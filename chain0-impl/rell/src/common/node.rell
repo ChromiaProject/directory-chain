@@ -68,31 +68,13 @@ operation remove_node(provider, node_pubkey: pubkey) {
 	//TODO: update blockchain_replica_node correspondingly?
 }
 
-operation update_node_host(provider_pubkey: pubkey, node_pubkey: pubkey, host: text) {
-	val node = require_node_provider(node_pubkey, provider_pubkey);
-	update node ( 
-		.host = host,
-		.last_updated = op_context.last_block_time
-	 );
-	node_list.last_update = op_context.last_block_time;
-}
-
-operation update_node_port(provider_pubkey: pubkey, node_pubkey: pubkey, port: integer) {
-	val node = require_node_provider(node_pubkey, provider_pubkey);
-	update node ( 
-		.port = port,
-		.last_updated = op_context.last_block_time
-	);
-	node_list.last_update = op_context.last_block_time;
-}
-
-operation update_node_api_url(provider_pubkey: pubkey, node_pubkey: pubkey, api_url: text) {
-	val node = require_node_provider(node_pubkey, provider_pubkey);
-	update node ( 
-		.api_url = api_url,
-		.last_updated = op_context.last_block_time
-		);
-	// node_list.last_update = op_context.last_block_time; Peer info not updated here?
+operation update_node(provider_pubkey: pubkey, node_pubkey: pubkey, host: text? = null, port: integer? = null, api_url: text? = null) {
+    val node = require_node_provider(node_pubkey, provider_pubkey);
+    if (host != null) node.host = host;
+    if (port != null) node.port = port;
+    if (api_url != null) node.api_url = api_url;
+    if (host != null or port != null or api_url != null) node.last_updated = op_context.last_block_time;
+    if (host != null or port != null) node_list.last_update = op_context.last_block_time;
 }
 
 function require_node_provider(node_pubkey: pubkey, provider_pubkey: pubkey) {
