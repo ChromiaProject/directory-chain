@@ -1,0 +1,46 @@
+@test module;
+
+/* Makes sure the module is initialized with the correct state */
+import ^^.*;
+import ^.ops.*;
+
+function test_initialization() {
+	rell.test.tx().op(initialize_test_module(rell.test.pubkeys.alice, 100)).run();
+	
+	// Provider quotas are created
+	assert_not_null(provider_quota @? { .tier == provider_tier.COMMUNITY_NODE_PROVIDER });
+	assert_not_null(provider_quota @? { .tier == provider_tier.NODE_PROVIDER });
+	
+	/* System voter sets are self-governed. */
+	val system = voter_set @? { "SYSTEM" };
+	val system_p = voter_set @? { "SYSTEM_P" };
+	assert_not_null(system);
+	assert_not_null(system_p);
+	assert_equals(voter_set_governance @ { .voter_set==system } ( .governor ), system);
+	assert_equals(voter_set_governance @ { .voter_set==system_p } ( .governor ), system_p);
+	assert_null(voter_set_member @? { system }); // SYSTEM has no members
+	
+	/* System cluster is governed by SYSTEM_P */
+	val cluster1 = cluster @? { "system" };
+	assert_not_null(cluster1);
+	assert_equals(cluster1.governance, system_p);
+	
+	/* Initial provider is a provider of system cluster */
+	val p1 = provider @? { rell.test.pubkeys.alice };
+	assert_not_null(p1);
+	assert_true(p1.active);
+	assert_equals(cluster_provider @ { cluster1 }.provider, p1);
+	assert_equals(voter_set_member @ { system_p }.provider, p1);
+	
+	/* System container is naked and part of system cluster */
+	val container1 = container @? { "system" };
+	assert_not_null(container1);
+	assert_equals(container1.cluster, cluster1);
+	assert_equals(container1.container_type, container_type.naked);
+
+	val summary = get_summary();
+	assert_equals(1, summary.providers);
+	assert_equals(1, summary.clusters);
+	assert_equals(1, summary.containers);
+	assert_equals(2, summary.voter_sets);
+}

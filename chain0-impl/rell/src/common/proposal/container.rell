@@ -1,0 +1,30 @@
+
+operation propose_container_limits(my_pubkey: pubkey, container_name: text, limits: map<container_resource_limit_type, integer>) {
+    val limits_map = _get_current_container_resource_limits(container_name);
+    limits_map.put_all(limits);
+
+    val me = require_provider(my_pubkey);
+    val container = require_container(container_name);
+    // check that provider authority and that it is cluster's deployer
+    require_provider_auth_with_rl(me);
+	require_cluster_governor(container.cluster, me);
+    val prop = create proposal(op_context.last_block_time, proposal_type.container_limits, me, container.cluster.governance);
+    create pending_container_limits(
+        prop,
+        container,
+        max_blockchains = limits_map[container_resource_limit_type.max_blockchains],
+        cpu = limits_map[container_resource_limit_type.cpu],
+        ram = limits_map[container_resource_limit_type.ram],
+        storage = limits_map[container_resource_limit_type.storage]
+    );
+    internal_vote(me, prop, true);
+}
+
+function _get_current_container_resource_limits(container_name: text): map<container_resource_limit_type, integer> {
+    var limits_map = map<container_resource_limit_type, integer>();
+    val cur_limits_list = container_resource_limit @* { .container.name == container_name };
+    for (l in cur_limits_list) {
+        limits_map[l.container_resource_limit_type] = l.value;
+    }
+    return limits_map;
+}

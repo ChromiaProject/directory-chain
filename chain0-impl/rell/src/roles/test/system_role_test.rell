@@ -1,0 +1,34 @@
+@test module;
+
+import ^^.*;
+import ^.ops.*;
+import ^^^.common.*;
+
+function test_enroll_system() {
+    rell.test.tx().op(
+        create_system_entities_op(),
+        add_provider(rell.test.pubkeys.alice),
+        enroll_system(rell.test.pubkeys.alice)
+    ).run();
+
+    val provider = provider @ { rell.test.pubkeys.alice };
+    assert_true(roles.has_system_access(provider));
+    assert_true(roles.has_node_access(provider));
+    assert_true(roles.has_deploy_access(provider, system_container()));
+    assert_not_null(voter_set_member @? { provider, system_p_voter_set()});
+    assert_not_null(cluster_provider @? { provider, system_cluster()});
+
+    rell.test.tx().op(
+        revoke_node(rell.test.pubkeys.alice)
+    ).run_must_fail();
+
+    rell.test.tx().op(
+        revoke_system(rell.test.pubkeys.alice)
+    ).run();
+
+    assert_false(roles.has_system_access(provider));
+    assert_true(roles.has_node_access(provider)); // Can still deploy nodes to other clusters
+    assert_false(roles.has_deploy_access(provider, system_container()));
+    assert_null(voter_set_member @? { provider, system_p_voter_set()});
+    assert_null(cluster_provider @? { provider, system_cluster()});
+}

@@ -1,0 +1,45 @@
+
+entity blockchain { 
+    key rid: byte_array; 
+    mutable name: text; 
+    mutable active: boolean;
+}
+
+entity blockchain_added { 
+    key blockchain; 
+    key transaction; 
+}
+
+entity blockchain_configuration {
+	key blockchain, height: integer;
+	mutable data: byte_array;
+}
+
+entity blockchain_configuration_signers {
+      key blockchain, height: integer;
+      signers: byte_array;
+}
+
+entity blockchain_replica_node { 
+    key blockchain, node; 
+}
+
+/**
+* For blockchain dependency tracking. Dependency is not static.
+* Blockchain (me) might be dependent on different blockchains (dependent_on) at different heights.
+*/
+entity blockchain_dependency { 
+    key me: blockchain, height: integer, dependent_on: blockchain; 
+}
+
+enum blockchain_action {
+    pause,
+    resume,
+    remove
+}
+
+function get_signers_for_configuration(blockchain, height: integer): gtv {
+    val raw_signers = blockchain_configuration_signers @ { blockchain, .height <= height }
+        (@omit @sort_desc .height, .signers) limit 1;
+    return gtv.from_bytes(raw_signers);
+}

@@ -1,0 +1,48 @@
+@test module;
+
+import ^.helpers.*;
+import ^^.*;
+import ^^^.common.test.setup.*;
+import ^^^.common.test.util.*;
+import ^^^.common.proposal.*;
+import ^^^.container.container_proposal.*;
+
+function test_nm_get_blockchains_for_container() {
+    setup_module();
+
+    var conf = map<text, gtv>();
+    rell.test.tx().op(
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", containers.system)
+    ).sign(initial_provider).run();
+
+    val chains = nm_get_blockchains_for_container("system");
+    assert_equals(chains.size(), 2);
+    assert_true(chains.contains(blockchain @ { blockchains.c0 } (.rid)));
+    assert_true(chains.contains(blockchain @ { "foo_chain" } (.rid)));
+}
+
+function test_nm_get_container_for_blockchain() {
+    setup_module();
+
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p)
+    ).sign(initial_provider).run();
+    val container1 = container @ { "container1" };
+
+    var conf = map<text, gtv>();
+    rell.test.tx().op(
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "container1")
+    ).sign(initial_provider).run();
+
+    val chain0_brid = blockchain @ { blockchains.c0 } (.rid);
+    assert_equals(nm_get_container_for_blockchain(chain0_brid), containers.system);
+
+    val foo_chain = blockchain @ { "foo_chain" } (.rid);
+    assert_equals(nm_get_container_for_blockchain(foo_chain), "container1");
+
+    // Unknown blockchain
+    // Query wrapped in op to be able to assert require() call
+    rell.test.tx().op(
+        _query_in_op__nm_get_container_for_blockchain(x"")
+    ).sign(initial_provider).run_must_fail();
+}

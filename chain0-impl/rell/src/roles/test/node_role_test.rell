@@ -1,0 +1,23 @@
+@test module;
+
+import ^^.*;
+import ^.ops.*;
+
+function test_enroll_node() {
+    rell.test.tx().op(
+        add_provider(rell.test.pubkeys.alice),
+        enroll_node(rell.test.pubkeys.alice)
+    ).run();
+
+    val provider = provider @ { rell.test.pubkeys.alice };
+    assert_true(provider.active);
+    assert_false(roles.has_system_access(provider));
+    assert_true(roles.has_node_access(provider));
+
+    rell.test.tx().op(
+        revoke_node(rell.test.pubkeys.alice)
+    ).run();
+
+    assert_true(provider.active); // Still active
+    assert_false(roles.has_node_access(provider));   
+}

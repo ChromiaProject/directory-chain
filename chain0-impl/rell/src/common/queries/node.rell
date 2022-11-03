@@ -1,0 +1,46 @@
+
+query get_node (pubkey) = node @ { pubkey };
+
+query is_node (pubkey) : boolean {
+	return not(empty(node @? { pubkey }));
+}
+
+query get_node_data (pubkey) {
+    return node @ {
+        pubkey
+    } (
+        provider = .provider.pubkey,
+        pubkey = .pubkey,
+        active = .active,
+        host = .host,
+        port = .port,
+        last_updated = .last_updated
+    );
+}
+
+query list_clusters_of_node (pubkey) : list<text> {
+	return cluster_node @* { node @ {pubkey} }.cluster.name;
+}
+
+query get_node_containers(pubkey): list<(cluster:text, name:text, deployer:text)> {
+	val clusters = cluster_node @* { node @ { pubkey } } .cluster;
+	val res = list<(cluster:text, name:text, deployer:text)>();
+	for (cl in clusters) {
+		val containers = container @* { cl } (@sort cluster = .cluster.name, @sort name = .name, deployer = .deployer.name);
+		res.add_all(containers);
+	}
+	return res;
+}
+
+query get_nodes_with_provider() {
+    return node @* {} (
+        pubkey = .pubkey,
+        node_active = .active,
+        host = .host,
+        port = .port,
+        last_updated = .last_updated,
+        name = .provider.name,
+        provider_active = .provider.active,
+        @sort provider = .provider.pubkey
+    );
+}

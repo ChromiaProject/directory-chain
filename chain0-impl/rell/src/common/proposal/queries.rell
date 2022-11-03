@@ -1,0 +1,54 @@
+
+
+//queries used in the voting procedure for configuration updates:
+query get_proposals_since(since: rowid) {
+  return proposal @* { .rowid >= since } (.rowid, .proposal_type) limit 10;
+}
+
+query get_proposal (id: rowid?): (id :rowid, timestamp: integer, type :proposal_type, proposed_by :pubkey)? {
+	val result = if (id == null) proposal @? {} (@sort_desc @omit .rowid, $) limit 1 else proposal @? { id };
+	if (result == null) return null;
+	return (
+		id = result.rowid,
+		timestamp = result.timestamp,
+		type = result.proposal_type,
+		proposed_by = result.proposed_by.pubkey
+	);
+}
+
+query get_blockchain_proposal(rowid): (data:byte_array, container:text)? {
+	return pending_blockchain @? { require_proposal(rowid) } ( data = .data, container = .container.name );
+}
+
+function require_proposal(rowid) = require(proposal @? { rowid }, "Proposal " + rowid + " not found");
+
+query get_configuration_proposal(rowid?): (
+	current_conf:struct<blockchain_configuration>, 
+	proposed_conf:struct<pending_configuration_at>
+)? {
+
+	val proposal = if (rowid == null) proposal @ { proposal_type.configuration_at } ( @max proposal ) else proposal @ { rowid };
+	if (proposal == null) return null;
+	val config = pending_configuration_at @? { require_proposal(proposal.rowid) };
+	if (config == null) return null;
+	val current = (blockchain_configuration @ { config.blockchain }
+     (@omit @sort_desc .height, $) limit 1);
+	
+	return (
+		current_conf = current.to_struct(),
+		proposed_conf = config.to_struct()
+	);
+}
+
+query get_cluster_provider_proposal(rowid?) {
+	val proposal = get_latest_proposal(rowid, proposal_type.cluster_provider);
+	if (proposal == null) return null;
+	val pcp = pending_cluster_provider @ { proposal };
+	return (
+		cluster = pcp.cluster.name,
+		provider = pcp.provider.pubkey,
+		add = pcp.add
+	);
+}
+
+function get_latest_proposal(rowid?, proposal_type) = if (rowid == null) proposal @ { proposal_type } ( @max proposal ) else proposal @ { rowid };

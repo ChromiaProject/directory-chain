@@ -1,0 +1,42 @@
+module;
+
+import ^.*;
+import ^^.roles.*;
+import .constants.*;
+
+function require_is_signer(pubkey) {
+    require(op_context.is_signer(pubkey), "Operation must be signed by " + pubkey.to_hex());
+}
+
+function require_provider(pubkey) = require(provider @? { pubkey }, "Unknown provider %s".format(pubkey.to_hex()));
+function require_blockchain(blockchain_rid: byte_array) = require(blockchain @? { blockchain_rid }, "Unknown blockchain %s".format(blockchain_rid.to_hex()));
+function require_cluster(name) = require(cluster @? { name }, "Cluster %s not found".format(name));
+function require_container(name) = require(container @? { name }, "Container %s not found".format(name));
+function require_voter_set(name) = require(voter_set @? { name }, "Voter set " + name + " does not exist");
+
+function require_is_system_provider(pubkey) {
+	val p = require_provider(pubkey);
+	require_system_access(p);
+	return p;
+}
+
+function require_system_p_member(provider) {
+	require_voter_set_member(system_p_voter_set(), provider);	
+}
+
+function require_cluster_governor(cluster, provider) {
+	require_voter_set_member(cluster.governance, provider);
+}
+
+function require_voter_set_governor(voter_set, provider) {
+	val governor = voter_set_governance @ { voter_set } .governor;
+	require_voter_set_member(governor, provider);
+}
+
+function require_container_deployer(container, provider) {
+	require(roles.has_deploy_access(provider, container));
+}
+
+function require_voter_set_member(voter_set, provider) {
+	require (exists(voter_set_member @* { voter_set, provider}), "Provider is not a member of voter set " + voter_set.name);
+}

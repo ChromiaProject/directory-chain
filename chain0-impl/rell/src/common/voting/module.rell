@@ -1,0 +1,64 @@
+module;
+
+import ^.*;
+
+
+
+entity vote {
+    key proposal, provider;
+	vote: boolean; // yes | no
+}
+
+
+function create_voter_set_internal(name, threshold: integer = 0, governor: voter_set? = null) {
+	val vs = create voter_set(name, threshold);
+    if (exists(governor)) {
+        create voter_set_governance(voter_set = vs, governor = governor);
+    } else {
+        create voter_set_governance(voter_set = vs, governor = vs);
+    }
+    return vs;
+}
+
+
+/**
+ * Governance semantics:
+ * Anybody can create a new voter_set directly, but it consumes an action point.
+ * voter_set can be updated. If voter_set_governance is defined, it will control voter set, otherwise, it is the voter set itself.
+ **/
+operation create_voter_set(my_pubkey: pubkey, name, threshold: integer, initials: list<pubkey>?, governor: text?) {
+    require_is_provider_with_rl(my_pubkey);
+    val governor_set = if (governor != null) require_voter_set(governor) else null;
+    val vs = create_voter_set_internal(name, threshold, governor_set);
+    if (exists(initials)) {
+        for (prov in initials) {
+            val p = require_provider(prov);
+            require(roles.has_node_access(p), "Provider must have node access role to be part of a voter set");
+            create voter_set_member(voter_set = vs, p);
+        }
+    }
+}
+
+operation make_vote(my_pubkey: pubkey, proposal_id: integer, vote: boolean) {
+    val provider = require_provider(my_pubkey);
+    val prop = require_proposal(rowid_from_integer(proposal_id));
+	require_provider_auth_with_rl(provider);
+	require_voter_set_member(prop.voter_set, provider);
+	require(empty(vote @? {prop, provider}), "Only one vote per pubkey is allowed");
+	internal_vote(provider, prop, vote);
+}
+
+operation retract_vote(my_pubkey: pubkey, proposal_id: integer) {
+    val provider = require_provider(my_pubkey);
+    val prop = require_proposal(rowid_from_integer(proposal_id));
+	require_provider_auth_with_rl(provider);
+	require_voter_set_member(prop.voter_set, provider);
+
+	if (exists(vote @? { prop, provider })) {
+	    delete vote @* { prop, provider };
+        print("vote for proposal retracted:", proposalStr(prop));
+        apply_voting_result(prop);
+	} else {
+	    print("no vote for proposal to retract:", proposalStr(prop));
+	}
+}

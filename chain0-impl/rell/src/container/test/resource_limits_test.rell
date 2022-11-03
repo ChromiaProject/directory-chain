@@ -1,0 +1,74 @@
+@test module;
+
+import ^^.container_proposal.*;
+import ^^^.common.test.setup.*;
+
+function test_container_resource_limits() {
+    setup_module();
+    val container1_name = "container1";
+
+    // 1. Adding a new container
+    val alice = provider @ { rell.test.pubkeys.alice };
+    rell.test.tx().op(
+        propose_container(alice.pubkey, clusters.system, container1_name, voter_sets.system_p)
+    ).sign(rell.test.keypairs.alice).run();
+    val container1 = container @ { container1_name };
+
+    // Asserting default container resource limits
+    val default_limits = get_container_resource_limits(container1);
+    assert_container_resource_limits(default_limits, -1, -1, -1, -1);
+
+    // 2. Proposing container resource limits
+    val proposed_limits = map<container_resource_limit_type, integer>();
+    proposed_limits[container_resource_limit_type.max_blockchains] = 2;
+    proposed_limits[container_resource_limit_type.ram] = 100;
+    proposed_limits[container_resource_limit_type.storage] = 1000;
+    rell.test.tx().op(
+        propose_container_limits(alice.pubkey, container1_name, proposed_limits)
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Asserting new container resource limits
+    val actual = get_container_resource_limits(container1);
+    val expected = map<container_resource_limit_type, integer>();
+    expected.put_all(proposed_limits);
+    expected[container_resource_limit_type.cpu] = -1;
+    assert_equals(expected, actual);
+
+    // 3. Deploying 2 dapps
+    val blockchain_count0 = blockchain_count();
+    var conf = map<text, gtv>();
+    conf["name"] = "foo_chain".to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "foo_chain", container1_name)
+    ).sign(rell.test.keypairs.alice).run();
+    conf["name"] = "bar_chain".to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "bar_chain", container1_name)
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Asserting 2 dapps deployed
+    assert_equals(blockchain_count0 + 2, blockchain_count());
+
+    // 4. Trying to deploy more than 2 dapps
+    conf["name"] = "foobar_chain".to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "foobar_chain", container1_name)
+    ).sign(rell.test.keypairs.alice).run_must_fail();
+}
+
+function assert_container_resource_limits(limits: map<container_resource_limit_type, integer>, max_blockchains: integer, cpu: integer, ram: integer, storage: integer) {
+    assert_equals(limits[container_resource_limit_type.max_blockchains], max_blockchains);
+    assert_equals(limits[container_resource_limit_type.cpu], cpu);
+    assert_equals(limits[container_resource_limit_type.ram], ram);
+    assert_equals(limits[container_resource_limit_type.storage], storage);
+}
+
+function get_container_resource_limits(container): map<container_resource_limit_type, integer> {
+    val limits = map<container_resource_limit_type, integer>();
+    for (l in container_resource_limit @* { container }) {
+        limits[l.container_resource_limit_type] = l.value;
+    }
+    return limits;
+}
+
+function blockchain_count() = blockchain @* {} (@sum 1)[0];

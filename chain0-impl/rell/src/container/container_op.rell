@@ -1,0 +1,34 @@
+module;
+
+import ^.*;
+import ^^.model.*;
+import ^^.common.util.*;
+
+operation create_container(me:pubkey, name, cluster_name:text, consensus_threshold: integer, deployers: list<pubkey>) {
+    create_container_impl(me, name, cluster_name, consensus_threshold, deployers);
+}
+
+operation create_container_from(me:pubkey, name, cluster_name:text, consensus_threshold: integer, voter_set_name:text) {
+    val vs = require_voter_set(voter_set_name);
+    val deployers = list<pubkey>();
+    for (member in voter_set_member @* { vs }) {
+        deployers.add(member.provider.pubkey);
+    }
+    create_container_impl(me, name, cluster_name, consensus_threshold, deployers);
+}
+
+operation add_container_deployer(me:pubkey, container_name:text, deployer_pubkey:pubkey) {
+    val provider = require_is_provider_with_rl(me);
+    val container = require_container(container_name);
+    require_cluster_governor(container.cluster, provider);
+    val deployer = require_provider(deployer_pubkey);
+    create voter_set_member(container.deployer, deployer);
+}
+
+operation remove_container_deployer(me:pubkey, container_name:text, deployer_pubkey:pubkey) {
+    val provider = require_is_provider_with_rl(me);
+    val container = require_container(container_name);
+    require_cluster_governor(container.cluster, provider);
+    val deployer = require_provider(deployer_pubkey); 
+    delete voter_set_member @? { container.deployer, deployer };
+}

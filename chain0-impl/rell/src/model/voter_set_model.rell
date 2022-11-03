@@ -1,0 +1,30 @@
+/**
+* A voter set is a set of providers who are part of a governance process.
+* The threshold determines how consensus is achieved.
+*/
+entity voter_set {
+    key name;
+	// special values for threshold:
+	// 	0: super-majority of voters, specifically  `n - (n - 1) / 3` (which is usually around 67%)
+	// -1: simple majority
+	// positive number: that many voters
+    mutable threshold: integer = 0;
+}
+
+/**
+* Voter set governance determines who is allowed to change an voter set.
+*/
+entity voter_set_governance {
+	key voter_set;
+	mutable governor: voter_set;
+}
+
+entity voter_set_member {
+    key voter_set, provider;
+}
+
+function remove_voter_set_impl(voter_set) {
+    delete voter_set_member @* { voter_set };
+    delete voter_set_governance @? { voter_set };
+    delete voter_set;
+}

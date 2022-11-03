@@ -1,0 +1,47 @@
+@test module;
+
+import ^^.*;
+import ^^.container_op.*;
+import ^^^.common.test.setup.*;
+import ^^^.common.test.ops.*;
+import ^^^.common.test.util.constants.*;
+
+function test_create_container() {
+    setup_module();
+    val deployer1 = rell.test.keypairs.bob;
+    val deployer2 = rell.test.keypairs.trudy;
+
+    // Register provider as tier 0
+    rell.test.tx().op(
+        create_test_provider("", deployer1.pub, provider_tier.COMMUNITY_NODE_PROVIDER),
+        create_test_provider("", deployer2.pub, provider_tier.COMMUNITY_NODE_PROVIDER)
+    ).run();
+
+    val deployers = list<pubkey>();
+    deployers.add(deployer1.pub);
+    rell.test.tx().op(
+        create_container(initial_provider.pub, "foo", clusters.system, 1, deployers)
+    ).sign(initial_provider).run();
+
+    assert_not_null(container @? { "foo" });
+    assert_not_null(voter_set @? { "container_foo_deployer" });
+    val vs = voter_set @ { "container_foo_deployer" };
+    assert_equals((voter_set_member @* { vs }).size(), 1);
+
+    rell.test.tx().op(
+        add_container_deployer(initial_provider.pub, "foo", deployer2.pub)
+        ).sign(initial_provider).run();
+    assert_equals((voter_set_member @* { vs }).size(), 2);
+
+    rell.test.tx().op(
+        remove_container_deployer(initial_provider.pub, "foo", deployer1.pub)
+        ).sign(initial_provider).run();
+    assert_equals((voter_set_member @* { vs }).size(), 1);
+
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "foo")
+        ).sign(initial_provider).run();
+        
+    assert_null(container @? { "foo" });
+    assert_null(voter_set @? { "container_foo_deployer" });
+}

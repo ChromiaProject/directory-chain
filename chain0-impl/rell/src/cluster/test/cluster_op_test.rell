@@ -1,0 +1,73 @@
+@test module;
+
+import ^^.cluster_op.*;
+import ^^^.common.test.setup.*;
+import ^^^.common.proposal.*;
+import ^^^.container.container_op.*;
+
+function test_add_remove_cluster() {
+    setup_module();
+    val alice = provider @ { rell.test.pubkeys.alice };
+
+    // 1. Deleting system cluster. Must fail.
+    rell.test.tx().op(
+        propose_remove_cluster(rell.test.pubkeys.alice, clusters.system)
+    ).sign(rell.test.keypairs.alice).run_must_fail();
+
+    // 2. Deleting unknown cluster. Must fail.
+    rell.test.tx().op(
+        propose_remove_cluster(rell.test.pubkeys.alice, "unknown")
+    ).sign(rell.test.keypairs.alice).run_must_fail();
+
+    // 3. Adding a new cluster
+    rell.test.tx().op(
+        create_cluster(rell.test.pubkeys.alice, "cluster1",  voter_sets.system_p, [alice.pubkey])
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Asserting cluster1 added
+    val cluster1 = cluster @? { "cluster1" };
+    assert_not_null(cluster1);
+
+    // Adding a node into cluster1
+    val node = node @ { .provider == alice };
+    rell.test.tx().op(
+        add_node_to_cluster(rell.test.pubkeys.alice, node.pubkey, "cluster1")
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Asserting cluster1's stuff added
+    assert_false(empty(cluster_resource_limit @* { cluster1 }));
+    assert_not_null(cluster_node @? { cluster1 });
+    assert_not_null(cluster_provider @? { cluster1 });
+
+    // Adding container
+    rell.test.tx().op(
+        create_container_from(alice.pubkey, "container1", cluster1.name, 1, voter_sets.system_p)
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Asserting container1 is added
+    assert_not_null(container @? { "container1" });
+
+    // Trying to remove cluster1 and fail because it contains container1
+    rell.test.tx().op(
+        propose_remove_cluster(rell.test.pubkeys.alice, "cluster1")
+    ).sign(rell.test.keypairs.alice).run_must_fail();
+
+    // Removing container1 from cluster1
+    rell.test.tx().op(
+        remove_container(rell.test.pubkeys.alice, "container1")
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Asserting container1 is deleted
+    assert_null(container @? { "container1" });
+
+    // Trying to remove cluster1 again
+    rell.test.tx().op(
+        propose_remove_cluster(rell.test.pubkeys.alice, "cluster1")
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Asserting cluster1 is deleted with its stuff
+    assert_null(cluster @? { "cluster1" });
+    assert_true(empty(cluster_resource_limit @* { cluster1 }));
+    assert_null(cluster_node @? { cluster1 });
+    assert_null(cluster_provider @? { cluster1 });
+}

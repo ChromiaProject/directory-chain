@@ -1,0 +1,64 @@
+/* Governance semantics:
+ *
+ * Anybody can create a cluster, but it consumes an action point.
+ *
+ * A cluster defines a list of providers involved in it. Each provider is supposed to contribute one node.
+ * Cluster is considered operational only once every provider specified in a cluster have provided a node.
+ * Cluster composition (providers) can change, operational status does not change if new provider is added.
+ *
+ * Cluster composition can be changed by its 'governance' voter set, they can vote to add or remove providers
+ *
+ * a provider can add at most one node to a cluster he is a member of. he can also replace his node.
+ *
+ * Cluster's deployer can add containers, specifying their resource limits. He can change limits for existing containers.
+ *
+ * Container deployer can deploy, update and stop blockchains in the container.
+ *
+ *
+ * Node can belong to multiple clusters. Although it is not recommended, but permitted.
+ *
+ * blockchain_signer_node records are not needed for blockchains which run on a cluster, as list
+ * of signer nodes can be deduced from list of nodes of a cluster.
+ *
+ */
+
+// node cluster
+entity cluster {
+    key name;
+    governance: voter_set; // who controls the cluster
+    mutable operational: boolean = false; // cluster goes operational when all providers provide a node
+}
+
+entity cluster_provider { 
+    key cluster, provider; 
+}
+
+entity cluster_node { 
+    key cluster, node; 
+}
+
+enum cluster_resource_limit_type {
+    max_containers,
+    default_container_max_blockchains,
+    default_container_cpu,
+    default_container_ram,
+    default_container_storage
+}
+
+entity cluster_resource_limit {
+    key cluster, cluster_resource_limit_type;
+    mutable value: integer;
+}
+
+// Cluster replicate this container, but container belongs to another cluster that is responsible for block building.
+entity cluster_container_replica { 
+    key cluster, container; 
+}
+
+function remove_cluster_impl(cluster) {
+    delete cluster_resource_limit @* { cluster };
+	delete cluster_node @* { cluster };
+	delete cluster_provider @* { cluster };
+	delete cluster_container_replica @* { cluster };
+    delete cluster;
+}

@@ -1,0 +1,28 @@
+module;
+
+import ^^.*;
+
+operation initialize_test_module(pubkey, majority_threshold:integer = 0) {
+	initialize_module(pubkey, "localhost", 9870, 1000, majority_threshold);
+}
+
+operation create_test_provider(name, pubkey, provider_tier = provider_tier.NODE_PROVIDER) {
+	if (provider_quota @? { .tier == provider_tier } == null) create provider_quota(provider_tier, provider_quota_type.max_actions_per_day, value = 100);
+	val p = create provider(pubkey, name, active = true, provider_tier);
+	create provider_rl_state(p, points = 10000, last_update = 0);
+}
+
+operation create_test_node(provider, pubkey, cluster) {
+	val c = list<text>();
+	c.add(cluster.name);
+	add_node_internal(provider, pubkey, "", 0, "", c);
+}
+
+// This operation is not accessible in the app. It is only the system itself who can create anchoring chain
+operation create_anchoring_chain_op(cluster_name: text) {
+	create_anchoring_chain(cluster @ { cluster_name });
+}
+
+operation create_test_voter_set(name, threshold: integer, governor: voter_set?) {
+	create_voter_set_internal(name, threshold, governor);
+}

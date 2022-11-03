@@ -1,0 +1,84 @@
+
+// Registers and enables a provider
+operation register_provider(my_pubkey: pubkey, pubkey, provider_tier) {
+    val me = require_provider(my_pubkey);
+	require_provider_auth_with_rl(me);
+	register_and_enable_provider(
+		pubkey,
+		provider_tier,
+		cluster = null, 
+		voter_set = null, 
+		enabled_by_default = _is_node_provider(provider_tier) == false
+	);
+    if (_is_node_provider(provider_tier)) {
+        require(roles.has_system_access(me), "Must be system provider to add a node provider");
+        enroll.node(provider @ { pubkey });
+    }
+}
+
+function _is_node_provider(tier: provider_tier) = tier == provider_tier.NODE_PROVIDER;
+
+@extendable function register_and_enable_provider(pubkey, provider_tier, cluster?, voter_set?, enabled_by_default: boolean = false) {
+	val provider = create provider (
+		pubkey,
+		name = "",
+        active = enabled_by_default,
+        tier = provider_tier
+    );
+    create provider_rl_state(provider, points = 100, last_update=op_context.last_block_time);
+    if (exists(cluster)) {
+        create cluster_provider(cluster, provider);
+    }
+    if (exists(voter_set)) {
+    	create voter_set_member(voter_set, provider);
+    }
+}
+
+operation promote_node_provider(my_pubkey: pubkey, provider_pubkey: pubkey) { // TODO: Should be able to demote
+    val me = require_is_system_provider(my_pubkey);
+    val p = require_provider(provider_pubkey);
+    require(p.tier != provider_tier.NODE_PROVIDER, "Provider already has this role");
+    enroll.node(p);
+}
+
+// recover provider's action points and consume one, if possible
+function provider_rate_limit(provider) {
+	val max_actions_per_day = provider_quota @ {
+			.tier == provider.tier,
+			provider_quota_type.max_actions_per_day
+	} .value;
+
+	// We recover max_actions_per_day in 24 hours, find time needed to recover 1 point
+	val recovery_time = (86400 * 1000) / max_actions_per_day;
+    val state = provider_rl_state @ { provider } (.points, .last_update);
+    val time_delta = op_context.last_block_time - state.last_update;
+    var got_points = 0;
+    var update_time = state.last_update;
+
+    if (time_delta > recovery_time)
+    {
+        got_points = time_delta / recovery_time;
+        // advance  update_time to a multiple of recovery_time to avoid wasting time
+        update_time = state.last_update + got_points * recovery_time;
+        if (got_points + state.points > max_actions_per_day) {
+            got_points = max_actions_per_day - state.points;
+            // if user is at the maximum reset his timer
+            update_time = op_context.last_block_time;
+        }
+    }
+
+    require(state.points + got_points > 0); // make sure we have at least one point, which will be spent
+
+    update provider_rl_state @ { provider } (
+        .points += got_points - 1,
+        .last_update = update_time
+    );
+}
+
+operation transfer_action_points(from: provider, to: provider, amount: integer) {
+	require_provider_auth_with_rl(from);
+	require(provider_rl_state @ { from } .points >= amount, "Not enough action points to transfer from.");
+	update provider_rl_state @ { from } ( .points -= amount );
+	update provider_rl_state @ { to } ( .points += amount );
+}
+

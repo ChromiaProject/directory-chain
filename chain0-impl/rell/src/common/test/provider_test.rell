@@ -1,0 +1,49 @@
+@test module;
+
+import ^.setup.*;
+import ^^.*;
+import ^.util.constants.*;
+
+function test_register_provider() {
+    setup_module();
+
+    val dapp_provider = rell.test.keypairs.bob;
+    val node_provider = rell.test.keypairs.trudy;
+
+    rell.test.tx()
+        .op(register_provider(initial_provider.pub, dapp_provider.pub, provider_tier.COMMUNITY_NODE_PROVIDER))
+        .op(register_provider(initial_provider.pub, node_provider.pub, provider_tier.NODE_PROVIDER))
+        .sign(initial_provider)
+        .run();
+
+    // Dapp providers are active by default
+    val dp = provider @ { dapp_provider.pub };
+    assert_true(dp.active);
+    assert_false(roles.has_node_access(dp)); // Has to be enabled first
+
+    // Node providers must be activated first
+    val np = provider @ { node_provider.pub };
+    assert_false(np.active);
+    assert_false(roles.has_node_access(np)); // Has to be enabled first
+
+    rell.test.tx()
+        .op(propose_enable_provider(initial_provider.pub, node_provider.pub))
+        .sign(initial_provider)
+        .run();
+    assert_true(np.active);
+    assert_true(roles.has_node_access(np)); 
+
+    // Node provider cannot add node provider
+    rell.test.tx()
+        .op(register_provider(node_provider.pub, x"03", provider_tier.NODE_PROVIDER))
+        .sign(node_provider)
+        .run_must_fail();
+
+
+    // Dapp provider is promoted
+    rell.test.tx()
+        .op(promote_node_provider(initial_provider.pub, dp.pubkey))
+        .sign(initial_provider)
+        .run();
+    assert_true(roles.has_node_access(dp)); // Has to be enabled first
+}

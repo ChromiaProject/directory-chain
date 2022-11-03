@@ -1,0 +1,42 @@
+
+function add_dependencies(data: byte_array, me_brid: byte_array, height: integer) {
+    val config_map = map<text, gtv>.from_gtv(gtv.from_bytes(data));
+	if (config_map.contains("dependencies")) {
+		val deps = list<(text, byte_array)>.from_gtv(config_map["dependencies"]);   // Returns e.g.  [brid0, brid22, ..]
+		for ((_, dep) in deps) {
+			val dependent_on = blockchain @? { dep };
+			if (exists(dependent_on)) {
+				require(me_brid != dep);
+				create blockchain_dependency(
+					me = blockchain @ {me_brid},
+					dependent_on,
+					height = height);
+			}
+		}
+	}
+}
+
+function require_no_dependencies_on_me(blockchain) {
+	require (empty(blockchain_dependency @* { .dependent_on == blockchain}));
+}
+
+function get_last_height(blockchain): integer {
+	if (blockchain.rid == chain_context.blockchain_rid) {
+		return op_context.block_height;
+	} else {
+		return (anchored_block @? { blockchain } (@sort_desc .height) limit 1) ?: -1;
+	}
+}
+
+operation add_bc_replica(provider, blockchain, node) {
+	require_provider_auth_with_rl(provider);
+	require(node.provider == provider);
+	require(empty(blockchain_replica_node @? { blockchain, node }));
+	create blockchain_replica_node(blockchain, node);
+}
+
+operation remove_bc_replica(provider, blockchain, node) {
+	require_provider_auth_with_rl(provider);
+	require(node.provider == provider);
+	delete blockchain_replica_node @? { blockchain, node };
+}

@@ -1,0 +1,48 @@
+enum provider_tier {
+	/* Can add replica nodes to any cluster */
+	COMMUNITY_NODE_PROVIDER,
+	/* Can add signer nodes to any non-system cluster */
+	NODE_PROVIDER
+}
+/*
+* A provider is a participant of the mainnet eco system
+* - Add a replica node
+* - Add a provider (Without priviliges)
+* - Update their own information
+* - Form a new voter set
+* - Create a cluster
+* - Vote on proposals concerning voter sets you belong to
+*/
+entity provider { 
+	key pubkey; 
+	mutable name: text = "";
+	mutable active: boolean = false;
+    mutable tier: provider_tier = provider_tier.COMMUNITY_NODE_PROVIDER;
+	/* System provider can
+    * - Add and remove signer nodes to clusters
+    * - update the system cluster/voter set
+    * - Add provider with any (non-system) privileges
+    * - Propose removal of providers
+    * - Update cluster configuration
+    */
+	mutable system: boolean = false;
+}
+
+// type of quota for a provider
+enum provider_quota_type {
+	max_nodes,
+	max_actions_per_day
+}
+
+entity provider_quota {
+	index tier: provider_tier, provider_quota_type;
+	mutable value: integer;
+}
+
+// Limit how much stuff provider can do to prevent abuse,
+// such as starting billion nodes, etc.
+entity provider_rl_state {
+	key provider;
+	mutable points: integer;
+	mutable last_update: integer;
+}

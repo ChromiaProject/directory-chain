@@ -1,0 +1,29 @@
+
+query get_provider (pubkey) = provider @ { pubkey };
+
+query get_nodes_by_provider(pubkey) {
+    return node @* { provider @ { pubkey } } (
+        .pubkey,
+        .active,
+        .host,
+        .port,
+        .api_url,
+        .last_updated
+    );
+}
+
+query get_provider_points(pubkey): integer {
+	return provider_rl_state @ {provider @ { pubkey }} .points;
+}
+
+query get_provider_clusters(pubkey) : list<text> {
+	return cluster_provider @* { provider @ {pubkey} }.cluster.name;
+}
+
+query get_provider_data (pubkey) {
+    return provider @ { pubkey } ($.to_struct());
+}
+
+query get_all_providers(): list<struct<provider>> {
+    return provider @* {} ($.to_struct());
+}

@@ -1,0 +1,140 @@
+// Revoke Proposal
+@test module;
+
+import ^^^.*;
+import ^^^.test.ops.*;
+
+function test_revoke_not_considered_proposal() {
+    setup();
+
+    // Propose something
+    propose_new_container();
+
+    // Asserting that we have a new proposal
+    val prop = proposal @? {};
+    assert_not_null(prop);
+    assert_not_null(pending_blockchain @? { prop });
+    assert_not_null(vote @? { prop });
+
+    // Alice revokes the proposal
+    rell.test.tx().op(
+        revoke_proposal(rell.test.pubkeys.alice, prop.rowid)
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Asserting that proposal removed
+    assert_null(proposal @? {});
+    assert_null(pending_blockchain @? {});
+    assert_null(vote @? { prop });
+}
+
+function test_revoke_proposal_under_consideration() {
+    setup();
+
+    // Propose something
+    propose_new_container();
+
+    // Asserting that we have a new proposal
+    val prop = proposal @? {};
+    assert_not_null(prop);
+    assert_not_null(pending_blockchain @? { prop });
+    assert_not_null(vote @? { prop });
+
+    // Bob votes for the proposal
+    vote_for_last_proposal(rell.test.keypairs.bob);
+    // Asserting that bob voted
+    val bob_vote = vote @? { prop, .provider.pubkey == rell.test.pubkeys.bob };
+    assert_not_null(bob_vote);
+
+    // Alice revokes the proposal
+    rell.test.tx().op(
+        revoke_proposal(rell.test.pubkeys.alice, prop.rowid)
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Asserting that proposal removed
+    assert_null(proposal @? {});
+    assert_null(pending_blockchain @? {});
+    assert_null(vote @? { prop });
+}
+
+function test_when_bob_revokes_alice_proposal_and_fails() {
+    setup();
+
+    // Propose something
+    propose_new_container();
+
+    // Asserting that we have a new proposal
+    val prop = proposal @? {};
+    assert_not_null(prop);
+    assert_not_null(pending_blockchain @? { prop });
+    assert_not_null(vote @? { prop });
+
+    // Bob revokes Alice's proposal, cf. run_must_fail()
+    rell.test.tx().op(
+        revoke_proposal(rell.test.pubkeys.bob, prop.rowid)
+    ).sign(rell.test.keypairs.bob).run_must_fail();
+}
+
+// -----------------------------------------------------------
+
+function setup() {
+    setupD1();
+
+    // Adding two providers to system cluster
+    add_provider_to_system_cluster(rell.test.pubkeys.bob, null);
+    add_provider_to_system_cluster(rell.test.pubkeys.trudy, rell.test.keypairs.bob);
+}
+
+function setupD1() {
+	rell.test.tx().op(
+	    initialize_test_module(rell.test.pubkeys.alice)
+	).run();
+}
+
+function add_provider_to_system_cluster(provider_pk: byte_array, approver: rell.test.keypair?) {
+    val alice = rell.test.pubkeys.alice;
+    val initial_providers = provider @* {} (@sort .pubkey);
+
+    // Registering a new provider
+    rell.test.tx().op(
+        register_provider(alice, provider_pk, provider_tier.NODE_PROVIDER)
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Asserting that provider added
+    initial_providers.add(provider_pk);
+    assert_equals(
+        provider @* {} (@sort .pubkey),
+        initial_providers.sorted()
+    );
+
+    // Proposing provider to be enabled.
+    rell.test.tx().op(
+        propose_enable_provider(alice, provider_pk)
+    ).sign(rell.test.keypairs.alice).run();
+
+    if (approver != null) vote_for_last_proposal(approver);
+
+    // Proposing provider to be a system provider.
+    rell.test.tx().op(
+        propose_provider_is_system(alice, provider_pk, true)
+    ).sign(rell.test.keypairs.alice).run();
+
+    if (approver != null) vote_for_last_proposal(approver);
+
+    // Asserting that provider is enabled and system
+    val prov = provider @ { provider_pk };
+    assert_true(roles.has_system_access(prov));
+}
+
+function vote_for_last_proposal(approver: rell.test.keypair) {
+    val proposal_id = integer_from_rowid(proposal @ {}.rowid);
+    rell.test.tx().op(
+        make_vote(approver.pub, proposal_id, true)
+    ).sign(approver.priv).run();
+}
+
+function propose_new_container() {
+    val alice = rell.test.pubkeys.alice;
+    rell.test.tx().op(
+        propose_blockchain(alice, x"", "test", containers.system)
+    ).sign(rell.test.keypairs.alice).run();
+}

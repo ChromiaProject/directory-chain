@@ -1,0 +1,32 @@
+@test module;
+
+import ^^.*;
+import ^^^.test.ops.*;
+import ^^^.util.*;
+
+function test_create_anchoring_chain() {
+    val provider = rell.test.keypairs.alice;
+    rell.test.tx().op(initialize_test_module(provider.pub, 100)).run();
+    assert_not_null(container @? { containers.system });
+
+    rell.test.tx().op(
+        create_anchoring_chain_op(clusters.system)
+    ).run();
+
+    val system_chain = blockchain @ { constants.blockchains.c0 };
+    val anchoring_chain = blockchain @? { "anchoring_system" };
+    assert_not_null(anchoring_chain);
+    assert_equals(blockchain_configuration_signers @ { anchoring_chain }.signers, blockchain_configuration_signers @ { system_chain }.signers);
+
+    // Cannot have more than one anchoring chain per cluster
+    rell.test.tx().op(
+        create_anchoring_chain_op(clusters.system)
+    ).run_must_fail();
+
+    val clusters = cm_get_cluster_names();
+    assert_equals(clusters.size(), 1);
+
+    val cluster_info = cm_get_cluster_info(constants.clusters.system);
+    assert_equals(cluster_info.anchoring_chain, anchoring_chain.rid);
+    assert_equals(cluster_info.peers.size(), 1);
+}

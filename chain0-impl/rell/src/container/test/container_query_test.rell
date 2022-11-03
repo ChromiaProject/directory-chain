@@ -1,0 +1,68 @@
+@test module;
+
+import ^.helpers.*;
+import ^^.*;
+import ^^.container_op.*;
+import ^^^.cluster.cluster_op.*;
+import ^^^.common.test.setup.*;
+import ^^^.common.test.ops.*;
+import ^^^.common.test.util.constants.*;
+import ^^.container_proposal.*;
+
+function test_get_cluster_containers() {
+    setup_module();
+
+    // Initial asserting
+    _assert_equals_all(get_containers(), [containers.system]);
+
+    // Adding `foo` to `system` cluster
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "foo", voter_sets.system_p)
+    ).sign(initial_provider).run();
+
+    // Adding `bar_cluster` cluster and `bar` container
+    rell.test.tx().op(
+        create_cluster(initial_provider.pub, "bar_cluster", voter_sets.system_p, list<pubkey>())
+    ).sign(initial_provider).run();
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, "bar_cluster", "bar", voter_sets.system_p)
+    ).sign(initial_provider).run();
+
+    // Asserting all containers
+    _assert_equals_all(get_containers(), [containers.system, "foo", "bar"]);
+
+    // Asserting clusters in `system` container
+    val system_containers = get_cluster_containers(clusters.system);
+    _assert_equals(system_containers, [containers.system, "foo"]);
+
+    // Asserting clusters in `bar_cluster` container
+    val bar_containers = get_cluster_containers("bar_cluster");
+    _assert_equals(bar_containers, ["bar"]);
+
+    // Unknown cluster
+    assert_equals(get_cluster_containers("unknown").size(), 0);
+
+    // Containers for node
+    val node_containers = get_node_containers(initial_signer.pub);
+    _assert_equals_all(node_containers, [containers.system, "foo"]);
+    // Unknown node
+    rell.test.tx().op(
+        _query_in_op__get_node_containers(x"")
+    ).sign(initial_provider).run_must_fail();
+}
+
+function _assert_equals_all(actual: list<(cluster:text, name:text, deployer:text)>, expected: list<text>) {
+    val actual0 = set<text>();
+    for (e in actual) {
+        actual0.add(e.name);
+    }
+    assert_equals(actual0, set(expected));
+}
+
+function _assert_equals(actual: list<(name:text, deployer:text)>, expected: list<text>) {
+    val actual0 = set<text>();
+    for (e in actual) {
+        actual0.add(e.name);
+    }
+    assert_equals(actual0, set(expected));
+}

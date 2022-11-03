@@ -1,0 +1,87 @@
+@test module;
+
+import ^^.*;
+import ^^^^.container.container_op.*;
+import ^^^^.container.test.resource_limits_test.*;
+import ^^^^.cluster.cluster_op.*;
+import ^^^.test.setup.*;
+
+function test_cluster_resource_limits() {
+    setup_module();
+
+    // 1. Creating cluster
+    val cluster1_name = "cluster1";
+    rell.test.tx().op(
+        create_cluster(rell.test.pubkeys.alice, cluster1_name, voter_sets.system_p, list())
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Asserting cluster1 added
+    val cluster1 = cluster @? { cluster1_name };
+    assert_not_null(cluster1);
+
+    // Asserting default cluster resource limits
+    val default_limits = get_cluster_resource_limits(cluster1);
+    assert_cluster_resource_limits(default_limits, -1, -1, -1, -1, -1);
+
+    // Deploying container "foo" and asserting its resource limits
+    val container_count0 = container_count(cluster1_name);
+    rell.test.tx().op(
+        create_container_from(rell.test.pubkeys.alice, "foo", cluster1_name, 1, voter_sets.system_p)
+    ).sign(rell.test.keypairs.alice).run();
+    assert_equals(container_count0 + 1, container_count(cluster1_name));
+    val foo_limits = get_container_resource_limits(container @ { "foo" });
+    assert_container_resource_limits(foo_limits, -1, -1, -1, -1);
+
+    // 2. Proposing cluster resource limits
+    val proposed_limits = map<cluster_resource_limit_type, integer>();
+    proposed_limits[cluster_resource_limit_type.max_containers] = 2;
+    proposed_limits[cluster_resource_limit_type.default_container_max_blockchains] = 3;
+    proposed_limits[cluster_resource_limit_type.default_container_cpu] = 10;
+    proposed_limits[cluster_resource_limit_type.default_container_ram] = 100;
+    rell.test.tx().op(
+        propose_cluster_limits(rell.test.pubkeys.alice, cluster1_name, proposed_limits)
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Asserting new container resource limits
+    val actual = get_cluster_resource_limits(cluster1);
+    val expected = map<cluster_resource_limit_type, integer>();
+    expected.put_all(proposed_limits);
+    expected[cluster_resource_limit_type.default_container_storage] = -1;
+    assert_equals(expected, actual);
+
+    // Deploying container "bar" and asserting its NEW resource limits
+    rell.test.tx().op(
+        create_container_from(rell.test.pubkeys.alice, "bar", cluster1_name, 1, voter_sets.system_p)
+    ).sign(rell.test.keypairs.alice).run();
+    assert_equals(container_count0 + 2, container_count(cluster1_name));
+    val bar_limits = get_container_resource_limits(container @ { "bar" });
+    val bar_expected_limits = map<container_resource_limit_type, integer>();
+    bar_expected_limits[container_resource_limit_type.max_blockchains] = 3;
+    bar_expected_limits[container_resource_limit_type.cpu] = 10;
+    bar_expected_limits[container_resource_limit_type.ram] = 100;
+    bar_expected_limits[container_resource_limit_type.storage] = -1;
+    assert_equals(bar_expected_limits, bar_limits);
+
+    // 3. Trying to deploy more than 2 containers
+    rell.test.tx().op(
+        propose_container(rell.test.pubkeys.alice, cluster1_name, "foobar", voter_sets.system_p)
+    ).sign(rell.test.keypairs.alice).run_must_fail();
+}
+
+function assert_cluster_resource_limits(limits: map<cluster_resource_limit_type, integer>, max_containers: integer, max_blockchains: integer, cpu: integer, ram: integer, storage: integer) {
+    assert_equals(limits[cluster_resource_limit_type.max_containers], max_containers);
+    assert_equals(limits[cluster_resource_limit_type.default_container_max_blockchains], max_blockchains);
+    assert_equals(limits[cluster_resource_limit_type.default_container_cpu], cpu);
+    assert_equals(limits[cluster_resource_limit_type.default_container_ram], ram);
+    assert_equals(limits[cluster_resource_limit_type.default_container_storage], storage);
+}
+
+function get_cluster_resource_limits(cluster): map<cluster_resource_limit_type, integer> {
+    val limits = map<cluster_resource_limit_type, integer>();
+    for (l in cluster_resource_limit @* { cluster }) {
+        limits[l.cluster_resource_limit_type] = l.value;
+    }
+    return limits;
+}
+
+function container_count(cluster_name: text) = container @* { .cluster.name == cluster_name } (@sum 1)[0];

@@ -1,0 +1,32 @@
+@test module;
+
+import ^^.*;
+import ^^^.model.*;
+import ^.ops.*;
+import ^.util.*;
+
+function test_replace_node() {
+    val provider = rell.test.keypairs.alice;
+    rell.test.tx().op(initialize_test_module(provider.pub, 100)).run();
+    assert_not_null(node @? { initial_signer.pub });
+
+    val node2 = rell.test.keypairs.trudy;
+
+    print(node @ {}.pubkey);
+    rell.test.tx().op(
+        replace_node(provider.pub, initial_signer.pub, node2.pub, null, 123, null) 
+    )
+    .sign(provider)
+    .sign(initial_signer)
+    .sign(node2)
+    .run();
+
+    assert_null(node @? { initial_signer.pub });
+    val new_node = node @? { node2.pub };
+    assert_not_null(new_node);
+    assert_equals(new_node.host, "localhost"); // From initialize_test_module
+    assert_equals(new_node.port, 123);
+
+    assert_true(get_signers_of_cluster_name(clusters.system).contains(node2.pub));
+    assert_false(get_signers_of_cluster_name(clusters.system).contains(initial_signer.pub));
+}

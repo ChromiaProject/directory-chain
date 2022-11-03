@@ -1,0 +1,120 @@
+@test module;
+
+import ^^.*;
+import ^^^.test.ops.*;
+import ^^^.test.setup.*;
+import ^^^.test.util.*;
+import ^^^.util.*;
+import ^^^.voting.test.ops.*;
+
+function setup() {
+    setup_module();
+    rell.test.tx().op(create_test_provider("bob", rell.test.pubkeys.bob)).run();
+}
+
+function test_propose_blockchain() {
+    setup();
+
+    val cl = system_cluster();
+    val co = system_container();
+    val alice = provider @ { rell.test.pubkeys.alice };
+    val bob = provider @ { rell.test.pubkeys.bob };
+    rell.test.tx().op(add_test_member(system_p_voter_set(), bob)).run();
+
+    var conf = map<text, text>();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "foo_chain", co.name)
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Proposal is pending
+    val prop = last_proposal();
+    val config_proposal = get_blockchain_proposal(prop.rowid);
+    assert_not_null(config_proposal);
+    assert_equals(config_proposal.container, containers.system);
+    
+    rell.test.tx().op(
+        create_test_node(alice, rell.test.pubkeys.alice, cl)
+    ).sign(rell.test.keypairs.alice).run_must_fail();
+
+    // Bob votes
+    bob_votes();
+
+    // Asserting blockchain is running
+    val bc = blockchain @ { .name == "foo_chain" };
+    assert_true(bc.active);
+
+    // 2. Proposing blockchain pause
+    alice_proposes_action(bc, blockchain_action.pause);
+    assert_action_proposed(blockchain_action.pause);
+    bob_votes();
+    assert_false(bc.active);
+
+    // 3. Proposing blockchain resume
+    alice_proposes_action(bc, blockchain_action.resume);
+    assert_action_proposed(blockchain_action.resume);
+    bob_votes();
+    assert_true(bc.active);
+
+    // 4. Proposing blockchain deleted
+    val brid = bc.rid;
+    alice_proposes_action(bc, blockchain_action.remove);
+    assert_action_proposed(blockchain_action.remove);
+    bob_votes();
+    assert_null( blockchain @? { .rid == brid } );
+
+    // Proposal(s) is removed
+    assert_null(proposal @? {} limit 1);
+}
+
+function alice_proposes_action(bc: blockchain, action: blockchain_action) {
+    rell.test.tx().op(
+        propose_blockchain_action(rell.test.pubkeys.alice, bc.rid, action)
+    ).sign(rell.test.keypairs.alice).run();
+}
+
+function bob_votes() {
+    val bob = rell.test.pubkeys.bob;
+    rell.test.tx().op(
+        make_vote(bob, integer_from_rowid(last_proposal().rowid), true)
+    ).sign(rell.test.keypairs.bob).run();
+}
+
+function assert_action_proposed(action: blockchain_action) {
+    assert_equals(
+        pending_blockchain_action @ { last_proposal() } .action,
+        action
+    );
+}
+
+function test_propose_configuration() {
+    setup_module();
+
+    val alice = rell.test.keypairs.alice;
+
+    var conf = map<text, text>();
+    rell.test.tx().op(
+        propose_blockchain(alice.pub, conf.to_gtv().to_bytes(), "foo_chain", containers.system)
+    ).sign(alice).run(); 
+    val bc = blockchain @? { conf.hash() };
+    assert_not_null(bc);
+
+    //force == false: only configs for heights > next config height can be added:
+    alice_propose_conf(bc.rid, conf, 10, false).run();
+    assert_not_null(blockchain_configuration @? { bc, .height == 10 });
+    alice_propose_conf(bc.rid, conf, 8, false).run_must_fail();
+
+
+    //force == true: OK to add configs at all heights > current height
+    alice_propose_conf(bc.rid, conf, 8, true).run();
+    assert_not_null(blockchain_configuration @? { bc, .height == 8 });
+    //force == true: OK to override a configuration
+    alice_propose_conf(bc.rid, conf, 10, true).run();
+}
+
+function alice_propose_conf(brid: byte_array, conf: map<text, text>, height: integer, force: boolean) {
+    val alice = rell.test.keypairs.alice;
+    return rell.test.tx().op(
+        propose_configuration_at(alice.pub, brid, conf.to_gtv().to_bytes(), height, force)
+    )  
+    .sign(alice);
+}
