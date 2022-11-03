@@ -3,22 +3,30 @@
 import ^^.container_proposal.*;
 import ^^^.common.test.setup.*;
 
-
-function test_remove_container() {
+function test_propose_and_remove_container() {
     setup_module();
+    val alice = provider @ { rell.test.pubkeys.alice };
 
     // 1. Deleting system container. Must fail.
     rell.test.tx().op(
-        propose_remove_container(rell.test.pubkeys.alice, "system")
+        propose_remove_container(alice.pubkey, "system")
     ).sign(rell.test.keypairs.alice).run_must_fail();
 
     // 2. Deleting unknown container. Must fail.
     rell.test.tx().op(
-        propose_remove_container(rell.test.pubkeys.alice, "unknown")
+        propose_remove_container(alice.pubkey, "unknown")
     ).sign(rell.test.keypairs.alice).run_must_fail();
 
-    // 3. Adding a new container
-    val alice = provider @ { rell.test.pubkeys.alice };
+    // 3. Proposing container by provider that is not a member of cluster's governance
+    rell.test.tx().op(
+        register_provider(alice.pubkey, rell.test.pubkeys.bob, provider_tier.COMMUNITY_NODE_PROVIDER)
+    ).sign(rell.test.keypairs.alice).run();
+    assert_not_null(provider @? { rell.test.pubkeys.bob });
+    rell.test.tx().op(
+        propose_container(rell.test.pubkeys.bob, clusters.system, "container1", voter_sets.system_p)
+    ).sign(rell.test.keypairs.bob).run_must_fail();
+
+    // 4. Adding a new container
     rell.test.tx().op(
         propose_container(alice.pubkey, clusters.system, "container1", voter_sets.system_p)
     ).sign(rell.test.keypairs.alice).run();

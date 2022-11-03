@@ -3,11 +3,12 @@ operation propose_container_limits(my_pubkey: pubkey, container_name: text, limi
     val limits_map = _get_current_container_resource_limits(container_name);
     limits_map.put_all(limits);
 
-    val me = require_provider(my_pubkey);
-    val container = require_container(container_name);
     // check that provider authority and that it is cluster's deployer
+    val me = require_provider(my_pubkey);
     require_provider_auth_with_rl(me);
+    val container = require_container(container_name);
 	require_cluster_governor(container.cluster, me);
+
     val prop = create proposal(op_context.last_block_time, proposal_type.container_limits, me, container.cluster.governance);
     create pending_container_limits(
         prop,
