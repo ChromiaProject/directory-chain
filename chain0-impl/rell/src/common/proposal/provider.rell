@@ -12,12 +12,23 @@ operation propose_cluster_provider(my_pubkey: pubkey, cluster_name: text, provid
 	internal_vote(me, prop, true);
 }
 
+/*
+      | CNP | NP  | SP
+ -----|-----|-----|-----
+  CNP |  -  |  -  |  -
+  NP  |  +  |  -  |  -
+  SP  |  +  |  +  |  +
+*/
 operation propose_enable_provider(my_pubkey: pubkey, enable_pubkey: pubkey) {
 	val me = require_provider(my_pubkey);
 	val other_prov = require_provider(enable_pubkey);
-
 	require_provider_auth_with_rl(me);
-	if (other_prov.tier == provider_tier.COMMUNITY_NODE_PROVIDER and roles.has_node_access(me)) {
+
+    // Only SP and NP can enable providers
+	require_node_access(me);
+
+    // NP can enable CNP without voting, otherwise
+	if (roles.has_node_access(me) and other_prov.tier == provider_tier.COMMUNITY_NODE_PROVIDER) {
 		update_provider_state(other_prov, true);		
 	} else {
 		require_system_access(me);
