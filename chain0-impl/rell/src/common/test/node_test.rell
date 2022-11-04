@@ -4,6 +4,7 @@ import ^^.*;
 import ^^^.model.*;
 import ^.ops.*;
 import ^.util.*;
+import ^^.test.setup.*;
 
 function test_replace_node() {
     val provider = rell.test.keypairs.alice;
@@ -30,3 +31,42 @@ function test_replace_node() {
     assert_true(get_signers_of_cluster_name(clusters.system).contains(node2.pub));
     assert_false(get_signers_of_cluster_name(clusters.system).contains(initial_signer.pub));
 }
+
+function test_update_node() {
+    setup_module();
+
+    val prov = initial_provider();
+    val before = _get_node_data(prov);
+
+    // Trivial update
+    rell.test.tx().op(
+        update_node(initial_provider.pub, initial_signer.pub)
+    ).sign(initial_provider).run();
+    assert_equals(_get_node_data(prov), before);
+
+    // Updating host:port
+    rell.test.tx().op(
+        update_node(initial_provider.pub, initial_signer.pub, host = "new_host", port = 777)
+    ).sign(initial_provider).run();
+    assert_equals(
+        _get_node_data(prov),
+        ("new_host", 777, before[2], _prev_block_time(), _prev_block_time())
+    );
+
+    // Updating api_port
+    rell.test.tx().op(
+        update_node(initial_provider.pub, initial_signer.pub, api_url = "http://localhost/api")
+    ).sign(initial_provider).run();
+    val prev_node_list = node_list.last_update;
+    assert_equals(
+        _get_node_data(prov),
+        ("new_host", 777, "http://localhost/api", _prev_block_time(), prev_node_list)
+    );
+}
+
+function _get_node_data(provider)
+    = node @ { provider } ( _ = .host, _ = .port, _ = .api_url, _ = .last_updated, _ = node_list.last_update );
+
+function _prev_block_time()
+    = (block @* { } ( @omit @sort_desc .block_height, .timestamp ) limit 2)[1];
+
