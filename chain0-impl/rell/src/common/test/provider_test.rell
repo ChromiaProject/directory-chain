@@ -65,13 +65,13 @@ function test_enable_provider() {
       SP  |  *  |  *  |  *
     */
     rell.test.tx().op(
-        propose_enable_provider(dapp_provider1.pub, dapp_provider2.pub)
+        propose_provider_state(dapp_provider1.pub, dapp_provider2.pub, true)
     ).sign(dapp_provider1).run_must_fail();
     rell.test.tx().op(
-        propose_enable_provider(dapp_provider1.pub, node_provider2.pub)
+        propose_provider_state(dapp_provider1.pub, node_provider2.pub, true)
     ).sign(dapp_provider1).run_must_fail();
     rell.test.tx().op(
-        propose_enable_provider(dapp_provider1.pub, initial_provider.pub)
+        propose_provider_state(dapp_provider1.pub, initial_provider.pub, true)
     ).sign(dapp_provider1).run_must_fail();
 
     // NP tries to activate CNP and fails because it is not activated
@@ -83,7 +83,7 @@ function test_enable_provider() {
       SP  |  *  |  *  |  *
     */
     rell.test.tx().op(
-        propose_enable_provider(node_provider1.pub, dapp_provider1.pub)
+        propose_provider_state(node_provider1.pub, dapp_provider1.pub, true)
     ).sign(node_provider1).run_must_fail();
 
     // SP activates NP
@@ -95,7 +95,7 @@ function test_enable_provider() {
       SP  |  *  | (+) |  *
     */
     rell.test.tx().op(
-        propose_enable_provider(initial_provider.pub, node_provider1.pub)
+        propose_provider_state(initial_provider.pub, node_provider1.pub, true)
     ).sign(initial_provider).run();
     rell.test.tx().op(
         make_vote(system_provider.pub, integer_from_rowid(last_proposal().rowid), true)
@@ -112,7 +112,7 @@ function test_enable_provider() {
       SP  | (+) |  +  |  *
     */
     rell.test.tx().op(
-        propose_enable_provider(initial_provider.pub, dapp_provider1.pub)
+        propose_provider_state(initial_provider.pub, dapp_provider1.pub, true)
     ).sign(initial_provider).run();
 
     // NP activates CNP (it's activated by default, just checking requirements), NP, SP
@@ -124,13 +124,13 @@ function test_enable_provider() {
       SP  |  +  |  +  |  *
     */
     rell.test.tx().op(
-        propose_enable_provider(node_provider1.pub, dapp_provider1.pub)
+        propose_provider_state(node_provider1.pub, dapp_provider1.pub, true)
     ).sign(node_provider1).run();
     rell.test.tx().op(
-        propose_enable_provider(node_provider1.pub, node_provider2.pub)
+        propose_provider_state(node_provider1.pub, node_provider2.pub, true)
     ).sign(node_provider1).run_must_fail();
     rell.test.tx().op(
-        propose_enable_provider(node_provider1.pub, initial_provider.pub)
+        propose_provider_state(node_provider1.pub, initial_provider.pub, true)
     ).sign(initial_provider).run_must_fail();
 
     // SP activates SP
@@ -142,7 +142,7 @@ function test_enable_provider() {
       SP  |  +  |  +  | (+)
     */
     rell.test.tx().op(
-        propose_enable_provider(initial_provider.pub, system_provider.pub)
+        propose_provider_state(initial_provider.pub, system_provider.pub, true)
     ).sign(initial_provider).run();
     assert_true(sp.active);
     assert_true(roles.has_system_access(sp));
@@ -188,7 +188,7 @@ function test_disable_provider() {
     ).sign(initial_provider).run();
 
     rell.test.tx().op(
-        propose_enable_provider(initial_provider.pub, system_provider.pub),
+        propose_provider_state(initial_provider.pub, system_provider.pub, true),
         propose_provider_is_system(initial_provider.pub, system_provider.pub, true)
     ).sign(initial_provider).run();
 
@@ -219,13 +219,13 @@ function test_disable_provider() {
       SP  |  x  |  x  |  x
     */
     rell.test.tx().op(
-        propose_disable_provider(dapp_provider1.pub, dapp_provider2.pub)
+        propose_provider_state(dapp_provider1.pub, dapp_provider2.pub, false)
     ).sign(dapp_provider1).run_must_fail();
     rell.test.tx().op(
-        propose_disable_provider(dapp_provider1.pub, node_provider2.pub)
+        propose_provider_state(dapp_provider1.pub, node_provider2.pub, false)
     ).sign(dapp_provider1).run_must_fail();
     rell.test.tx().op(
-        propose_disable_provider(dapp_provider1.pub, initial_provider.pub)
+        propose_provider_state(dapp_provider1.pub, initial_provider.pub, false)
     ).sign(dapp_provider1).run_must_fail();
 
     // NP tries to deactivate CNP, NP, SP
@@ -237,13 +237,13 @@ function test_disable_provider() {
       SP  |  x  |  x  |  x
     */
     rell.test.tx().op(
-        propose_disable_provider(node_provider1.pub, dapp_provider2.pub)
+        propose_provider_state(node_provider1.pub, dapp_provider2.pub, false)
     ).sign(node_provider1).run();
     rell.test.tx().op(
-        propose_disable_provider(node_provider1.pub, node_provider2.pub)
+        propose_provider_state(node_provider1.pub, node_provider2.pub, false)
     ).sign(node_provider1).run_must_fail();
     rell.test.tx().op(
-        propose_disable_provider(node_provider1.pub, initial_provider.pub)
+        propose_provider_state(node_provider1.pub, initial_provider.pub, false)
     ).sign(node_provider1).run_must_fail();
 
     // SP tries to deactivate CNP, NP, SP
@@ -261,14 +261,14 @@ function test_disable_provider() {
     assert_true(sp.active);
     // Disabling providers
     rell.test.tx().op(
-        propose_disable_provider(initial_provider.pub, dapp_provider1.pub)
+        propose_provider_state(initial_provider.pub, dapp_provider1.pub, false)
     ).sign(initial_provider).run();
     rell.test.tx().op(
-        propose_disable_provider(initial_provider.pub, node_provider1.pub)
+        propose_provider_state(initial_provider.pub, node_provider1.pub, false)
     ).sign(initial_provider).run();
     _provider_votes(system_provider);
     rell.test.tx().op(
-        propose_disable_provider(initial_provider.pub, system_provider.pub)
+        propose_provider_state(initial_provider.pub, system_provider.pub, false)
     ).sign(initial_provider).run();
     _provider_votes(system_provider);
     // Asserting
@@ -287,7 +287,7 @@ function test_disable_provider() {
 
 function _enable_provider(provider, additional_voter: rell.test.keypair? = null) {
     rell.test.tx().op(
-        propose_enable_provider(initial_provider.pub, provider.pubkey)
+        propose_provider_state(initial_provider.pub, provider.pubkey, true)
     ).sign(initial_provider).run();
 
     if (additional_voter != null) {
