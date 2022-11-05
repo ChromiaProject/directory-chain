@@ -41,15 +41,23 @@ operation propose_enable_provider(my_pubkey: pubkey, enable_pubkey: pubkey) {
 }
 
 operation propose_disable_provider(my_pubkey: pubkey, disable_pubkey: pubkey) {
-	val me = require_is_system_provider(my_pubkey);
+	val me = require_provider(my_pubkey);
 	val other_prov = require_provider(disable_pubkey);
 	require_provider_auth_with_rl(me);
-	
-	if (empty(pending_provider_state @* { .provider == other_prov, .active == false } limit 1)) {
-		val prop = create proposal(op_context.last_block_time, proposal_type.provider_state, me, system_p_voter_set());
-		create pending_provider_state(prop, other_prov, .active = false);
-		internal_vote(me, prop, true);
-	}
+
+	// Only SP and NP can disable providers
+    require_node_access(me);
+
+	if (roles.has_node_access(me) and other_prov.tier == provider_tier.COMMUNITY_NODE_PROVIDER) {
+        update_provider_state(other_prov, false);
+    } else {
+        require_system_access(me);
+        if (empty(pending_provider_state @* { .provider == other_prov, .active == false } limit 1)) {
+            val prop = create proposal(op_context.last_block_time, proposal_type.provider_state, me, system_p_voter_set());
+            create pending_provider_state(prop, other_prov, .active = false);
+            internal_vote(me, prop, true);
+        }
+    }
 }
 
 operation propose_provider_is_system(my_pubkey: pubkey, provider_pubkey: pubkey, promote: boolean) {
