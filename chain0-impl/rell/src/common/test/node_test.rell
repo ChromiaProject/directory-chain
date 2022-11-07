@@ -6,7 +6,65 @@ import ^.ops.*;
 import ^.util.*;
 import ^^.test.setup.*;
 
-function test_replace_node() {
+function test_add_node() {
+    setup_module();
+
+    val system_provider = rell.test.keypairs.bob;
+    val sp_node_key = x"01";
+
+    val node_provider = rell.test.keypairs.trudy;
+    val np_node_key = x"02";
+
+    val dapp_provider = rell.test.keypair(
+        priv = x"71C89AE77719E3779EAE09C26A229F7AF33D8C8F7E7E8D82A9A42470C224AB56",
+        pub = x"020EE9063CED9B47CC60EB931443C01F3FD7A0DAB4B2D0505D3A2FAAD4FA9ABF13"
+    );
+    val dp_node_key = x"03";
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, dapp_provider.pub, provider_tier.COMMUNITY_NODE_PROVIDER),
+        register_provider(initial_provider.pub, node_provider.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, node_provider.pub, true),
+        register_provider(initial_provider.pub, system_provider.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, system_provider.pub, true)
+    ).sign(initial_provider).run();
+
+    // SP's node is added by IP and fails
+    rell.test.tx().op(
+        add_node(system_provider.pub, sp_node_key, "host", 7777, "http://host/api_url")
+    ).sign(initial_provider).run_must_fail();
+
+    // SP adds a node
+    rell.test.tx().op(
+        add_node(system_provider.pub, sp_node_key, "host", 7777, "http://host/api_url")
+    ).sign(system_provider).run();
+    val sp_node = node @? { sp_node_key };
+    assert_not_null(sp_node);
+    assert_true(sp_node.active);
+
+    // NP's node is added by IP and fails
+    rell.test.tx().op(
+        add_node(node_provider.pub, np_node_key, "host", 7777, "http://host/api_url")
+    ).sign(initial_provider).run_must_fail();
+    // NP adds a node
+    rell.test.tx().op(
+        add_node(node_provider.pub, np_node_key, "host", 7777, "http://host/api_url")
+    ).sign(node_provider).run();
+    val np_node = node @? { np_node_key };
+    assert_not_null(np_node);
+    assert_true(np_node.active);
+
+    // DP/CNP's node is added by IP and fails
+    rell.test.tx().op(
+        add_node(dapp_provider.pub, dp_node_key, "host", 7777, "http://host/api_url")
+    ).sign(initial_provider).run_must_fail();
+    // DP/CNP adds a node and fails, only providers with "node access" can add nodes.
+    rell.test.tx().op(
+        add_node(dapp_provider.pub, dp_node_key, "host", 7777, "http://host/api_url")
+    ).sign(dapp_provider).run_must_fail();
+}
+
+function ff_test_replace_node() {
     val provider = rell.test.keypairs.alice;
     rell.test.tx().op(initialize_test_module(provider.pub, 100)).run();
     assert_not_null(node @? { initial_signer.pub });
@@ -32,7 +90,7 @@ function test_replace_node() {
     assert_false(get_signers_of_cluster_name(clusters.system).contains(initial_signer.pub));
 }
 
-function test_update_node() {
+function ff_test_update_node() {
     setup_module();
 
     val prov = initial_provider();

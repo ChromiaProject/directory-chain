@@ -2,8 +2,10 @@
 
 operation add_node(provider_key:pubkey, node_pubkey: pubkey, host: text, port: integer, api_url: text, clusters:list<text> = list<text>()) {
 	print("-------------Add-Node--------------");
-	require_provider_auth_with_rl(provider @ { provider_key });
-	add_node_internal(provider @ { provider_key }, node_pubkey, host, port, api_url, clusters);
+	val provider = require_provider(provider_key);
+	require_provider_auth_with_rl(provider);
+	require_node_access(provider);
+	add_node_internal(provider, node_pubkey, host, port, api_url, clusters);
 	print("Added node information for node: " + node_pubkey.to_hex());
 	print("-----------------------------------");
 }
