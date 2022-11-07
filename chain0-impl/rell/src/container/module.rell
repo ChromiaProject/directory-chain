@@ -3,10 +3,7 @@ module;
 import ^.model.*;
 import ^.common.util.*;
 
-function create_container_impl(me:pubkey, name, cluster_name:text, consensus_threshold: integer, deployers: list<pubkey>) {
-    val provider = require_is_provider_with_rl(me);
-    val cluster = require_cluster(cluster_name);
-    require_cluster_governor(cluster, provider);
+function create_container_impl(name, cluster, consensus_threshold: integer, deployers: list<pubkey>) {
     require(consensus_threshold >= -1 and consensus_threshold <= deployers.size(), "Invalid threshold");
     val vs = create_voter_set_internal("container_" + name + "_deployer", consensus_threshold, cluster.governance);
     for (deployer_key in deployers) {
@@ -18,7 +15,7 @@ function create_container_impl(me:pubkey, name, cluster_name:text, consensus_thr
     val cpu = _get_cluster_limit_or_default(cluster, cluster_resource_limit_type.default_container_cpu);
     val ram = _get_cluster_limit_or_default(cluster, cluster_resource_limit_type.default_container_ram);
     val storage = _get_cluster_limit_or_default(cluster, cluster_resource_limit_type.default_container_storage);
-    create_container_with_resource_limits(name, container_type.isolated, cluster, vs, max_blockchains, cpu, ram, storage); // TODO: Add Resource limits
+    create_container_with_resource_limits(name, container_type.isolated, cluster, vs, max_blockchains, cpu, ram, storage); 
 }
 
 operation remove_container(me:pubkey, container_name:text) {
