@@ -146,6 +146,14 @@ function test_remove_node() {
     rell.test.tx().op(
         remove_node(initial_provider.pub, sp_node_key)
     ).sign(initial_provider).run_must_fail();
+
+    // SP removes its own node
+    rell.test.tx().op(
+        remove_node(system_provider.pub, sp_node_key)
+    ).sign(system_provider).run();
+    val sp_removed = node @? { np2_node_key };
+    assert_not_null(sp_removed);
+    assert_false(sp_removed.active);
 }
 
 function test_replace_node() {

@@ -59,12 +59,12 @@ operation remove_node(my_pubkey: pubkey, node_pubkey: pubkey) {
     val provider = require_provider(my_pubkey);
 	require_provider_auth_with_rl(provider);
 	val node_to_remove = node @ { node_pubkey };
-	if (roles.has_system_access(provider)) {
-        require(
-            roles.has_node_access(node_to_remove.provider) and not(roles.has_system_access(node_to_remove.provider)),
-            "System provider can't delete nodes of other system provider");
-	} else {
-	    require(node_to_remove.provider == provider, "It is only allowed to remove own nodes");
+
+	if (provider != node_to_remove.provider) {
+	    require(roles.has_system_access(provider), "Non system provider is only allowed to remove own nodes");
+	    require(
+            node_to_remove.provider.tier == provider_tier.NODE_PROVIDER and not(node_to_remove.provider.system),
+            "System provider is only allowed to remove nodes of non system provider");
 	}
 
 	node_to_remove.active = false;
