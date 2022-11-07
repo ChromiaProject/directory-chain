@@ -4,23 +4,23 @@ import ^.setup.*;
 import ^^.*;
 import ^.util.*;
 
+val system_provider = rell.test.keypairs.bob;
+val node_provider1 = rell.test.keypairs.trudy;
+val node_provider2 = rell.test.keypair(
+     priv = x"B39E4CCCB9B0FD71B7AC9FFF1216C34648FA7362ECD9874743776BDFDEE4F6A8",
+     pub = x"03BD01AF899839BDDB5810616C1AF8B61B415E903D73418DED238A8EEA352C72E0"
+ );
+val dapp_provider1 = rell.test.keypair(
+    priv = x"71C89AE77719E3779EAE09C26A229F7AF33D8C8F7E7E8D82A9A42470C224AB56",
+    pub = x"020EE9063CED9B47CC60EB931443C01F3FD7A0DAB4B2D0505D3A2FAAD4FA9ABF13"
+);
+val dapp_provider2 = rell.test.keypair(
+    priv = x"49DB53CB0E1CC472DE90FC833CEDB4E1B412C5AF658342762D1BB8F3886063B6",
+    pub = x"031D22EA1C599A69E35E023E1CBCEAC66C046B445FF5507DBA650B58F28C650A15"
+);
+
 function test_enable_provider() {
     setup_module();
-
-    val system_provider = rell.test.keypairs.bob;
-    val node_provider1 = rell.test.keypairs.trudy;
-    val node_provider2 = rell.test.keypair(
-         priv = x"B39E4CCCB9B0FD71B7AC9FFF1216C34648FA7362ECD9874743776BDFDEE4F6A8",
-         pub = x"03BD01AF899839BDDB5810616C1AF8B61B415E903D73418DED238A8EEA352C72E0"
-     );
-    val dapp_provider1 = rell.test.keypair(
-        priv = x"71C89AE77719E3779EAE09C26A229F7AF33D8C8F7E7E8D82A9A42470C224AB56",
-        pub = x"020EE9063CED9B47CC60EB931443C01F3FD7A0DAB4B2D0505D3A2FAAD4FA9ABF13"
-    );
-    val dapp_provider2 = rell.test.keypair(
-        priv = x"49DB53CB0E1CC472DE90FC833CEDB4E1B412C5AF658342762D1BB8F3886063B6",
-        pub = x"031D22EA1C599A69E35E023E1CBCEAC66C046B445FF5507DBA650B58F28C650A15"
-    );
 
     rell.test.tx().op(
         register_provider(initial_provider.pub, system_provider.pub, provider_tier.NODE_PROVIDER),
@@ -159,26 +159,6 @@ function test_enable_provider() {
 function test_disable_provider() {
     setup_module();
 
-//    val system_provider = rell.test.keypairs.bob;
-    val system_provider = rell.test.keypair(
-       priv = x"098D4D89103B5439CF1C9B195586888AEB6A2EF75C59F8234F1002F089690B63",
-       pub = x"0273E6B94E97F0A0B649C0DA28592ECCF5116FA065515F1A72842B4A9B7DE55C61"
-   );
-
-    val node_provider1 = rell.test.keypairs.trudy;
-    val node_provider2 = rell.test.keypair(
-         priv = x"B39E4CCCB9B0FD71B7AC9FFF1216C34648FA7362ECD9874743776BDFDEE4F6A8",
-         pub = x"03BD01AF899839BDDB5810616C1AF8B61B415E903D73418DED238A8EEA352C72E0"
-     );
-    val dapp_provider1 = rell.test.keypair(
-        priv = x"71C89AE77719E3779EAE09C26A229F7AF33D8C8F7E7E8D82A9A42470C224AB56",
-        pub = x"020EE9063CED9B47CC60EB931443C01F3FD7A0DAB4B2D0505D3A2FAAD4FA9ABF13"
-    );
-    val dapp_provider2 = rell.test.keypair(
-        priv = x"49DB53CB0E1CC472DE90FC833CEDB4E1B412C5AF658342762D1BB8F3886063B6",
-        pub = x"031D22EA1C599A69E35E023E1CBCEAC66C046B445FF5507DBA650B58F28C650A15"
-    );
-
     rell.test.tx().op(
         register_provider(initial_provider.pub, system_provider.pub, provider_tier.NODE_PROVIDER),
         register_provider(initial_provider.pub, node_provider1.pub, provider_tier.NODE_PROVIDER),
@@ -300,27 +280,3 @@ function _provider_votes(voter: rell.test.keypair) {
         make_vote(voter.pub, integer_from_rowid(last_proposal().rowid), true)
     ).sign(voter).run();
 }
-
-/*
-function test_register_provider_TODO() {
-    // CNP is trying to register  CNP
-    rell.test.tx().op(
-        register_provider(dapp_provider1.pub, x"03", provider_tier.COMMUNITY_NODE_PROVIDER)
-    ).sign(dapp_provider1).run_must_fail();
-//    // Node provider cannot add node provider
-//        rell.test.tx().op(
-//            register_provider(node_provider.pub, x"03", provider_tier.NODE_PROVIDER)
-//        ).sign(node_provider).run_must_fail();
-}
-*/
-
-/*
-function test_promote_provider_TODO() {
-//    // Dapp provider is promoted
-//        rell.test.tx().op(
-//            promote_node_provider(initial_provider.pub, dp.pubkey)
-//        ).sign(initial_provider).run();
-//        assert_true(roles.has_node_access(dp)); // Has to be enabled first
-}
-*/
-
