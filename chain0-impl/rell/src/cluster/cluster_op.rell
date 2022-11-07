@@ -8,6 +8,7 @@ import ^^.common.cluster.*;
 // Creates a cluster with a set of providers
 operation create_cluster(my_pubkey: pubkey, name, governor_voter_set: text, provider_pubkeys: list<pubkey>) {
     val me = require_is_provider_with_rl(my_pubkey);
+    require_node_access(me);
     val governor = require_voter_set(governor_voter_set);
     create_cluster_impl(name, governor, provider_pubkeys);
 }
@@ -15,6 +16,7 @@ operation create_cluster(my_pubkey: pubkey, name, governor_voter_set: text, prov
 // Creates a cluster provided by the members of an existing voter set
 operation create_cluster_from(my_pubkey: pubkey, name, governor_voter_set: text, provider_voter_set: text) {
     val me = require_is_provider_with_rl(my_pubkey);
+    require_node_access(me);
     val governor = require_voter_set(governor_voter_set);
     val node_provider_set = require_voter_set(provider_voter_set);
     create_cluster_impl(name, governor, voter_set_member @* { node_provider_set }.provider.pubkey);

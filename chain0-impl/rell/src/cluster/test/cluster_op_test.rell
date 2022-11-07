@@ -2,68 +2,94 @@
 
 import ^^.cluster_op.*;
 import ^^^.common.test.setup.*;
+import ^^^.common.test.util.*;
 import ^^^.common.proposal.*;
 import ^^^.container.container_op.*;
 
 function test_add_remove_cluster() {
     setup_module();
-    val alice = provider @ { rell.test.pubkeys.alice };
+
+    // Initial state
+    val node_provider1 = rell.test.keypairs.bob;
+    val dapp_provider1 = rell.test.keypairs.trudy;
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, dapp_provider1.pub, provider_tier.COMMUNITY_NODE_PROVIDER),
+        register_provider(initial_provider.pub, node_provider1.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, node_provider1.pub, true)
+    ).sign(initial_provider).run();
 
     // 1. Deleting system cluster. Must fail.
     rell.test.tx().op(
-        propose_remove_cluster(rell.test.pubkeys.alice, clusters.system)
-    ).sign(rell.test.keypairs.alice).run_must_fail();
+        propose_remove_cluster(initial_provider.pub, clusters.system)
+    ).sign(initial_provider).run_must_fail();
 
     // 2. Deleting unknown cluster. Must fail.
     rell.test.tx().op(
-        propose_remove_cluster(rell.test.pubkeys.alice, "unknown")
-    ).sign(rell.test.keypairs.alice).run_must_fail();
+        propose_remove_cluster(initial_provider.pub, "unknown")
+    ).sign(initial_provider).run_must_fail();
 
     // 3. Adding a new cluster
     rell.test.tx().op(
-        create_cluster(rell.test.pubkeys.alice, "cluster1",  voter_sets.system_p, [alice.pubkey])
-    ).sign(rell.test.keypairs.alice).run();
+        create_cluster(initial_provider.pub, "cluster1",  voter_sets.system_p, [initial_provider.pub])
+    ).sign(initial_provider).run();
 
     // Asserting cluster1 added
     val cluster1 = cluster @? { "cluster1" };
     assert_not_null(cluster1);
 
     // Adding a node into cluster1
-    val node = node @ { .provider == alice };
+    val node = node @ { .provider == initial_provider() };
     rell.test.tx().op(
-        add_node_to_cluster(rell.test.pubkeys.alice, node.pubkey, "cluster1")
-    ).sign(rell.test.keypairs.alice).run();
+        add_node_to_cluster(initial_provider.pub, node.pubkey, "cluster1")
+    ).sign(initial_provider).run();
 
     // Asserting cluster1's stuff added
     assert_false(empty(cluster_resource_limit @* { cluster1 }));
     assert_not_null(cluster_node @? { cluster1 });
     assert_not_null(cluster_provider @? { cluster1 });
 
+    // Asserting that permissions are honored for create_cluster() / create_cluster_from()
+    rell.test.tx().op(
+        create_cluster(dapp_provider1.pub, "dapp_cluster",  voter_sets.system_p, [dapp_provider1.pub])
+    ).sign(dapp_provider1).run_must_fail();
+    rell.test.tx().op(
+        create_cluster_from(dapp_provider1.pub, "dapp_cluster_from",  voter_sets.system_p, voter_sets.system_p)
+    ).sign(dapp_provider1).run_must_fail();
+    rell.test.tx().op(
+        create_cluster(node_provider1.pub, "node_cluster",  voter_sets.system_p, [node_provider1.pub])
+    ).sign(node_provider1).run();
+    assert_not_null(cluster @? { "node_cluster" });
+    rell.test.tx().op(
+        create_cluster_from(node_provider1.pub, "node_cluster_from",  voter_sets.system_p, voter_sets.system_p)
+    ).sign(node_provider1).run();
+    assert_not_null(cluster @? { "node_cluster_from" });
+    // Permissions are honored
+
     // Adding container
     rell.test.tx().op(
-        create_container_from(alice.pubkey, "container1", cluster1.name, 1, voter_sets.system_p)
-    ).sign(rell.test.keypairs.alice).run();
+        create_container_from(initial_provider.pub, "container1", cluster1.name, 1, voter_sets.system_p)
+    ).sign(initial_provider).run();
 
     // Asserting container1 is added
     assert_not_null(container @? { "container1" });
 
     // Trying to remove cluster1 and fail because it contains container1
     rell.test.tx().op(
-        propose_remove_cluster(rell.test.pubkeys.alice, "cluster1")
-    ).sign(rell.test.keypairs.alice).run_must_fail();
+        propose_remove_cluster(initial_provider.pub, "cluster1")
+    ).sign(initial_provider).run_must_fail();
 
     // Removing container1 from cluster1
     rell.test.tx().op(
-        remove_container(rell.test.pubkeys.alice, "container1")
-    ).sign(rell.test.keypairs.alice).run();
+        remove_container(initial_provider.pub, "container1")
+    ).sign(initial_provider).run();
 
     // Asserting container1 is deleted
     assert_null(container @? { "container1" });
 
     // Trying to remove cluster1 again
     rell.test.tx().op(
-        propose_remove_cluster(rell.test.pubkeys.alice, "cluster1")
-    ).sign(rell.test.keypairs.alice).run();
+        propose_remove_cluster(initial_provider.pub, "cluster1")
+    ).sign(initial_provider).run();
 
     // Asserting cluster1 is deleted with its stuff
     assert_null(cluster @? { "cluster1" });
