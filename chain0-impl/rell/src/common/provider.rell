@@ -75,10 +75,11 @@ function provider_rate_limit(provider) {
     );
 }
 
-operation transfer_action_points(from: provider, to: provider, amount: integer) {
-	require_provider_auth_with_rl(from);
-	require(provider_rl_state @ { from } .points >= amount, "Not enough action points to transfer from.");
-	update provider_rl_state @ { from } ( .points -= amount );
-	update provider_rl_state @ { to } ( .points += amount );
+operation transfer_action_points(from: pubkey, to: pubkey, amount: integer) {
+	val _from = require_is_provider_with_rl(from);
+	val _to = require_provider(to);
+	require(provider_rl_state @ { _from } .points >= amount, "Not enough action points to transfer from.");
+	update provider_rl_state @ { _from } ( .points -= amount );
+	update provider_rl_state @ { _to } ( .points += amount );
 }
 

@@ -321,6 +321,90 @@ function test_promote_node_provider() {
     ).sign(system_provider).run_must_fail();
 }
 
+function test_transfer_action_points() {
+    setup_module();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, system_provider.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, node_provider1.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, node_provider2.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, dapp_provider1.pub, provider_tier.COMMUNITY_NODE_PROVIDER),
+        register_provider(initial_provider.pub, dapp_provider2.pub, provider_tier.COMMUNITY_NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, system_provider.pub, true),
+        propose_provider_is_system(initial_provider.pub, system_provider.pub, true)
+    ).sign(initial_provider).run();
+
+    // Asserting initial state
+    val sp = provider @? { system_provider.pub };
+    val np1 = provider @? { node_provider1.pub };
+    val np2 = provider @? { node_provider2.pub };
+    val dp1 = provider @? { dapp_provider1.pub };
+    val dp2 = provider @? { dapp_provider2.pub };
+
+    assert_equals(_points(sp), 100);
+    assert_equals(_points(np1), 100);
+    assert_equals(_points(np2), 100);
+    assert_equals(_points(dp1), 100);
+    assert_equals(_points(dp2), 100);
+
+    // Bad op sign
+    rell.test.tx().op(
+        transfer_action_points(dapp_provider1.pub, dapp_provider2.pub, 10)
+    ).sign(initial_provider).run_must_fail();
+
+    // CNP -> itself, CNP, NP, SP
+    rell.test.tx().op(
+        transfer_action_points(dapp_provider1.pub, dapp_provider1.pub, 10),
+        transfer_action_points(dapp_provider1.pub, dapp_provider2.pub, 10),
+        transfer_action_points(dapp_provider1.pub, node_provider1.pub, 10),
+        transfer_action_points(dapp_provider1.pub, system_provider.pub, 10)
+    ).sign(dapp_provider1).run();
+    assert_equals(_points(dp1), 66);
+    assert_equals(_points(dp2), 110);
+    assert_equals(_points(np1), 110);
+    assert_equals(_points(sp), 110);
+
+    // NP -> CNP, itself, NP, SP
+    rell.test.tx().op(
+        transfer_action_points(node_provider2.pub, dapp_provider2.pub, 10),
+        transfer_action_points(node_provider2.pub, node_provider2.pub, 10),
+        transfer_action_points(node_provider2.pub, node_provider1.pub, 10),
+        transfer_action_points(node_provider2.pub, system_provider.pub, 10)
+    ).sign(node_provider2).run();
+    assert_equals(_points(np2), 66);
+    assert_equals(_points(dp2), 120);
+    assert_equals(_points(np1), 120);
+    assert_equals(_points(sp), 120);
+
+    // SP -> CNP, NP, itself, IP/SP
+    rell.test.tx().op(
+        transfer_action_points(system_provider.pub, dapp_provider2.pub, 10),
+        transfer_action_points(system_provider.pub, node_provider2.pub, 10),
+        transfer_action_points(system_provider.pub, system_provider.pub, 10),
+        transfer_action_points(system_provider.pub, initial_provider.pub, 10)
+    ).sign(system_provider).run();
+    assert_equals(_points(dp2), 130);
+    assert_equals(_points(np2), 76);
+    assert_equals(_points(np1), 120);
+    assert_equals(_points(initial_provider()), 1003);
+
+    // Insufficient amount
+    rell.test.tx().op(
+        transfer_action_points(system_provider.pub, dapp_provider2.pub, 100000)
+    ).sign(system_provider).run_must_fail();
+
+    // From non provider to provider
+    rell.test.tx().op(
+        transfer_action_points(x"ff", dapp_provider1.pub, 10)
+    ).sign(system_provider).run_must_fail();
+    // From provider to non provider
+    rell.test.tx().op(
+        transfer_action_points(system_provider.pub, x"ff", 10)
+    ).sign(system_provider).run_must_fail();
+}
+
+function _points(provider?) = provider_rl_state @ { provider!! } ( .points );
+
 function _enable_provider(provider, additional_voter: rell.test.keypair? = null) {
     rell.test.tx().op(
         propose_provider_state(initial_provider.pub, provider.pubkey, true)
