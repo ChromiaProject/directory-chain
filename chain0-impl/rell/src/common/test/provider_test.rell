@@ -265,6 +265,62 @@ function test_disable_provider() {
     */
 }
 
+function test_promote_node_provider() {
+    setup_module();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, system_provider.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, node_provider1.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, node_provider2.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, dapp_provider1.pub, provider_tier.COMMUNITY_NODE_PROVIDER),
+        register_provider(initial_provider.pub, dapp_provider2.pub, provider_tier.COMMUNITY_NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, system_provider.pub, true),
+        propose_provider_is_system(initial_provider.pub, system_provider.pub, true)
+    ).sign(initial_provider).run();
+
+    // CNP tries to promote CNP, NP, SP and fails
+    rell.test.tx().op(
+        promote_node_provider(dapp_provider1.pub, dapp_provider2.pub)
+    ).sign(dapp_provider1).run_must_fail();
+    rell.test.tx().op(
+        promote_node_provider(dapp_provider1.pub, node_provider1.pub)
+    ).sign(dapp_provider1).run_must_fail();
+    rell.test.tx().op(
+        promote_node_provider(dapp_provider1.pub, system_provider.pub)
+    ).sign(dapp_provider1).run_must_fail();
+
+    // NP tries to promote CNP, NP, SP and fails
+    rell.test.tx().op(
+        promote_node_provider(node_provider1.pub, dapp_provider2.pub)
+    ).sign(node_provider1).run_must_fail();
+    rell.test.tx().op(
+        promote_node_provider(node_provider1.pub, node_provider2.pub)
+    ).sign(node_provider1).run_must_fail();
+    rell.test.tx().op(
+        promote_node_provider(node_provider1.pub, system_provider.pub)
+    ).sign(node_provider1).run_must_fail();
+
+    // SP promotes CNP, NP, SP
+    // * SP > CNP
+    rell.test.tx().op(
+        promote_node_provider(system_provider.pub, dapp_provider2.pub)
+    ).sign(system_provider).run();
+    assert_equals(provider @ { dapp_provider2.pub } (.tier), provider_tier.NODE_PROVIDER);
+    // * SP > NP, fails since NP is already a node provider
+    rell.test.tx().op(
+        promote_node_provider(system_provider.pub, node_provider2.pub)
+    ).sign(system_provider).run_must_fail();
+    // * IP(SP) > SP, fails since SP is already a node provider
+    rell.test.tx().op(
+        promote_node_provider(initial_provider.pub, system_provider.pub)
+    ).sign(initial_provider).run_must_fail();
+
+    // SP promotes itself and fails
+    rell.test.tx().op(
+        promote_node_provider(system_provider.pub, system_provider.pub)
+    ).sign(system_provider).run_must_fail();
+}
+
 function _enable_provider(provider, additional_voter: rell.test.keypair? = null) {
     rell.test.tx().op(
         propose_provider_state(initial_provider.pub, provider.pubkey, true)
