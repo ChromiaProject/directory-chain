@@ -2,48 +2,281 @@
 
 import ^.setup.*;
 import ^^.*;
-import ^.util.constants.*;
+import ^.util.*;
 
-function test_register_provider() {
+val system_provider = rell.test.keypairs.bob;
+val node_provider1 = rell.test.keypairs.trudy;
+val node_provider2 = rell.test.keypair(
+     priv = x"B39E4CCCB9B0FD71B7AC9FFF1216C34648FA7362ECD9874743776BDFDEE4F6A8",
+     pub = x"03BD01AF899839BDDB5810616C1AF8B61B415E903D73418DED238A8EEA352C72E0"
+ );
+val dapp_provider1 = rell.test.keypair(
+    priv = x"71C89AE77719E3779EAE09C26A229F7AF33D8C8F7E7E8D82A9A42470C224AB56",
+    pub = x"020EE9063CED9B47CC60EB931443C01F3FD7A0DAB4B2D0505D3A2FAAD4FA9ABF13"
+);
+val dapp_provider2 = rell.test.keypair(
+    priv = x"49DB53CB0E1CC472DE90FC833CEDB4E1B412C5AF658342762D1BB8F3886063B6",
+    pub = x"031D22EA1C599A69E35E023E1CBCEAC66C046B445FF5507DBA650B58F28C650A15"
+);
+
+function test_enable_provider() {
     setup_module();
 
-    val dapp_provider = rell.test.keypairs.bob;
-    val node_provider = rell.test.keypairs.trudy;
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, system_provider.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, node_provider1.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, node_provider2.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, dapp_provider1.pub, provider_tier.COMMUNITY_NODE_PROVIDER),
+        register_provider(initial_provider.pub, dapp_provider2.pub, provider_tier.COMMUNITY_NODE_PROVIDER)
+    ).sign(initial_provider).run();
 
-    rell.test.tx()
-        .op(register_provider(initial_provider.pub, dapp_provider.pub, provider_tier.COMMUNITY_NODE_PROVIDER))
-        .op(register_provider(initial_provider.pub, node_provider.pub, provider_tier.NODE_PROVIDER))
-        .sign(initial_provider)
-        .run();
+    // CNP/Dapp providers are active by default
+    val dp1 = provider @ { dapp_provider1.pub };
+    assert_true(dp1.active);
+    assert_false(roles.has_node_access(dp1));
 
-    // Dapp providers are active by default
-    val dp = provider @ { dapp_provider.pub };
-    assert_true(dp.active);
-    assert_false(roles.has_node_access(dp)); // Has to be enabled first
+    val dp2 = provider @ { dapp_provider2.pub };
+    assert_true(dp2.active);
+    assert_false(roles.has_node_access(dp2));
 
-    // Node providers must be activated first
-    val np = provider @ { node_provider.pub };
-    assert_false(np.active);
-    assert_false(roles.has_node_access(np)); // Has to be enabled first
+    // NP must be activated first
+    val np1 = provider @ { node_provider1.pub };
+    assert_false(np1.active);
+    assert_false(roles.has_node_access(np1));
 
-    rell.test.tx()
-        .op(propose_enable_provider(initial_provider.pub, node_provider.pub))
-        .sign(initial_provider)
-        .run();
-    assert_true(np.active);
-    assert_true(roles.has_node_access(np)); 
+    val np2 = provider @ { node_provider2.pub };
+    assert_false(np2.active);
+    assert_false(roles.has_node_access(np2));
 
-    // Node provider cannot add node provider
-    rell.test.tx()
-        .op(register_provider(node_provider.pub, x"03", provider_tier.NODE_PROVIDER))
-        .sign(node_provider)
-        .run_must_fail();
+    // SP promotes SP
+    rell.test.tx().op(
+        propose_provider_is_system(initial_provider.pub, system_provider.pub, true)
+    ).sign(initial_provider).run();
+    val sp = provider @ { system_provider.pub };
+    assert_true(sp.active);
+    assert_true(roles.has_system_access(sp));
+
+    // CNP tries to activate CNP, NP, SP and fails
+    /*
+          | CNP | NP  | SP
+     -----|-----|-----|-----
+      CNP | (-) | (-) | (-)
+      NP  |  *  |  *  |  *
+      SP  |  *  |  *  |  *
+    */
+    rell.test.tx().op(
+        propose_provider_state(dapp_provider1.pub, dapp_provider2.pub, true)
+    ).sign(dapp_provider1).run_must_fail();
+    rell.test.tx().op(
+        propose_provider_state(dapp_provider1.pub, node_provider2.pub, true)
+    ).sign(dapp_provider1).run_must_fail();
+    rell.test.tx().op(
+        propose_provider_state(dapp_provider1.pub, initial_provider.pub, true)
+    ).sign(dapp_provider1).run_must_fail();
+
+    // NP tries to activate CNP and fails because it is not activated
+    /*
+          | CNP | NP  | SP
+     -----|-----|-----|-----
+      CNP |  -  |  -  |  -
+      NP  | (*) |  *  |  *
+      SP  |  *  |  *  |  *
+    */
+    rell.test.tx().op(
+        propose_provider_state(node_provider1.pub, dapp_provider1.pub, true)
+    ).sign(node_provider1).run_must_fail();
+
+    // SP activates NP
+    /*
+          | CNP | NP  | SP
+     -----|-----|-----|-----
+      CNP |  -  |  -  | -
+      NP  |  *  |  *  |  *
+      SP  |  *  | (+) |  *
+    */
+    rell.test.tx().op(
+        propose_provider_state(initial_provider.pub, node_provider1.pub, true)
+    ).sign(initial_provider).run();
+    rell.test.tx().op(
+        make_vote(system_provider.pub, integer_from_rowid(last_proposal().rowid), true)
+    ).sign(system_provider).run();
+    assert_true(np1.active);
+    assert_true(roles.has_node_access(np1));
+
+    // SP activates CNP (it's activated by default, just checking requirements)
+    /*
+          | CNP | NP  | SP
+     -----|-----|-----|-----
+      CNP |  -  |  -  |  -
+      NP  |  *  |  *  |  *
+      SP  | (+) |  +  |  *
+    */
+    rell.test.tx().op(
+        propose_provider_state(initial_provider.pub, dapp_provider1.pub, true)
+    ).sign(initial_provider).run();
+
+    // NP activates CNP (it's activated by default, just checking requirements), NP, SP
+    /*
+          | CNP | NP  | SP
+     -----|-----|-----|-----
+      CNP |  -  |  -  |  -
+      NP  | (+) | (-) | (-)
+      SP  |  +  |  +  |  *
+    */
+    rell.test.tx().op(
+        propose_provider_state(node_provider1.pub, dapp_provider1.pub, true)
+    ).sign(node_provider1).run();
+    rell.test.tx().op(
+        propose_provider_state(node_provider1.pub, node_provider2.pub, true)
+    ).sign(node_provider1).run_must_fail();
+    rell.test.tx().op(
+        propose_provider_state(node_provider1.pub, initial_provider.pub, true)
+    ).sign(initial_provider).run_must_fail();
+
+    // SP activates SP
+    /*
+          | CNP | NP  | SP
+     -----|-----|-----|-----
+      CNP |  -  |  -  |  -
+      NP  |  +  |  -  |  -
+      SP  |  +  |  +  | (+)
+    */
+    rell.test.tx().op(
+        propose_provider_state(initial_provider.pub, system_provider.pub, true)
+    ).sign(initial_provider).run();
+    assert_true(sp.active);
+    assert_true(roles.has_system_access(sp));
+
+    /*
+          | CNP | NP  | SP
+     -----|-----|-----|-----
+      CNP |  -  |  -  |  -
+      NP  |  +  |  -  |  -
+      SP  |  +  |  +  |  +
+    */
+}
+
+function test_disable_provider() {
+    setup_module();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, system_provider.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, node_provider1.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, node_provider2.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, dapp_provider1.pub, provider_tier.COMMUNITY_NODE_PROVIDER),
+        register_provider(initial_provider.pub, dapp_provider2.pub, provider_tier.COMMUNITY_NODE_PROVIDER)
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        propose_provider_state(initial_provider.pub, system_provider.pub, true),
+        propose_provider_is_system(initial_provider.pub, system_provider.pub, true)
+    ).sign(initial_provider).run();
+
+    val sp = provider @ { system_provider.pub };
+    assert_true(sp.active);
+
+    val np1 = provider @ { node_provider1.pub };
+    _enable_provider(np1, system_provider);
+    assert_true(np1.active);
+
+    val np2 = provider @ { node_provider2.pub };
+    _enable_provider(np2, system_provider);
+    assert_true(np2.active);
+
+    val dp1 = provider @ { dapp_provider1.pub };
+    assert_true(dp1.active);
+
+    val dp2 = provider @ { dapp_provider2.pub };
+    assert_true(dp2.active);
 
 
-    // Dapp provider is promoted
-    rell.test.tx()
-        .op(promote_node_provider(initial_provider.pub, dp.pubkey))
-        .sign(initial_provider)
-        .run();
-    assert_true(roles.has_node_access(dp)); // Has to be enabled first
+    // CNP tries to deactivate CNP, NP, SP and fails
+    /*
+          | CNP | NP  | SP
+     -----|-----|-----|-----
+      CNP | (-) | (-) | (-)
+      NP  |  x  |  x  |  x
+      SP  |  x  |  x  |  x
+    */
+    rell.test.tx().op(
+        propose_provider_state(dapp_provider1.pub, dapp_provider2.pub, false)
+    ).sign(dapp_provider1).run_must_fail();
+    rell.test.tx().op(
+        propose_provider_state(dapp_provider1.pub, node_provider2.pub, false)
+    ).sign(dapp_provider1).run_must_fail();
+    rell.test.tx().op(
+        propose_provider_state(dapp_provider1.pub, initial_provider.pub, false)
+    ).sign(dapp_provider1).run_must_fail();
+
+    // NP tries to deactivate CNP, NP, SP
+    /*
+          | CNP | NP  | SP
+     -----|-----|-----|-----
+      CNP |  -  |  -  |  -
+      NP  | (+) | (-) | (-)
+      SP  |  x  |  x  |  x
+    */
+    rell.test.tx().op(
+        propose_provider_state(node_provider1.pub, dapp_provider2.pub, false)
+    ).sign(node_provider1).run();
+    rell.test.tx().op(
+        propose_provider_state(node_provider1.pub, node_provider2.pub, false)
+    ).sign(node_provider1).run_must_fail();
+    rell.test.tx().op(
+        propose_provider_state(node_provider1.pub, initial_provider.pub, false)
+    ).sign(node_provider1).run_must_fail();
+
+    // SP tries to deactivate CNP, NP, SP
+    /*
+          | CNP | NP  | SP
+     -----|-----|-----|-----
+      CNP |  -  |  -  |  -
+      NP  |  +  |  -  |  -
+      SP  | (+) | (+) | (+)
+    */
+    // Making sure providers are enabled
+    _enable_provider(dp1);
+    assert_true(dp1.active);
+    assert_true(np1.active);
+    assert_true(sp.active);
+    // Disabling providers
+    rell.test.tx().op(
+        propose_provider_state(initial_provider.pub, dapp_provider1.pub, false)
+    ).sign(initial_provider).run();
+    rell.test.tx().op(
+        propose_provider_state(initial_provider.pub, node_provider1.pub, false)
+    ).sign(initial_provider).run();
+    _provider_votes(system_provider);
+    rell.test.tx().op(
+        propose_provider_state(initial_provider.pub, system_provider.pub, false)
+    ).sign(initial_provider).run();
+    _provider_votes(system_provider);
+    // Asserting
+    assert_false(dp1.active);
+    assert_false(np1.active);
+    assert_false(sp.active);
+
+    /*
+          | CNP | NP  | SP
+     -----|-----|-----|-----
+      CNP |  -  |  -  |  -
+      NP  |  +  |  -  |  -
+      SP  |  +  |  +  |  +
+    */
+}
+
+function _enable_provider(provider, additional_voter: rell.test.keypair? = null) {
+    rell.test.tx().op(
+        propose_provider_state(initial_provider.pub, provider.pubkey, true)
+    ).sign(initial_provider).run();
+
+    if (additional_voter != null) {
+        _provider_votes(additional_voter);
+    }
+}
+
+function _provider_votes(voter: rell.test.keypair) {
+    rell.test.tx().op(
+        make_vote(voter.pub, integer_from_rowid(last_proposal().rowid), true)
+    ).sign(voter).run();
 }
