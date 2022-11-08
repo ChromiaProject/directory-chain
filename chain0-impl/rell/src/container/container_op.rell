@@ -12,14 +12,14 @@ operation create_container(me:pubkey, name, cluster_name:text, consensus_thresho
 }
 
 operation create_container_from(me:pubkey, name, cluster_name:text, consensus_threshold: integer, voter_set_name:text) {
+    val provider = require_is_provider_with_rl(me);
+    val cluster = require_cluster(cluster_name);
+    require_cluster_governor(cluster, provider);
     val vs = require_voter_set(voter_set_name);
     val deployers = list<pubkey>();
     for (member in voter_set_member @* { vs }) {
         deployers.add(member.provider.pubkey);
     }
-    val provider = require_is_provider_with_rl(me);
-    val cluster = require_cluster(cluster_name);
-    require_cluster_governor(cluster, provider);
     create_container_impl(name, cluster, consensus_threshold, deployers);
 }
 
