@@ -10,16 +10,16 @@
 */
 operation register_provider(my_pubkey: pubkey, pubkey, provider_tier) {
     val me = require_provider(my_pubkey);
-	require_provider_auth_with_rl(me);
-	require(empty(provider @* { pubkey }), "Provider already exists: " + pubkey);
+    require_provider_auth_with_rl(me);
+    require(empty(provider @* { pubkey }), "Provider already exists: " + pubkey);
 
-	register_and_enable_provider(
-		pubkey,
-		provider_tier,
-		cluster = null, 
-		voter_set = null, 
-		enabled_by_default = _is_node_provider(provider_tier) == false
-	);
+    register_and_enable_provider(
+        pubkey,
+        provider_tier,
+        cluster = null,
+        voter_set = null,
+        enabled_by_default = _is_node_provider(me.tier) and not(_is_node_provider(provider_tier))
+    );
     if (_is_node_provider(provider_tier)) {
         require(roles.has_system_access(me), "Must be system provider to add a node provider");
         enroll.node(provider @ { pubkey });
@@ -45,13 +45,14 @@ function _is_node_provider(tier: provider_tier) = tier == provider_tier.NODE_PRO
 }
 
 operation promote_node_provider(my_pubkey: pubkey, provider_pubkey: pubkey) { // TODO: Should be able to demote
-    val me = require_is_system_provider(my_pubkey);
+    val me = require_is_provider_with_rl(my_pubkey);
+    require_is_system_provider(my_pubkey);
     val p = require_provider(provider_pubkey);
     require(p.tier != provider_tier.NODE_PROVIDER, "Provider already has this role");
     enroll.node(p);
 }
 
-// recover provider's action points and consume one, if possible
+// Recover provider's action points and consume one, if possible
 function provider_rate_limit(provider) {
 	val max_actions_per_day = provider_quota @ {
 			.tier == provider.tier,
