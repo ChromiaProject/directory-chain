@@ -1,8 +1,18 @@
 
-// Registers and enables a provider
+/*
+    The provider with type in line can (+) / can not (-) register a provider with the type in the column:
+
+         | CNP | NP
+    -----|-----|-----
+     CNP |  +  |  -
+     NP  |  +  |  -
+     SP  |  +  |  +
+*/
 operation register_provider(my_pubkey: pubkey, pubkey, provider_tier) {
     val me = require_provider(my_pubkey);
 	require_provider_auth_with_rl(me);
+	require(empty(provider @* { pubkey }), "Provider already exists: " + pubkey);
+
 	register_and_enable_provider(
 		pubkey,
 		provider_tier,
@@ -19,7 +29,7 @@ operation register_provider(my_pubkey: pubkey, pubkey, provider_tier) {
 function _is_node_provider(tier: provider_tier) = tier == provider_tier.NODE_PROVIDER;
 
 @extendable function register_and_enable_provider(pubkey, provider_tier, cluster?, voter_set?, enabled_by_default: boolean = false) {
-	val provider = create provider (
+	val provider = create provider(
 		pubkey,
 		name = "",
         active = enabled_by_default,
