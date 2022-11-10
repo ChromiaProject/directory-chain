@@ -32,7 +32,7 @@ function test_register_provider() {
     assert_false(roles.has_node_access(np1));
 
     val dp1 = provider @ { dapp_provider1.pub };
-    assert_true(dp1.active); // CNP is active by default
+    assert_true(dp1.active); // CNP is active by default if creator is NP
     assert_false(roles.has_node_access(dp1));
 
     // CNP registers CNP
@@ -40,7 +40,7 @@ function test_register_provider() {
         register_provider(dapp_provider1.pub, dapp_provider2.pub, provider_tier.COMMUNITY_NODE_PROVIDER)
     ).sign(dapp_provider1).run();
     val dp2 = provider @ { dapp_provider2.pub };
-    assert_true(dp2.active); // CNP is active by default
+    assert_false(dp2.active); // CNP is not active by default if creator is not NP
     assert_false(roles.has_node_access(dp2));
 
     // CNP tries to register NP/SP and fails, since only SP can register NP
@@ -81,7 +81,7 @@ function test_register_provider() {
     ).sign(initial_provider).run_must_fail();
 }
 
-function ff_test_enable_provider() {
+function test_enable_provider() {
     setup_module();
 
     rell.test.tx().op(
@@ -218,7 +218,7 @@ function ff_test_enable_provider() {
     */
 }
 
-function ff_test_disable_provider() {
+function test_disable_provider() {
     setup_module();
 
     rell.test.tx().op(
@@ -327,7 +327,7 @@ function ff_test_disable_provider() {
     */
 }
 
-function ff_test_promote_node_provider() {
+function test_promote_node_provider() {
     setup_module();
 
     rell.test.tx().op(
@@ -383,7 +383,7 @@ function ff_test_promote_node_provider() {
     ).sign(system_provider).run_must_fail();
 }
 
-function ff_test_transfer_action_points() {
+function test_transfer_action_points() {
     setup_module();
 
     rell.test.tx().op(
