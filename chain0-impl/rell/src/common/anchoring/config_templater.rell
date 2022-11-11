@@ -32,50 +32,6 @@ Template of anchoring chain config (with empty rell module)
 // Builds config for anchoring chain; uses cluster_name to make config unique;
 function get_anchoring_config(cluster_name: text): gtv {
     val config = map<text, gtv>();
-    config["cluster"] = cluster_name.to_gtv(); // Make it unique
-
-    // ./blockstrategy
-    val block_strategy = map<text, gtv>();
-    block_strategy["maxblocktime"] = integer(2000).to_gtv();
-    config["blockstrategy"] = block_strategy.to_gtv();
-
-    // ./configurationfactory
-    config["configurationfactory"] = "net.postchain.gtx.GTXBlockchainConfigurationFactory".to_gtv();
-
-    // BEGIN: ./gtx
-    val gtx = map<text, gtv>();
-
-    // ./gtx/modules
-    gtx["modules"] = [
-        "net.postchain.rell.module.RellPostchainModuleFactory",
-        "net.postchain.gtx.StandardOpsGTXModule",
-        "net.postchain.d1.anchor.AnchorGTXModule"
-    ].to_gtv();
-
-    // BEGIN: ./gtx/rell
-    val rell = map<text, gtv>();
-
-    // ./gtx/rell/modules
-    rell["modules"] = ["anchoring"].to_gtv();
-
-    // ./gtx/rell/sources
-    val sources = map<text, gtv>();
-    sources["module.rell"] = _get_rell_module_code().to_gtv();
-    rell["sources"] = sources.to_gtv();
-
-    // END: ./gtx/rell
-    gtx["rell"] = rell.to_gtv();
-
-    // END: ./gtx
-    config["gtx"] = gtx.to_gtv();
-
-    return config.to_gtv();
-        //.to_bytes();
-}
-
-// Builds config for anchoring chain; uses cluster_name to make config unique;
-function get_anchoring_config2(cluster_name: text): gtv {
-    val config = map<text, gtv>();
 
     _add_property(config, "cluster", cluster_name.to_gtv()); // Make it unique
     _add_property(config, "blockstrategy/maxblocktime", integer(2000).to_gtv());
