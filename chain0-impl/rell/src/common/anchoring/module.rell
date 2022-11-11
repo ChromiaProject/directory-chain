@@ -1,18 +1,15 @@
-module;
-
-import ^^.model.*;
 import ^.util.*;
 
 // Creates an anchoring chain for a given cluster
-function create_anchoring_chain(cluster) {
+function create_cluster_anchoring_chain(cluster) {
 	require(empty(anchoring_chain @? { cluster }), "Anchoring chain already exists for cluster " + cluster.name);
-	val config = map<text, gtv>(); // TODO: How do we get config for anchoring chain?
-	config["cluster"] = cluster.name.to_gtv(); // Make it unique
+
+	val config = get_anchoring_config2(cluster.name);
 	val blockchain_rid = config.hash();
-	val blockchain = create blockchain (blockchain_rid, "anchoring_" + cluster.name, true);
-	create blockchain_configuration (blockchain, 0, config.to_gtv().to_bytes());
-	
-	val container = create_container_with_resource_limits(
+	val blockchain = create blockchain(blockchain_rid, "anchoring_" + cluster.name, system = true, active = true);
+	create blockchain_configuration(blockchain, 0, config.to_bytes());
+
+    val container = create_container_with_resource_limits(
 		"anchoring_" + cluster.name,
 		container_type.naked,
 		cluster = cluster,
@@ -20,8 +17,22 @@ function create_anchoring_chain(cluster) {
 	);
 	val signers = cluster_node @* { cluster }.node.pubkey;
 	create blockchain_configuration_signers(blockchain, 0, signers.to_gtv().to_bytes());
-	create blockchain_added (blockchain, op_context.transaction);
+	create blockchain_added(blockchain, op_context.transaction);
 	create container_blockchain(container, blockchain);
-	create anchoring_chain(blockchain, container.cluster);
+	create anchoring_chain(blockchain, cluster);
 }
 
+function remove_cluster_anchoring_chain(cluster) {
+    val anchor = anchoring_chain @ { cluster } .blockchain;
+	delete blockchain_configuration @* { anchor };
+	delete blockchain_configuration_signers @* { anchor };
+	delete blockchain_added @* { anchor };
+
+	val cont = container @ { "anchoring_" + cluster.name };
+	delete container_resource_limit @* { cont };
+	delete container_blockchain @* { anchor };
+	delete cont;
+
+	delete anchoring_chain @ { anchor };
+	delete blockchain @ { anchor.rid };
+}

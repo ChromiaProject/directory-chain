@@ -1,0 +1,146 @@
+import ^.*;
+
+/*
+
+Template of anchoring chain config (with empty rell module)
+
+{
+	"blockstrategy": {
+		"maxblocktime": 2000
+	},
+	"cluster":"c1",
+	"configurationfactory":"net.postchain.gtx.GTXBlockchainConfigurationFactory",
+	"gtx":{
+		"modules":[
+			"net.postchain.rell.module.RellPostchainModuleFactory",
+			"net.postchain.gtx.StandardOpsGTXModule",
+			"net.postchain.d1.anchor.AnchorGTXModule"
+		],
+		"rell":{
+			"modules":[
+				"anchoring"
+			],
+			"sources":{
+				"module.rell":"module;"
+			}
+		}
+	}
+}
+
+*/
+
+// Builds config for anchoring chain; uses cluster_name to make config unique;
+function get_anchoring_config(cluster_name: text): gtv {
+    val config = map<text, gtv>();
+    config["cluster"] = cluster_name.to_gtv(); // Make it unique
+
+    // ./blockstrategy
+    val block_strategy = map<text, gtv>();
+    block_strategy["maxblocktime"] = integer(2000).to_gtv();
+    config["blockstrategy"] = block_strategy.to_gtv();
+
+    // ./configurationfactory
+    config["configurationfactory"] = "net.postchain.gtx.GTXBlockchainConfigurationFactory".to_gtv();
+
+    // BEGIN: ./gtx
+    val gtx = map<text, gtv>();
+
+    // ./gtx/modules
+    gtx["modules"] = [
+        "net.postchain.rell.module.RellPostchainModuleFactory",
+        "net.postchain.gtx.StandardOpsGTXModule",
+        "net.postchain.d1.anchor.AnchorGTXModule"
+    ].to_gtv();
+
+    // BEGIN: ./gtx/rell
+    val rell = map<text, gtv>();
+
+    // ./gtx/rell/modules
+    rell["modules"] = ["anchoring"].to_gtv();
+
+    // ./gtx/rell/sources
+    val sources = map<text, gtv>();
+    sources["module.rell"] = _get_rell_module_code().to_gtv();
+    rell["sources"] = sources.to_gtv();
+
+    // END: ./gtx/rell
+    gtx["rell"] = rell.to_gtv();
+
+    // END: ./gtx
+    config["gtx"] = gtx.to_gtv();
+
+    return config.to_gtv();
+        //.to_bytes();
+}
+
+// Builds config for anchoring chain; uses cluster_name to make config unique;
+function get_anchoring_config2(cluster_name: text): gtv {
+    val config = map<text, gtv>();
+
+    _add_property(config, "cluster", cluster_name.to_gtv()); // Make it unique
+    _add_property(config, "blockstrategy/maxblocktime", integer(2000).to_gtv());
+    _add_property(config, "configurationfactory", "net.postchain.gtx.GTXBlockchainConfigurationFactory".to_gtv());
+    val modules = [
+        "net.postchain.rell.module.RellPostchainModuleFactory",
+        "net.postchain.gtx.StandardOpsGTXModule",
+        "net.postchain.d1.anchor.AnchorGTXModule"
+    ].to_gtv();
+    _add_property(config, "gtx/modules", modules);
+    _add_property(config, "gtx/rell/modules", ["anchoring"].to_gtv());
+    _add_property(config, "gtx/rell/sources/module.rell", _get_rell_module_code().to_gtv());
+
+    return config.to_gtv();
+        //.to_bytes();
+}
+
+// Returns content of 'gtx/rell/sources/rell_module.rell' file from chain_context.raw_config
+/*private*/ function _get_rell_module_code(): text {
+    val empty = "module;";
+
+    if (chain_context.raw_config == null.to_gtv()) return empty; // if module is @test one
+
+    val config = map<text, gtv>.from_gtv(chain_context.raw_config);
+    val rell_module_code = _get_property(config, "gtx/rell/sources/rell_module.rell");
+    return rell_module_code ?: empty;
+}
+
+// TODO: [POS-359]: Add tests
+// TODO: [POS-359]: Move to 'config utils'
+/*private*/ function _add_property(config: map<text, gtv>, path: text, property: gtv) {
+    val keys = path.split("/");
+    if (keys.size() == 0) {
+        // path is empty
+    } else if (keys.size() == 1) {
+        config[keys[0]] = property;
+    } else {
+        val k = keys[0];
+        if (not config.contains(k)) {
+            config[k] = map<text, gtv>().to_gtv();
+        }
+
+        val sub_path = path.sub(k.size() + 1);
+        val sub_config = map<text, gtv>.from_gtv(config[k]);
+        _add_property(sub_config, sub_path, property);
+        config[k] = sub_config.to_gtv();
+    }
+}
+
+// TODO: [POS-359]: Add tests
+// TODO: [POS-359]: Move to 'config utils'
+/*private*/ function _get_property(config: map<text, gtv>, path: text): text? {
+    val keys = path.split("/");
+    if (keys.size() == 0) {
+        return null;
+    } else if (keys.size() == 1) {
+        val k = keys[0];
+        if (not config.contains(k)) return null;
+        return text.from_gtv(config[k]);
+    } else {
+        val k = keys[0];
+        if (not config.contains(k)) return null;
+
+        val sub_path = path.sub(k.size() + 1);
+        val sub_config = map<text, gtv>.from_gtv(config[k]);
+        return _get_property(sub_config, sub_path);
+    }
+}

@@ -6,6 +6,7 @@ import ^.model.*;
     Version 1: Initial Managed Mode support
     Version 2: MustSyncUntil feature
     Version 3: Containers and Clusters
+    Version 4: Blockchain.system property added (chain0, anchoring_chain are system chains)
 */
 
 /*
@@ -68,22 +69,46 @@ function get_blockchain_configuration_with_signers(blockchain, height: integer, 
 
 
 /*
-    Function getBlockchainsShouldBeLaunched() uses this query. If caller (nod_id) is a signer, return only active bcs.
+    Function getBlockchainsShouldBeLaunched() uses this query.
+    If caller (node_id) is a signer, return only active bcs.
     Inactive bcs should not be launched, to alleviate block building.
     If caller is a replica node of bc, include inactive bcs as well.
     NP API Version: 1
 */
 query nm_compute_blockchain_list(node_id: pubkey): list<byte_array> {
-	val node = node @? { .pubkey == node_id};
+	val node = node @? { .pubkey == node_id };
+	if (exists(node)) {
+		val res = list<byte_array>();
+		res.add_all(blockchain_replica_node @* { node } (.blockchain.rid));
+
+		val clusters = cluster_node @* {node} .cluster;
+		for (cl in clusters) {
+			val containers = container @*{ cl };
+			for (container in containers) {
+				res.add_all(container_blockchain @* {container, .blockchain.active == true, .blockchain.system == false} .blockchain.rid);
+			}
+		}
+
+		// TODO: [POS-359] Compat fix. Will be removed.
+		res.add(blockchain @ { blockchains.c0 } ( .rid ));
+
+		return res;
+	} else {
+		return [chain_context.blockchain_rid];
+	}
+}
+
+// NP API Version: 4
+query nm_compute_system_blockchain_list(node_id: pubkey): list<byte_array> {
+	val node = node @? { .pubkey == node_id };
 
 	if (exists(node)) {
 		val clusters = cluster_node @* {node} .cluster;
 		val res = list<byte_array>();
-		res.add_all(blockchain_replica_node @* { node } (.blockchain.rid));
 		for (cl in clusters) {
 			val containers = container @*{ cl };
 			for (container in containers) {
-				res.add_all(container_blockchain @* {container, .blockchain.active == true} .blockchain.rid);
+				res.add_all(container_blockchain @* {container, .blockchain.active == true, .blockchain.system == true } .blockchain.rid);
 			}
 		}
 		return res;
@@ -152,7 +177,7 @@ query nm_get_node_replica_map(): list<list<byte_array>> {
 /*
     NP API Version: 3
 */
-query nm_get_container_limits(name) : map<text, integer> {
+query nm_get_container_limits(name): map<text, integer> {
 	val container = container @ {name};
 	var return_map = map<text, integer>();
 	val limits_list = container_resource_limit @* { container };
@@ -166,7 +191,7 @@ query nm_get_container_limits(name) : map<text, integer> {
 /*
     NP API Version: 3
 */
-query nm_get_cluster_limits(name) : map<text, integer> {
+query nm_get_cluster_limits(name): map<text, integer> {
 	val cluster = cluster @ {name};
 	var return_map = map<text, integer>();
 	val limits_list = cluster_resource_limit @* {cluster};

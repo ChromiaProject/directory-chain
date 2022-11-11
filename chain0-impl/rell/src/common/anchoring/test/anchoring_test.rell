@@ -1,32 +1,42 @@
-@test module;
-
-import ^^.*;
 import ^^^.test.ops.*;
 import ^^^.util.*;
 
-function test_create_anchoring_chain() {
+function test_create_and_remove_cluster_anchoring_chain() {
     val provider = rell.test.keypairs.alice;
     rell.test.tx().op(initialize_test_module(provider.pub, 100)).run();
     assert_not_null(container @? { containers.system });
 
-    rell.test.tx().op(
-        create_anchoring_chain_op(clusters.system)
-    ).run();
-
-    val system_chain = blockchain @ { constants.blockchains.c0 };
-    val anchoring_chain = blockchain @? { "anchoring_system" };
-    assert_not_null(anchoring_chain);
-    assert_equals(blockchain_configuration_signers @ { anchoring_chain }.signers, blockchain_configuration_signers @ { system_chain }.signers);
+    val chain0 = blockchain @ { constants.blockchains.c0 };
+    val anchor = blockchain @? { "anchoring_system" };
+    assert_not_null(anchor);
+    assert_not_null(blockchain_configuration @? { anchor });
+    assert_equals(
+        blockchain_configuration_signers @ { anchor }.signers,
+        blockchain_configuration_signers @ { chain0 }.signers);
+    assert_not_null(blockchain_added @? { anchor });
+    assert_not_null(anchoring_chain @? { anchor });
 
     // Cannot have more than one anchoring chain per cluster
     rell.test.tx().op(
-        create_anchoring_chain_op(clusters.system)
+        _create_cluster_anchoring_chain_op(clusters.system)
     ).run_must_fail();
 
-    val clusters = cm_get_cluster_names();
-    assert_equals(clusters.size(), 1);
+    val cluster_names = cm_get_cluster_names();
+    assert_equals(cluster_names.size(), 1);
 
-    val cluster_info = cm_get_cluster_info(constants.clusters.system);
-    assert_equals(cluster_info.anchoring_chain, anchoring_chain.rid);
+    val cluster_info = cm_get_cluster_info(clusters.system);
+    assert_equals(cluster_info.anchoring_chain, anchor.rid);
     assert_equals(cluster_info.peers.size(), 1);
+
+    // 2. Removing anchoring chain
+    rell.test.tx().op(
+        _remove_cluster_anchoring_chain_op(clusters.system)
+    ).run();
+
+    val removed_anchor = blockchain @? { "anchoring_system" };
+    assert_null(removed_anchor);
+    assert_equals(blockchain_configuration @* {} (.blockchain.name), [blockchains.c0]);
+    assert_equals(blockchain_configuration_signers @* {} (.blockchain.name), [blockchains.c0]);
+    assert_equals(blockchain_added @* {} (.blockchain.name), [blockchains.c0]);
+    assert_equals((anchoring_chain @* {}).size(), 0);
 }
