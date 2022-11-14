@@ -1,7 +1,6 @@
 module;
 
 import ^.model.*;
-import ^.common.anchoring;
 
 function create_cluster_impl(name, governor: voter_set, providers: list<pubkey>, max_containers: integer = -1, cpu: integer = -1, ram: integer = -1, storage: integer = -1) {
     require(empty(cluster @* { name }), "Cluster with name %s already exists".format(name));
@@ -16,6 +15,8 @@ function create_cluster_impl(name, governor: voter_set, providers: list<pubkey>,
         require_node_access(provider);
         create cluster_provider(c, provider);
     }
-    anchoring.create_cluster_anchoring_chain(c);
+    after_cluster_creation(c);
     return c;
 }
+
+@extendable function after_cluster_creation(cluster) {}
