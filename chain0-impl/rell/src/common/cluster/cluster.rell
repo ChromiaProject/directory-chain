@@ -3,11 +3,35 @@
  * Adding a node to a cluster automatically makes it signer of all bc in this cluster.
  * Only one node per provider and cluster.
  */
-operation add_node_to_cluster(provider_pubkey: pubkey, node_pubkey: pubkey, cluster_name: text) {
-	val provider = require_provider(provider_pubkey);
+operation add_node_to_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cluster_name: text) {
+	val provider = require_provider(my_pubkey);
 	require_provider_auth_with_rl(provider);
-	val cluster = cluster @ { cluster_name };
+	val cluster = require_cluster(cluster_name);
 	add_node_to_cluster_internal(provider, node @ { node_pubkey }, cluster);
+}
+
+operation add_replica_node_to_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cluster_name: text) {
+    val provider = require_provider(my_pubkey);
+    require_provider_auth_with_rl(provider);
+    val cluster = require_cluster(cluster_name);
+    val node = require_node(node_pubkey);
+    require(empty(cluster_replica_node @* { cluster, node }), "Node %s is already a replica of the cluster %s".format(node_pubkey, cluster_name));
+    require(node.provider == provider, "It is only allowed to add own node as a container replica");
+    _add_replica_node_to_cluster_internal(cluster, node);
+}
+
+function _add_replica_node_to_cluster_internal(cluster, node) {
+    create cluster_replica_node(cluster, node);
+}
+
+operation remove_replica_node_from_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cluster_name: text) {
+    val provider = require_provider(my_pubkey);
+    require_provider_auth_with_rl(provider);
+    val cluster = require_cluster(cluster_name);
+    val node = require_node(node_pubkey);
+    require(exists(cluster_replica_node @* { cluster, node }), "Node %s is not a replica of the cluster %s".format(node_pubkey, cluster_name));
+    require(node.provider == provider, "It is only allowed to remove own container replica node");
+    delete cluster_replica_node @* { node };
 }
 
 /**
