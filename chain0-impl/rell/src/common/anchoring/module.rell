@@ -1,38 +1,47 @@
 import ^.util.*;
 
+struct module_args {
+    anchoring_code: text;
+}
+
 // Creates an anchoring chain for a given cluster
 function create_cluster_anchoring_chain(cluster) {
-	require(empty(anchoring_chain @? { cluster }), "Anchoring chain already exists for cluster " + cluster.name);
+    val anchoring_code = chain_context.args.anchoring_code;
 
-	val config = get_anchoring_config(cluster.name);
-	val blockchain_rid = config.hash();
-	val blockchain = create blockchain(blockchain_rid, "anchoring_" + cluster.name, system = true, active = true);
-	create blockchain_configuration(blockchain, 0, config.to_bytes());
+    // feature toggle
+    if (!anchoring_code.empty()) {
+        require(empty(anchoring_chain @? { cluster }), "Anchoring chain already exists for cluster " + cluster.name);
 
-    val container = create_container_with_resource_limits(
-		"anchoring_" + cluster.name,
-		container_type.naked,
-		cluster = cluster,
-		voter_set = system_voter_set()
-	);
-	val signers = cluster_node @* { cluster }.node.pubkey;
-	create blockchain_configuration_signers(blockchain, 0, signers.to_gtv().to_bytes());
-	create blockchain_added(blockchain, op_context.transaction);
-	create container_blockchain(container, blockchain);
-	create anchoring_chain(blockchain, cluster);
+        val config = get_anchoring_config(cluster.name, anchoring_code);
+        val blockchain_rid = config.hash();
+        val blockchain = create blockchain(blockchain_rid, "anchoring_" + cluster.name, system = true, active = true);
+        create blockchain_configuration(blockchain, 0, config.to_bytes());
+
+        val container = create_container_with_resource_limits(
+            "anchoring_" + cluster.name,
+            container_type.naked,
+            cluster = cluster,
+            voter_set = system_voter_set()
+        );
+        val signers = cluster_node @* { cluster }.node.pubkey;
+        create blockchain_configuration_signers(blockchain, 0, signers.to_gtv().to_bytes());
+        create blockchain_added(blockchain, op_context.transaction);
+        create container_blockchain(container, blockchain);
+        create anchoring_chain(blockchain, cluster);
+    }
 }
 
 function remove_cluster_anchoring_chain(cluster) {
     val anchor = anchoring_chain @ { cluster } .blockchain;
-	delete blockchain_configuration @* { anchor };
-	delete blockchain_configuration_signers @* { anchor };
-	delete blockchain_added @* { anchor };
+    delete blockchain_configuration @* { anchor };
+    delete blockchain_configuration_signers @* { anchor };
+    delete blockchain_added @* { anchor };
 
-	val cont = container @ { "anchoring_" + cluster.name };
-	delete container_resource_limit @* { cont };
-	delete container_blockchain @* { anchor };
-	delete cont;
+    val cont = container @ { "anchoring_" + cluster.name };
+    delete container_resource_limit @* { cont };
+    delete container_blockchain @* { anchor };
+    delete cont;
 
-	delete anchoring_chain @ { anchor };
-	delete blockchain @ { anchor.rid };
+    delete anchoring_chain @ { anchor };
+    delete blockchain @ { anchor.rid };
 }
