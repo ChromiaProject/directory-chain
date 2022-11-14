@@ -5,15 +5,39 @@ import ^.common.*;
 
 namespace auth_service {
 
-    operation create_container(pubkey, cluster_name: text) {
+    operation create_container(pubkey, cluster_name: text?) {
         require_module_auth();
-        val cluster = require_cluster(cluster_name);
-        
+        if (cluster_name != null) {
+            val cluster = require_cluster(cluster_name);
+            create_container_in_cluster(pubkey, cluster);
+            return;
+        }
+
+        val clusters = cluster @* { cluster.name != clusters.system };
+        for (cluster in clusters) {
+            val capacity = cluster_resource_limit @? { cluster, cluster_resource_limit_type.max_containers }.value;
+            val containers = (cl: cluster, co: container) @ { cl == co.cluster } (@group cl, @sum 1)[1];
+            if (capacity == null or capacity == -1 or containers < capacity) {
+                create_container_in_cluster(pubkey, cluster);
+                return;
+            }
+        }
+        require(false, "No available clusters exist");
+    }
+
+    function create_container_in_cluster(pubkey, cluster) {
         val name = [cluster.to_gtv(), pubkey.to_gtv()].hash().to_base64();
         if (not(exists(provider @? { pubkey }))) {
             register_and_enable_provider(pubkey, provider_tier.COMMUNITY_NODE_PROVIDER, null, null, true);
         }
         create_container_impl(name, cluster, 1, [pubkey]);
+    }
+
+    query get_licenses(pubkey) : list<text> { 
+        return (c: container, vsm: voter_set_member) @* { 
+            c.deployer == vsm.voter_set,
+            vsm.provider.pubkey == pubkey
+        }.name;
     }
 
 }
