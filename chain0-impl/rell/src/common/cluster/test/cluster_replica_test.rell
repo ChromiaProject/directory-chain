@@ -11,7 +11,7 @@ function test_cluster_replica() {
     val node_provider1 = rell.test.keypairs.bob;
     val np1_node_key = x"01";
 
-    // 1. Creating cluster
+    // Creating cluster
     val cluster1_name = "cluster1";
     rell.test.tx().op(
         create_cluster(initial_provider.pub, cluster1_name, voter_sets.system_p, list()),
@@ -61,3 +61,44 @@ function test_cluster_replica() {
         remove_replica_node_from_cluster(node_provider1.pub, node.pubkey, cluster1_name)
     ).sign(node_provider1).run_must_fail();
 }
+
+function test_cluster_node_added_as_cluster_replica_node() {
+    setup_module();
+    val node = node @ { .provider == initial_provider() };
+
+    // Creating cluster
+    val cluster1_name = "cluster1";
+    rell.test.tx().op(
+        create_cluster(initial_provider.pub, cluster1_name, voter_sets.system_p, [initial_provider.pub]),
+        add_node_to_cluster(initial_provider.pub, node.pubkey, cluster1_name)
+    ).sign(initial_provider).run();
+    assert_true(exists(cluster_node @? { .cluster.name == cluster1_name, node }));
+
+    // Adding cluster node as a cluster replica node
+    rell.test.tx().op(
+        add_replica_node_to_cluster(initial_provider.pub, node.pubkey, cluster1_name)
+    ).sign(initial_provider).run();
+    assert_true(exists(cluster_node @? { .cluster.name == cluster1_name, node }));
+    assert_true(exists(cluster_replica_node @? { .cluster.name == cluster1_name, node }));
+}
+
+function test_cluster_replica_node_added_as_cluster_node() {
+    setup_module();
+    val node = node @ { .provider == initial_provider() };
+
+    // Creating cluster
+    val cluster1_name = "cluster1";
+    rell.test.tx().op(
+        create_cluster(initial_provider.pub, cluster1_name, voter_sets.system_p, [initial_provider.pub]),
+        add_replica_node_to_cluster(initial_provider.pub, node.pubkey, cluster1_name)
+    ).sign(initial_provider).run();
+    assert_true(exists(cluster_replica_node @? { .cluster.name == cluster1_name, node }));
+
+    // Adding cluster replica node as a cluster node
+    rell.test.tx().op(
+        add_node_to_cluster(initial_provider.pub, node.pubkey, cluster1_name)
+    ).sign(initial_provider).run();
+    assert_true(exists(cluster_replica_node @? { .cluster.name == cluster1_name, node }));
+    assert_true(exists(cluster_node @? { .cluster.name == cluster1_name, node }));
+}
+
