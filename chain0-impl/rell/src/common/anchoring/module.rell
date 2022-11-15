@@ -9,13 +9,14 @@ object anchoring_config {
 }
 
 function set_config(config: byte_array) {
+    map<text, gtv>.from_gtv(gtv.from_bytes(config)); // Validate that config is a map
     anchoring_config.raw_config = config;
 }
 
 @extend(after_cluster_creation) function create_cluster_anchoring_chain(cluster) {
     val config_map = map<text,gtv>.from_gtv(gtv.from_bytes(anchoring_config.raw_config));
     // feature toggle
-    if (config_map.size() == 0) {
+    if (config_map.size() > 0) {
         require(empty(anchoring_chain @? { cluster }), "Anchoring chain already exists for cluster " + cluster.name);
 
         config_map["cluster"] = cluster.name.to_gtv();
