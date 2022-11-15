@@ -3,7 +3,7 @@ module;
 import ^.model.*;
 import ^.cm_api.*;
 import ^.nm_api.*;
-import .anchoring.*;
+import .anchoring;
 import .cluster.*;
 import .voting.*;
 import .proposal.*;
@@ -14,7 +14,7 @@ import ^.cluster.*;
 query directory_solution_version() = "0.1";
 
 // Adds the initial provider as a system provider along with voter sets and clusters needed to start
-function initialize_module(initial_provider:pubkey, genesis_node: node_info, actions_per_day:integer, majority_threshold:integer = 0) {
+function initialize_module(initial_provider:pubkey, genesis_node: node_info, actions_per_day:integer, anchoring_config: gtv, majority_threshold:integer = 0) {
 	require(empty( provider @* {}));
 	print("--------------------Initializing-Chain-0-----------------------");
 	print("Creating provider quotas");
@@ -30,6 +30,7 @@ function initialize_module(initial_provider:pubkey, genesis_node: node_info, act
 	val system_voter_set = create_voter_set_internal(voter_sets.system_p, majority_threshold);
 	
 	print("Creating system cluster with SYSTEM_P as governor");
+	anchoring.set_config(anchoring_config);
 	val system_cluster = create_cluster_impl(
 		clusters.system,
 		governor=system_voter_set,
@@ -59,7 +60,7 @@ function initialize_module(initial_provider:pubkey, genesis_node: node_info, act
 	print("Adding c0 blockchain to system container");
 	val c0_config = map<text,gtv>.from_gtv(chain_context.raw_config);
 	val c0_signers_gtv = c0_config["signers"];
-	val blockchain = create blockchain (chain_context.blockchain_rid, blockchains.c0, true);
+	val blockchain = create blockchain(chain_context.blockchain_rid, blockchains.c0, system = true, active = true);
 	create blockchain_configuration (blockchain, 0, chain_context.raw_config.to_bytes());
 	create blockchain_configuration_signers(blockchain, 0, c0_signers_gtv.to_bytes());
 	create blockchain_added (blockchain, op_context.transaction);
@@ -69,14 +70,14 @@ function initialize_module(initial_provider:pubkey, genesis_node: node_info, act
 	require(signer_node_keys.size() == 1, "C0 must have exactly one initial signer");
 	val initial_signer_node_key = signer_node_keys[0];
 	require(initial_signer_node_key == genesis_node.pubkey, "Blockchain signer must match genesis node configuration");
-	
+
 	print("Adding initial signer node of c0 to system cluster: " + initial_signer_node_key.to_hex());
 	val initial_node = create node(
 		provider, 
 		initial_signer_node_key, 
-		host = genesis_node.host, 
-		port = genesis_node.port, 
-		api_url = genesis_node.api_url, 
+		host = genesis_node.host,
+		port = genesis_node.port,
+		api_url = genesis_node.api_url,
 		last_updated = op_context.last_block_time
 	);
 	create cluster_node(system_cluster, initial_node);

@@ -4,6 +4,7 @@ import ^.helpers.*;
 import ^^.*;
 import ^^.container_op.*;
 import ^^^.cluster.cluster_op.*;
+import ^^^.common.anchoring;
 import ^^^.common.test.setup.*;
 import ^^^.common.test.ops.*;
 import ^^^.common.test.util.constants.*;
@@ -13,7 +14,7 @@ function test_get_cluster_containers() {
     setup_module();
 
     // Initial asserting
-    _assert_equals_all(get_containers(), [containers.system]);
+    _assert_equals_all(get_containers(), [containers.system, anchoring.container_prefix + containers.system]);
 
     // Adding `foo` to `system` cluster
     rell.test.tx().op(
@@ -29,22 +30,22 @@ function test_get_cluster_containers() {
     ).sign(initial_provider).run();
 
     // Asserting all containers
-    _assert_equals_all(get_containers(), [containers.system, "foo", "bar"]);
+    _assert_equals_all(get_containers(), [containers.system, anchoring.container_prefix + containers.system, "foo", "bar", anchoring.container_prefix + "bar_cluster"]);
 
     // Asserting clusters in `system` container
     val system_containers = get_cluster_containers(clusters.system);
-    _assert_equals(system_containers, [containers.system, "foo"]);
+    _assert_equals(system_containers, [containers.system, anchoring.container_prefix + containers.system, "foo"]);
 
     // Asserting clusters in `bar_cluster` container
     val bar_containers = get_cluster_containers("bar_cluster");
-    _assert_equals(bar_containers, ["bar"]);
+    _assert_equals(bar_containers, [anchoring.container_prefix + "bar_cluster", "bar"]);
 
     // Unknown cluster
     assert_equals(get_cluster_containers("unknown").size(), 0);
 
     // Containers for node
     val node_containers = get_node_containers(initial_signer.pub);
-    _assert_equals_all(node_containers, [containers.system, "foo"]);
+    _assert_equals_all(node_containers, [containers.system, anchoring.container_prefix + containers.system, "foo"]);
     // Unknown node
     rell.test.tx().op(
         _query_in_op__get_node_containers(x"")

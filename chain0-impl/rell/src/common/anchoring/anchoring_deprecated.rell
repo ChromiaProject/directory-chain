@@ -1,0 +1,28 @@
+
+import ^.*;
+
+// Deprecated
+operation anchor_block(header: base_block_header, signers: list<pubkey>, signatures: list<byte_array>) {
+    val blockchain = blockchain @ { header.blockchain_rid };
+    val existing_ab = anchored_block @? { blockchain, header.height };
+    require(not exists(existing_ab));
+
+    val all_signers = set<pubkey>.from_gtv(
+        get_signers_for_configuration(blockchain, header.height)
+    );
+
+    val block_rid = header.hash();
+    print("block rid", block_rid);
+
+    for (i in range(0, signers.size())) {
+        require(all_signers.contains(signers[i]));
+        print("s", signers[i], signatures[i]);
+        require(verify_signature(block_rid, signers[i], signatures[i]));
+    }
+
+    val block = create anchored_block ( blockchain, header.height, block_rid );
+    for (signer in signers) {
+        create anchored_block_signer(block, node @ { signer });
+    }
+}
+

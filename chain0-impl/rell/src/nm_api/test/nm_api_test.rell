@@ -2,10 +2,12 @@
 
 import ^.helpers.*;
 import ^^.*;
+import ^^^.common.anchoring;
 import ^^^.common.test.setup.*;
 import ^^^.common.test.util.*;
 import ^^^.common.proposal.*;
 import ^^^.container.container_proposal.*;
+import ^^^.model.util.constants.*;
 
 function test_nm_get_blockchains_for_container() {
     setup_module();
@@ -45,4 +47,34 @@ function test_nm_get_container_for_blockchain() {
     rell.test.tx().op(
         _query_in_op__nm_get_container_for_blockchain(x"")
     ).sign(initial_provider).run_must_fail();
+}
+
+function test_nm_compute_blockchain_list() {
+    setup_module();
+
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p)
+    ).sign(initial_provider).run();
+    val container1 = container @ { "container1" };
+
+    var conf = map<text, gtv>();
+    rell.test.tx().op(
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "container1")
+    ).sign(initial_provider).run();
+
+    val chain0 = blockchain @ { blockchains.c0 } (.rid);
+    val system_anchoring = blockchain @ { anchoring.container_prefix + clusters.system } (.rid);
+    val foo_chain = blockchain @ { "foo_chain" } (.rid);
+
+    val computed_blockchain_info_list = nm_compute_blockchain_info_list(test_node.pubkey);
+    assert_equals(computed_blockchain_info_list.size(), 3);
+    assert_true(computed_blockchain_info_list.contains(blockchain_info(chain0, true)));
+    assert_true(computed_blockchain_info_list.contains(blockchain_info(system_anchoring, true)));
+    assert_true(computed_blockchain_info_list.contains(blockchain_info(foo_chain, false)));
+
+    val computed_blockchain_list = nm_compute_blockchain_list(test_node.pubkey);
+    assert_equals(computed_blockchain_list.size(), 3);
+    assert_true(computed_blockchain_list.contains(chain0));
+    assert_true(computed_blockchain_list.contains(system_anchoring));
+    assert_true(computed_blockchain_list.contains(foo_chain));
 }

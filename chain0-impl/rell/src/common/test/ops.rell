@@ -3,7 +3,7 @@ module;
 import ^^.*;
 
 operation initialize_test_module(pubkey, test_node: node_info, majority_threshold:integer = 0) {
-	initialize_module(pubkey, test_node, 1000, majority_threshold);
+	initialize_module(pubkey, test_node, 1000, anchoring_config=map<text,gtv>().to_gtv(), majority_threshold=majority_threshold);
 }
 
 operation create_test_provider(name, pubkey, provider_tier = provider_tier.NODE_PROVIDER) {
@@ -16,11 +16,6 @@ operation create_test_node(provider, pubkey, cluster) {
 	val c = list<text>();
 	c.add(cluster.name);
 	add_node_internal(provider, pubkey, "", 0, "", c);
-}
-
-// This operation is not accessible in the app. It is only the system itself who can create anchoring chain
-operation create_anchoring_chain_op(cluster_name: text) {
-	create_anchoring_chain(cluster @ { cluster_name });
 }
 
 operation create_test_voter_set(name, threshold: integer, governor: voter_set?) {

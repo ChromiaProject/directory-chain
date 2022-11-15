@@ -1,3 +1,4 @@
+import ^.anchoring;
 
 /**
  * Adding a node to a cluster automatically makes it signer of all bc in this cluster.
@@ -77,14 +78,19 @@ function update_configuration_signers(cluster) {
 		val signers = cluster_node @* { container.cluster } (@sort .node.pubkey);
 		// do not write new configuration when size is 0 since it's impossible to recover from that
 		require(signers.size() > 0);
-		create blockchain_configuration_signers(blockchain, current_height + 5, signers.to_gtv().to_bytes());
+		val bc_signers = blockchain_configuration_signers @? { blockchain, current_height + 5 };
+		if (bc_signers == null) {
+		    create blockchain_configuration_signers(blockchain, current_height + 5, signers.to_gtv().to_bytes());
+		} else {
+		    bc_signers.signers = signers.to_gtv().to_bytes();
+		}
 	}
 }
 
 function require_cluster_available_for_removal(cluster) {
     require(cluster.name != clusters.system, "System cluster can't be deleted");
     require(
-        empty(container @* { cluster }),
+        empty(container @* { cluster, not .name.starts_with(anchoring.container_prefix) }),
         "Cluster %s is not empty and can't be deleted. Delete containers first".format(cluster.name)
     );
 }
