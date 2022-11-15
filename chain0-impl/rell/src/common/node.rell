@@ -25,8 +25,17 @@ operation replace_node(my_pubkey: pubkey, old_node_key: pubkey, new_node_key: pu
 
 	val cluster_names = cluster_node @* { old_node }.cluster.name;
 	delete cluster_node @* { old_node };
+	val clusters_replicated_by_node = cluster_replica_node @* { old_node } (.cluster);
+	delete cluster_replica_node @* { old_node };
+
 	add_node_internal(provider, new_node_key, host, port, api_url, cluster_names);
 	delete old_node;
+
+	val new_node = node @ { new_node_key };
+	for (cl in clusters_replicated_by_node) {
+		_add_replica_node_to_cluster_internal(cl, new_node);
+	}
+
 	node_list.last_update = op_context.last_block_time;
 	print("---------------------------------------");
 }
@@ -57,26 +66,30 @@ function add_node_internal(provider, node_pubkey: pubkey, host: text, port: inte
 
 operation remove_node(my_pubkey: pubkey, node_pubkey: pubkey) {
     val provider = require_provider(my_pubkey);
-	require_provider_auth_with_rl(provider);
-	val node_to_remove = node @ { node_pubkey };
+    require_provider_auth_with_rl(provider);
+    val node_to_remove = node @ { node_pubkey };
 
-	if (provider != node_to_remove.provider) {
-	    require(roles.has_system_access(provider), "Non system provider is only allowed to remove own nodes");
-	    require(
+    if (provider != node_to_remove.provider) {
+        require(roles.has_system_access(provider), "Non system provider is only allowed to remove own nodes");
+        require(
             node_to_remove.provider.tier == provider_tier.NODE_PROVIDER and not(node_to_remove.provider.system),
             "System provider is only allowed to remove nodes of non system provider");
-	}
+    }
 
-	node_to_remove.active = false;
-	val clusters = cluster_node @* {.node.pubkey == node_pubkey} .cluster;
-	delete cluster_node @* { .node.pubkey == node_pubkey };
-	for (cl in clusters) {
-	    // Removing the last node of a cluster is not allowed:
-	    require(not(empty(cluster_node @* { cl })), "Cannot remove last node of a cluster.");
+    node_to_remove.active = false;
+    // cluster node
+    val clusters = cluster_node @* {.node.pubkey == node_pubkey} .cluster;
+    delete cluster_node @* { .node.pubkey == node_pubkey };
+    for (cl in clusters) {
+        // Removing the last node of a cluster is not allowed:
+        require(not(empty(cluster_node @* { cl })), "Cannot remove last node of a cluster.");
         update_configuration_signers (cl);
-	}
-	node_list.last_update = op_context.last_block_time;
-	//TODO: update blockchain_replica_node correspondingly?
+    }
+    // cluster replica node
+    delete cluster_replica_node @* { .node.pubkey == node_pubkey };
+
+    node_list.last_update = op_context.last_block_time;
+    //TODO: update blockchain_replica_node correspondingly?
 }
 
 operation update_node(my_pubkey: pubkey, node_pubkey: pubkey, host: text? = null, port: integer? = null, api_url: text? = null) {
