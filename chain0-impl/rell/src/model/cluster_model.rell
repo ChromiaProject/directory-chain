@@ -37,6 +37,10 @@ entity cluster_node {
     key cluster, node; 
 }
 
+entity cluster_replica_node {
+    key cluster, node;
+}
+
 enum cluster_resource_limit_type {
     max_containers,
     default_container_max_blockchains,
@@ -50,15 +54,10 @@ entity cluster_resource_limit {
     mutable value: integer;
 }
 
-// Cluster replicate this container, but container belongs to another cluster that is responsible for block building.
-entity cluster_container_replica { 
-    key cluster, container; 
-}
-
 function remove_cluster_impl(cluster) {
     delete cluster_resource_limit @* { cluster };
 	delete cluster_node @* { cluster };
+	delete cluster_replica_node @* { cluster };
 	delete cluster_provider @* { cluster };
-	delete cluster_container_replica @* { cluster };
     delete cluster;
 }

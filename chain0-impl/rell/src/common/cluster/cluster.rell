@@ -3,11 +3,40 @@
  * Adding a node to a cluster automatically makes it signer of all bc in this cluster.
  * Only one node per provider and cluster.
  */
-operation add_node_to_cluster(provider_pubkey: pubkey, node_pubkey: pubkey, cluster_name: text) {
-	val provider = require_provider(provider_pubkey);
+operation add_node_to_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cluster_name: text) {
+	val provider = require_provider(my_pubkey);
 	require_provider_auth_with_rl(provider);
-	val cluster = cluster @ { cluster_name };
+	val cluster = require_cluster(cluster_name);
 	add_node_to_cluster_internal(provider, node @ { node_pubkey }, cluster);
+}
+
+operation add_replica_node_to_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cluster_name: text) {
+    val provider = require_provider(my_pubkey);
+    require_provider_auth_with_rl(provider);
+    val cluster = require_cluster(cluster_name);
+    val node = require_node(node_pubkey);
+    require(empty(cluster_replica_node @* { cluster, node }), "Node %s is already a replica of the cluster %s".format(node_pubkey, cluster_name));
+    require(node.provider == provider, "It is only allowed to add own node as a container replica");
+    require(empty(cluster_node @* { cluster, node }), "Node %s is a cluster node and can't be added to cluster %s as a replica node".format(node_pubkey, cluster_name));
+    _add_replica_node_to_cluster_internal(cluster, node);
+}
+
+function _add_replica_node_to_cluster_internal(cluster, node) {
+    create cluster_replica_node(cluster, node);
+}
+
+operation remove_replica_node_from_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cluster_name: text) {
+    val provider = require_provider(my_pubkey);
+    require_provider_auth_with_rl(provider);
+    val cluster = require_cluster(cluster_name);
+    val node = require_node(node_pubkey);
+    require(exists(cluster_replica_node @* { cluster, node }), "Node %s is not a replica of the cluster %s".format(node_pubkey, cluster_name));
+    require(node.provider == provider, "It is only allowed to remove own container replica node");
+    _remove_replica_node_from_cluster_internal(node);
+}
+
+function _remove_replica_node_from_cluster_internal(node) {
+    delete cluster_replica_node @* { node };
 }
 
 /**
@@ -22,20 +51,6 @@ function check_operational(cl: cluster) {
 }
 
 /**
- * Make node a replica of all bcs in a cluster
- */
-// Not used
-function make_node_a_replica_in_cluster(cluster, node_pubkey: pubkey) {
-	val containers = container @*{ cluster };
-	for (container in containers) {
-		val bcs = container_blockchain @* {container} .blockchain;
-		for (bc in bcs) {
-			create blockchain_replica_node (bc, node @ { node_pubkey });
-		}
-	}
-}
-
-/**
  * If a provider is part of that cluster, and if provider do not already have a node in this cluster,
  * add node as block signer to this cluster. blockchain_configuration_signers update is included.
  */
@@ -46,6 +61,7 @@ function add_node_to_cluster_internal(provider, node, cluster) {
 		require(empty(provider_cluster_nodes), "A provider can only provide one node to each cluster");
 		create cluster_node(cluster, node);
 		update_configuration_signers(cluster);
+		_remove_replica_node_from_cluster_internal(node);
 		// check if cluster now is operational, if so update the flag:
 		check_operational(cluster);
 		print("blockchain configuration signers are updated");
