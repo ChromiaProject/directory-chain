@@ -1,7 +1,7 @@
 
 import ^.model.*;
 /*
-    NP API Version: 3
+    NP API Version: 4
 
     Version 1: Initial Managed Mode support
     Version 2: MustSyncUntil feature
@@ -9,11 +9,16 @@ import ^.model.*;
     Version 4: Blockchain.system property added (chain0, anchoring_chain are system chains)
 */
 
+struct blockchain_info {
+    rid: byte_array;
+    system: boolean;
+}
+
 /*
     Returns NP API Version
     NP API Version: 1
 */
-query nm_api_version () = 3;
+query nm_api_version () = 4;
 
 /*
     Returns version of peerlist
@@ -73,44 +78,44 @@ function get_blockchain_configuration_with_signers(blockchain, height: integer, 
     If caller (node_id) is a signer, return only active bcs.
     Inactive bcs should not be launched, to alleviate block building.
     If caller is a replica node of bc, include inactive bcs as well.
-    NP API Version: 1
+    NP API Version: 1 (Deprecated: Use nm_compute_blockchain_info_list)
 */
 query nm_compute_blockchain_list(node_id: pubkey): list<byte_array> {
-	val node = node @? { .pubkey == node_id };
-	if (exists(node)) {
-		val res = list<byte_array>();
-		res.add_all(blockchain_replica_node @* { node } (.blockchain.rid));
-
-		val clusters = cluster_node @* {node} .cluster;
-		for (cl in clusters) {
-			val containers = container @*{ cl };
-			for (container in containers) {
-				res.add_all(container_blockchain @* {container, .blockchain.active == true} .blockchain.rid);
-			}
-		}
-
-		return res;
-	} else {
-		return [chain_context.blockchain_rid];
+    val res = list<byte_array>();
+	for (blockchain in compute_blockchain_info_list(node_id)) {
+	    res.add(blockchain.rid);
 	}
+	return res;
 }
 
-// NP API Version: 4
-query nm_compute_system_blockchain_list(node_id: pubkey): list<byte_array> {
-	val node = node @? { .pubkey == node_id };
+/*
+    Function getBlockchainsShouldBeLaunched() uses this query.
+    If caller (node_id) is a signer, return only active bcs.
+    Inactive bcs should not be launched, to alleviate block building.
+    If caller is a replica node of bc, include inactive bcs as well.
+    NP API Version: 4
+*/
+query nm_compute_blockchain_info_list(node_id: pubkey): list<blockchain_info> {
+    return compute_blockchain_info_list(node_id);
+}
 
+function compute_blockchain_info_list(node_id: pubkey): list<blockchain_info> {
+	val node = node @? { .pubkey == node_id };
 	if (exists(node)) {
+		val res = list<blockchain_info>();
+		res.add_all(blockchain_replica_node @* { node } (blockchain_info(.blockchain.rid, .blockchain.system)));
+
 		val clusters = cluster_node @* {node} .cluster;
-		val res = list<byte_array>();
 		for (cl in clusters) {
 			val containers = container @*{ cl };
 			for (container in containers) {
-				res.add_all(container_blockchain @* {container, .blockchain.active == true, .blockchain.system == true } .blockchain.rid);
+				res.add_all(container_blockchain @* {container, .blockchain.active == true} (blockchain_info(.blockchain.rid, .blockchain.system)));
 			}
 		}
+
 		return res;
 	} else {
-		return [chain_context.blockchain_rid];
+		return [blockchain_info(chain_context.blockchain_rid, true)];
 	}
 }
 
