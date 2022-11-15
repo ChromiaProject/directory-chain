@@ -31,6 +31,10 @@ operation remove_replica_node_from_cluster(my_pubkey: pubkey, node_pubkey: pubke
     val node = require_node(node_pubkey);
     require(exists(cluster_replica_node @* { cluster, node }), "Node %s is not a replica of the cluster %s".format(node_pubkey, cluster_name));
     require(node.provider == provider, "It is only allowed to remove own container replica node");
+    _remove_replica_node_from_cluster_internal(node);
+}
+
+function _remove_replica_node_from_cluster_internal(node) {
     delete cluster_replica_node @* { node };
 }
 
@@ -56,6 +60,7 @@ function add_node_to_cluster_internal(provider, node, cluster) {
 		require(empty(provider_cluster_nodes), "A provider can only provide one node to each cluster");
 		create cluster_node(cluster, node);
 		update_configuration_signers(cluster);
+		_remove_replica_node_from_cluster_internal(node);
 		// check if cluster now is operational, if so update the flag:
 		check_operational(cluster);
 		print("blockchain configuration signers are updated");
