@@ -1,6 +1,7 @@
 module;
 
 import ^.common.*;
+import ^.common.init.*;
 import .proposal.*;
 import .ft3.ft3_basic;
 import ft3_account: .ft3.account;
@@ -12,18 +13,13 @@ import ^.cluster.cluster_op.*;
  * To run this dapp postchain must be started in managed mode using anchoring, EIF and preferably the master/subnode configuration.
  * This dapp supports usage of the CHR token across dapps.
  */
-struct module_args {
-	initial_provider: pubkey;
-	genesis_node: node_info;
-}
 
 entity provider_beneficiary {
 	key provider;
 	mutable beneficiary: ft3_account.account; 	 
 }
 
-operation init (initial_node_host:text, initial_node_port:integer) {
-	initialize_module(chain_context.args.initial_provider, chain_context.args.genesis_node, 100);
+@extend(after_init) function init_asset () {
 	ft3_core.register_asset("CHR", chain_context.blockchain_rid);
 }
 
