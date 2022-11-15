@@ -14,7 +14,7 @@ import ^.cluster.*;
 query directory_solution_version() = "0.1";
 
 // Adds the initial provider as a system provider along with voter sets and clusters needed to start
-function initialize_module(initial_provider:pubkey, initial_node_host:text, initial_node_port:integer, actions_per_day:integer, anchoring_config: gtv, majority_threshold:integer = 0) {
+function initialize_module(initial_provider:pubkey, genesis_node: node_info, actions_per_day:integer, anchoring_config: gtv, majority_threshold:integer = 0) {
 	require(empty( provider @* {}));
 	print("--------------------Initializing-Chain-0-----------------------");
 	print("Creating provider quotas");
@@ -68,15 +68,16 @@ function initialize_module(initial_provider:pubkey, initial_node_host:text, init
 
 	val signer_node_keys = list<byte_array>.from_gtv(c0_signers_gtv);
 	require(signer_node_keys.size() == 1, "C0 must have exactly one initial signer");
-	
 	val initial_signer_node_key = signer_node_keys[0];
+	require(initial_signer_node_key == genesis_node.pubkey, "Blockchain signer must match genesis node configuration");
+
 	print("Adding initial signer node of c0 to system cluster: " + initial_signer_node_key.to_hex());
 	val initial_node = create node(
 		provider, 
 		initial_signer_node_key, 
-		host = initial_node_host, 
-		port = initial_node_port, 
-		api_url = "", 
+		host = genesis_node.host,
+		port = genesis_node.port,
+		api_url = genesis_node.api_url,
 		last_updated = op_context.last_block_time
 	);
 	create cluster_node(system_cluster, initial_node);
