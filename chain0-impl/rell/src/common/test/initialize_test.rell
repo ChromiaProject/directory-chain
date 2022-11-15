@@ -3,10 +3,11 @@
 /* Makes sure the module is initialized with the correct state */
 import ^^.*;
 import ^.ops.*;
+import ^.setup.*;
 import ^.util.constants.*;
 
 function test_initialization() {
-	rell.test.tx().op(initialize_test_module(rell.test.pubkeys.alice, test_node, 100)).run();
+	setup_module();
 	
 	// Provider quotas are created
 	assert_not_null(provider_quota @? { .tier == provider_tier.COMMUNITY_NODE_PROVIDER });
@@ -44,4 +45,15 @@ function test_initialization() {
 	assert_equals(summary.clusters, 1);
 	assert_equals(summary.containers, 1);
 	assert_equals(summary.voter_sets, 2);
+	assert_equals(summary.blockchains, 1);
+}
+
+function test_initialization_with_anchoring() {
+    val anchoring_config = map<text, gtv>();
+    anchoring_config["any"] = "value".to_gtv();
+    setup_module(anchoring_config);
+
+	val summary = get_summary();
+	assert_equals(summary.containers, 2);
+	assert_equals(summary.blockchains, 2);
 }
