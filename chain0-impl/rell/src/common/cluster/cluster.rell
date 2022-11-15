@@ -17,6 +17,7 @@ operation add_replica_node_to_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cl
     val node = require_node(node_pubkey);
     require(empty(cluster_replica_node @* { cluster, node }), "Node %s is already a replica of the cluster %s".format(node_pubkey, cluster_name));
     require(node.provider == provider, "It is only allowed to add own node as a container replica");
+    require(empty(cluster_node @* { cluster, node }), "Node %s is a cluster node and can't be added to cluster %s as a replica node".format(node_pubkey, cluster_name));
     _add_replica_node_to_cluster_internal(cluster, node);
 }
 
