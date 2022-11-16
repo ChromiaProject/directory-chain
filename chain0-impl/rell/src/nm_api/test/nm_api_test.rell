@@ -7,6 +7,7 @@ import ^^^.common.test.setup.*;
 import ^^^.common.test.util.*;
 import ^^^.common.proposal.*;
 import ^^^.container.container_proposal.*;
+import ^^^.cluster.cluster_op.*;
 import ^^^.model.util.constants.*;
 
 function test_nm_get_blockchains_for_container() {
@@ -53,30 +54,94 @@ function test_nm_compute_blockchain_list() {
     val anchoring_config = map<text, gtv>();
     anchoring_config["any"] = "value".to_gtv();
     setup_module(anchoring_config);
+    val node_provider1 = rell.test.keypairs.bob;
+    val np1_node_key = x"01";
 
+    val cluster1_name = "cluster1";
+    /*
+        system cluster:
+            - providers:    initial_provider
+            - nodes:        initial_node
+            - replicas:     np1_node
+            - containers:   container1
+            - blockchains:  foo_chain
+        cluster1:
+            - providers:    node_provider1
+            - nodes:        np1_node
+            - replicas:     initial_node
+    */
     rell.test.tx().op(
-        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p)
+        // container to system cluster
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p),
+        // new node provider
+        register_provider(initial_provider.pub, node_provider1.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, node_provider1.pub, true),
+        // new cluster
+        create_cluster(initial_provider.pub, cluster1_name, voter_sets.system_p, [node_provider1.pub]),
+        add_replica_node_to_cluster(initial_provider.pub, test_node.pubkey, cluster1_name)
     ).sign(initial_provider).run();
+    // Adding np's node
+    rell.test.tx().op(
+        add_node(node_provider1.pub, np1_node_key, "host", 7777, "http://host/api_url"),
+        add_node_to_cluster(node_provider1.pub, np1_node_key, cluster1_name),
+        add_replica_node_to_cluster(node_provider1.pub, np1_node_key, clusters.system)
+    ).sign(node_provider1).run();
     val container1 = container @ { "container1" };
 
     var conf = map<text, gtv>();
     rell.test.tx().op(
-        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "container1")
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", container1.name)
     ).sign(initial_provider).run();
 
     val chain0 = blockchain @ { blockchains.c0 } (.rid);
     val system_anchoring = blockchain @ { anchoring.container_prefix + clusters.system } (.rid);
     val foo_chain = blockchain @ { "foo_chain" } (.rid);
+    val cluster1_anchoring = blockchain @ { anchoring.container_prefix + cluster1_name } (.rid);
 
-    val computed_blockchain_info_list = nm_compute_blockchain_info_list(test_node.pubkey);
-    assert_equals(computed_blockchain_info_list.size(), 3);
-    assert_true(computed_blockchain_info_list.contains(blockchain_info(chain0, true)));
-    assert_true(computed_blockchain_info_list.contains(blockchain_info(system_anchoring, true)));
-    assert_true(computed_blockchain_info_list.contains(blockchain_info(foo_chain, false)));
+    // test_node
+    val blockchain_info_list = nm_compute_blockchain_info_list(test_node.pubkey);
+    assert_equals(blockchain_info_list.size(), 4);
+    assert_true(blockchain_info_list.contains(blockchain_info(chain0, true)));
+    assert_true(blockchain_info_list.contains(blockchain_info(system_anchoring, true)));
+    assert_true(blockchain_info_list.contains(blockchain_info(foo_chain, false)));
+    assert_true(blockchain_info_list.contains(blockchain_info(cluster1_anchoring, true)));
+    // Asserting impl
+    assert_equals(toBrids(get_cluster_node_blockchains(initial_node())), set([chain0, system_anchoring, foo_chain]));
+    assert_equals(toBrids(get_cluster_replica_node_blockchains(initial_node())), set([cluster1_anchoring]));
+    assert_equals(toBrids(get_blockchains_replicated_by_node(initial_node())), set<byte_array>());
 
-    val computed_blockchain_list = nm_compute_blockchain_list(test_node.pubkey);
-    assert_equals(computed_blockchain_list.size(), 3);
-    assert_true(computed_blockchain_list.contains(chain0));
-    assert_true(computed_blockchain_list.contains(system_anchoring));
-    assert_true(computed_blockchain_list.contains(foo_chain));
+    // test_node, deprecated API call
+    val blockchain_list = nm_compute_blockchain_list(test_node.pubkey);
+    assert_equals(blockchain_list.size(), 4);
+    assert_true(blockchain_list.contains(chain0));
+    assert_true(blockchain_list.contains(system_anchoring));
+    assert_true(blockchain_list.contains(foo_chain));
+    assert_true(blockchain_list.contains(cluster1_anchoring));
+
+    // np1_node
+    val np1_node = node @ { np1_node_key };
+    val blockchain_info_list1 = nm_compute_blockchain_info_list(np1_node_key);
+    assert_equals(blockchain_info_list1.size(), 4);
+    assert_true(blockchain_info_list1.contains(blockchain_info(chain0, true)));
+    assert_true(blockchain_info_list1.contains(blockchain_info(system_anchoring, true)));
+    assert_true(blockchain_info_list1.contains(blockchain_info(foo_chain, false)));
+    assert_true(blockchain_info_list1.contains(blockchain_info(cluster1_anchoring, true)));
+    // Asserting impl
+    assert_equals(toBrids(get_cluster_node_blockchains(np1_node)), set([cluster1_anchoring]));
+    assert_equals(toBrids(get_cluster_replica_node_blockchains(np1_node)), set([chain0, system_anchoring, foo_chain]));
+    assert_equals(toBrids(get_blockchains_replicated_by_node(np1_node)), set<byte_array>());
+
+    // np1_node, deprecated API call
+    val blockchain_list1 = nm_compute_blockchain_list(np1_node_key);
+    assert_equals(blockchain_list1.size(), 4);
+    assert_true(blockchain_list1.contains(chain0));
+    assert_true(blockchain_list1.contains(system_anchoring));
+    assert_true(blockchain_list1.contains(foo_chain));
+    assert_true(blockchain_list1.contains(cluster1_anchoring));
+}
+
+function toBrids(bc_info_list: set<blockchain_info>): set<byte_array> {
+    val res = set<byte_array>();
+    for (info in bc_info_list) res.add(info.rid);
+    return res;
 }

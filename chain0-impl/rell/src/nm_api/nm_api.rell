@@ -1,39 +1,23 @@
 
 import ^.model.*;
-/*
-    NP API Version: 4
-
-    Version 1: Initial Managed Mode support
-    Version 2: MustSyncUntil feature
-    Version 3: Containers and Clusters
-    Version 4: Blockchain.system property added (chain0, anchoring_chain are system chains)
-*/
-
-struct blockchain_info {
-    rid: byte_array;
-    system: boolean;
-}
 
 /*
-    Returns NP API Version
-    NP API Version: 1
+    Returns NM API Version
+    NM API Version: 1
 */
 query nm_api_version () = 4;
 
 /*
     Returns version of peerlist
-    NP API Version: 1
+    NM API Version: 1
 */
 query nm_get_peer_list_version() = node_list.last_update;
 
 /*
     Configuration updates are found in two tables. Both must be checked to get next configuration height.
-    NP API Version: 1
+    NM API Version: 1
 */
-query nm_find_next_configuration_height(
-	blockchain_rid: byte_array,
-	height: integer
-): integer? {
+query nm_find_next_configuration_height(blockchain_rid: byte_array, height: integer): integer? {
     val bc = blockchain @? { blockchain_rid };
     if (bc == null) return null;
     val conf_h = blockchain_configuration @? { bc, .height > height } (@sort .height) limit 1;
@@ -45,12 +29,9 @@ query nm_find_next_configuration_height(
 
 /*
     Merge content of blockchain_configuration and blockchain_configuration_signers
-    NP API Version: 1
+    NM API Version: 1
 */
-query nm_get_blockchain_configuration(
-	blockchain_rid: byte_array,
-	height: integer
-): byte_array? {
+query nm_get_blockchain_configuration(blockchain_rid: byte_array, height: integer): byte_array? {
 	val bc = blockchain @ { blockchain_rid };
     // Find configuration height -- the latest height up to given height.
     // If conf_h exist, so does signer_h, thus no need to check both.
@@ -62,23 +43,8 @@ query nm_get_blockchain_configuration(
 }
 
 /*
-    Checking that signers.size() is non-zero is done when population blockchain_configuration_signers.
-    Thus, not needed to check here.
-*/
-function get_blockchain_configuration_with_signers(blockchain, height: integer, config_height: integer) : byte_array {
-	val current_config = blockchain_configuration @ { blockchain, .height == config_height };
-	val config_dict = map<text, gtv>.from_gtv(gtv.from_bytes(current_config.data));
-	config_dict["signers"] = get_signers_for_configuration(blockchain, height);
-	return config_dict.to_gtv().to_bytes();
-}
-
-
-/*
-    Function getBlockchainsShouldBeLaunched() uses this query.
-    If caller (node_id) is a signer, return only active bcs.
-    Inactive bcs should not be launched, to alleviate block building.
-    If caller is a replica node of bc, include inactive bcs as well.
-    NP API Version: 1 (Deprecated: Use nm_compute_blockchain_info_list)
+    Returns list of blockchains to be launched
+    NM API Version: 1 (Deprecated: Use nm_compute_blockchain_info_list)
 */
 query nm_compute_blockchain_list(node_id: pubkey): list<byte_array> {
     val res = list<byte_array>();
@@ -89,31 +55,21 @@ query nm_compute_blockchain_list(node_id: pubkey): list<byte_array> {
 }
 
 /*
-    Function getBlockchainsShouldBeLaunched() uses this query.
-    If caller (node_id) is a signer, return only active bcs.
-    Inactive bcs should not be launched, to alleviate block building.
-    If caller is a replica node of bc, include inactive bcs as well.
-    NP API Version: 4
+    Returns list of blockchains to be launched
+    NM API Version: 4
 */
 query nm_compute_blockchain_info_list(node_id: pubkey): list<blockchain_info> {
     return compute_blockchain_info_list(node_id);
 }
 
 function compute_blockchain_info_list(node_id: pubkey): list<blockchain_info> {
-	val node = node @? { .pubkey == node_id };
+	val node = node @? { node_id };
 	if (exists(node)) {
-		val res = list<blockchain_info>();
-		res.add_all(blockchain_replica_node @* { node } (blockchain_info(.blockchain.rid, .blockchain.system)));
-
-		val clusters = cluster_node @* {node} .cluster;
-		for (cl in clusters) {
-			val containers = container @*{ cl };
-			for (container in containers) {
-				res.add_all(container_blockchain @* {container, .blockchain.active == true} (blockchain_info(.blockchain.rid, .blockchain.system)));
-			}
-		}
-
-		return res;
+	    val res = set<blockchain_info>();
+	    res.add_all(get_cluster_node_blockchains(node));
+        res.add_all(get_cluster_replica_node_blockchains(node));
+        res.add_all(get_blockchains_replicated_by_node(node));
+		return list(res);
 	} else {
 		return [blockchain_info(chain_context.blockchain_rid, true)];
 	}
@@ -121,12 +77,12 @@ function compute_blockchain_info_list(node_id: pubkey): list<blockchain_info> {
 
 /*
     note -- API expects array, so we need suppress naming
-    NP API Version: 1
+    NM API Version: 1
 */
 query nm_get_peer_infos() = node @* {} (_ = .host,_ = .port,_ = .pubkey,_ = .last_updated);
 
 /*
-    NP API Version: 1
+    NM API Version: 1
 */
 query nm_get_blockchain_replica_node_map(blockchain_rids: list<byte_array>): list<list<byte_array>> {
 	val res = list<list<byte_array>>();
@@ -135,7 +91,7 @@ query nm_get_blockchain_replica_node_map(blockchain_rids: list<byte_array>): lis
 		if (empty(bc)) {
 			res.add(list<byte_array>());
 		} else {
-			// note: we include signers in this list because node processing old blocks might
+			// Kalle: we include signers in this list because node processing old blocks might
 			// want to connect to _current_ signers to get blocks
 			val container = container_blockchain @ {bc} .container;
 			val signers = set( cluster_node @* { container.cluster } .node.pubkey );
@@ -150,7 +106,7 @@ query nm_get_blockchain_replica_node_map(blockchain_rids: list<byte_array>): lis
 
 /*
     Function used by  mustSyncUntil (height) pos-146
-    NP API Version: 2
+    NM API Version: 2
 */
 query nm_get_blockchain_last_height_map(blockchain_rids: list<byte_array>) : list<integer> {
 	val res = list<integer>();
@@ -170,14 +126,14 @@ query nm_get_blockchain_last_height_map(blockchain_rids: list<byte_array>) : lis
 }
 
 /*
-    NP API Version: 1
+    NM API Version: 1
 */
 query nm_get_node_replica_map(): list<list<byte_array>> {
 	return list<list<byte_array>>();
 }
 
 /*
-    NP API Version: 3
+    NM API Version: 3
 */
 query nm_get_container_limits(name): map<text, integer> {
 	val container = container @ {name};
@@ -191,7 +147,7 @@ query nm_get_container_limits(name): map<text, integer> {
 }
 
 /*
-    NP API Version: 3
+    NM API Version: 3
 */
 query nm_get_cluster_limits(name): map<text, integer> {
 	val cluster = cluster @ {name};
@@ -206,7 +162,7 @@ query nm_get_cluster_limits(name): map<text, integer> {
 
 /*
     Returns node containers
-    NP API Version: 3
+    NM API Version: 3
 */
 query nm_get_containers(pubkey): list<text> {
 	val clusters = cluster_node @* {node @ { pubkey }} .cluster;
@@ -219,7 +175,7 @@ query nm_get_containers(pubkey): list<text> {
 }
 
 /*
-    NP API Version: 3
+    NM API Version: 3
 */
 query nm_get_blockchains_for_container(container_name: text): list<byte_array> {
 	val container = container @? {container_name};
@@ -232,7 +188,7 @@ query nm_get_blockchains_for_container(container_name: text): list<byte_array> {
 }
 
 /*
-    NP API Version: 3
+    NM API Version: 3
 */
 query nm_get_container_for_blockchain(blockchain_rid: byte_array): text {
     val bc = require(blockchain @? { blockchain_rid }, "Blockchain with rid not found: " + blockchain_rid.to_hex());
@@ -241,7 +197,7 @@ query nm_get_container_for_blockchain(blockchain_rid: byte_array): text {
 
 /*
     Returns a list of brids with corresponding container that this blockchain is dependent on. At the given height.
-    NP API Version: 3
+    NM API Version: 3
 */
 query nm_get_blockchain_dependencies(blockchain, height: integer): list<(byte_array, text)> {
 	val res = list<(byte_array, text)>();
