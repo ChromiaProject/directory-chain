@@ -23,7 +23,7 @@ function initialize_module(initial_provider:pubkey, genesis_node: node_info, act
 	print("Creating SYSTEM voter set");
 	create_voter_set_internal(voter_sets.system, 1);
 	/** 
-	 * System provider create a ‘system’ cluster which will include ‘system’ nodes and has a ‘system’ naked container 
+	 * System provider create a ‘system’ cluster which will include ‘system’ nodes and has a ‘system’ container 
 	 * which will run the directory bc.
 	 */
 	print("Creating SYSTEM_P voter set");
@@ -47,10 +47,9 @@ function initialize_module(initial_provider:pubkey, genesis_node: node_info, act
 	);
 	val provider = provider @ { initial_provider };
 	
-	print("Creating naked system container");
+	print("Creating system container");
 	val system_container = create_container_with_resource_limits(
 		containers.system,
-		container_type.naked,
 		cluster = system_cluster,
 		voter_set = system_voter_set
 	);
@@ -60,7 +59,7 @@ function initialize_module(initial_provider:pubkey, genesis_node: node_info, act
 	print("Adding c0 blockchain to system container");
 	val c0_config = map<text,gtv>.from_gtv(chain_context.raw_config);
 	val c0_signers_gtv = c0_config["signers"];
-	val blockchain = create blockchain(chain_context.blockchain_rid, blockchains.c0, system = true, active = true);
+	val blockchain = create blockchain(chain_context.blockchain_rid, blockchains.c0, system = true);
 	create blockchain_configuration (blockchain, 0, chain_context.raw_config.to_bytes());
 	create blockchain_configuration_signers(blockchain, 0, c0_signers_gtv.to_bytes());
 	create blockchain_added (blockchain, op_context.transaction);
