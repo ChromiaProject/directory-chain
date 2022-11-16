@@ -5,20 +5,20 @@ import ^^.model.*;
 val container_prefix = "anchoring_";
 
 object anchoring_config {
-    mutable raw_config: byte_array = null.to_gtv().to_bytes();
+    mutable raw_config: byte_array = map<text, gtv>().to_gtv().to_bytes();
 }
 
-function set_config(config: gtv) {
-    anchoring_config.raw_config = config.to_bytes();
+function set_config(config: byte_array) {
+    map<text, gtv>.from_gtv(gtv.from_bytes(config)); // Validate that config is a map
+    anchoring_config.raw_config = config;
 }
 
 @extend(after_cluster_creation) function create_cluster_anchoring_chain(cluster) {
-    val config = gtv.from_bytes(anchoring_config.raw_config);
+    val config_map = map<text,gtv>.from_gtv(gtv.from_bytes(anchoring_config.raw_config));
     // feature toggle
-    if (config != null.to_gtv()) {
+    if (config_map.size() > 0) {
         require(empty(anchoring_chain @? { cluster }), "Anchoring chain already exists for cluster " + cluster.name);
 
-        val config_map = map<text,gtv>.from_gtv_pretty(config);
         config_map["cluster"] = cluster.name.to_gtv();
         val unique_config = config_map.to_gtv_pretty();
         val blockchain_rid = unique_config.hash();
@@ -40,9 +40,9 @@ function set_config(config: gtv) {
 }
 
 @extend(before_cluster_removal) function remove_cluster_anchoring_chain(cluster) {
-    val config = gtv.from_bytes(anchoring_config.raw_config);
+    val config_map = map<text,gtv>.from_gtv(gtv.from_bytes(anchoring_config.raw_config));
     // feature toggle
-    if (config != null.to_gtv()) {
+    if (config_map.size() > 0) {
         val anchor = anchoring_chain @ { cluster } .blockchain;
         delete blockchain_configuration @* { anchor };
         delete blockchain_configuration_signers @* { anchor };
