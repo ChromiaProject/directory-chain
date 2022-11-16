@@ -19,7 +19,6 @@ entity pending_container {
 	key proposal;
 	key name;
  	cluster;
- 	container_type;
  	deployer: voter_set;
 }
 
@@ -27,7 +26,6 @@ entity pending_container_with_resource_limits {
 	key proposal;
 	key name;
  	cluster;
- 	container_type;
  	deployer: voter_set;
  	max_blockchains: integer;
  	cpu: integer;
@@ -84,7 +82,7 @@ operation propose_container(my_pubkey: pubkey, cluster_name: text, name, deploye
 
 	val prop = create proposal(op_context.last_block_time, proposal_type.other, me, cluster.governance);
     create pending_container_with_resource_limits(
-        prop, name, cluster, container_type.isolated, deployer,
+        prop, name, cluster, deployer,
         max_blockchains, cpu, ram, storage
     );
     create container_proposal(prop, container_proposal_type.create_container_with_resource_limits);
@@ -108,7 +106,6 @@ function apply_container(proposal) {
 	val pps = pending_container @ { proposal };
 	create_container_with_resource_limits(
 		pps.name,
-		pps.container_type,
 		pps.cluster,
 		pps.deployer
 	);
@@ -118,7 +115,6 @@ function apply_container_with_resource_limits(proposal) {
 	val pps = pending_container_with_resource_limits @ { proposal };
 	create_container_with_resource_limits(
 		pps.name,
-		pps.container_type,
 		pps.cluster,
 		pps.deployer,
 		pps.max_blockchains,
