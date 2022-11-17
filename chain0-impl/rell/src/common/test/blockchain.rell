@@ -1,0 +1,57 @@
+@test module;
+
+import ^^.*;
+import ^^.test.ops.*;
+import ^^.test.setup.*;
+import ^^^.container.container_proposal.*;
+import ^.util.*;
+
+function test_add_and_remove_blockchain_replica() {
+    setup_module();
+
+    val node_provider1 = rell.test.keypairs.bob;
+    val np1_node_key = x"01";
+
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p),
+        propose_blockchain(initial_provider.pub, map<text, gtv>().to_gtv().to_bytes(), "foo_chain", "container1"),
+        register_provider(initial_provider.pub, node_provider1.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, node_provider1.pub, true)
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        add_node(node_provider1.pub, np1_node_key, "host", 7777, "http://host/api_url")
+    ).sign(node_provider1).run();
+
+    val np1_node = node @ { np1_node_key };
+    val foo_chain = blockchain @ { "foo_chain" };
+
+    // adding blockchain replica node
+    rell.test.tx().op(
+        add_blockchain_replica(node_provider1.pub, foo_chain.rid, np1_node_key)
+    ).sign(node_provider1).run();
+    // adding the same again, must fail
+    rell.test.tx().op(
+        add_blockchain_replica(node_provider1.pub, foo_chain.rid, np1_node_key)
+    ).sign(node_provider1).run_must_fail();
+    // asserts
+    val db_replicas = blockchain_replica_node @* { foo_chain } (.node.pubkey);
+    assert_equals(db_replicas, [np1_node_key]);
+    val query_replicas = get_blockchain_replicas(foo_chain);
+    assert_equals(query_replicas.size(), 1);
+    assert_equals(query_replicas[0][0], np1_node_key);
+
+    // removing blockchain replica node
+    rell.test.tx().op(
+        remove_blockchain_replica(node_provider1.pub, foo_chain.rid, np1_node_key)
+    ).sign(node_provider1).run();
+    // asserts
+    assert_true(empty(blockchain_replica_node @* { foo_chain } (.node.pubkey)));
+    assert_true(empty(get_blockchain_replicas(foo_chain)));
+
+    // Testing requirement: Not my node
+    rell.test.tx().op(
+        add_blockchain_replica(initial_provider.pub, foo_chain.rid, np1_node_key),
+        remove_blockchain_replica(initial_provider.pub, foo_chain.rid, np1_node_key)
+    ).sign(initial_provider).run_must_fail();
+}
