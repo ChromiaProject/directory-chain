@@ -1,5 +1,6 @@
 import ^.proposal.*;
 import ^^.model.util.constants.*;
+import ^^.nm_api;
 
 // NB: check authority before calling this function
 function internal_vote(provider, proposal, vote: boolean) {
@@ -10,16 +11,16 @@ function internal_vote(provider, proposal, vote: boolean) {
 }
 
 function apply_voting_result(prop: proposal) {
-    val propStr = proposalStr(prop);
+    val prop_str = proposal_str(prop);
 	val voting_result = compute_voting_result(prop);
 	when (voting_result) {
-		pending -> print("proposal is still under discussion:", propStr);
+		pending -> print("proposal is still under discussion:", prop_str);
 		rejected -> {
-			print("proposal rejected:", propStr);
+			print("proposal rejected:", prop_str);
 			delete_proposal(prop);
 		}
 		approved -> {
-			print("proposal approved:", propStr);
+			print("proposal approved:", prop_str);
 			when (prop.proposal_type) {
 				other			  -> apply_other_voting_result(prop);
 				configuration 	  -> apply_configuration(prop);
@@ -97,19 +98,23 @@ function update_provider_state(provider, active: boolean) {
 	provider.active = active;
 	if (active == false) {
 		update node @* { provider } ( .active = false );
-		for (cl in cluster_provider @* { .provider == provider } (.cluster)) {
-			for (n in node @* { provider }) {
-				delete cluster_node @* { n };
-			}
+		// cluster nodes
+        delete cluster_node @* { .node.provider == provider };
+        for (cl in cluster_provider @* { provider } (.cluster)) {
+            // Removing the last node of a cluster is not allowed:
+            require(not(empty(cluster_node @* { cl })), "Cannot deactivate the last node of a cluster: " + cl.name);
 			update_configuration_signers(cl);
 		}
+		// cluster replica nodes
+		delete cluster_replica_node @* { .node.provider == provider };
+		// blockchain replica nodes
+        delete blockchain_replica_node @* { .node.provider == provider };
+        // remove disabled provider from voter_set_member table
+        delete voter_set_member @* { .provider == provider };
+        // updating node list timestamp
 		node_list.last_update = op_context.last_block_time;
-		//remove disabled provider from voter_set_member table
-		delete voter_set_member @* { .provider == provider};
-		//TODO: Delete all replicas of the provider?
-		delete blockchain_replica_node @* { .node.provider == provider };
-	} else { //enable
-		//I f enabled provider is a system provider, update SYSTEM_P voter set
+	} else { // enable
+		// If enabled provider is a system provider, update SYSTEM_P voter set
 		if (roles.has_system_access(provider)) {
 			create voter_set_member(voter_set @ { voter_sets.system_p }, provider);
 		}
@@ -168,25 +173,24 @@ function apply_blockchain_action(proposal) {
     }
 }
 
-// Remove block production by inactivating bc, Keep replicas.
+// Stop block production by inactivating bc, and keep replicas.
 function _apply_pause_blockchain(action: pending_blockchain_action, proposal) {
 	update blockchain @ { action.blockchain.rid } (.active = false);
-	/* val cl = container_blockchain @ {bc.blockchain}.container.cluster;
-	for (n in cluster_node @* {.cluster == cl} .node) {
-		create blockchain_replica_node(bc.blockchain, n);	
-	} */
+    // Keep replicas
+    val nodes = nm_api.get_blockchain_cluster_nodes_and_cluster_replica_nodes(action.blockchain.rid);
+    for (node_pubkey in nodes) {
+        create blockchain_replica_node(action.blockchain, node @ { node_pubkey });
+    }
 }
 
-/* restart block production (activate bc), block builders will be the ones in cluster_node.
- * cluster nodes are removed from blockchain_replica_node table. To ensure that signers 
- * are not also replicas.
-*/
+// Restart block production; block builders will be the ones in cluster_node.
 function _apply_resume_blockchain(action: pending_blockchain_action, proposal) {
 	update blockchain @ { action.blockchain.rid } (.active = true);
-	val cl = container_blockchain @ { action.blockchain }.container.cluster;
-	for (n in cluster_node @* { .cluster == cl } .node) {
-		delete blockchain_replica_node @? { action.blockchain, n };
-	}
+    // Removing replicas if they are cluster nodes
+    val nodes = get_blockchain_signers(action.blockchain);
+    for (node_info in nodes) {
+        delete blockchain_replica_node @? { action.blockchain, node @ { node_info[0] } };
+    }
 }
 
 // Delete everything about this bc
@@ -202,6 +206,6 @@ function _apply_delete_blockchain(action: pending_blockchain_action, proposal) {
 	delete blockchain @ { bc.rid };
 }
 
-function proposalStr(prop: proposal) {
+function proposal_str(prop: proposal) {
     return "%s:%d".format(prop.proposal_type, prop.rowid);
 }

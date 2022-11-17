@@ -28,15 +28,15 @@ function get_last_height(blockchain): integer {
 	}
 }
 
-operation add_bc_replica(provider, blockchain, node) {
+operation add_blockchain_replica(provider, blockchain, node) {
 	require_provider_auth_with_rl(provider);
-	require(node.provider == provider);
-	require(empty(blockchain_replica_node @? { blockchain, node }));
+	require(node.provider == provider, "It is only allowed to add own node as a blockchain replica");
+	require(empty(blockchain_replica_node @? { blockchain, node }), "Node is already a replica of blockchain %s".format(node.pubkey, blockchain.rid));
 	create blockchain_replica_node(blockchain, node);
 }
 
-operation remove_bc_replica(provider, blockchain, node) {
+operation remove_blockchain_replica(provider, blockchain, node) {
 	require_provider_auth_with_rl(provider);
-	require(node.provider == provider);
+	require(node.provider == provider, "It is only allowed to remove own blockchain replica node; provider:%s, node: %s".format(provider.pubkey, node.pubkey));
 	delete blockchain_replica_node @? { blockchain, node };
 }
