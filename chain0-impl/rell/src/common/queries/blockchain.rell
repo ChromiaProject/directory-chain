@@ -3,10 +3,9 @@ query get_blockchain(rid: byte_array) = blockchain @ { rid };
 
 query get_blockchain_signers_by_brid(blockchain_rid: byte_array) = get_blockchain_signers(blockchain @ { blockchain_rid });
 
-query get_blockchain_signers(blockchain) {
-    var return_list = list<(byte_array, text, integer, boolean, integer)>();
+query get_blockchain_signers(blockchain): list<(byte_array, text, integer, boolean, integer)> {
     if (blockchain.active) {
-        (cluster_node, container_blockchain) @* {
+        return (cluster_node, container_blockchain) @* {
             container_blockchain.blockchain == blockchain,
             cluster_node.cluster == container_blockchain.container.cluster
         } (
@@ -17,7 +16,7 @@ query get_blockchain_signers(blockchain) {
             .node.last_updated
         );
     }
-    return return_list;
+    return list();
 }
 
 query get_blockchain_replicas(blockchain) {
