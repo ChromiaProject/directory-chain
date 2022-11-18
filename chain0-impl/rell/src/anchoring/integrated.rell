@@ -2,6 +2,11 @@ module;
 
 import ^^.common.*;
 
+struct legacy_anchored_block {
+    height: integer;
+    block_rid: byte_array;
+}
+
 // Deprecated
 operation anchor_block(header: base_block_header, signers: list<pubkey>, signatures: list<byte_array>) {
     val blockchain = blockchain @ { header.blockchain_rid };
@@ -25,4 +30,9 @@ operation anchor_block(header: base_block_header, signers: list<pubkey>, signatu
     for (signer in signers) {
         create anchored_block_signer(block, node @ { signer });
     }
+}
+
+query get_last_legacy_anchored_block(blockchain_rid: byte_array): legacy_anchored_block? {
+    val blockchain = blockchain @ { blockchain_rid };
+    return anchored_block @? { blockchain } (@omit @sort_desc .height, legacy_anchored_block(.height, .block_rid)) limit 1;
 }
