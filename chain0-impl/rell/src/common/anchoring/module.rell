@@ -22,7 +22,7 @@ function set_config(config: byte_array) {
         config_map["cluster"] = cluster.name.to_gtv();
         val unique_config = config_map.to_gtv_pretty();
         val blockchain_rid = unique_config.hash();
-        val blockchain = create blockchain(blockchain_rid, container_prefix + cluster.name, system = true);
+        val blockchain = create blockchain(blockchain_rid, container_prefix + cluster.name, system = true, active = false);
         create blockchain_configuration(blockchain, 0, unique_config.to_bytes());
 
         val container = create_container_with_resource_limits(
@@ -30,11 +30,26 @@ function set_config(config: byte_array) {
             cluster = cluster,
             voter_set = system_voter_set()
         );
-        val signers = cluster_node @* { cluster }.node.pubkey;
-        create blockchain_configuration_signers(blockchain, 0, signers.to_gtv().to_bytes());
+
         create blockchain_added(blockchain, op_context.transaction);
         create container_blockchain(container, blockchain);
         create anchoring_chain(blockchain, cluster);
+    }
+}
+
+@extend(after_cluster_operational) function activate_cluster_anchoring_chain(cluster) {
+    val anchoring_chain = anchoring_chain @? { cluster } (.blockchain);
+
+    if (anchoring_chain != null and not anchoring_chain.active) {
+        val cluster_signers = cluster_node @* { cluster } (.node.pubkey).to_gtv().to_bytes();
+        val current_anchoring_signers = blockchain_configuration_signers @? { anchoring_chain, 0 };
+        if (current_anchoring_signers == null) {
+            create blockchain_configuration_signers(anchoring_chain, 0, cluster_signers);
+        } else {
+            current_anchoring_signers.signers = cluster_signers;
+        }
+
+        anchoring_chain.active = true;
     }
 }
 
@@ -42,7 +57,7 @@ function set_config(config: byte_array) {
     val config_map = map<text,gtv>.from_gtv(gtv.from_bytes(anchoring_config.raw_config));
     // feature toggle
     if (config_map.size() > 0) {
-        val anchor = anchoring_chain @ { cluster } .blockchain;
+        val anchor = anchoring_chain @ { cluster } (.blockchain);
         delete blockchain_configuration @* { anchor };
         delete blockchain_configuration_signers @* { anchor };
         delete blockchain_added @* { anchor };
