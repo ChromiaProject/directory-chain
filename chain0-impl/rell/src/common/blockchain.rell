@@ -1,3 +1,4 @@
+import ^.model.util.*;
 
 function add_dependencies(data: byte_array, me_brid: byte_array, height: integer) {
     val config_map = map<text, gtv>.from_gtv(gtv.from_bytes(data));
@@ -28,15 +29,21 @@ function get_last_height(blockchain): integer {
 	}
 }
 
-operation add_bc_replica(provider, blockchain, node) {
+operation add_blockchain_replica(my_pubkey: pubkey, blockchain_rid: byte_array, node_pubkey: byte_array) {
+    val provider = require_provider(my_pubkey);
 	require_provider_auth_with_rl(provider);
-	require(node.provider == provider);
-	require(empty(blockchain_replica_node @? { blockchain, node }));
+	val node = require_node(node_pubkey);
+	val blockchain = require_blockchain(blockchain_rid);
+	require(empty(blockchain_replica_node @? { blockchain, node }), "Node is already a replica of blockchain %s".format(node.pubkey, blockchain.rid));
+	require(node.provider == provider, "It is only allowed to add own node as a blockchain replica");
 	create blockchain_replica_node(blockchain, node);
 }
 
-operation remove_bc_replica(provider, blockchain, node) {
+operation remove_blockchain_replica(my_pubkey: pubkey, blockchain_rid: byte_array, node_pubkey: byte_array) {
+    val provider = require_provider(my_pubkey);
 	require_provider_auth_with_rl(provider);
-	require(node.provider == provider);
+    val blockchain = require_blockchain(blockchain_rid);
+    val node = require_node(node_pubkey);
+	require(node.provider == provider, "It is only allowed to remove own blockchain replica node; provider:%s, node: %s".format(provider.pubkey, node.pubkey));
 	delete blockchain_replica_node @? { blockchain, node };
 }

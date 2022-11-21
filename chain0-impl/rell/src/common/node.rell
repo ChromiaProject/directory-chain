@@ -6,7 +6,7 @@ operation add_node(my_pubkey: pubkey, node_pubkey: pubkey, host: text, port: int
 	require_provider_auth_with_rl(provider);
 	require_node_access(provider);
 	add_node_internal(provider, node_pubkey, host, port, api_url, clusters);
-	print("Added node information for node: " + node_pubkey.to_hex());
+	print("Added node information for node: " + node_pubkey);
 	print("-----------------------------------");
 }
 
@@ -77,19 +77,21 @@ operation remove_node(my_pubkey: pubkey, node_pubkey: pubkey) {
     }
 
     node_to_remove.active = false;
-    // cluster node
-    val clusters = cluster_node @* {.node.pubkey == node_pubkey} .cluster;
+    // cluster nodes
+    val clusters = cluster_node @* { .node.pubkey == node_pubkey } .cluster;
     delete cluster_node @* { .node.pubkey == node_pubkey };
     for (cl in clusters) {
         // Removing the last node of a cluster is not allowed:
-        require(not(empty(cluster_node @* { cl })), "Cannot remove last node of a cluster.");
-        update_configuration_signers (cl);
+        require(not(empty(cluster_node @* { cl })), "Cannot remove the last node of a cluster " + cl.name);
+        update_configuration_signers(cl);
     }
-    // cluster replica node
+    // cluster replica nodes
     delete cluster_replica_node @* { .node.pubkey == node_pubkey };
+    // blockchain replica nodes
+    delete blockchain_replica_node @* { .node.pubkey == node_pubkey };
 
+    // updating node list timestamp
     node_list.last_update = op_context.last_block_time;
-    //TODO: update blockchain_replica_node correspondingly?
 }
 
 operation update_node(my_pubkey: pubkey, node_pubkey: pubkey, host: text? = null, port: integer? = null, api_url: text? = null) {

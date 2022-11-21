@@ -14,8 +14,8 @@ function test_initialization() {
 	assert_not_null(provider_quota @? { .tier == provider_tier.NODE_PROVIDER });
 	
 	/* System voter sets are self-governed. */
-	val system = voter_set @? { "SYSTEM" };
-	val system_p = voter_set @? { "SYSTEM_P" };
+	val system = voter_set @? { voter_sets.system };
+	val system_p = voter_set @? { voter_sets.system_p };
 	assert_not_null(system);
 	assert_not_null(system_p);
 	assert_equals(voter_set_governance @ { .voter_set==system } ( .governor ), system);
@@ -23,7 +23,7 @@ function test_initialization() {
 	assert_null(voter_set_member @? { system }); // SYSTEM has no members
 	
 	/* System cluster is governed by SYSTEM_P */
-	val cluster1 = cluster @? { "system" };
+	val cluster1 = cluster @? { clusters.system };
 	assert_not_null(cluster1);
 	assert_equals(cluster1.governance, system_p);
 	
@@ -35,7 +35,7 @@ function test_initialization() {
 	assert_equals(voter_set_member @ { system_p }.provider, p1);
 	
 	/* System container is part of system cluster */
-	val container1 = container @? { "system" };
+	val container1 = container @? { containers.system };
 	assert_not_null(container1);
 	assert_equals(container1.cluster, cluster1);
 

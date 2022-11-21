@@ -18,7 +18,7 @@ function test_nm_get_blockchains_for_container() {
         propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", containers.system)
     ).sign(initial_provider).run();
 
-    val chains = nm_get_blockchains_for_container("system");
+    val chains = nm_get_blockchains_for_container(containers.system);
     assert_equals(chains.size(), 2);
     assert_true(chains.contains(blockchain @ { blockchains.c0 } (.rid)));
     assert_true(chains.contains(blockchain @ { "foo_chain" } (.rid)));
@@ -54,6 +54,8 @@ function test_nm_compute_blockchain_list__and__nm_get_blockchain_replica_node_ma
     setup_module(["any": "value".to_gtv()]);
     val node_provider1 = rell.test.keypairs.bob;
     val np1_node_key = x"01";
+    val node_provider2 = rell.test.keypairs.trudy;
+    val np2_node_key = x"02";
 
     val cluster1_name = "cluster1";
     /*
@@ -71,30 +73,41 @@ function test_nm_compute_blockchain_list__and__nm_get_blockchain_replica_node_ma
     rell.test.tx().op(
         // container to system cluster
         propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p),
-        // new node provider
+        // new node provider1
         register_provider(initial_provider.pub, node_provider1.pub, provider_tier.NODE_PROVIDER),
         propose_provider_state(initial_provider.pub, node_provider1.pub, true),
+        // new node provider2
+        register_provider(initial_provider.pub, node_provider2.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, node_provider2.pub, true),
         // new cluster
         create_cluster(initial_provider.pub, cluster1_name, voter_sets.system_p, [node_provider1.pub]),
         add_replica_node_to_cluster(initial_provider.pub, test_node.pubkey, cluster1_name)
     ).sign(initial_provider).run();
-    // Adding np's node
+    // Adding np1's node
     rell.test.tx().op(
         add_node(node_provider1.pub, np1_node_key, "host", 7777, "http://host/api_url"),
         add_node_to_cluster(node_provider1.pub, np1_node_key, cluster1_name),
         add_replica_node_to_cluster(node_provider1.pub, np1_node_key, clusters.system)
     ).sign(node_provider1).run();
-    val container1 = container @ { "container1" };
+    // Adding np2's node
+    rell.test.tx().op(
+        add_node(node_provider2.pub, np2_node_key, "host", 8888, "http://host/api_url")
+    ).sign(node_provider2).run();
 
     var conf = map<text, gtv>();
     rell.test.tx().op(
-        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", container1.name)
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "container1")
     ).sign(initial_provider).run();
 
     val chain0 = blockchain @ { blockchains.c0 } (.rid);
     val system_anchoring = blockchain @ { anchoring.container_prefix + clusters.system } (.rid);
     val foo_chain = blockchain @ { "foo_chain" } (.rid);
     val cluster1_anchoring = blockchain @ { anchoring.container_prefix + cluster1_name } (.rid);
+
+    // np2 adds its node as a replica of `foo_chain`
+    rell.test.tx().op(
+        add_blockchain_replica(node_provider2.pub, foo_chain, np2_node_key)
+    ).sign(node_provider2).run();
 
     // test_node::nm_compute_blockchain_info_list
     val blockchain_info_list = nm_compute_blockchain_info_list(test_node.pubkey);
@@ -115,7 +128,7 @@ function test_nm_compute_blockchain_list__and__nm_get_blockchain_replica_node_ma
     assert_equals(replica_node_map.size(), 4);
     assert_equals(replica_node_map[chain0], expected_replicas);
     assert_equals(replica_node_map[system_anchoring], expected_replicas);
-    assert_equals(replica_node_map[foo_chain], expected_replicas);
+    assert_equals(replica_node_map[foo_chain], set([test_node.pubkey, np1_node_key, np2_node_key])); // + np2's node
     assert_equals(replica_node_map[cluster1_anchoring], expected_replicas);
 
     // test_node, deprecated API call
@@ -146,7 +159,7 @@ function test_nm_compute_blockchain_list__and__nm_get_blockchain_replica_node_ma
     assert_equals(replica_node_map1.size(), 4);
     assert_equals(replica_node_map1[chain0], expected_replicas1);
     assert_equals(replica_node_map1[system_anchoring], expected_replicas1);
-    assert_equals(replica_node_map1[foo_chain], expected_replicas1);
+    assert_equals(replica_node_map1[foo_chain], set([test_node.pubkey, np1_node_key, np2_node_key])); // + np2's node
     assert_equals(replica_node_map1[cluster1_anchoring], expected_replicas1);
 
     // np1_node, deprecated API call

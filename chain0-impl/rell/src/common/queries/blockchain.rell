@@ -1,26 +1,25 @@
 
-query get_blockchain (rid: byte_array) = blockchain @ { rid };
+query get_blockchain(rid: byte_array) = blockchain @ { rid };
 
-query get_bc_signers(blockchain_rid: byte_array) = get_blockchain_signers(blockchain @ { blockchain_rid }); // Temporary to speed up tests
-
-query get_blockchain_signers(bc: blockchain) {
-	val cl = container_blockchain @ {bc}.container.cluster;
-	var return_list = list<(byte_array, text, integer, boolean, integer)>();
-    if (bc.active) {
-    	return_list = cluster_node @* { cl } (
-        @sort .node.pubkey,
-        .node.host,
-        .node.port,
-        .node.active,
-        .node.last_updated
-    	);
+query get_blockchain_signers(blockchain_rid: byte_array): list<(byte_array, text, integer, boolean, integer)> {
+    val blockchain = blockchain @? { blockchain_rid, .active == true };
+    if (exists(blockchain)) {
+        return (cluster_node, container_blockchain) @* {
+            container_blockchain.blockchain == blockchain,
+            cluster_node.cluster == container_blockchain.container.cluster
+        } (
+            @sort .node.pubkey,
+            .node.host,
+            .node.port,
+            .node.active,
+            .node.last_updated
+        );
     }
-    return return_list;
+    return list();
 }
 
-query get_blockchain_replicas(blockchain) {
-    return blockchain_replica_node @* { blockchain } (
-        .blockchain.rid,
+query get_blockchain_replicas(blockchain_rid: byte_array) {
+    return blockchain_replica_node @* { .blockchain.rid == blockchain_rid } (
         @sort .node.pubkey,
         .node.host,
         .node.port,
