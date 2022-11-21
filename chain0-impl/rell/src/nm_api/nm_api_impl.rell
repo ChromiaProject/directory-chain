@@ -1,0 +1,44 @@
+import ^.model.*;
+
+/*
+    Checking that signers.size() is non-zero is done when population blockchain_configuration_signers.
+    Thus, not needed to check here.
+*/
+function get_blockchain_configuration_with_signers(blockchain, height: integer, config_height: integer) : byte_array {
+	val current_config = blockchain_configuration @ { blockchain, .height == config_height };
+	val config_dict = map<text, gtv>.from_gtv(gtv.from_bytes(current_config.data));
+	config_dict["signers"] = get_signers_for_configuration(blockchain, height);
+	return config_dict.to_gtv().to_bytes();
+}
+
+function get_cluster_node_blockchains(node) = set(
+    (cluster_node, container_blockchain) @* {
+        cluster_node.node == node,
+        cluster_node.cluster == container_blockchain.container.cluster,
+        container_blockchain.blockchain.active == true
+    } ( blockchain_info(container_blockchain.blockchain.rid, container_blockchain.blockchain.system) )
+);
+
+function get_cluster_replica_node_blockchains(node) = set(
+    (cluster_replica_node, container_blockchain) @* {
+        cluster_replica_node.node == node,
+        cluster_replica_node.cluster == container_blockchain.container.cluster,
+        container_blockchain.blockchain.active == true
+    } ( blockchain_info(container_blockchain.blockchain.rid, container_blockchain.blockchain.system) )
+);
+
+function get_blockchains_replicated_by_node(node) = set(
+    blockchain_replica_node @* { node } (blockchain_info(.blockchain.rid, .blockchain.system))
+);
+
+function get_blockchain_signers_and_replicas(brid: byte_array): set<byte_array> {
+    val nodes = set<byte_array>();
+
+    val cluster = container_blockchain @? { .blockchain.rid == brid } (.container.cluster);
+    if (exists(cluster)) {
+        nodes.add_all(cluster_node @* { cluster } (.node.pubkey));
+        nodes.add_all(cluster_replica_node @* { cluster } (.node.pubkey));
+    }
+
+    return nodes;
+}
