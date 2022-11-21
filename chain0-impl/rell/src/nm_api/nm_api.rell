@@ -70,26 +70,30 @@ query nm_compute_blockchain_info_list(node_id: pubkey): list<blockchain_info> {
 }
 
 function compute_blockchain_info_list(node_id: pubkey): list<blockchain_info> {
-	val node = node @? { node_id };
-	if (exists(node)) {
-	    val res = set<blockchain_info>();
-	    res.add_all(get_cluster_node_blockchains(node));
+    val node = node @? { node_id };
+    if (exists(node)) {
+        val res = set<blockchain_info>();
+        res.add_all(get_cluster_node_blockchains(node));
         res.add_all(get_cluster_replica_node_blockchains(node));
         res.add_all(get_blockchains_replicated_by_node(node));
-		return list(res);
-	} else {
-		return [blockchain_info(chain_context.blockchain_rid, true)];
-	}
+        return list(res);
+    } else {
+        return [blockchain_info(chain_context.blockchain_rid, true)];
+    }
 }
 
 /*
     NM API Version: 4
 */
-query nm_get_blockchain_replica_node_map_v4(blockchain_rids: list<byte_array>): map<byte_array, set<byte_array>> {
+query nm_get_blockchain_replica_node_map_v4(blockchain_rids: set<byte_array>): map<byte_array, set<byte_array>> {
     val res = map<byte_array, set<byte_array>>();
     for (brid in set(blockchain_rids)) {
+        /*
+            Kalle: we include signers in this list because node processing old blocks might
+            want to connect to _current_ signers to get blocks
+        */
         val nodes = set<byte_array>();
-        nodes.add_all(get_blockchain_cluster_nodes_and_cluster_replica_nodes(brid));
+        nodes.add_all(get_blockchain_signers_and_replicas(brid));
         nodes.add_all(blockchain_replica_node @* { .blockchain.rid == brid } (.node.pubkey));
         res.put(brid, nodes);
     }
