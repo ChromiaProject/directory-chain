@@ -88,21 +88,14 @@ function compute_blockchain_info_list(node_id: pubkey): list<blockchain_info> {
 query nm_get_blockchain_replica_node_map_v4(blockchain_rids: set<byte_array>): map<byte_array, set<byte_array>> {
     val res = map<byte_array, set<byte_array>>();
     for (brid in set(blockchain_rids)) {
-        /*
-            Kalle: we include signers in this list because node processing old blocks might
-            want to connect to _current_ signers to get blocks
-        */
-        val nodes = set<byte_array>();
-        nodes.add_all(get_blockchain_signers_and_replicas(brid));
-        nodes.add_all(blockchain_replica_node @* { .blockchain.rid == brid } (.node.pubkey));
-        res.put(brid, nodes);
+        res.put(brid, get_blockchain_replica_nodes(brid));
     }
     return res;
 }
 
 /*
     NM API Version: 1
-    Deprecated, use `nm_get_node_blockchain_replica_node_map()` instead
+    Deprecated, use `nm_get_blockchain_replica_node_map_v4()` instead
 */
 query nm_get_blockchain_replica_node_map(blockchain_rids: list<byte_array>): list<list<byte_array>> {
 	val res = list<list<byte_array>>();

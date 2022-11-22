@@ -31,14 +31,18 @@ function get_blockchains_replicated_by_node(node) = set(
     blockchain_replica_node @* { node } (blockchain_info(.blockchain.rid, .blockchain.system))
 );
 
-function get_blockchain_signers_and_replicas(brid: byte_array): set<byte_array> {
-    val nodes = set<byte_array>();
+function get_blockchain_replica_nodes(blockchain_rid: byte_array): set<byte_array> {
+    val replicas = set<byte_array>();
 
-    val cluster = container_blockchain @? { .blockchain.rid == brid } (.container.cluster);
-    if (exists(cluster)) {
-        nodes.add_all(cluster_node @* { cluster } (.node.pubkey));
-        nodes.add_all(cluster_replica_node @* { cluster } (.node.pubkey));
-    }
+    // cluster_replica_node
+    val replica_nodes = (crn: cluster_replica_node, cb: container_blockchain) @* {
+        cb.blockchain.rid == blockchain_rid,
+        cb.container.cluster == crn.cluster
+    } (.node.pubkey);
+    replicas.add_all(replica_nodes);
 
-    return nodes;
+    // blockchain_replica_node
+    replicas.add_all(blockchain_replica_node @* { .blockchain.rid == blockchain_rid } (.node.pubkey));
+
+    return replicas;
 }
