@@ -7,7 +7,10 @@ operation initialize_test_module(pubkey, test_node: node_info, majority_threshol
 }
 
 operation create_test_provider(name, pubkey, provider_tier = provider_tier.NODE_PROVIDER) {
-	if (provider_quota @? { .tier == provider_tier } == null) create provider_quota(provider_tier, provider_quota_type.max_actions_per_day, value = 100);
+	if (empty(provider_quota @* { .tier == provider_tier })) {
+	    create provider_quota(provider_tier, provider_quota_type.max_actions_per_day, value = 100);
+	    create provider_quota(provider_tier, provider_quota_type.max_nodes, value = provider_quota_defaults.MAX_NODES);
+	}
 	val p = create provider(pubkey, name, active = true, provider_tier);
 	create provider_rl_state(p, points = 10000, last_update = 0);
 }
