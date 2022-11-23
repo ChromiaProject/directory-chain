@@ -66,6 +66,10 @@ function test_add_node() {
     val np1_node = node @? { np1_node_key };
     assert_not_null(np1_node);
     assert_true(np1_node.active);
+    // NP tries to add more nodes and fails
+    rell.test.tx().op(
+        add_node(node_provider1.pub, x"000001", "host", 7777, "http://host/api_url")
+    ).sign(node_provider1).run_must_fail();
 
     // DP/CNP's node is added by IP and fails
     rell.test.tx().op(
@@ -78,6 +82,10 @@ function test_add_node() {
     assert_true(exists(node @? { dp1_node_key }));
     val system_cluster_replicas = cluster_replica_node @* { .cluster.name == clusters.system } (.node.pubkey);
     assert_true(system_cluster_replicas.contains(dp1_node_key));
+    // NP tries to add more nodes and fails
+    rell.test.tx().op(
+        add_node(dapp_provider1.pub, x"000002", "host", 7777, "http://host/api_url")
+    ).sign(dapp_provider1).run_must_fail();
 }
 
 function test_remove_node() {
