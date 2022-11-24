@@ -11,8 +11,11 @@ function test_initialization() {
 
     // Provider quotas are created
     for (quota in provider_quota_type.values()) {
-        assert_true(exists(provider_quota @* { provider_tier.COMMUNITY_NODE_PROVIDER, quota }));
-        assert_true(exists(provider_quota @* { provider_tier.NODE_PROVIDER, quota }));
+        when (quota) {
+            max_actions_per_day -> assert_provider_quota(quota, [provider_tier.COMMUNITY_NODE_PROVIDER, provider_tier.NODE_PROVIDER]);
+        	max_nodes -> assert_provider_quota(quota, [provider_tier.COMMUNITY_NODE_PROVIDER, provider_tier.NODE_PROVIDER]);
+        	max_containers -> assert_provider_quota(quota, [provider_tier.NODE_PROVIDER]);
+        }
     }
 
     /* System voter sets are self-governed. */
@@ -50,9 +53,15 @@ function test_initialization() {
 }
 
 function test_initialization_with_anchoring() {
-    setup_module(["any": "value".to_gtv()]);
+    setup_module(anchoring_config = ["any": "value".to_gtv()]);
 
     val summary = get_summary();
     assert_equals(summary.containers, 2);
     assert_equals(summary.blockchains, 2);
+}
+
+function assert_provider_quota(quota: provider_quota_type, tiers: list<provider_tier>) {
+    for (tier in tiers) {
+        assert_true(exists(provider_quota @* { tier, quota }));
+    }
 }
