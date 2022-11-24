@@ -18,10 +18,8 @@ function initialize_module(initial_provider:pubkey, genesis_node: node_info, act
 	require(empty( provider @* {}));
 	print("--------------------Initializing-Chain-0-----------------------");
 	print("Creating provider quotas");
-	create provider_quota(tier = provider_tier.COMMUNITY_NODE_PROVIDER, provider_quota_type.max_actions_per_day, value = actions_per_day);
-	create provider_quota(tier = provider_tier.NODE_PROVIDER, provider_quota_type.max_actions_per_day, value = actions_per_day);
-	create provider_quota(tier = provider_tier.COMMUNITY_NODE_PROVIDER, provider_quota_type.max_nodes, value = provider_quota_defaults.MAX_NODES);
-    create provider_quota(tier = provider_tier.NODE_PROVIDER, provider_quota_type.max_nodes, value = provider_quota_defaults.MAX_NODES);
+	_setup_provider_quotas(actions_per_day);
+
 	print("Creating SYSTEM voter set");
 	create_voter_set_internal(voter_sets.system, 1);
 	/** 
@@ -87,3 +85,9 @@ function initialize_module(initial_provider:pubkey, genesis_node: node_info, act
 	print("---------------------------------------------------------------");
 }
 
+function _setup_provider_quotas(actions_per_day: integer) {
+    create provider_quota(tier = provider_tier.COMMUNITY_NODE_PROVIDER, provider_quota_type.max_actions_per_day, value = actions_per_day);
+    create provider_quota(tier = provider_tier.NODE_PROVIDER, provider_quota_type.max_actions_per_day, value = actions_per_day);
+    create provider_quota(tier = provider_tier.COMMUNITY_NODE_PROVIDER, provider_quota_type.max_nodes, value = provider_quota_defaults.MAX_NODES);
+    create provider_quota(tier = provider_tier.NODE_PROVIDER, provider_quota_type.max_nodes, value = provider_quota_defaults.MAX_NODES);
+}
