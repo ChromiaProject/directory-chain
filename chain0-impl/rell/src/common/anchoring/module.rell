@@ -13,7 +13,7 @@ function set_config(config: byte_array) {
     anchoring_config.raw_config = config;
 }
 
-@extend(after_cluster_creation) function create_cluster_anchoring_chain(cluster) {
+@extend(after_cluster_creation) function create_cluster_anchoring_chain(provider, cluster) {
     val config_map = map<text,gtv>.from_gtv(gtv.from_bytes(anchoring_config.raw_config));
     // feature toggle
     if (config_map.size() > 0) {
@@ -26,6 +26,7 @@ function set_config(config: byte_array) {
         create blockchain_configuration(blockchain, 0, unique_config.to_bytes());
 
         val container = create_container_with_resource_limits(
+            provider,
             container_prefix + cluster.name,
             cluster = cluster,
             voter_set = system_voter_set()

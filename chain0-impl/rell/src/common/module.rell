@@ -29,14 +29,6 @@ function initialize_module(initial_provider:pubkey, genesis_node: node_info, act
 	print("Creating SYSTEM_P voter set");
 	val system_voter_set = create_voter_set_internal(voter_sets.system_p, majority_threshold);
 	
-	print("Creating system cluster with SYSTEM_P as governor");
-	anchoring.set_config(anchoring_config);
-	val system_cluster = create_cluster_impl(
-		clusters.system,
-		governor=system_voter_set,
-		providers=list<pubkey>()
-		);
-	
 	print("Creating initial provider with pubkey: " + initial_provider);
 	register_and_enable_provider(
 		initial_provider, 
@@ -46,9 +38,19 @@ function initialize_module(initial_provider:pubkey, genesis_node: node_info, act
 		enabled_by_default = true
 	);
 	val provider = provider @ { initial_provider };
-	
+
+	print("Creating system cluster with SYSTEM_P as governor");
+    anchoring.set_config(anchoring_config);
+    val system_cluster = create_cluster_impl(
+        provider,
+        clusters.system,
+        governor=system_voter_set,
+        providers=list<pubkey>()
+   	);
+
 	print("Creating system container");
 	val system_container = create_container_with_resource_limits(
+		provider,
 		containers.system,
 		cluster = system_cluster,
 		voter_set = system_voter_set
