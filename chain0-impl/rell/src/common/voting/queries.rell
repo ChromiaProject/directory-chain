@@ -1,30 +1,30 @@
 
 query list_voter_sets() {
-	return voter_set@* {} ( voter_set.to_struct() );
+    return voter_set@* {} ( voter_set.to_struct() );
 }
 
 query get_voter_set_info(name): (name:text, threshold:integer, governor:text, members:list<pubkey>) {
-	val v = require(voter_set @? { name }, "Voter set " + name + " not found");
-	val governance = voter_set_governance @ { .voter_set == v };
-	val members = voter_set_member @* { v } ( .provider.pubkey );
-	return (
-		name = v.name,
-		threshold = v.threshold,
-		governor = governance.governor.name,
-		members = members
-	);
+    val v = require(voter_set @? { name }, "Voter set " + name + " not found");
+    val governance = voter_set_governance @ { .voter_set == v };
+    val members = voter_set_member @* { v } ( .provider.pubkey );
+    return (
+        name = v.name,
+        threshold = v.threshold,
+        governor = governance.governor.name,
+        members = members
+    );
 }
 
 query get_voter_set(name) = voter_set @ { name };
 
 query get_voter_set_governor(name) {
-	return voter_set_governance @ { .voter_set == voter_set @ { name } } .governor.name;	
+    return voter_set_governance @ { .voter_set == voter_set @ { name } } .governor.name;
 }
 
 query get_voter_set_members(name) {
-	return voter_set_member @* {voter_set @ {name}} (.provider.pubkey);
+    return voter_set_member @* {voter_set @ {name}} (.provider.pubkey);
 }
 
 query get_voter_sets() {
-	return (voter_set, voter_set_governance) @* { voter_set == voter_set_governance.voter_set } (name = voter_set.name, threshold = voter_set.threshold, @sort gorvernor = voter_set_governance.governor.name);
+    return (voter_set, voter_set_governance) @* { voter_set == voter_set_governance.voter_set } (name = voter_set.name, threshold = voter_set.threshold, @sort gorvernor = voter_set_governance.governor.name);
 }

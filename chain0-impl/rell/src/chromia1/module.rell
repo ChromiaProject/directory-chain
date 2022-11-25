@@ -15,39 +15,39 @@ import ^.cluster.cluster_op.*;
  */
 
 entity provider_beneficiary {
-	key provider;
-	mutable beneficiary: ft3_account.account; 	 
+    key provider;
+    mutable beneficiary: ft3_account.account;
 }
 
 @extend(after_init) function init_asset () {
-	ft3_core.register_asset("CHR", chain_context.blockchain_rid);
+    ft3_core.register_asset("CHR", chain_context.blockchain_rid);
 }
 
 function create_simple_ft3_account(pubkey): ft3_account.account {
-	val account_id = ft3_account.create_account_with_auth(
-		ft3_account.auth_descriptor(
-			"C",
-			[pubkey],
-			[pubkey.to_gtv()]
-		)	
-	);
-	return ft3_account.account @ { account_id };
+    val account_id = ft3_account.create_account_with_auth(
+        ft3_account.auth_descriptor(
+            "C",
+            [pubkey],
+            [pubkey.to_gtv()]
+        )
+    );
+    return ft3_account.account @ { account_id };
 }
 
 @extend(register_and_enable_provider) function add_account_to_provider(pubkey, provider_tier, cluster?, voter_set?, enabled_by_default: boolean) {
-	val account = create_simple_ft3_account(pubkey);
-	create provider_beneficiary(provider @ { pubkey }, account);
+    val account = create_simple_ft3_account(pubkey);
+    create provider_beneficiary(provider @ { pubkey }, account);
 }
 
 operation update_provider(my_pubkey: pubkey, name?, beneficiary_account_id: byte_array?) {
     val me = require_provider(my_pubkey);
-	require_provider_auth_with_rl(me);
-	if (exists(name)) {
-		me.name = name;
-	}
-	if (exists(beneficiary_account_id)) {
-		update provider_beneficiary @ { me } (
-			.beneficiary = ft3_account.account @ { .id == beneficiary_account_id }
-		);
-	} 
+    require_provider_auth_with_rl(me);
+    if (exists(name)) {
+        me.name = name;
+    }
+    if (exists(beneficiary_account_id)) {
+        update provider_beneficiary @ { me } (
+            .beneficiary = ft3_account.account @ { .id == beneficiary_account_id }
+        );
+    }
 }

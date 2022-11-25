@@ -39,7 +39,7 @@ query nm_find_next_configuration_height(blockchain_rid: byte_array, height: inte
     NM API Version: 1
 */
 query nm_get_blockchain_configuration(blockchain_rid: byte_array, height: integer): byte_array? {
-	val bc = blockchain @ { blockchain_rid };
+    val bc = blockchain @ { blockchain_rid };
     // Find configuration height -- the latest height up to given height.
     // If conf_h exist, so does signer_h, thus no need to check both.
     val config_h = blockchain_configuration @? { bc, .height <= height } (@sort_desc .height) limit 1;
@@ -55,10 +55,10 @@ query nm_get_blockchain_configuration(blockchain_rid: byte_array, height: intege
 */
 query nm_compute_blockchain_list(node_id: pubkey): list<byte_array> {
     val res = list<byte_array>();
-	for (blockchain in compute_blockchain_info_list(node_id)) {
-	    res.add(blockchain.rid);
-	}
-	return res;
+    for (blockchain in compute_blockchain_info_list(node_id)) {
+        res.add(blockchain.rid);
+    }
+    return res;
 }
 
 /*
@@ -98,23 +98,23 @@ query nm_get_blockchain_replica_node_map_v4(blockchain_rids: set<byte_array>): m
     Deprecated, use `nm_get_blockchain_replica_node_map_v4()` instead
 */
 query nm_get_blockchain_replica_node_map(blockchain_rids: list<byte_array>): list<list<byte_array>> {
-	val res = list<list<byte_array>>();
-	for (brid in blockchain_rids) {
-		val bc = blockchain @? { brid };
-		if (empty(bc)) {
-			res.add(list<byte_array>());
-		} else {
-			// Kalle: we include signers in this list because node processing old blocks might
-			// want to connect to _current_ signers to get blocks
-			val container = container_blockchain @ {bc} .container;
-			val signers = set( cluster_node @* { container.cluster } .node.pubkey );
-			signers.add_all(
-				blockchain_replica_node @* { bc } .node.pubkey
-			);
-			res.add(list(signers));
-		}
-	}
-	return res;
+    val res = list<list<byte_array>>();
+    for (brid in blockchain_rids) {
+        val bc = blockchain @? { brid };
+        if (empty(bc)) {
+            res.add(list<byte_array>());
+        } else {
+            // Kalle: we include signers in this list because node processing old blocks might
+            // want to connect to _current_ signers to get blocks
+            val container = container_blockchain @ {bc} .container;
+            val signers = set( cluster_node @* { container.cluster } .node.pubkey );
+            signers.add_all(
+                blockchain_replica_node @* { bc } .node.pubkey
+            );
+            res.add(list(signers));
+        }
+    }
+    return res;
 }
 
 /*
@@ -122,7 +122,7 @@ query nm_get_blockchain_replica_node_map(blockchain_rids: list<byte_array>): lis
     NM API Version: 2
 */
 query nm_get_blockchain_last_height_map(blockchain_rids: list<byte_array>) : list<integer> {
-	val res = list<integer>();
+    val res = list<integer>();
     for (brid in blockchain_rids) {
         val bc = blockchain @? { brid };
         if (brid == chain_context.blockchain_rid) {
@@ -142,28 +142,28 @@ query nm_get_blockchain_last_height_map(blockchain_rids: list<byte_array>) : lis
     NM API Version: 3
 */
 query nm_get_container_limits(name): map<text, integer> {
-	val container = container @ {name};
-	var return_map = map<text, integer>();
-	val limits_list = container_resource_limit @* { container };
-	for (l in limits_list) {
-		val r = l.container_resource_limit_type;
-		return_map.put(r.name, l.value);
-	}
-	return return_map;
+    val container = container @ {name};
+    var return_map = map<text, integer>();
+    val limits_list = container_resource_limit @* { container };
+    for (l in limits_list) {
+        val r = l.container_resource_limit_type;
+        return_map.put(r.name, l.value);
+    }
+    return return_map;
 }
 
 /*
     NM API Version: 3
 */
 query nm_get_cluster_limits(name): map<text, integer> {
-	val cluster = cluster @ {name};
-	var return_map = map<text, integer>();
-	val limits_list = cluster_resource_limit @* {cluster};
-	for (l in limits_list) {
-		val r = l.cluster_resource_limit_type;
-		return_map.put(r.name, l.value);
-	}
-	return return_map;
+    val cluster = cluster @ {name};
+    var return_map = map<text, integer>();
+    val limits_list = cluster_resource_limit @* {cluster};
+    for (l in limits_list) {
+        val r = l.cluster_resource_limit_type;
+        return_map.put(r.name, l.value);
+    }
+    return return_map;
 }
 
 /*
@@ -171,26 +171,26 @@ query nm_get_cluster_limits(name): map<text, integer> {
     NM API Version: 3
 */
 query nm_get_containers(pubkey): list<text> {
-	val clusters = cluster_node @* {node @ { pubkey }} .cluster;
-	val res = list<text>();
-	for (cl in clusters) {
-		val containers = container @* { cl } .name;
-		res.add_all(containers);
-	}
-	return res;
+    val clusters = cluster_node @* {node @ { pubkey }} .cluster;
+    val res = list<text>();
+    for (cl in clusters) {
+        val containers = container @* { cl } .name;
+        res.add_all(containers);
+    }
+    return res;
 }
 
 /*
     NM API Version: 3
 */
 query nm_get_blockchains_for_container(container_name: text): list<byte_array> {
-	val container = container @? {container_name};
-	val res = list<byte_array>();
-	if (exists(container)) {
-		val cluster = container.cluster;
-		res.add_all(container_blockchain @* {container, .blockchain.active == true} .blockchain.rid);
-	}
-	return res;
+    val container = container @? {container_name};
+    val res = list<byte_array>();
+    if (exists(container)) {
+        val cluster = container.cluster;
+        res.add_all(container_blockchain @* {container, .blockchain.active == true} .blockchain.rid);
+    }
+    return res;
 }
 
 /*
@@ -206,14 +206,14 @@ query nm_get_container_for_blockchain(blockchain_rid: byte_array): text {
     NM API Version: 3
 */
 query nm_get_blockchain_dependencies(blockchain, height: integer): list<(byte_array, text)> {
-	val res = list<(byte_array, text)>();
-	val conf_h = blockchain_configuration @? { blockchain, .height <= height }
-        	(@sort .height) limit 1;
+    val res = list<(byte_array, text)>();
+    val conf_h = blockchain_configuration @? { blockchain, .height <= height }
+            (@sort .height) limit 1;
     if (conf_h != null) {
-    	val brids = blockchain_dependency @* {.me == blockchain, conf_h} .dependent_on.rid;
-    	for (brid in brids) {
-    		res.add((brid, container_blockchain @ { blockchain @{brid}} .container.name));
-    	}
+        val brids = blockchain_dependency @* {.me == blockchain, conf_h} .dependent_on.rid;
+        for (brid in brids) {
+            res.add((brid, container_blockchain @ { blockchain @{brid}} .container.name));
+        }
     }
-	return res;
+    return res;
 }

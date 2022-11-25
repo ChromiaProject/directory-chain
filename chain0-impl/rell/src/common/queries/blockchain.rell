@@ -30,45 +30,45 @@ query get_blockchain_replicas(blockchain_rid: byte_array) {
 
 //Cannot use function get_last_height, since it uses an op_context.
 query get_blockchain_last_height(blockchain_rid: byte_array) : integer {
-	if (blockchain_rid == chain_context.blockchain_rid) {
-		return (block @? {} (@sort_desc .block_height) limit 1) ?: -1;
-	} else {
-		return (anchored_block @? { blockchain @ { blockchain_rid } } (@sort_desc .height) limit 1) ?: -1;
-	}
+    if (blockchain_rid == chain_context.blockchain_rid) {
+        return (block @? {} (@sort_desc .block_height) limit 1) ?: -1;
+    } else {
+        return (anchored_block @? { blockchain @ { blockchain_rid } } (@sort_desc .height) limit 1) ?: -1;
+    }
 }
 
 query get_blockchains(include_inactive: boolean): list<struct<blockchain>> {
-	if (include_inactive) {
-		return blockchain @* {} ($.to_struct());
-	}
+    if (include_inactive) {
+        return blockchain @* {} ($.to_struct());
+    }
     return blockchain @* { .active == true } ($.to_struct());
 }
 
 query get_added_blockchain_rid(tx_rid: byte_array) {
-	return blockchain_added @ { transaction @ { tx_rid } }.blockchain.rid;
+    return blockchain_added @ { transaction @ { tx_rid } }.blockchain.rid;
 }
 
 function get_blockchains_with_container(include_inactive:boolean) {
-	if (include_inactive) {
-		return (b: blockchain, c: container_blockchain) @* { c.blockchain == b } (blockchain=b, c.container) ;
-	} else {
-		return (b: blockchain, c: container_blockchain) @* { c.blockchain ==b and b.active == true} (blockchain=b, c.container);	
-	}
+    if (include_inactive) {
+        return (b: blockchain, c: container_blockchain) @* { c.blockchain == b } (blockchain=b, c.container) ;
+    } else {
+        return (b: blockchain, c: container_blockchain) @* { c.blockchain ==b and b.active == true} (blockchain=b, c.container);
+    }
 }
 
 query get_blockchain_info_list(include_inactive: boolean): list<(rid:byte_array, name:text, active:boolean, container:name, cluster:name)> {
-	val bc_infos = get_blockchains_with_container(include_inactive);
-	val result = list<(rid:byte_array, name:text, active:boolean, container:name, cluster:name)>();
-	for (bc in bc_infos) {
-		result.add((
-			rid = bc.blockchain.rid,
-			name = bc.blockchain.name,
-			active = bc.blockchain.active,
-			container = bc.container.name,
-			cluster = bc.container.cluster.name
-		));
-	}
-	return result;
+    val bc_infos = get_blockchains_with_container(include_inactive);
+    val result = list<(rid:byte_array, name:text, active:boolean, container:name, cluster:name)>();
+    for (bc in bc_infos) {
+        result.add((
+            rid = bc.blockchain.rid,
+            name = bc.blockchain.name,
+            active = bc.blockchain.active,
+            container = bc.container.name,
+            cluster = bc.container.cluster.name
+        ));
+    }
+    return result;
 }
 
 query get_blockchain_cluster(blockchain_rid: byte_array) = cm_get_blockchain_cluster(blockchain_rid);

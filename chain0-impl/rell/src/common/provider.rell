@@ -29,9 +29,9 @@ operation register_provider(my_pubkey: pubkey, pubkey, provider_tier) {
 function _is_node_provider(tier: provider_tier) = tier == provider_tier.NODE_PROVIDER;
 
 @extendable function register_and_enable_provider(pubkey, provider_tier, cluster?, voter_set?, enabled_by_default: boolean = false) {
-	val provider = create provider(
-		pubkey,
-		name = "",
+    val provider = create provider(
+        pubkey,
+        name = "",
         active = enabled_by_default,
         tier = provider_tier
     );
@@ -40,7 +40,7 @@ function _is_node_provider(tier: provider_tier) = tier == provider_tier.NODE_PRO
         create cluster_provider(cluster, provider);
     }
     if (exists(voter_set)) {
-    	create voter_set_member(voter_set, provider);
+        create voter_set_member(voter_set, provider);
     }
 }
 
@@ -54,13 +54,13 @@ operation promote_node_provider(my_pubkey: pubkey, provider_pubkey: pubkey) { //
 
 // Recover provider's action points and consume one, if possible
 function provider_rate_limit(provider) {
-	val max_actions_per_day = provider_quota @ {
-			.tier == provider.tier,
-			provider_quota_type.max_actions_per_day
-	} .value;
+    val max_actions_per_day = provider_quota @ {
+            .tier == provider.tier,
+            provider_quota_type.max_actions_per_day
+    } .value;
 
-	// We recover max_actions_per_day in 24 hours, find time needed to recover 1 point
-	val recovery_time = (86400 * 1000) / max_actions_per_day;
+    // We recover max_actions_per_day in 24 hours, find time needed to recover 1 point
+    val recovery_time = (86400 * 1000) / max_actions_per_day;
     val state = provider_rl_state @ { provider } (.points, .last_update);
     val time_delta = op_context.last_block_time - state.last_update;
     var got_points = 0;
@@ -87,11 +87,11 @@ function provider_rate_limit(provider) {
 }
 
 operation transfer_action_points(from: pubkey, to: pubkey, amount: integer) {
-	val _from = require_is_provider_with_rl(from);
-	val _to = require_provider(to);
-	require(provider_rl_state @ { _from } .points >= amount, "Not enough action points to transfer from.");
-	update provider_rl_state @ { _from } ( .points -= amount );
-	update provider_rl_state @ { _to } ( .points += amount );
+    val _from = require_is_provider_with_rl(from);
+    val _to = require_provider(to);
+    require(provider_rl_state @ { _from } .points >= amount, "Not enough action points to transfer from.");
+    update provider_rl_state @ { _from } ( .points -= amount );
+    update provider_rl_state @ { _to } ( .points += amount );
 }
 
 function require_provider_quota(provider, quota_type: provider_quota_type) {

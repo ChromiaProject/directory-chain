@@ -1,42 +1,42 @@
 
 
 operation add_node(my_pubkey: pubkey, node_pubkey: pubkey, host: text, port: integer, api_url: text, clusters:list<text> = list<text>()) {
-	print("-------------Add-Node--------------");
-	val provider = require_provider(my_pubkey);
-	require_provider_auth_with_rl(provider);
-	add_node_internal(provider, node_pubkey, host, port, api_url, clusters);
-	print("Added node information for node: " + node_pubkey);
-	print("-----------------------------------");
+    print("-------------Add-Node--------------");
+    val provider = require_provider(my_pubkey);
+    require_provider_auth_with_rl(provider);
+    add_node_internal(provider, node_pubkey, host, port, api_url, clusters);
+    print("Added node information for node: " + node_pubkey);
+    print("-----------------------------------");
 }
 
 operation replace_node(my_pubkey: pubkey, old_node_key: pubkey, new_node_key: pubkey, new_host: text?, new_port: integer?, new_api_url: text?) {
-	print("-------------Replace-Node--------------");
-	val provider = provider @ { my_pubkey };
-	require_provider_auth_with_rl(provider);
-	require_is_signer(old_node_key);
-	require_is_signer(new_node_key);
-	val old_node = node @ { old_node_key };
-	require(old_node.provider == provider, "Node must be owned by provider");
+    print("-------------Replace-Node--------------");
+    val provider = provider @ { my_pubkey };
+    require_provider_auth_with_rl(provider);
+    require_is_signer(old_node_key);
+    require_is_signer(new_node_key);
+    val old_node = node @ { old_node_key };
+    require(old_node.provider == provider, "Node must be owned by provider");
 
-	val host = new_host ?: old_node.host;
-	val port = new_port ?: old_node.port;
-	val api_url = new_api_url ?: old_node.api_url;
+    val host = new_host ?: old_node.host;
+    val port = new_port ?: old_node.port;
+    val api_url = new_api_url ?: old_node.api_url;
 
-	val cluster_names = cluster_node @* { old_node }.cluster.name;
-	delete cluster_node @* { old_node };
-	val clusters_replicated_by_node = cluster_replica_node @* { old_node } (.cluster);
-	delete cluster_replica_node @* { old_node };
+    val cluster_names = cluster_node @* { old_node }.cluster.name;
+    delete cluster_node @* { old_node };
+    val clusters_replicated_by_node = cluster_replica_node @* { old_node } (.cluster);
+    delete cluster_replica_node @* { old_node };
 
-	delete old_node;
-	add_node_internal(provider, new_node_key, host, port, api_url, cluster_names);
+    delete old_node;
+    add_node_internal(provider, new_node_key, host, port, api_url, cluster_names);
 
-	val new_node = node @ { new_node_key };
-	for (cl in clusters_replicated_by_node) {
-		_add_replica_node_to_cluster_internal(cl, new_node);
-	}
+    val new_node = node @ { new_node_key };
+    for (cl in clusters_replicated_by_node) {
+        _add_replica_node_to_cluster_internal(cl, new_node);
+    }
 
-	node_list.last_update = op_context.last_block_time;
-	print("---------------------------------------");
+    node_list.last_update = op_context.last_block_time;
+    print("---------------------------------------");
 }
 
 function add_node_internal(provider, node_pubkey: pubkey, host: text, port: integer, api_url: text, clusters: list<text>): node {
@@ -95,9 +95,9 @@ operation update_node(my_pubkey: pubkey, node_pubkey: pubkey, host: text? = null
 }
 
 function require_node_provider(node_pubkey: pubkey, provider_pubkey: pubkey) {
-	val provider = require(provider @? { provider_pubkey }, "Provider %s does not exist".format(provider_pubkey));
-	require_provider_auth_with_rl(provider);
-	val node = require(node @? { node_pubkey }, "Node does not exist: " + node_pubkey);
-	require(node.provider == provider, "Must be provider of node to update its state");
-	return node;
+    val provider = require(provider @? { provider_pubkey }, "Provider %s does not exist".format(provider_pubkey));
+    require_provider_auth_with_rl(provider);
+    val node = require(node @? { node_pubkey }, "Node does not exist: " + node_pubkey);
+    require(node.provider == provider, "Must be provider of node to update its state");
+    return node;
 }

@@ -3,40 +3,40 @@ import ^^.model.util.constants.*;
 
 // NB: check authority before calling this function
 function internal_vote(provider, proposal, vote: boolean) {
-	require(voter_set_member @? { proposal.voter_set, provider }, provider.pubkey + " must be a member of the voter set");
-	create vote(proposal, provider, vote);
-	print("vote added with value:", if (vote) "Yes" else "False");
-	apply_voting_result(proposal);
+    require(voter_set_member @? { proposal.voter_set, provider }, provider.pubkey + " must be a member of the voter set");
+    create vote(proposal, provider, vote);
+    print("vote added with value:", if (vote) "Yes" else "False");
+    apply_voting_result(proposal);
 }
 
 function apply_voting_result(prop: proposal) {
     val prop_str = proposal_str(prop);
-	val voting_result = compute_voting_result(prop);
-	when (voting_result) {
-		pending -> print("proposal is still under discussion:", prop_str);
-		rejected -> {
-			print("proposal rejected:", prop_str);
-			delete_proposal(prop);
-		}
-		approved -> {
-			print("proposal approved:", prop_str);
-			when (prop.proposal_type) {
-				other			  -> apply_other_voting_result(prop);
-				configuration 	  -> apply_configuration(prop);
-	 			configuration_at  -> apply_configuration_at(prop);
-	 			bc                -> apply_bc(prop);
-				container_limits  -> apply_container_limits(prop);
-				cluster_limits    -> apply_cluster_limits(prop);
-				cluster_provider  -> apply_cluster_provider(prop);
-				cluster_remove    -> apply_remove_cluster(prop);
-				voter_set_update  -> apply_voter_set_update(prop);
-				provider_state    -> apply_provider_state(prop);
-				provider_is_system-> apply_provider_is_system(prop);
-				blockchain_action -> apply_blockchain_action(prop);
-	    	}
-			delete_proposal(prop);
-		}
-	}
+    val voting_result = compute_voting_result(prop);
+    when (voting_result) {
+        pending -> print("proposal is still under discussion:", prop_str);
+        rejected -> {
+            print("proposal rejected:", prop_str);
+            delete_proposal(prop);
+        }
+        approved -> {
+            print("proposal approved:", prop_str);
+            when (prop.proposal_type) {
+                other             -> apply_other_voting_result(prop);
+                configuration     -> apply_configuration(prop);
+                configuration_at  -> apply_configuration_at(prop);
+                bc                -> apply_bc(prop);
+                container_limits  -> apply_container_limits(prop);
+                cluster_limits    -> apply_cluster_limits(prop);
+                cluster_provider  -> apply_cluster_provider(prop);
+                cluster_remove    -> apply_remove_cluster(prop);
+                voter_set_update  -> apply_voter_set_update(prop);
+                provider_state    -> apply_provider_state(prop);
+                provider_is_system-> apply_provider_is_system(prop);
+                blockchain_action -> apply_blockchain_action(prop);
+            }
+            delete_proposal(prop);
+        }
+    }
 }
 
 @extendable function apply_other_voting_result(proposal) { /* Should be extended */ }
@@ -44,123 +44,123 @@ function apply_voting_result(prop: proposal) {
 
 
 function apply_container_limits(proposal) {
-	val pps = pending_container_limits @ { proposal };
-	update container_resource_limit @ {pps.container, container_resource_limit_type.max_blockchains} (pps.max_blockchains);
-	update container_resource_limit @ {pps.container, container_resource_limit_type.cpu} (pps.cpu);
-	update container_resource_limit @ {pps.container, container_resource_limit_type.ram} (pps.ram);
-	update container_resource_limit @ {pps.container, container_resource_limit_type.storage} (pps.storage);
+    val pps = pending_container_limits @ { proposal };
+    update container_resource_limit @ {pps.container, container_resource_limit_type.max_blockchains} (pps.max_blockchains);
+    update container_resource_limit @ {pps.container, container_resource_limit_type.cpu} (pps.cpu);
+    update container_resource_limit @ {pps.container, container_resource_limit_type.ram} (pps.ram);
+    update container_resource_limit @ {pps.container, container_resource_limit_type.storage} (pps.storage);
 }
 
 function apply_cluster_limits(proposal) {
-	val pps = pending_cluster_limits @ { proposal };
-	update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.max_containers} (pps.max_containers);
-	update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.default_container_max_blockchains} (pps.default_container_max_blockchains);
-	update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.default_container_cpu} (pps.default_container_cpu);
-	update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.default_container_ram} (pps.default_container_ram);
-	update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.default_container_storage} (pps.default_container_storage);
+    val pps = pending_cluster_limits @ { proposal };
+    update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.max_containers} (pps.max_containers);
+    update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.default_container_max_blockchains} (pps.default_container_max_blockchains);
+    update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.default_container_cpu} (pps.default_container_cpu);
+    update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.default_container_ram} (pps.default_container_ram);
+    update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.default_container_storage} (pps.default_container_storage);
 }
 
 function apply_remove_cluster(proposal) {
-	val cl = pending_remove_cluster @ { proposal } .cluster;
-	delete pending_remove_cluster @ { proposal };
-	remove_cluster_impl(cl);
+    val cl = pending_remove_cluster @ { proposal } .cluster;
+    delete pending_remove_cluster @ { proposal };
+    remove_cluster_impl(cl);
 }
 
 function apply_cluster_provider(proposal) {
-	val pps = pending_cluster_provider @ {proposal};
-	if (pps.add) {
-		create cluster_provider(pps.cluster, pps.provider);
-	} else {
-		delete cluster_provider @ {pps.cluster, pps.provider};
-	}
+    val pps = pending_cluster_provider @ {proposal};
+    if (pps.add) {
+        create cluster_provider(pps.cluster, pps.provider);
+    } else {
+        delete cluster_provider @ {pps.cluster, pps.provider};
+    }
 }
 
 //For promotion and demotion of system providers
 function apply_provider_is_system(proposal) {
-	val pps = pending_provider_is_system @ {proposal};
+    val pps = pending_provider_is_system @ {proposal};
 
-	//If promotion, update SYSTEM_P voter set
-	if (pps.system) {
-		enroll.system(pps.provider);
-	} else {
-		revoke.system(pps.provider);
-	}
+    //If promotion, update SYSTEM_P voter set
+    if (pps.system) {
+        enroll.system(pps.provider);
+    } else {
+        revoke.system(pps.provider);
+    }
 }
 
 //For both enabling and disabling of providers:
 function apply_provider_state(proposal) {
-	val pps = pending_provider_state @ { proposal };
-	update_provider_state(pps.provider, pps.active);
+    val pps = pending_provider_state @ { proposal };
+    update_provider_state(pps.provider, pps.active);
 }
 
 function update_provider_state(provider, active: boolean) {
-	provider.active = active;
-	if (active == false) {
-		update node @* { provider } ( .active = false );
-		// cluster nodes
+    provider.active = active;
+    if (active == false) {
+        update node @* { provider } ( .active = false );
+        // cluster nodes
         delete cluster_node @* { .node.provider == provider };
         for (cl in cluster_provider @* { provider } (.cluster)) {
             // Removing the last node of a cluster is not allowed:
             require(not(empty(cluster_node @* { cl })), "Cannot deactivate the last node of a cluster: " + cl.name);
-			update_configuration_signers(cl);
-		}
-		// cluster replica nodes
-		delete cluster_replica_node @* { .node.provider == provider };
-		// blockchain replica nodes
+            update_configuration_signers(cl);
+        }
+        // cluster replica nodes
+        delete cluster_replica_node @* { .node.provider == provider };
+        // blockchain replica nodes
         delete blockchain_replica_node @* { .node.provider == provider };
         // remove disabled provider from voter_set_member table
         delete voter_set_member @* { .provider == provider };
         // updating node list timestamp
-		node_list.last_update = op_context.last_block_time;
-	} else { // enable
-		// If enabled provider is a system provider, update SYSTEM_P voter set
-		if (roles.has_system_access(provider)) {
-			create voter_set_member(voter_set @ { voter_sets.system_p }, provider);
-		}
-	}
+        node_list.last_update = op_context.last_block_time;
+    } else { // enable
+        // If enabled provider is a system provider, update SYSTEM_P voter set
+        if (roles.has_system_access(provider)) {
+            create voter_set_member(voter_set @ { voter_sets.system_p }, provider);
+        }
+    }
 }
 
 function apply_configuration(proposal) {
-	val pc = pending_configuration @ { proposal };
-	val apply_at_height = get_last_height(pc.blockchain) + 10;
-	require(empty(blockchain_configuration @? { pc.blockchain, apply_at_height }), "Configuration at height %d already exists".format(apply_at_height));
-	create blockchain_configuration(pc.blockchain, apply_at_height, pc.data);
-	add_dependencies(pc.data, pc.blockchain.rid, apply_at_height);
+    val pc = pending_configuration @ { proposal };
+    val apply_at_height = get_last_height(pc.blockchain) + 10;
+    require(empty(blockchain_configuration @? { pc.blockchain, apply_at_height }), "Configuration at height %d already exists".format(apply_at_height));
+    create blockchain_configuration(pc.blockchain, apply_at_height, pc.data);
+    add_dependencies(pc.data, pc.blockchain.rid, apply_at_height);
 }
 
 function apply_configuration_at(proposal) {
-	val pc = pending_configuration_at @ {proposal};
-	require(get_last_height(pc.blockchain) < pc.height);
-	if (not(pc.force)) {
-		require(empty(blockchain_configuration @? { pc.blockchain, .height > pc.height } limit 1));
-	}
-	if (not(exists(blockchain_configuration @? {pc.blockchain, pc.height} ))) {
-		create blockchain_configuration(
-			pc.blockchain,
-			pc.height,
-			data = pc.data
-		);
-		add_dependencies(pc.data, pc.blockchain.rid, pc.height);
-	} else {
-		update blockchain_configuration @ { pc.blockchain, pc.height }(.data = pc.data);
-	}
+    val pc = pending_configuration_at @ {proposal};
+    require(get_last_height(pc.blockchain) < pc.height);
+    if (not(pc.force)) {
+        require(empty(blockchain_configuration @? { pc.blockchain, .height > pc.height } limit 1));
+    }
+    if (not(exists(blockchain_configuration @? {pc.blockchain, pc.height} ))) {
+        create blockchain_configuration(
+            pc.blockchain,
+            pc.height,
+            data = pc.data
+        );
+        add_dependencies(pc.data, pc.blockchain.rid, pc.height);
+    } else {
+        update blockchain_configuration @ { pc.blockchain, pc.height }(.data = pc.data);
+    }
 }
 
 // Initial signers of new bc are the ones in cluster_node table.
 function apply_bc(proposal) {
-	val bc = pending_blockchain @ {proposal};
-	val config = map<text, gtv>.from_gtv(gtv.from_bytes(bc.data));
-	val blockchain_rid = config.hash();
-	val blockchain = create blockchain(blockchain_rid, bc.name);
-	print("Added blockchain", blockchain_rid);
-	create blockchain_configuration (blockchain, 0, bc.data);
-	val nodes = cluster_node @* { bc.container.cluster } (@sort .node.pubkey);
-	// do not write new configuration when size is 0 since it's impossible to recover from that
-	require(nodes.size() > 0, "Cluster must have at least one node");
-	create blockchain_configuration_signers(blockchain, 0, nodes.to_gtv().to_bytes());
-	create blockchain_added(blockchain, op_context.transaction);
-	create container_blockchain(bc.container, blockchain);
-	add_dependencies(bc.data, blockchain_rid, 0);
+    val bc = pending_blockchain @ {proposal};
+    val config = map<text, gtv>.from_gtv(gtv.from_bytes(bc.data));
+    val blockchain_rid = config.hash();
+    val blockchain = create blockchain(blockchain_rid, bc.name);
+    print("Added blockchain", blockchain_rid);
+    create blockchain_configuration (blockchain, 0, bc.data);
+    val nodes = cluster_node @* { bc.container.cluster } (@sort .node.pubkey);
+    // do not write new configuration when size is 0 since it's impossible to recover from that
+    require(nodes.size() > 0, "Cluster must have at least one node");
+    create blockchain_configuration_signers(blockchain, 0, nodes.to_gtv().to_bytes());
+    create blockchain_added(blockchain, op_context.transaction);
+    create container_blockchain(bc.container, blockchain);
+    add_dependencies(bc.data, blockchain_rid, 0);
 }
 
 function apply_blockchain_action(proposal) {
@@ -174,7 +174,7 @@ function apply_blockchain_action(proposal) {
 
 // Stop block production by inactivating bc, and keep replicas.
 function _apply_pause_blockchain(action: pending_blockchain_action, proposal) {
-	update blockchain @ { action.blockchain.rid } (.active = false);
+    update blockchain @ { action.blockchain.rid } (.active = false);
     // Keep replicas
     for (signer in get_blockchain_signers(action.blockchain.rid)) {
         create blockchain_replica_node(action.blockchain, node @ { signer[0] });
@@ -183,7 +183,7 @@ function _apply_pause_blockchain(action: pending_blockchain_action, proposal) {
 
 // Restart block production; block builders will be the ones in cluster_node.
 function _apply_resume_blockchain(action: pending_blockchain_action, proposal) {
-	update blockchain @ { action.blockchain.rid } (.active = true);
+    update blockchain @ { action.blockchain.rid } (.active = true);
     // Removing replicas if they are cluster nodes
     val nodes = get_blockchain_signers(action.blockchain.rid);
     for (node_info in nodes) {
@@ -193,15 +193,15 @@ function _apply_resume_blockchain(action: pending_blockchain_action, proposal) {
 
 // Delete everything about this bc
 function _apply_delete_blockchain(action: pending_blockchain_action, proposal) {
-	val bc = action.blockchain;
-	delete container_blockchain @ { bc };
-	delete blockchain_configuration @* { bc };
-	delete blockchain_configuration_signers @* { bc };
-	delete blockchain_added @* { bc };
-	delete blockchain_replica_node @* { bc };
-	delete blockchain_dependency @* { .me == bc };
-	delete pending_blockchain_action @ { proposal };
-	delete blockchain @ { bc.rid };
+    val bc = action.blockchain;
+    delete container_blockchain @ { bc };
+    delete blockchain_configuration @* { bc };
+    delete blockchain_configuration_signers @* { bc };
+    delete blockchain_added @* { bc };
+    delete blockchain_replica_node @* { bc };
+    delete blockchain_dependency @* { .me == bc };
+    delete pending_blockchain_action @ { proposal };
+    delete blockchain @ { bc.rid };
 }
 
 function proposal_str(prop: proposal) {

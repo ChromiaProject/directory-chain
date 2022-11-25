@@ -2,7 +2,7 @@
 query get_node (pubkey) = node @ { pubkey };
 
 query is_node (pubkey) : boolean {
-	return not(empty(node @? { pubkey }));
+    return not(empty(node @? { pubkey }));
 }
 
 query get_node_data (pubkey) {
@@ -19,17 +19,17 @@ query get_node_data (pubkey) {
 }
 
 query list_clusters_of_node (pubkey) : list<text> {
-	return cluster_node @* { node @ {pubkey} }.cluster.name;
+    return cluster_node @* { node @ {pubkey} }.cluster.name;
 }
 
 query get_node_containers(pubkey): list<(cluster:text, name:text, deployer:text)> {
-	val clusters = cluster_node @* { node @ { pubkey } } .cluster;
-	val res = list<(cluster:text, name:text, deployer:text)>();
-	for (cl in clusters) {
-		val containers = container @* { cl } (@sort cluster = .cluster.name, @sort name = .name, deployer = .deployer.name);
-		res.add_all(containers);
-	}
-	return res;
+    val clusters = cluster_node @* { node @ { pubkey } } .cluster;
+    val res = list<(cluster:text, name:text, deployer:text)>();
+    for (cl in clusters) {
+        val containers = container @* { cl } (@sort cluster = .cluster.name, @sort name = .name, deployer = .deployer.name);
+        res.add_all(containers);
+    }
+    return res;
 }
 
 query get_nodes_with_provider() {

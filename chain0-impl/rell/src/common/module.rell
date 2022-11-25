@@ -22,76 +22,76 @@ function initialize_module(
     provider_quota_max_actions_per_day: integer = provider_quota_defaults.MAX_ACTIONS_PER_DAY,
     provider_quota_max_containers: integer = provider_quota_defaults.MAX_CONTAINERS
 ) {
-	require(empty( provider @* {}));
-	print("--------------------Initializing-Chain-0-----------------------");
-	print("Creating provider quotas");
-	_setup_provider_quotas(provider_quota_max_actions_per_day, provider_quota_max_containers);
+    require(empty( provider @* {}));
+    print("--------------------Initializing-Chain-0-----------------------");
+    print("Creating provider quotas");
+    _setup_provider_quotas(provider_quota_max_actions_per_day, provider_quota_max_containers);
 
-	print("Creating SYSTEM voter set");
-	create_voter_set_internal(voter_sets.system, 1);
-	/** 
-	 * System provider create a ‘system’ cluster which will include ‘system’ nodes and has a ‘system’ container 
-	 * which will run the directory bc.
-	 */
-	print("Creating SYSTEM_P voter set");
-	val system_voter_set = create_voter_set_internal(voter_sets.system_p, majority_threshold);
-	
-	print("Creating initial provider with pubkey: " + initial_provider);
-	register_and_enable_provider(
-		initial_provider, 
-		provider_tier.NODE_PROVIDER, 
-		cluster = null, 
-		voter_set = null, 
-		enabled_by_default = true
-	);
-	val provider = provider @ { initial_provider };
+    print("Creating SYSTEM voter set");
+    create_voter_set_internal(voter_sets.system, 1);
+    /**
+     * System provider create a ‘system’ cluster which will include ‘system’ nodes and has a ‘system’ container
+     * which will run the directory bc.
+     */
+    print("Creating SYSTEM_P voter set");
+    val system_voter_set = create_voter_set_internal(voter_sets.system_p, majority_threshold);
 
-	print("Creating system cluster with SYSTEM_P as governor");
+    print("Creating initial provider with pubkey: " + initial_provider);
+    register_and_enable_provider(
+        initial_provider,
+        provider_tier.NODE_PROVIDER,
+        cluster = null,
+        voter_set = null,
+        enabled_by_default = true
+    );
+    val provider = provider @ { initial_provider };
+
+    print("Creating system cluster with SYSTEM_P as governor");
     anchoring.set_config(anchoring_config);
     val system_cluster = create_cluster_impl(
         provider,
         clusters.system,
         governor=system_voter_set,
         providers=list<pubkey>()
-   	);
+       );
 
-	print("Creating system container");
-	val system_container = create_container_with_resource_limits(
-		provider,
-		containers.system,
-		cluster = system_cluster,
-		voter_set = system_voter_set
-	);
-	
-	enroll.system(provider);
-	
-	print("Adding c0 blockchain to system container");
-	val c0_config = map<text,gtv>.from_gtv(chain_context.raw_config);
-	val c0_signers_gtv = c0_config["signers"];
-	val blockchain = create blockchain(chain_context.blockchain_rid, blockchains.c0, system = true);
-	create blockchain_configuration (blockchain, 0, chain_context.raw_config.to_bytes());
-	create blockchain_configuration_signers(blockchain, 0, c0_signers_gtv.to_bytes());
-	create blockchain_added (blockchain, op_context.transaction);
-	create container_blockchain(system_container, blockchain);
+    print("Creating system container");
+    val system_container = create_container_with_resource_limits(
+        provider,
+        containers.system,
+        cluster = system_cluster,
+        voter_set = system_voter_set
+    );
 
-	val signer_node_keys = list<byte_array>.from_gtv(c0_signers_gtv);
-	require(signer_node_keys.size() == 1, "C0 must have exactly one initial signer");
-	val initial_signer_node_key = signer_node_keys[0];
-	require(initial_signer_node_key == genesis_node.pubkey, "Blockchain signer must match genesis node configuration");
+    enroll.system(provider);
 
-	print("Adding initial signer node of c0 to system cluster: " + initial_signer_node_key);
-	val initial_node = create node(
-		provider, 
-		initial_signer_node_key, 
-		host = genesis_node.host,
-		port = genesis_node.port,
-		api_url = genesis_node.api_url,
-		last_updated = op_context.last_block_time
-	);
-	create cluster_node(system_cluster, initial_node);
-	node_list.last_update = op_context.last_block_time;
-	check_operational(system_cluster);
-	print("---------------------------------------------------------------");
+    print("Adding c0 blockchain to system container");
+    val c0_config = map<text,gtv>.from_gtv(chain_context.raw_config);
+    val c0_signers_gtv = c0_config["signers"];
+    val blockchain = create blockchain(chain_context.blockchain_rid, blockchains.c0, system = true);
+    create blockchain_configuration (blockchain, 0, chain_context.raw_config.to_bytes());
+    create blockchain_configuration_signers(blockchain, 0, c0_signers_gtv.to_bytes());
+    create blockchain_added (blockchain, op_context.transaction);
+    create container_blockchain(system_container, blockchain);
+
+    val signer_node_keys = list<byte_array>.from_gtv(c0_signers_gtv);
+    require(signer_node_keys.size() == 1, "C0 must have exactly one initial signer");
+    val initial_signer_node_key = signer_node_keys[0];
+    require(initial_signer_node_key == genesis_node.pubkey, "Blockchain signer must match genesis node configuration");
+
+    print("Adding initial signer node of c0 to system cluster: " + initial_signer_node_key);
+    val initial_node = create node(
+        provider,
+        initial_signer_node_key,
+        host = genesis_node.host,
+        port = genesis_node.port,
+        api_url = genesis_node.api_url,
+        last_updated = op_context.last_block_time
+    );
+    create cluster_node(system_cluster, initial_node);
+    node_list.last_update = op_context.last_block_time;
+    check_operational(system_cluster);
+    print("---------------------------------------------------------------");
 }
 
 function _setup_provider_quotas(actions_per_day: integer, max_containers: integer) {
