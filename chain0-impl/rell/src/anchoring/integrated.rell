@@ -36,3 +36,11 @@ query get_last_legacy_anchored_block(blockchain_rid: byte_array): legacy_anchore
     val blockchain = blockchain @ { blockchain_rid };
     return anchored_block @? { blockchain } (@omit @sort_desc .height, legacy_anchored_block(.height, .block_rid)) limit 1;
 }
+
+@extend (before_delete_blockchain) function remove_anchored_blocks(blockchain) {
+    val blocks = anchored_block @* { blockchain };
+    for (block in blocks) {
+        delete anchored_block_signer @* { block };
+    }
+    delete blocks;
+}
