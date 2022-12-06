@@ -5,10 +5,10 @@ import ^.anchoring;
  * Only one node per provider and cluster.
  */
 operation add_node_to_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cluster_name: text) {
-	val provider = require_provider(my_pubkey);
-	require_provider_auth_with_rl(provider);
-	val cluster = require_cluster(cluster_name);
-	add_node_to_cluster_internal(provider, node @ { node_pubkey }, cluster);
+    val provider = require_provider(my_pubkey);
+    require_provider_auth_with_rl(provider);
+    val cluster = require_cluster(cluster_name);
+    add_node_to_cluster_internal(provider, node @ { node_pubkey }, cluster);
 }
 
 operation add_replica_node_to_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cluster_name: text) {
@@ -44,12 +44,12 @@ function _remove_replica_node_from_cluster_internal(node) {
  * When all providers have provided a node each, cluster goes operational and stays operational even if a provider is added to the cluster
  */
 function check_operational(cl: cluster) {
-	val providers = cluster_provider @* { cl }.provider;
-	val nodes = cluster_node @* { cl }.node;
-	if (nodes.size() == providers.size()) {
-		update cluster @ { cl.name } (.operational = true);
-		after_cluster_operational(cl);
-	}
+    val providers = cluster_provider @* { cl }.provider;
+    val nodes = cluster_node @* { cl }.node;
+    if (nodes.size() == providers.size()) {
+        update cluster @ { cl.name } (.operational = true);
+        after_cluster_operational(cl);
+    }
 }
 
 /**
@@ -57,35 +57,35 @@ function check_operational(cl: cluster) {
  * add node as block signer to this cluster. blockchain_configuration_signers update is included.
  */
 function add_node_to_cluster_internal(provider, node, cluster) {
-	if (exists(cluster_node @? { cluster, node })) return; // Node already part of cluster
-	if (exists(cluster_provider @* { cluster, provider })) {
-	    val provider_cluster_nodes = cluster_node @* { cluster, .node in node @* { provider } };
-		require(empty(provider_cluster_nodes), "A provider can only provide one node to each cluster");
-		create cluster_node(cluster, node);
-		update_configuration_signers(cluster);
-		_remove_replica_node_from_cluster_internal(node);
-		// check if cluster now is operational, if so update the flag:
-		check_operational(cluster);
-		print("blockchain configuration signers are updated");
-	}
+    if (exists(cluster_node @? { cluster, node })) return; // Node already part of cluster
+    if (exists(cluster_provider @* { cluster, provider })) {
+        val provider_cluster_nodes = cluster_node @* { cluster, .node in node @* { provider } };
+        require(empty(provider_cluster_nodes), "A provider can only provide one node to each cluster");
+        create cluster_node(cluster, node);
+        update_configuration_signers(cluster);
+        _remove_replica_node_from_cluster_internal(node);
+        // check if cluster now is operational, if so update the flag:
+        check_operational(cluster);
+        print("blockchain configuration signers are updated");
+    }
 }
 
 // Use this to update signers after a change in cluster_node table. TODO: +5 or not?
 function update_configuration_signers(cluster) {
-	val bcs = container_blockchain @*{ .container.cluster == cluster} .blockchain;
-	for (blockchain in bcs) {
-		val current_height = get_last_height(blockchain);
-		val container = container_blockchain @ {blockchain} .container;
-		val signers = cluster_node @* { container.cluster } (@sort .node.pubkey);
-		// do not write new configuration when size is 0 since it's impossible to recover from that
-		require(signers.size() > 0);
-		val bc_signers = blockchain_configuration_signers @? { blockchain, current_height + 5 };
-		if (bc_signers == null) {
-		    create blockchain_configuration_signers(blockchain, current_height + 5, signers.to_gtv().to_bytes());
-		} else {
-		    bc_signers.signers = signers.to_gtv().to_bytes();
-		}
-	}
+    val bcs = container_blockchain @*{ .container.cluster == cluster} .blockchain;
+    for (blockchain in bcs) {
+        val current_height = get_last_height(blockchain);
+        val container = container_blockchain @ {blockchain} .container;
+        val signers = cluster_node @* { container.cluster } (@sort .node.pubkey);
+        // do not write new configuration when size is 0 since it's impossible to recover from that
+        require(signers.size() > 0);
+        val bc_signers = blockchain_configuration_signers @? { blockchain, current_height + 5 };
+        if (bc_signers == null) {
+            create blockchain_configuration_signers(blockchain, current_height + 5, signers.to_gtv().to_bytes());
+        } else {
+            bc_signers.signers = signers.to_gtv().to_bytes();
+        }
+    }
 }
 
 function require_cluster_available_for_removal(cluster) {
