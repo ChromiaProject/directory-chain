@@ -4,11 +4,7 @@ operation add_node(my_pubkey: pubkey, node_pubkey: pubkey, host: text, port: int
 	print("-------------Add-Node--------------");
 	val provider = require_provider(my_pubkey);
 	require_provider_auth_with_rl(provider);
-	if (roles.has_node_access(provider)) {
-	    add_node_internal(provider, node_pubkey, host, port, api_url, clusters);
-	} else { // provider_tier.NODE_PROVIDER
-	    add_replica_node_internal(provider, node_pubkey, host, port, api_url, clusters);
-	}
+	add_node_internal(provider, node_pubkey, host, port, api_url, clusters);
 	print("Added node information for node: " + node_pubkey);
 	print("-----------------------------------");
 }
@@ -31,8 +27,8 @@ operation replace_node(my_pubkey: pubkey, old_node_key: pubkey, new_node_key: pu
 	val clusters_replicated_by_node = cluster_replica_node @* { old_node } (.cluster);
 	delete cluster_replica_node @* { old_node };
 
-	add_node_internal(provider, new_node_key, host, port, api_url, cluster_names);
 	delete old_node;
+	add_node_internal(provider, new_node_key, host, port, api_url, cluster_names);
 
 	val new_node = node @ { new_node_key };
 	for (cl in clusters_replicated_by_node) {
@@ -44,37 +40,19 @@ operation replace_node(my_pubkey: pubkey, old_node_key: pubkey, new_node_key: pu
 }
 
 function add_node_internal(provider, node_pubkey: pubkey, host: text, port: integer, api_url: text, clusters: list<text>): node {
-	val existing_node = node @? { node_pubkey };
-	if (exists(existing_node)) {
-		require(existing_node.provider == provider, "Must be provider of node to update its state");
-		update existing_node (
-			.active = true,
-			.host = host,
-			.port = port,
-			.api_url = api_url,
-			.last_updated = op_context.last_block_time
-		);
-	} else {
-		create node(provider, node_pubkey, host, port = port, api_url = api_url, last_updated = op_context.last_block_time);
-	}
-	node_list.last_update = op_context.last_block_time;
-	//If a cluster is given and provider is part of that cluster, add node as block signer to this cluster
-	val node = node @ { node_pubkey };
-	for (cluster_name in clusters) {
-		val cluster = require_cluster(cluster_name);
-		add_node_to_cluster_internal(provider, node, cluster);
-	}
-	return node @ { node_pubkey };
-}
-
-function add_replica_node_internal(provider, node_pubkey: pubkey, host: text, port: integer, api_url: text, clusters: list<text>) {
     require(empty(node @? { node_pubkey }), "Node already exists: " + node_pubkey);
-    val node = create node(provider, node_pubkey, host = host, port = port, api_url = api_url, last_updated = op_context.last_block_time);
+    require_provider_quota(provider, provider_quota_type.max_nodes);
+    val node = create node(provider, node_pubkey, host, port = port, api_url = api_url, last_updated = op_context.last_block_time);
     for (cluster_name in clusters) {
         val cluster = require_cluster(cluster_name);
-        _add_replica_node_to_cluster_internal(cluster, node);
+        if (roles.has_node_access(provider)) {
+            add_node_to_cluster_internal(provider, node, cluster);
+        } else { // provider_tier.COMMUNITY_NODE_PROVIDER
+            _add_replica_node_to_cluster_internal(cluster, node);
+        }
     }
     node_list.last_update = op_context.last_block_time;
+    return node;
 }
 
 operation remove_node(my_pubkey: pubkey, node_pubkey: pubkey) {
