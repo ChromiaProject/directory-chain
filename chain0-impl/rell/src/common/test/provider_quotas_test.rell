@@ -1,0 +1,57 @@
+@test module;
+
+import ^.ops.*;
+import ^.setup.*;
+import ^^^.cluster.*;
+import ^^^.cluster.cluster_op.*;
+import ^^^.container.container_op.*;
+import ^^^.container.container_proposal.*;
+import ^.util.constants.*;
+
+// Container / create_
+
+function test__create_container__when__max_containers_is_0() {
+    setup_module(provider_quota_max_containers = 0);
+
+    rell.test.tx().op(
+        create_container(initial_provider.pub, "container1",  clusters.system, 0, list<pubkey>()),
+        create_container(initial_provider.pub, "container2",  clusters.system, 0, list<pubkey>())
+    ).sign(initial_provider).run();
+}
+
+function test__create_container__when__max_containers_is_limited() {
+    setup_module(provider_quota_max_containers = 1);
+
+    rell.test.tx().op(
+        create_container(initial_provider.pub, "container1",  clusters.system, 0, list<pubkey>())
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        create_container(initial_provider.pub, "container2",  clusters.system, 0, list<pubkey>())
+    ).sign(initial_provider).run_must_fail();
+}
+
+
+// Container / propose_
+
+function test__propose_container__when__max_containers_is_0() {
+    setup_module(provider_quota_max_containers = 0);
+
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p),
+        propose_container(initial_provider.pub, clusters.system, "container2", voter_sets.system_p)
+    ).sign(initial_provider).run();
+}
+
+function test__propose_container__when__max_containers_is_limited() {
+    setup_module(provider_quota_max_containers = 1);
+
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p)
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container2", voter_sets.system_p)
+    ).sign(initial_provider).run_must_fail();
+}
+
