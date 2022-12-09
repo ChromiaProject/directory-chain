@@ -39,24 +39,35 @@ operation propose_configuration(my_pubkey: pubkey, blockchain_rid: byte_array, c
  * Proposes a new configuration for a blockchain.
  * NB: Only the deployer of the container the blockchain is running in can perform operation
  */
-operation propose_configuration_at(my_pubkey: pubkey, blockchain_rid:byte_array, config_data: byte_array, height: integer, force: boolean) {
-    val blockchain = blockchain @ { blockchain_rid };
-    val me = provider @ { my_pubkey };
+operation propose_configuration_at(my_pubkey: pubkey, blockchain_rid: byte_array, config_data: byte_array, height: integer?, force: boolean) {
+    val me = require_provider(my_pubkey);
     require_provider_auth_with_rl(me);
-    val container = container_blockchain @ {blockchain} .container;
+    val blockchain = require_blockchain(blockchain_rid);
+    val container = container_blockchain @ { blockchain }.container;
     require_container_deployer(container, me);
-    require(get_last_height(blockchain) < height, "Height must be greater than current height " + height);
-    if (not(force)) {
-        require(empty(blockchain_configuration @? { blockchain, .height >= height } limit 1), "BC config already exists.");
-        require(empty(pending_configuration_at @? { blockchain, .height >= height } limit 1), "BC config already exists.");
+
+//    val last_height = get_last_height(blockchain);
+    val last_height = get_blockchain_last_height(blockchain_rid);
+    if (force) {
+        if (height != null) {
+            require(last_height < height, "Height (%d) must be greater than current height (%d)".format(height, last_height));
+        }
+    } else {
+        require(height != null, "Height must not be null");
+        require(last_height < height!!, "Height (%d) must be greater than current height (%d)".format(height, last_height));
+        require(empty(blockchain_configuration @? { blockchain, height } limit 1), "Configuration at height %d already exists for blockchain %s".format(height, blockchain_rid));
     }
-    val prop = create proposal(op_context.last_block_time, proposal_type.configuration_at, me, container.deployer);
-    create pending_configuration_at(prop,
-        blockchain,
-        height,
-        force,
-        data = config_data
+
+    val proposed_height = height ?: -1; // encoding null-value as -1
+
+    val pending_config = pending_configuration_at @? { blockchain, proposed_height } limit 1;
+    require(empty(pending_config),
+        "Pending configuration proposal already exists: blockchain_rid: %s, height: %d. Revoke the proposal %d first."
+            .format(blockchain.rid, proposed_height, pending_config?.proposal)
     );
+
+    val prop = create proposal(op_context.last_block_time, proposal_type.configuration_at, me, container.deployer);
+    create pending_configuration_at(prop, blockchain, proposed_height, force, data = config_data);
     internal_vote(me, prop, true);
 }
 

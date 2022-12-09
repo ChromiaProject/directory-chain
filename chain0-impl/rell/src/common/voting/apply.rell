@@ -129,20 +129,26 @@ function apply_configuration(proposal) {
 }
 
 function apply_configuration_at(proposal) {
-    val pc = pending_configuration_at @ {proposal};
-    require(get_last_height(pc.blockchain) < pc.height);
-    if (not(pc.force)) {
-        require(empty(blockchain_configuration @? { pc.blockchain, .height > pc.height } limit 1));
-    }
-    if (not(exists(blockchain_configuration @? {pc.blockchain, pc.height} ))) {
-        create blockchain_configuration(
-            pc.blockchain,
-            pc.height,
-            data = pc.data
-        );
-        add_dependencies(pc.data, pc.blockchain.rid, pc.height);
+    val pc = pending_configuration_at @ { proposal };
+
+//    val last_height = get_last_height(pc.blockchain);
+    val last_height = get_blockchain_last_height(pc.blockchain.rid);
+    if (pc.force) {
+        if (pc.height != -1) { // null is encoded as -1
+            require(last_height <= pc.height, "Proposed configuration for height %d can't be applied, current height: %d".format(pc.height, last_height));
+        }
     } else {
-        update blockchain_configuration @ { pc.blockchain, pc.height }(.data = pc.data);
+        require(last_height < pc.height);
+        require(empty(blockchain_configuration @? { pc.blockchain, pc.height } limit 1), "Configuration at height %d already exists for blockchain %s".format(pc.height, pc.blockchain.rid));
+    }
+
+    val height = if (pc.height == -1) last_height else pc.height;
+
+    if (not(exists(blockchain_configuration @? { pc.blockchain, height }))) {
+        create blockchain_configuration(pc.blockchain, height, data = pc.data);
+        add_dependencies(pc.data, pc.blockchain.rid, height);
+    } else {
+        update blockchain_configuration @ { pc.blockchain, height } ( .data = pc.data );
     }
 }
 
