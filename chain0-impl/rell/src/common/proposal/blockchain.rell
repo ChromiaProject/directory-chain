@@ -4,9 +4,8 @@
  */
 //Who can propose a new blockchain? The container deployer voter set
 operation propose_blockchain(my_pubkey: pubkey, config_data: byte_array, bc_name: text, container_name: text) {
-    val me = provider @ { my_pubkey };
+    val me = require_is_provider_with_rl(my_pubkey);
     val container = require_container(container_name);
-    require_provider_auth_with_rl(me);
     require_container_deployer(container, me);
 
     // Require container resource limits are honored
@@ -40,8 +39,7 @@ operation propose_configuration(my_pubkey: pubkey, blockchain_rid: byte_array, c
  * NB: Only the deployer of the container the blockchain is running in can perform operation
  */
 operation propose_configuration_at(my_pubkey: pubkey, blockchain_rid: byte_array, config_data: byte_array, height: integer?, force: boolean) {
-    val me = require_provider(my_pubkey);
-    require_provider_auth_with_rl(me);
+    val me = require_is_provider_with_rl(my_pubkey);
     val blockchain = require_blockchain(blockchain_rid);
     val container = container_blockchain @ { blockchain }.container;
     require_container_deployer(container, me);
@@ -72,9 +70,8 @@ operation propose_configuration_at(my_pubkey: pubkey, blockchain_rid: byte_array
 }
 
 operation propose_blockchain_action(my_pubkey: pubkey, blockchain_rid: byte_array, action: blockchain_action) {
-    val me = provider @ { my_pubkey };
-    val blockchain = blockchain @ { blockchain_rid };
-    require_provider_auth_with_rl (me);
+    val me = require_is_provider_with_rl(my_pubkey);
+    val blockchain = require_blockchain(blockchain_rid);
     val container = container_blockchain @ {blockchain} .container;
     require_container_deployer(container, me);
     val prop = create proposal(op_context.last_block_time, proposal_type.blockchain_action, me, container.deployer);

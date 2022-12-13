@@ -11,7 +11,10 @@ struct legacy_anchored_block {
 operation anchor_block(header: base_block_header, signers: list<pubkey>, signatures: list<byte_array>) {
     val blockchain = blockchain @ { header.blockchain_rid };
     val existing_ab = anchored_block @? { blockchain, header.height };
-    require(not(exists(existing_ab)), "Block %d of blockchain %s is already anchored".format(header.height, header.blockchain_rid));
+    if (exists(existing_ab)) {
+        log("Block %d of blockchain %s is already anchored".format(header.height, header.blockchain_rid));
+        return;
+    }
 
     val all_signers = set<pubkey>.from_gtv(
         get_signers_for_configuration(blockchain, header.height)
