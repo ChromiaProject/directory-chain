@@ -93,34 +93,10 @@ function compute_blockchain_info_list(node_id: pubkey): list<blockchain_info> {
 /*
     NM API Version: 4
 */
-query nm_get_blockchain_replica_node_map_v4(blockchain_rids: set<byte_array>): map<byte_array, set<byte_array>> {
+query nm_get_blockchain_replica_node_map(blockchain_rids: set<byte_array>): map<byte_array, set<byte_array>> {
     val res = map<byte_array, set<byte_array>>();
     for (brid in set(blockchain_rids)) {
         res.put(brid, get_blockchain_replica_nodes(brid));
-    }
-    return res;
-}
-
-/*
-    NM API Version: 1
-    Deprecated, use `nm_get_blockchain_replica_node_map_v4()` instead
-*/
-query nm_get_blockchain_replica_node_map(blockchain_rids: list<byte_array>): list<list<byte_array>> {
-    val res = list<list<byte_array>>();
-    for (brid in blockchain_rids) {
-        val bc = blockchain @? { brid };
-        if (empty(bc)) {
-            res.add(list<byte_array>());
-        } else {
-            // Kalle: we include signers in this list because node processing old blocks might
-            // want to connect to _current_ signers to get blocks
-            val container = container_blockchain @ {bc} .container;
-            val signers = set( cluster_node @* { container.cluster } .node.pubkey );
-            signers.add_all(
-                blockchain_replica_node @* { bc } .node.pubkey
-            );
-            res.add(list(signers));
-        }
     }
     return res;
 }
