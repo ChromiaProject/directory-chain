@@ -22,6 +22,18 @@ query nm_get_peer_infos() = node @* {} (_ = .host, _ = .port, _ = .pubkey, _ = .
 
 /*
     Configuration updates are found in two tables. Both must be checked to get next configuration height.
+    NM API Version: 4
+*/
+query nm_get_blockchain_last_built_height(blockchain_rid: byte_array): integer {
+    if (blockchain_rid == chain_context.blockchain_rid) {
+        return (block @? {} (@sort_desc .block_height) limit 1) ?: -1;
+    } else {
+        return (anchored_block @? { blockchain @ { blockchain_rid } } (@sort_desc .height) limit 1) ?: -1;
+    }
+}
+
+/*
+    Configuration updates are found in two tables. Both must be checked to get next configuration height.
     NM API Version: 1
 */
 query nm_find_next_configuration_height(blockchain_rid: byte_array, height: integer): integer? {
