@@ -1,5 +1,6 @@
 
 import ^.model.*;
+import ^.common.queries.*;
 
 /*
     Returns NM API Version
@@ -21,16 +22,11 @@ query nm_get_peer_list_version() = node_list.last_update;
 query nm_get_peer_infos() = node @* {} (_ = .host, _ = .port, _ = .pubkey, _ = .last_updated);
 
 /*
-    Configuration updates are found in two tables. Both must be checked to get next configuration height.
+    Returns last built height of the blockchain
     NM API Version: 4
 */
-query nm_get_blockchain_last_built_height(blockchain_rid: byte_array): integer {
-    if (blockchain_rid == chain_context.blockchain_rid) {
-        return (block @? {} (@sort_desc .block_height) limit 1) ?: -1;
-    } else {
-        return (anchored_block @? { blockchain @ { blockchain_rid } } (@sort_desc .height) limit 1) ?: -1;
-    }
-}
+query nm_get_blockchain_last_built_height(blockchain_rid: byte_array) =
+    get_blockchain_last_height(blockchain_rid);
 
 /*
     Configuration updates are found in two tables. Both must be checked to get next configuration height.
@@ -136,15 +132,10 @@ query nm_get_blockchain_replica_node_map(blockchain_rids: list<byte_array>): lis
 query nm_get_blockchain_last_height_map(blockchain_rids: list<byte_array>) : list<integer> {
     val res = list<integer>();
     for (brid in blockchain_rids) {
-        val bc = blockchain @? { brid };
-        if (brid == chain_context.blockchain_rid) {
-            val h = (block @? {} (@sort_desc .block_height) limit 1) ?: -1;
-            res.add(h);
-        } else if (empty(bc)) {
+        if (empty(blockchain @? { brid })) {
             res.add(-1);
         } else {
-            val h = (anchored_block @? { bc } (@sort_desc .height) limit 1) ?: -1;
-            res.add(h);
+            res.add(get_blockchain_last_height(brid));
         }
     }
     return res;
