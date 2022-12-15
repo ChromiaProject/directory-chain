@@ -51,4 +51,14 @@ query get_cluster_provider_proposal(rowid?) {
     );
 }
 
+query get_system_provider_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.provider_is_system);
+    if (proposal == null) return null;
+    val pis = pending_provider_is_system @ { proposal };
+    return (
+        provider = pis.provider.pubkey,
+        add = pis.system
+    );
+}
+
 function get_latest_proposal(rowid?, proposal_type) = if (rowid == null) proposal @ { proposal_type } ( @max proposal ) else proposal @ { rowid };
