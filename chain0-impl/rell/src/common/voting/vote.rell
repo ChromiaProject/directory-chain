@@ -5,15 +5,6 @@ enum voting_result {
     rejected
 }
 
-function compute_voting_result(proposal): voting_result {
-    return _compute_voting_result(
-        positive_votes(proposal),
-        negative_votes(proposal),
-        max_votes(proposal.voter_set),
-        proposal.voter_set.threshold
-    );
-}
-
 function positive_votes(proposal) = vote @? { proposal, .vote == true } (@sum 1) ?: 0;
 function negative_votes(proposal) = vote @? { proposal, .vote == false } (@sum 1) ?: 0;
 function max_votes(voter_set) = voter_set_member @ { voter_set } (@sum 1);
@@ -29,7 +20,7 @@ function _compute_voting_result(yes: integer, no: integer, max: integer, thresho
 }
 
 function _compute_voting_result_custom(yes: integer, no: integer, max: integer, threshold: integer): voting_result {
-    return _voting_result(yes, no, max, threshold    );
+    return _voting_result(yes, no, max, threshold);
 }
 
 function _compute_voting_result_majority(yes: integer, no: integer, max: integer): voting_result {

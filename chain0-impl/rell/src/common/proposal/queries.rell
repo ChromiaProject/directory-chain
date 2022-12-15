@@ -62,3 +62,21 @@ query get_system_provider_proposal(rowid) {
 }
 
 function get_latest_proposal(rowid?, proposal_type) = if (rowid == null) proposal @ { proposal_type } ( @max proposal ) else proposal @ { rowid };
+
+struct proposal_voting_results {
+    positive_votes: integer;
+    negative_votes: integer;
+    max_votes: integer;
+    threshold: integer;
+    voting_result;
+}
+
+query get_proposal_voting_results(rowid): proposal_voting_results {
+    val proposal = require_proposal(rowid);
+    val positive_votes = positive_votes(proposal);
+    val negative_votes = negative_votes(proposal);
+    val max_votes = max_votes(proposal.voter_set);
+    val threshold = proposal.voter_set.threshold;
+    val status = _compute_voting_result(positive_votes, negative_votes, max_votes, threshold);
+    return proposal_voting_results(positive_votes, negative_votes, max_votes, threshold, status);
+}
