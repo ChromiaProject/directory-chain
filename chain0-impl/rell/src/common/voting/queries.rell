@@ -28,13 +28,3 @@ query get_voter_set_members(name) {
 query get_voter_sets() {
     return (voter_set, voter_set_governance) @* { voter_set == voter_set_governance.voter_set } (name = voter_set.name, threshold = voter_set.threshold, @sort gorvernor = voter_set_governance.governor.name);
 }
-
-query get_proposal_voting_results(rowid): voting_results {
-    val proposal = require_proposal(rowid);
-    val positive_votes = positive_votes(proposal);
-    val negative_votes = negative_votes(proposal);
-    val max_votes = max_votes(proposal.voter_set);
-    val threshold = proposal.voter_set.threshold;
-    val status = _compute_proposal_status(positive_votes, negative_votes, max_votes, threshold);
-    return voting_results(positive_votes, negative_votes, max_votes, threshold, status);
-}
