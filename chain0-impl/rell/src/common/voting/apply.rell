@@ -6,13 +6,13 @@ function internal_vote(provider, proposal, vote: boolean) {
     require(voter_set_member @? { proposal.voter_set, provider }, provider.pubkey + " must be a member of the voter set");
     create vote(proposal, provider, vote);
     print("vote added with value:", if (vote) "Yes" else "False");
-    apply_voting_result(proposal);
+    try_to_apply_proposal(proposal);
 }
 
-function apply_voting_result(prop: proposal) {
+function try_to_apply_proposal(prop: proposal) {
     val prop_str = proposal_str(prop);
-    val voting_result = compute_voting_result(prop);
-    when (voting_result) {
+    val results = get_proposal_voting_results(prop.rowid);
+    when (results.proposal_status) {
         pending -> print("proposal is still under discussion:", prop_str);
         rejected -> {
             print("proposal rejected:", prop_str);
