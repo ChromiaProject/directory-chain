@@ -55,3 +55,28 @@ function test__propose_container__when__max_containers_is_limited() {
     ).sign(initial_provider).run_must_fail();
 }
 
+function test_changing_provider_quota__max_containers() {
+    setup_module(provider_quota_max_containers = 1);
+
+    assert_equals(get_max_container_np_quota(), 1);
+    rell.test.tx().op(
+        propose_provider_quota(initial_provider.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_containers, 10)
+    ).sign(initial_provider).run();
+    assert_equals(get_max_container_np_quota(), 10);
+
+    // 0, -1
+    rell.test.tx().op(
+        propose_provider_quota(initial_provider.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_containers, 0),
+        propose_provider_quota(initial_provider.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_containers, -1)
+    ).sign(initial_provider).run();
+    assert_equals(get_max_container_np_quota(), -1);
+
+    // -2, must fail
+    rell.test.tx().op(
+        propose_provider_quota(initial_provider.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_containers, -2)
+    ).sign(initial_provider).run_must_fail();
+}
+
+function get_max_container_np_quota(): integer {
+    return provider_quota @ { provider_tier.NODE_PROVIDER, provider_quota_type.max_containers } (.value);
+}

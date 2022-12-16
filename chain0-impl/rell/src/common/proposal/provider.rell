@@ -52,3 +52,12 @@ operation propose_provider_is_system(my_pubkey: pubkey, provider_pubkey: pubkey,
         internal_vote(me, prop, true);
     }
 }
+
+operation propose_provider_quota(my_pubkey: pubkey, provider_tier, provider_quota_type, value: integer) {
+    val me = require_is_provider_with_rl(my_pubkey);
+    require_is_system_provider(my_pubkey);
+    require(value >= -1, "Proposed %s quota value for provider tier %s must not be less than -1".format(provider_quota_type, provider_tier));
+    val prop = create proposal(op_context.last_block_time, proposal_type.provider_quota, me, system_p_voter_set());
+    create pending_provider_quota(prop, provider_tier, provider_quota_type, value);
+    internal_vote(me, prop, true);
+}
