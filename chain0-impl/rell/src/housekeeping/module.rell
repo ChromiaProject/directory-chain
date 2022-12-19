@@ -1,0 +1,22 @@
+module;
+
+import ^.container.*;
+
+struct module_args {
+    max_empty_container_time: integer;
+}
+
+@extend (before_delete_blockchain) function set_container_latest_deleted_bc_time(blockchain) {
+    val container = container_blockchain @ { blockchain }.container;
+    container.latest_bc_removal = op_context.last_block_time;
+}
+
+function prune_empty_containers() {
+    for (container in container @* {}) {
+        val is_empty = (container_blockchain @* { container }).empty();
+        if (is_empty and op_context.last_block_time - container.latest_bc_removal > chain_context.args.max_empty_container_time) {
+            log("Removing container %s that has been empty since %s".format(container.name, container.latest_bc_removal));
+            remove_container_and_voter_set(container);
+        }
+    }
+}
