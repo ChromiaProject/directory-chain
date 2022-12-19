@@ -61,6 +61,17 @@ query get_system_provider_proposal(rowid) {
     );
 }
 
+query get_provider_quota_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.provider_quota);
+    if (proposal == null) return null;
+    val ppq = pending_provider_quota @ { proposal };
+    return (
+        tier = ppq.provider_tier,
+        quota_type = ppq.provider_quota_type,
+        value = ppq.value
+    );
+}
+
 function get_latest_proposal(rowid?, proposal_type) = if (rowid == null) proposal @ { proposal_type } ( @max proposal ) else proposal @ { rowid };
 
 struct proposal_voting_results {

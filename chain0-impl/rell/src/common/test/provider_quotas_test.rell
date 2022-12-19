@@ -55,3 +55,93 @@ function test__propose_container__when__max_containers_is_limited() {
     ).sign(initial_provider).run_must_fail();
 }
 
+function test_propose_provider_quota__requirements() {
+    setup_module(provider_quota_max_containers = 1);
+    val np = rell.test.keypairs.bob;
+    val cnp = rell.test.keypairs.trudy;
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, np.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, cnp.pub, provider_tier.COMMUNITY_NODE_PROVIDER)
+    ).sign(initial_provider).run();
+
+    // auth failure
+    rell.test.tx().op(
+        propose_provider_quota(np.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_containers, 10)
+    ).sign(initial_provider).run_must_fail();
+
+    // NP can't change anything
+    rell.test.tx().op(
+        propose_provider_quota(np.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_containers, 10)
+    ).sign(np).run_must_fail();
+    // CNP can't change anything
+    rell.test.tx().op(
+        propose_provider_quota(cnp.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_containers, 10)
+    ).sign(cnp).run_must_fail();
+}
+
+function test_propose_provider_quota__max_actions_per_day() {
+    setup_module();
+
+    assert_equals(get_max_action_points_quota(), (100, 100));
+    rell.test.tx().op(
+        propose_provider_quota(initial_provider.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_actions_per_day, 10),
+        propose_provider_quota(initial_provider.pub, provider_tier.COMMUNITY_NODE_PROVIDER, provider_quota_type.max_actions_per_day, 20)
+    ).sign(initial_provider).run();
+    assert_equals(get_max_action_points_quota(), (10, 20));
+
+    // 0 and -1 is not allowed
+    rell.test.tx().op(
+        propose_provider_quota(initial_provider.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_actions_per_day, 0)
+    ).sign(initial_provider).run_must_fail();
+    rell.test.tx().op(
+        propose_provider_quota(initial_provider.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_actions_per_day, -1)
+    ).sign(initial_provider).run_must_fail();
+}
+
+function test_propose_provider_quota__max_nodes() {
+    setup_module();
+
+    // Is not allowed now
+    rell.test.tx().op(
+        propose_provider_quota(initial_provider.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_nodes, 10)
+    ).sign(initial_provider).run_must_fail();
+}
+
+function test_propose_provider_quota__max_containers() {
+    setup_module(provider_quota_max_containers = 1);
+
+    assert_equals(get_max_container_np_quota(), 1);
+    rell.test.tx().op(
+        propose_provider_quota(initial_provider.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_containers, 10)
+    ).sign(initial_provider).run();
+    assert_equals(get_max_container_np_quota(), 10);
+
+    // 0, -1
+    rell.test.tx().op(
+        propose_provider_quota(initial_provider.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_containers, 0),
+        propose_provider_quota(initial_provider.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_containers, -1)
+    ).sign(initial_provider).run();
+    assert_equals(get_max_container_np_quota(), -1);
+
+    // -2, must fail
+    rell.test.tx().op(
+        propose_provider_quota(initial_provider.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_containers, -2)
+    ).sign(initial_provider).run_must_fail();
+
+    // must fail for COMMUNITY_NODE_PROVIDER tier
+    rell.test.tx().op(
+        propose_provider_quota(initial_provider.pub, provider_tier.COMMUNITY_NODE_PROVIDER, provider_quota_type.max_containers, -2)
+    ).sign(initial_provider).run_must_fail();
+}
+
+function get_max_container_np_quota(): integer {
+    return provider_quota @ { provider_tier.NODE_PROVIDER, provider_quota_type.max_containers } (.value);
+}
+
+function get_max_action_points_quota(): (integer, integer) {
+    return (
+        provider_quota @ { provider_tier.NODE_PROVIDER, provider_quota_type.max_actions_per_day } (.value),
+        provider_quota @ { provider_tier.COMMUNITY_NODE_PROVIDER, provider_quota_type.max_actions_per_day } (.value)
+    );
+}
+

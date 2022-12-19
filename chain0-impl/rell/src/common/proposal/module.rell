@@ -16,6 +16,7 @@ enum proposal_type {
     voter_set_update,
     provider_state,
     provider_is_system,
+    provider_quota,
     blockchain_action
     // and a lot more
 }
@@ -26,7 +27,6 @@ entity proposal {
   index voter_set; // voter set is determined at the time proposal is created
 }
 
-//Proposed configuration changes are put here while waiting for enough positive votes.
 entity pending_configuration_at {
     key proposal;
     blockchain;
@@ -113,6 +113,13 @@ entity pending_provider_is_system {
     system: boolean;
 }
 
+entity pending_provider_quota {
+    key proposal;
+    provider_tier;
+    provider_quota_type;
+    value: integer;
+}
+
 operation revoke_proposal(my_pubkey: pubkey, proposal_rowid: rowid) {
     val me = provider @ { my_pubkey };
     require_provider_auth_with_rl(me);
@@ -135,6 +142,7 @@ function delete_proposal(prop: proposal) {
         voter_set_update    -> delete_pending_voter_set_update(prop);
         provider_state      -> delete pending_provider_state @ { prop };
         provider_is_system  -> delete pending_provider_is_system @ { prop };
+        provider_quota      -> delete pending_provider_quota @ { prop };
         blockchain_action   -> delete pending_blockchain_action @? { prop };
     }
     delete vote @* { .proposal == prop };
