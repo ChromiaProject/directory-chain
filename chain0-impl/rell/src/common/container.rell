@@ -18,14 +18,13 @@ function is_container_available_for_removal(container) {
     return when {
         container.name == containers.system -> "System cluster can't be deleted";
         exists(container_blockchain @* { container }) -> "Container %s is not empty and can't be deleted. Delete blockchains first".format(container.name);
-        exists(pending_container_limits @? { container }) -> "Container %s has pending proposals and can't be deleted. Resolve proposals first".format(container.name);
+        exists(pending_container_limits @* { container }) -> "Container %s has pending proposals and can't be deleted. Resolve proposals first".format(container.name);
+        exists(pending_blockchain @* { container }) -> "Container %s has pending proposals and can't be deleted. Resolve proposals first".format(container.name);
         else -> "";
     };
 }
 
 function require_container_available_for_removal(container) {
     val msg = is_container_available_for_removal(container);
-    if (not(msg.empty())) {
-        require(false, msg);
-    }
+    require(msg.empty(), msg);
 }

@@ -67,13 +67,17 @@ function test_propose_and_remove_container() {
     ).sign(initial_provider).run();
     _make_vote(sp);
 
-    // Proposing container limits
+    // Proposing container limits and container blockchain
     val limits = map<container_resource_limit_type, integer>();
+    var conf_bar = map<text, text>();
+    conf_bar["foo"] = "bar";
     rell.test.tx().op(
-        propose_container_limits(initial_provider.pub, "container1", limits)
+        propose_container_limits(initial_provider.pub, "container1", limits),
+        propose_blockchain(initial_provider.pub, conf_bar.to_gtv().to_bytes(), "bar_chain", "container1")
     ).sign(initial_provider).run();
     // _make_vote(sp); Not votes,
     assert_true(exists(pending_container_limits @? { .container.name == "container1" }));
+    assert_true(exists(pending_blockchain @? { .container.name == "container1" }));
 
     // Trying to remove container1 and fail due to the fact there are other container1 related proposal(s)
     rell.test.tx().op(
@@ -81,6 +85,12 @@ function test_propose_and_remove_container() {
     ).sign(initial_provider).run_must_fail();
 
     // IP revokes pending proposal and tries to remove container again
+    _revoke_proposal(initial_provider);
+    rell.test.tx().op(
+        propose_remove_container(initial_provider.pub, "container1")
+    ).sign(initial_provider).run_must_fail();
+
+    // IP revokes 2nd pending proposal and tries to remove container again
     _revoke_proposal(initial_provider);
     rell.test.tx().op(
         propose_remove_container(initial_provider.pub, "container1")
