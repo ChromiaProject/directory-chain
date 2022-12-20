@@ -2,35 +2,41 @@
 
 import ^^.container_proposal.*;
 import ^^^.common.test.setup.*;
+import ^^^.common.test.util.*;
 import ^^^.model.util.constants.*;
 
 function test_propose_and_remove_container() {
     setup_module();
-    val alice = provider @ { rell.test.pubkeys.alice };
+
+    // 0. governance
+    val cnp = rell.test.keypairs.bob;
+    val sp = rell.test.keypairs.trudy;
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, cnp.pub, provider_tier.COMMUNITY_NODE_PROVIDER),
+        register_provider(initial_provider.pub, sp.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, sp.pub, true)
+    ).sign(initial_provider).run();
 
     // 1. Deleting system container. Must fail.
     rell.test.tx().op(
-        propose_remove_container(alice.pubkey, containers.system)
-    ).sign(rell.test.keypairs.alice).run_must_fail();
+        propose_remove_container(initial_provider.pub, containers.system)
+    ).sign(initial_provider).run_must_fail();
 
     // 2. Deleting unknown container. Must fail.
     rell.test.tx().op(
-        propose_remove_container(alice.pubkey, "unknown")
-    ).sign(rell.test.keypairs.alice).run_must_fail();
+        propose_remove_container(initial_provider.pub, "unknown")
+    ).sign(initial_provider).run_must_fail();
 
     // 3. Proposing container by provider that is not a member of cluster's governance
     rell.test.tx().op(
-        register_provider(alice.pubkey, rell.test.pubkeys.bob, provider_tier.COMMUNITY_NODE_PROVIDER)
-    ).sign(rell.test.keypairs.alice).run();
-    assert_not_null(provider @? { rell.test.pubkeys.bob });
-    rell.test.tx().op(
-        propose_container(rell.test.pubkeys.bob, clusters.system, "container1", voter_sets.system_p)
-    ).sign(rell.test.keypairs.bob).run_must_fail();
+        propose_container(cnp.pub, clusters.system, "container1", voter_sets.system_p)
+    ).sign(cnp).run_must_fail();
 
     // 4. Adding a new container
     rell.test.tx().op(
-        propose_container(alice.pubkey, clusters.system, "container1", voter_sets.system_p)
-    ).sign(rell.test.keypairs.alice).run();
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p)
+    ).sign(initial_provider).run();
+    _make_vote(sp);
 
     // Asserting container is added
     val container1 = container @? { "container1" };
@@ -41,8 +47,9 @@ function test_propose_and_remove_container() {
 
     var conf = map<text, text>();
     rell.test.tx().op(
-        propose_blockchain(rell.test.pubkeys.alice, conf.to_gtv().to_bytes(), "foo_chain", "container1")
-    ).sign(rell.test.keypairs.alice).run();
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "container1")
+    ).sign(initial_provider).run();
+    _make_vote(sp);
 
     // Asserting blockchain is added to container1
     val bcFoo = blockchain @? { "foo_chain" };
@@ -51,22 +58,52 @@ function test_propose_and_remove_container() {
 
     // Trying to remove container and fail due to the fact it contains a foo_chain
     rell.test.tx().op(
-        propose_remove_container(rell.test.pubkeys.alice, "container1")
-    ).sign(rell.test.keypairs.alice).run_must_fail();
+        propose_remove_container(initial_provider.pub, "container1")
+    ).sign(initial_provider).run_must_fail();
 
     // Deleting blockchain
     rell.test.tx().op(
-        propose_blockchain_action(rell.test.pubkeys.alice, bcFoo.rid, blockchain_action.remove)
-    ).sign(rell.test.keypairs.alice).run();
+        propose_blockchain_action(initial_provider.pub, bcFoo.rid, blockchain_action.remove)
+    ).sign(initial_provider).run();
+    _make_vote(sp);
 
-    // Trying to remove container1
+    // Proposing container limits
+    val limits = map<container_resource_limit_type, integer>();
     rell.test.tx().op(
-        propose_remove_container(rell.test.pubkeys.alice, "container1")
-    ).sign(rell.test.keypairs.alice).run();
+        propose_container_limits(initial_provider.pub, "container1", limits)
+    ).sign(initial_provider).run();
+    // _make_vote(sp); Not votes,
+    assert_true(exists(pending_container_limits @? { .container.name == "container1" }));
+
+    // Trying to remove container1 and fail due to the fact there are other container1 related proposal(s)
+    rell.test.tx().op(
+        propose_remove_container(initial_provider.pub, "container1")
+    ).sign(initial_provider).run_must_fail();
+
+    // IP revokes pending proposal and tries to remove container again
+    _revoke_proposal(initial_provider);
+    rell.test.tx().op(
+        propose_remove_container(initial_provider.pub, "container1")
+    ).sign(initial_provider).run();
+
+    // SP votes for container removal
+    _make_vote(sp);
 
     // Asserting that container1 is removed
     assert_null(container @? { "container1" });
     assert_true(empty(
         container_resource_limit @* { .container in container @* { "container1" } }
     ));
+}
+
+function _make_vote(voter: rell.test.keypair) {
+    rell.test.tx().op(
+        make_vote(voter.pub, integer_from_rowid(last_proposal().rowid), true)
+    ).sign(voter).run();
+}
+
+function _revoke_proposal(voter: rell.test.keypair) {
+    rell.test.tx().op(
+        revoke_proposal(voter.pub, last_proposal().rowid)
+    ).sign(voter).run();
 }
