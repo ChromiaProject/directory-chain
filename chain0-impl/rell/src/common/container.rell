@@ -14,10 +14,17 @@ function remove_container_impl(container) {
     delete container;
 }
 
+function is_container_available_for_removal(container): (boolean, text) {
+    return when {
+        container.name == containers.system -> (false, "System container can't be deleted");
+        exists(container_blockchain @* { container }) -> (false, "Container %s is not empty and can't be deleted. Delete blockchains first".format(container.name));
+        exists(pending_container_limits @* { container }) -> (false, "Container %s has pending proposals and can't be deleted. Resolve proposals first".format(container.name));
+        exists(pending_blockchain @* { container }) -> (false, "Container %s has pending proposals and can't be deleted. Resolve proposals first".format(container.name));
+        else -> (true, "");
+    };
+}
+
 function require_container_available_for_removal(container) {
-    require(container.name != containers.system, "System cluster can't be deleted");
-    require(
-        empty(container_blockchain @* { container }),
-        "Container %s is not empty and can't be deleted. Delete blockchains first".format(container.name)
-    );
+    val (available, msg) = is_container_available_for_removal(container);
+    require(available, msg);
 }
