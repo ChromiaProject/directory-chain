@@ -13,7 +13,7 @@ namespace auth_service {
             return;
         }
 
-        val clusters = cluster @* { cluster.name != clusters.system };
+        val clusters = if (chain_context.args.include_system_cluster) cluster @* {} else cluster @* { cluster.name != clusters.system };
         for (cluster in clusters) {
             val capacity = cluster_resource_limit @? { cluster, cluster_resource_limit_type.max_containers }.value;
             val n_containers = container @ { .cluster == cluster } (@sum 1);
