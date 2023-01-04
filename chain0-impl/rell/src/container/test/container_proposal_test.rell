@@ -11,7 +11,12 @@ function test_propose_and_remove_container() {
     // 0. governance
     val cnp = rell.test.keypairs.bob;
     val sp = rell.test.keypairs.trudy;
+
+    val system_cluster_limits = map<cluster_resource_limit_type, integer>();
+    system_cluster_limits[cluster_resource_limit_type.max_containers] = 2;
+
     rell.test.tx().op(
+        propose_cluster_limits(initial_provider.pub, clusters.system, system_cluster_limits),
         register_provider(initial_provider.pub, cnp.pub, provider_tier.COMMUNITY_NODE_PROVIDER),
         register_provider(initial_provider.pub, sp.pub, provider_tier.NODE_PROVIDER),
         propose_provider_is_system(initial_provider.pub, sp.pub, true)
@@ -37,6 +42,11 @@ function test_propose_and_remove_container() {
         propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p)
     ).sign(initial_provider).run();
     _make_vote(sp);
+
+    // Adding a second container, must fail due to `max_containers` restrictions
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container2", voter_sets.system_p)
+    ).sign(initial_provider).run_must_fail();
 
     // Asserting container is added
     val container1 = container @? { "container1" };

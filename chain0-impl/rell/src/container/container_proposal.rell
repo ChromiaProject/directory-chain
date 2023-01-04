@@ -70,13 +70,7 @@ operation propose_container(my_pubkey: pubkey, cluster_name: text, name, deploye
     val deployer = require_voter_set(deployer_name);
     require_cluster_governor(cluster, me);
     require_provider_quota(me, provider_quota_type.max_containers);
-
-    // Require container resource limits are honored
-    val max_containers = cluster_resource_limit @? { cluster, .cluster_resource_limit_type == cluster_resource_limit_type.max_containers } (.value);
-    if (max_containers != null and max_containers != -1) {
-        val cluster_container_count = container @* { cluster } (@sum 1)[0];
-        require(cluster_container_count + 1 <= max_containers, "Can't propose container, cluster %s is full".format(cluster_name));
-    }
+    require_cluster_quotas(cluster);
 
     val max_blockchains = _get_cluster_limit_or_default(cluster, cluster_resource_limit_type.default_container_max_blockchains);
     val cpu = _get_cluster_limit_or_default(cluster, cluster_resource_limit_type.default_container_cpu);
