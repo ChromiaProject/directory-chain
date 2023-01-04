@@ -20,3 +20,11 @@ function create_cluster_impl(me: provider, name, governor: voter_set, providers:
 }
 
 @extendable function after_cluster_creation(provider, cluster) {}
+
+function require_cluster_quotas(cluster) {
+    val max_containers = cluster_resource_limit @? { cluster, cluster_resource_limit_type.max_containers } (.value);
+    if (max_containers != null and max_containers != -1) {
+        val cluster_container_count = container @ { cluster } (@sum 1);
+        require(cluster_container_count < max_containers, "Can't propose container, cluster %s is full".format(cluster.name));
+    }
+}

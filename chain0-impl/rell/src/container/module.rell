@@ -38,11 +38,3 @@ function remove_container_and_voter_set(container) {
 function _get_cluster_limit_or_default(cluster, type: cluster_resource_limit_type): integer {
     return cluster_resource_limit @? { cluster, .cluster_resource_limit_type == type } (.value) ?: -1;
 }
-
-function require_cluster_quotas(cluster) {
-    val max_containers = cluster_resource_limit @? { cluster, cluster_resource_limit_type.max_containers } (.value);
-    if (max_containers != null and max_containers != -1) {
-        val cluster_container_count = container @ { cluster } (@sum 1);
-        require(cluster_container_count < max_containers, "Can't propose container, cluster %s is full".format(cluster.name));
-    }
-}
