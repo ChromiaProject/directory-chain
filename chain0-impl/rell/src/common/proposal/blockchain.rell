@@ -9,10 +9,10 @@ operation propose_blockchain(my_pubkey: pubkey, config_data: byte_array, bc_name
     require_container_deployer(container, me);
 
     // Require container resource limits are honored
-    val max_blockchains = container_resource_limit @ { container, .container_resource_limit_type == container_resource_limit_type.max_blockchains } (.value);
+    val max_blockchains = container_resource_limit @ { container, container_resource_limit_type.max_blockchains } (.value);
     if (max_blockchains > 0) {
         val container_dapps_count = container_blockchain @* { container } (@sum 1)[0];
-        require(container_dapps_count + 1 <= max_blockchains, "Can't propose blockchain, container %s is full".format(container_name));
+        require(container_dapps_count < max_blockchains, "Can't propose blockchain, container %s is full".format(container_name));
     }
 
     // If already proposed, do not add again.
