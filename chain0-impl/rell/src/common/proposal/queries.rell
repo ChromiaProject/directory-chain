@@ -22,12 +22,12 @@ query get_blockchain_proposal(rowid): (data:byte_array, container:text)? {
 
 function require_proposal(rowid) = require(proposal @? { rowid }, "Proposal " + rowid + " not found");
 
-query get_configuration_proposal(rowid?): (
+query get_configuration_proposal_at(rowid?): (
     current_conf:struct<blockchain_configuration>,
     proposed_conf:struct<pending_configuration_at>
 )? {
 
-    val proposal = if (rowid == null) proposal @ { proposal_type.configuration_at } ( @max proposal ) else proposal @ { rowid };
+    val proposal = get_latest_proposal(rowid, proposal_type.configuration_at);
     if (proposal == null) return null;
     val config = pending_configuration_at @? { require_proposal(proposal.rowid) };
     if (config == null) return null;
@@ -40,12 +40,12 @@ query get_configuration_proposal(rowid?): (
     );
 }
 
-query get_pending_configuration_proposal(rowid?): (
+query get_configuration_proposal(rowid?): (
     current_conf:struct<blockchain_configuration>,
     proposed_conf:struct<pending_configuration>
 )? {
 
-    val proposal = if (rowid == null) proposal @ { proposal_type.configuration_at } ( @max proposal ) else proposal @ { rowid };
+    val proposal = get_latest_proposal(rowid, proposal_type.configuration);
     if (proposal == null) return null;
     val config = pending_configuration @? { require_proposal(proposal.rowid) };
     if (config == null) return null;
