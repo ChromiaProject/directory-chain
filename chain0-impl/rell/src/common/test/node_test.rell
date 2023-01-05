@@ -88,7 +88,7 @@ function test_add_node() {
     ).sign(dapp_provider1).run_must_fail();
 }
 
-function test_remove_node() {
+function test_remove_and_enable_node() {
     setup_module();
 
     rell.test.tx().op(
@@ -165,6 +165,31 @@ function test_remove_node() {
     val sp_removed = node @? { np2_node_key };
     assert_not_null(sp_removed);
     assert_false(sp_removed.active);
+
+    //
+    // enable_node() op
+    //
+
+    // SP enables unknown node and fails
+    rell.test.tx().op(
+        enable_node(system_provider.pub, x"ff")
+    ).sign(system_provider).run_must_fail();
+
+    // SP enables NP1's node and fails
+    rell.test.tx().op(
+        enable_node(system_provider.pub, np1_node_key)
+    ).sign(system_provider).run_must_fail();
+
+    // SP enables its node
+    rell.test.tx().op(
+        enable_node(system_provider.pub, sp_node_key)
+    ).sign(system_provider).run();
+    assert_true(node @ { sp_node_key } (.active));
+
+    // SP enables its active node and fails
+    rell.test.tx().op(
+        enable_node(system_provider.pub, sp_node_key)
+    ).sign(system_provider).run_must_fail();
 }
 
 function test_replace_node() {
