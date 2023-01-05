@@ -31,7 +31,7 @@ query get_configuration_proposal_at(rowid?): (
     if (proposal == null) return null;
     val config = pending_configuration_at @? { require_proposal(proposal.rowid) };
     if (config == null) return null;
-    val current = (blockchain_configuration @ { config.blockchain }
+    val current = (blockchain_configuration @ { config.blockchain, .height < config.height }
      (@omit @sort_desc .height, $) limit 1);
 
     return (
@@ -49,7 +49,8 @@ query get_configuration_proposal(rowid?): (
     if (proposal == null) return null;
     val config = pending_configuration @? { require_proposal(proposal.rowid) };
     if (config == null) return null;
-    val current = (blockchain_configuration @ { config.blockchain }
+
+    val current = (blockchain_configuration @ { config.blockchain, .height < get_last_height(config.blockchain) }
      (@omit @sort_desc .height, $) limit 1);
 
     return (
