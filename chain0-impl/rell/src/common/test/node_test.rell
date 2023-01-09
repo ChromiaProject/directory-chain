@@ -88,7 +88,7 @@ function test_add_node() {
     ).sign(dapp_provider1).run_must_fail();
 }
 
-function test_remove_and_enable_node() {
+function test_disable_and_enable_node() {
     setup_module();
 
     rell.test.tx().op(
@@ -129,17 +129,17 @@ function test_remove_and_enable_node() {
 
     // NP1 signs NP2's tx and fails
     rell.test.tx().op(
-        remove_node(node_provider2.pub, np2_node_key)
+        disable_node(node_provider2.pub, np2_node_key)
     ).sign(node_provider1).run_must_fail();
 
     // NP1 tries to remove NP2's node and fails
     rell.test.tx().op(
-        remove_node(node_provider1.pub, np2_node_key)
+        disable_node(node_provider1.pub, np2_node_key)
     ).sign(node_provider1).run_must_fail();
 
     // NP1 removes its node
     rell.test.tx().op(
-        remove_node(node_provider1.pub, np1_node_key)
+        disable_node(node_provider1.pub, np1_node_key)
     ).sign(node_provider1).run();
     val np1_removed = node @? { np1_node_key };
     assert_not_null(np1_removed);
@@ -147,7 +147,7 @@ function test_remove_and_enable_node() {
 
     // SP removes NP2's node
     rell.test.tx().op(
-        remove_node(system_provider.pub, np2_node_key)
+        disable_node(system_provider.pub, np2_node_key)
     ).sign(system_provider).run();
     val np2_removed = node @? { np2_node_key };
     assert_not_null(np2_removed);
@@ -155,12 +155,12 @@ function test_remove_and_enable_node() {
 
     // IP tries to remove SP's node and fails
     rell.test.tx().op(
-        remove_node(initial_provider.pub, sp_node_key)
+        disable_node(initial_provider.pub, sp_node_key)
     ).sign(initial_provider).run_must_fail();
 
     // SP removes its own node
     rell.test.tx().op(
-        remove_node(system_provider.pub, sp_node_key)
+        disable_node(system_provider.pub, sp_node_key)
     ).sign(system_provider).run();
     val sp_removed = node @? { np2_node_key };
     assert_not_null(sp_removed);

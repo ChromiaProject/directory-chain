@@ -66,25 +66,25 @@ function add_node_internal(provider, node_pubkey: pubkey, host: text, port: inte
     return node;
 }
 
-operation remove_node(my_pubkey: pubkey, node_pubkey: pubkey) {
+operation disable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
     val provider = require_provider(my_pubkey);
     require_provider_auth_with_rl(provider);
-    val node_to_remove = node @ { node_pubkey };
+    val node_to_disable = node @ { node_pubkey };
 
-    if (provider != node_to_remove.provider) {
-        require(roles.has_system_access(provider), "Non system provider is only allowed to remove own nodes");
+    if (provider != node_to_disable.provider) {
+        require(roles.has_system_access(provider), "Non system provider is only allowed to disable own nodes");
         require(
-            node_to_remove.provider.tier == provider_tier.NODE_PROVIDER and not(node_to_remove.provider.system),
-            "System provider is only allowed to remove nodes of non system provider");
+            node_to_disable.provider.tier == provider_tier.NODE_PROVIDER and not(node_to_disable.provider.system),
+            "System provider is only allowed to disable nodes of non system provider");
     }
 
-    node_to_remove.active = false;
+    node_to_disable.active = false;
     // cluster nodes
     val clusters = cluster_node @* { .node.pubkey == node_pubkey } .cluster;
     delete cluster_node @* { .node.pubkey == node_pubkey };
     for (cl in clusters) {
-        // Removing the last node of a cluster is not allowed:
-        require(not(empty(cluster_node @* { cl })), "Cannot remove the last node of a cluster " + cl.name);
+        // Disabling the last node of a cluster is not allowed:
+        require(not(empty(cluster_node @* { cl })), "Cannot disable the last node of a cluster " + cl.name);
         update_configuration_signers(cl);
     }
     // cluster replica nodes
