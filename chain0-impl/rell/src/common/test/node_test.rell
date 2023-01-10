@@ -31,7 +31,7 @@ val dapp_provider2 = rell.test.keypair(
 val dp2_node_key = x"05";
 
 
-function test_add_node() {
+function test_register_node() {
     setup_module();
 
     rell.test.tx().op(
@@ -44,12 +44,12 @@ function test_add_node() {
 
     // SP's node is added by IP and fails
     rell.test.tx().op(
-        add_node(system_provider.pub, sp_node_key, "host", 7777, "http://host/api_url")
+        register_node(system_provider.pub, sp_node_key, "host", 7777, "http://host/api_url")
     ).sign(initial_provider).run_must_fail();
 
     // SP adds a node
     rell.test.tx().op(
-        add_node(system_provider.pub, sp_node_key, "host", 7777, "http://host/api_url")
+        register_node(system_provider.pub, sp_node_key, "host", 7777, "http://host/api_url")
     ).sign(system_provider).run();
     val sp_node = node @? { sp_node_key };
     assert_not_null(sp_node);
@@ -57,34 +57,34 @@ function test_add_node() {
 
     // NP's node is added by IP and fails
     rell.test.tx().op(
-        add_node(node_provider1.pub, np1_node_key, "host", 7777, "http://host/api_url")
+        register_node(node_provider1.pub, np1_node_key, "host", 7777, "http://host/api_url")
     ).sign(initial_provider).run_must_fail();
     // NP adds a node
     rell.test.tx().op(
-        add_node(node_provider1.pub, np1_node_key, "host", 7777, "http://host/api_url")
+        register_node(node_provider1.pub, np1_node_key, "host", 7777, "http://host/api_url")
     ).sign(node_provider1).run();
     val np1_node = node @? { np1_node_key };
     assert_not_null(np1_node);
     assert_true(np1_node.active);
     // NP tries to add more nodes and fails
     rell.test.tx().op(
-        add_node(node_provider1.pub, x"000001", "host", 7777, "http://host/api_url")
+        register_node(node_provider1.pub, x"000001", "host", 7777, "http://host/api_url")
     ).sign(node_provider1).run_must_fail();
 
     // DP/CNP's node is added by IP and fails
     rell.test.tx().op(
-        add_node(dapp_provider1.pub, dp1_node_key, "host", 7777, "http://host/api_url")
+        register_node(dapp_provider1.pub, dp1_node_key, "host", 7777, "http://host/api_url")
     ).sign(initial_provider).run_must_fail();
     // DP/CNP adds a node, node will be added as cluster replica mode
     rell.test.tx().op(
-        add_node(dapp_provider1.pub, dp1_node_key, "host", 7777, "http://host/api_url", list([clusters.system]))
+        register_node(dapp_provider1.pub, dp1_node_key, "host", 7777, "http://host/api_url", list([clusters.system]))
     ).sign(dapp_provider1).run();
     assert_true(exists(node @? { dp1_node_key }));
     val system_cluster_replicas = cluster_replica_node @* { .cluster.name == clusters.system } (.node.pubkey);
     assert_true(system_cluster_replicas.contains(dp1_node_key));
     // NP tries to add more nodes and fails
     rell.test.tx().op(
-        add_node(dapp_provider1.pub, x"000002", "host", 7777, "http://host/api_url")
+        register_node(dapp_provider1.pub, x"000002", "host", 7777, "http://host/api_url")
     ).sign(dapp_provider1).run_must_fail();
 }
 
@@ -103,13 +103,13 @@ function test_disable_and_enable_node() {
     ).sign(initial_provider).run();
 
     rell.test.tx().op(
-        add_node(system_provider.pub, sp_node_key, "host", 7777, "http://host/api_url")
+        register_node(system_provider.pub, sp_node_key, "host", 7777, "http://host/api_url")
     ).sign(system_provider).run();
     rell.test.tx().op(
-        add_node(node_provider1.pub, np1_node_key, "host", 7777, "http://host/api_url")
+        register_node(node_provider1.pub, np1_node_key, "host", 7777, "http://host/api_url")
     ).sign(node_provider1).run();
     rell.test.tx().op(
-        add_node(node_provider2.pub, np2_node_key, "host", 7777, "http://host/api_url")
+        register_node(node_provider2.pub, np2_node_key, "host", 7777, "http://host/api_url")
     ).sign(node_provider2).run();
 
     // Asserting initial state
