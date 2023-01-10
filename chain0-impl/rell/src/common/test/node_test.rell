@@ -250,6 +250,38 @@ function test_update_node() {
     );
 }
 
+function test_remove_node() {
+    setup_module();
+
+    // setup
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, node_provider1.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, node_provider1.pub, true)
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        register_node(node_provider1.pub, np1_node_key, "host", 7777, "http://host/api_url")
+    ).sign(node_provider1).run();
+
+    // asserts
+    // IP tries to remove NP1's node and fails
+    rell.test.tx().op(
+        remove_node(initial_provider.pub, np1_node_key)
+    ).sign(initial_provider).run_must_fail();
+
+    // NP1 tries to remove active node and fails
+    rell.test.tx().op(
+        remove_node(node_provider1.pub, np1_node_key)
+    ).sign(node_provider1).run_must_fail();
+
+    // NP1 disables the node and manages to remove it
+    rell.test.tx().op(
+        disable_node(node_provider1.pub, np1_node_key),
+        remove_node(node_provider1.pub, np1_node_key)
+    ).sign(node_provider1).run();
+    assert_true(empty(node @? { np1_node_key }));
+}
+
 function _get_node_data(provider)
     = node @ { provider } ( _ = .host, _ = .port, _ = .api_url, _ = .last_updated, _ = node_list.last_update );
 

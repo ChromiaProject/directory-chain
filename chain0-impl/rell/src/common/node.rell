@@ -95,6 +95,17 @@ operation disable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
     node_list.last_update = op_context.last_block_time;
 }
 
+operation remove_node(my_pubkey: pubkey, node_pubkey: pubkey) {
+    print("------------- Remove-Node: %s --------------".format(node_pubkey));
+    val provider = require_provider(my_pubkey);
+    require_provider_auth_with_rl(provider);
+    val node_to_remove = node @ { node_pubkey };
+    require(provider == node_to_remove.provider, "It is only allowed to remove own nodes: " + node_pubkey);
+    require(not(node_to_remove.active), "Can't remove active nodes: " + node_pubkey);
+    delete node_to_remove;
+    print("---------------------------------------");
+}
+
 operation update_node(my_pubkey: pubkey, node_pubkey: pubkey, host: text? = null, port: integer? = null, api_url: text? = null) {
     val node = require_node_provider(node_pubkey, my_pubkey);
     if (host != null) node.host = host;
