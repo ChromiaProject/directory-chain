@@ -5,8 +5,12 @@ query get_proposals_since(since: rowid) {
   return proposal @* { .rowid >= since } (.rowid, .proposal_type) limit 10;
 }
 
-query get_relevant_proposals(my_pubkey: pubkey) {
-    return (proposal, voter_set_member) @* { voter_set_member.voter_set == proposal.voter_set, voter_set_member.provider.pubkey == my_pubkey } (proposal.rowid, proposal.proposal_type);
+query get_relevant_proposals(my_pubkey: pubkey, since: rowid) {
+    return (proposal, voter_set_member) @* {
+        voter_set_member.voter_set == proposal.voter_set,
+        voter_set_member.provider.pubkey == my_pubkey,
+        proposal.rowid >= since
+     } (proposal.rowid, proposal.proposal_type);
 }
 
 query get_proposal (id: rowid?): (id :rowid, timestamp: integer, type :proposal_type, proposed_by :pubkey)? {
