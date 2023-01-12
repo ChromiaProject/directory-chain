@@ -17,6 +17,7 @@ enum proposal_type {
     provider_state,
     provider_is_system,
     provider_quota,
+    providers_batch,
     blockchain_action
     // and a lot more
 }
@@ -120,6 +121,14 @@ entity pending_provider_quota {
     value: integer;
 }
 
+entity pending_providers_batch {
+    key proposal;
+    csv_keys: text;
+    provider_tier;
+    system: boolean;
+    active: boolean;
+}
+
 operation revoke_proposal(my_pubkey: pubkey, proposal_rowid: rowid) {
     val me = provider @ { my_pubkey };
     require_provider_auth_with_rl(me);
@@ -143,6 +152,7 @@ function delete_proposal(prop: proposal) {
         provider_state      -> delete pending_provider_state @ { prop };
         provider_is_system  -> delete pending_provider_is_system @ { prop };
         provider_quota      -> delete pending_provider_quota @ { prop };
+        providers_batch     -> delete pending_providers_batch @ { prop };
         blockchain_action   -> delete pending_blockchain_action @? { prop };
     }
     delete vote @* { .proposal == prop };

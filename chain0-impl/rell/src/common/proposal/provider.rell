@@ -71,3 +71,16 @@ operation propose_provider_quota(my_pubkey: pubkey, tier: provider_tier, provide
     create pending_provider_quota(prop, tier, provider_quota_type, value);
     internal_vote(me, prop, true);
 }
+
+operation propose_providers_batch(my_pubkey: pubkey, csv_provider_keys: text, provider_tier, system: boolean, active: boolean) {
+    val me = require_is_provider_with_rl(my_pubkey);
+    require_is_system_provider(my_pubkey);
+
+    for (pk in csv_provider_keys.split(",")) {
+        require(empty(provider @? { byte_array(pk) }), "Provider ealready exists: " + byte_array(pk));
+    }
+
+    val prop = create proposal(op_context.last_block_time, proposal_type.providers_batch, me, system_p_voter_set());
+    create pending_providers_batch(prop, csv_provider_keys, provider_tier, system, active);
+    internal_vote(me, prop, true);
+}

@@ -33,6 +33,7 @@ function try_to_apply_proposal(prop: proposal) {
                 provider_state    -> apply_provider_state(prop);
                 provider_is_system-> apply_provider_is_system(prop);
                 provider_quota    -> apply_provider_quota(prop);
+                providers_batch   -> apply_providers_batch(prop);
                 blockchain_action -> apply_blockchain_action(prop);
             }
             delete_proposal(prop);
@@ -76,11 +77,11 @@ function apply_cluster_provider(proposal) {
     }
 }
 
-//For promotion and demotion of system providers
+// For promotion and demotion of system providers
 function apply_provider_is_system(proposal) {
     val pps = pending_provider_is_system @ {proposal};
 
-    //If promotion, update SYSTEM_P voter set
+    // If promotion, update SYSTEM_P voter set
     if (pps.system) {
         enroll.system(pps.provider);
     } else {
@@ -88,7 +89,7 @@ function apply_provider_is_system(proposal) {
     }
 }
 
-//For both enabling and disabling of providers:
+// For both enabling and disabling of providers:
 function apply_provider_state(proposal) {
     val pps = pending_provider_state @ { proposal };
     update_provider_state(pps.provider, pps.active);
@@ -124,6 +125,20 @@ function update_provider_state(provider, active: boolean) {
 function apply_provider_quota(proposal) {
     val ppq = pending_provider_quota @ { proposal };
     update provider_quota @? { ppq.provider_tier, ppq.provider_quota_type } (ppq.value);
+}
+
+function apply_providers_batch(proposal) {
+    val ppb = pending_providers_batch @ { proposal };
+    val keys = ppb.csv_keys.split(",") @* {} (byte_array($));
+
+    for (pk in keys) {
+        require(empty(provider @? { pk }), "Provider already exists: " + pk);
+        register_and_enable_provider(pk, ppb.provider_tier, null, null, ppb.active);
+        when {
+            ppb.system -> enroll.system(provider @ { pk }, ppb.active);
+            _is_node_provider(ppb.provider_tier) -> enroll.node(provider @ { pk });
+        }
+    }
 }
 
 function apply_configuration(proposal) {
