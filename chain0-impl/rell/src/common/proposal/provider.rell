@@ -82,14 +82,14 @@ operation propose_providers(my_pubkey: pubkey, provider_keys: list<pubkey>, prov
     }
 
     val already_proposed = list<byte_array>();
-    for (ppb in pending_providers_batch @* {}) {
+    for (ppb in pending_provider_batch @* {}) {
         already_proposed.add_all(list<byte_array>.from_gtv(gtv.from_bytes(ppb.gtv_keys)));
     }
     for (pk in keys) {
         require(not(pk in already_proposed), "Provider is already proposed: " + pk);
     }
 
-    val prop = create proposal(op_context.last_block_time, proposal_type.providers_batch, me, system_p_voter_set());
-    create pending_providers_batch(prop, keys.to_gtv().to_bytes(), provider_tier, system, active);
+    val prop = create proposal(op_context.last_block_time, proposal_type.provider_batch, me, system_p_voter_set());
+    create pending_provider_batch(prop, keys.to_gtv().to_bytes(), provider_tier, system, active);
     internal_vote(me, prop, true);
 }
