@@ -77,7 +77,15 @@ operation propose_providers(my_pubkey: pubkey, provider_keys: list<pubkey>, prov
     require_is_system_provider(my_pubkey);
     require(not(empty(provider_keys)), "Proposed provider key list is empty");
     for (pk in provider_keys) {
-        require(empty(provider @? { pk }), "Provider ealready exists: " + pk);
+        require(empty(provider @? { pk }), "Provider already exists: " + pk);
+    }
+
+    val already_proposed = list<byte_array>();
+    for (ppb in pending_providers_batch @* {}) {
+        already_proposed.add_all(list<byte_array>.from_gtv(gtv.from_bytes(ppb.gtv_keys)));
+    }
+    for (pk in provider_keys) {
+        require(not(pk in already_proposed), "Provider is already proposed: " + pk);
     }
 
     val prop = create proposal(op_context.last_block_time, proposal_type.providers_batch, me, system_p_voter_set());
