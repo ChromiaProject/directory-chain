@@ -75,8 +75,9 @@ operation propose_provider_quota(my_pubkey: pubkey, tier: provider_tier, provide
 operation propose_providers(my_pubkey: pubkey, provider_keys: list<pubkey>, provider_tier, system: boolean, active: boolean) {
     val me = require_is_provider_with_rl(my_pubkey);
     require_is_system_provider(my_pubkey);
-    require(not(empty(provider_keys)), "Proposed provider key list is empty");
-    for (pk in provider_keys) {
+    val keys = list<pubkey>(set<pubkey>(provider_keys));
+    require(not(empty(keys)), "Proposed provider key list is empty");
+    for (pk in keys) {
         require(empty(provider @? { pk }), "Provider already exists: " + pk);
     }
 
@@ -84,11 +85,11 @@ operation propose_providers(my_pubkey: pubkey, provider_keys: list<pubkey>, prov
     for (ppb in pending_providers_batch @* {}) {
         already_proposed.add_all(list<byte_array>.from_gtv(gtv.from_bytes(ppb.gtv_keys)));
     }
-    for (pk in provider_keys) {
+    for (pk in keys) {
         require(not(pk in already_proposed), "Provider is already proposed: " + pk);
     }
 
     val prop = create proposal(op_context.last_block_time, proposal_type.providers_batch, me, system_p_voter_set());
-    create pending_providers_batch(prop, provider_keys.to_gtv().to_bytes(), provider_tier, system, active);
+    create pending_providers_batch(prop, keys.to_gtv().to_bytes(), provider_tier, system, active);
     internal_vote(me, prop, true);
 }

@@ -89,4 +89,14 @@ function test_propose_providers_duplication() {
     rell.test.tx().op(
         propose_providers(initial_provider.pub, keys2, provider_tier.NODE_PROVIDER, true, false)
     ).sign(initial_provider).run_must_fail();
+
+    // tolerating of incoming duplicates
+    val keys3 = [provider2.pub, provider2.pub];
+    rell.test.tx().op(
+        propose_providers(initial_provider.pub, keys3, provider_tier.NODE_PROVIDER, true, false)
+    ).sign(initial_provider).run();
+    rell.test.tx().op(
+        make_vote(system_provider.pub, integer_from_rowid(last_proposal().rowid), true)
+    ).sign(system_provider).run();
+    assert_true(exists(provider @? { keys3[0], .system == true, .active == false }));
 }
