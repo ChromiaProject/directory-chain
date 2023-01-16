@@ -72,27 +72,41 @@ operation propose_provider_quota(my_pubkey: pubkey, tier: provider_tier, provide
     internal_vote(me, prop, true);
 }
 
-operation propose_providers(my_pubkey: pubkey, provider_keys: list<pubkey>, tier: provider_tier, system: boolean, active: boolean) {
+struct provider_info {
+	pubkey;
+	name = "";
+	url: text = "";
+}
+
+operation propose_providers(my_pubkey: pubkey, provider_infos: list<provider_info>, tier: provider_tier, system: boolean, active: boolean) {
     val me = require_is_provider_with_rl(my_pubkey);
     require_is_system_provider(my_pubkey);
     if (system) {
         require(provider_tier.COMMUNITY_NODE_PROVIDER != tier, "COMMUNITY_NODE_PROVIDER tier is incompatible with system = true flag");
     }
-    val keys = list<pubkey>(set<pubkey>(provider_keys));
-    require(not(empty(keys)), "Proposed provider key list is empty");
-    for (pk in keys) {
-        require(empty(provider @? { pk }), "Provider already exists: " + pk);
+
+    val providers_map = map<pubkey, provider_info>();
+    for (pi in provider_infos) {
+        providers_map[pi.pubkey] = pi;
+    }
+    val providers = providers_map.values();
+
+    require(not(empty(providers)), "Proposed provider key list is empty");
+    for (p in providers) {
+        require(empty(provider @? { p.pubkey }), "Provider already exists: " + p.pubkey);
     }
 
-    val already_proposed = list<byte_array>();
+    val already_proposed = list<pubkey>();
     for (ppb in pending_provider_batch @* {}) {
-        already_proposed.add_all(list<byte_array>.from_gtv(gtv.from_bytes(ppb.gtv_keys)));
+        already_proposed.add_all(
+            list<provider_info>.from_gtv(gtv.from_bytes(ppb.provider_infos)) @* {} ( .pubkey )
+        );
     }
-    for (pk in keys) {
-        require(not(pk in already_proposed), "Provider is already proposed: " + pk);
+    for (p in providers) {
+        require(not(p.pubkey in already_proposed), "Provider is already proposed: " + p.pubkey);
     }
 
     val prop = create proposal(op_context.last_block_time, proposal_type.provider_batch, me, system_p_voter_set());
-    create pending_provider_batch(prop, keys.to_gtv().to_bytes(), tier, system, active);
+    create pending_provider_batch(prop, providers.to_gtv().to_bytes(), tier, system, active);
     internal_vote(me, prop, true);
 }

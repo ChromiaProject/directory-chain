@@ -129,14 +129,13 @@ function apply_provider_quota(proposal) {
 
 function apply_provider_batch(proposal) {
     val ppb = pending_provider_batch @ { proposal };
-    val keys = list<byte_array>.from_gtv(gtv.from_bytes(ppb.gtv_keys));
-
-    for (pk in keys) {
-        require(empty(provider @? { pk }), "Provider already exists: " + pk);
-        register_and_enable_provider(pk, ppb.provider_tier, null, null, ppb.active);
+    val providers = list<provider_info>.from_gtv(gtv.from_bytes(ppb.provider_infos));
+    for (p in providers) {
+        require(empty(provider @? { p.pubkey }), "Provider already exists: " + p.pubkey);
+        register_and_enable_provider(p.pubkey, ppb.provider_tier, null, null, p.name, ppb.active);
         when {
-            ppb.system -> enroll.system(provider @ { pk }, ppb.active);
-            _is_node_provider(ppb.provider_tier) -> enroll.node(provider @ { pk });
+            ppb.system -> enroll.system(provider @ { p.pubkey }, ppb.active);
+            _is_node_provider(ppb.provider_tier) -> enroll.node(provider @ { p.pubkey });
         }
     }
 }
