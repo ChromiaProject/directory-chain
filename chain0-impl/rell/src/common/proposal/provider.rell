@@ -1,5 +1,5 @@
 
-operation propose_cluster_provider(my_pubkey: pubkey, cluster_name: text, provider_pubkey: pubkey, add: boolean) {
+operation propose_cluster_provider(my_pubkey: pubkey, cluster_name: text, provider_pubkey: pubkey, add: boolean, message: text) {
     val me = require_is_provider_with_rl(my_pubkey);
     val provider = require_provider(provider_pubkey);
     require_node_access(provider);
@@ -7,7 +7,7 @@ operation propose_cluster_provider(my_pubkey: pubkey, cluster_name: text, provid
     val cluster = require_cluster(cluster_name);
     require(cluster.name != clusters.system, "Cannot add provider to system cluster manually");
     require_cluster_governor(cluster, me);
-    val prop = create proposal(op_context.last_block_time, proposal_type.cluster_provider, me, cluster.governance);
+    val prop = create proposal(op_context.last_block_time, proposal_type.cluster_provider, me, cluster.governance, message);
     create pending_cluster_provider(prop, cluster, provider, add);
     internal_vote(me, prop, true);
 }
@@ -21,7 +21,7 @@ operation propose_cluster_provider(my_pubkey: pubkey, cluster_name: text, provid
      NP  |  +  |  -  |  -
      SP  |  +  |  +  |  +
 */
-operation propose_provider_state(my_pubkey: pubkey, provider_pubkey: pubkey, active: boolean) {
+operation propose_provider_state(my_pubkey: pubkey, provider_pubkey: pubkey, active: boolean, message: text) {
     val me = require_provider(my_pubkey);
     val other_prov = require_provider(provider_pubkey);
     require_provider_auth_with_rl(me);
@@ -34,26 +34,26 @@ operation propose_provider_state(my_pubkey: pubkey, provider_pubkey: pubkey, act
     } else {
         require_system_access(me);
         if (empty(pending_provider_state @* { .provider == other_prov, .active == active } limit 1)) {
-            val prop = create proposal(op_context.last_block_time, proposal_type.provider_state, me, system_p_voter_set());
+            val prop = create proposal(op_context.last_block_time, proposal_type.provider_state, me, system_p_voter_set(), message);
             create pending_provider_state(prop, other_prov, .active = active);
             internal_vote(me, prop, true);
         }
     }
 }
 
-operation propose_provider_is_system(my_pubkey: pubkey, provider_pubkey: pubkey, promote: boolean) {
+operation propose_provider_is_system(my_pubkey: pubkey, provider_pubkey: pubkey, promote: boolean, message: text) {
     val me = require_is_provider_with_rl(my_pubkey);
     require_is_system_provider(my_pubkey);
     val other_prov = require_provider(provider_pubkey);
 
     if (empty(pending_provider_is_system @* { .provider == other_prov, .system == promote } limit 1)) {
-        val prop = create proposal(op_context.last_block_time, proposal_type.provider_is_system, me, system_p_voter_set());
+        val prop = create proposal(op_context.last_block_time, proposal_type.provider_is_system, me, system_p_voter_set(), message);
         create pending_provider_is_system(prop, other_prov, .system = promote);
         internal_vote(me, prop, true);
     }
 }
 
-operation propose_provider_quota(my_pubkey: pubkey, tier: provider_tier, provider_quota_type, value: integer) {
+operation propose_provider_quota(my_pubkey: pubkey, tier: provider_tier, provider_quota_type, value: integer, message: text) {
     val me = require_is_provider_with_rl(my_pubkey);
     require_is_system_provider(my_pubkey);
 
@@ -67,7 +67,7 @@ operation propose_provider_quota(my_pubkey: pubkey, tier: provider_tier, provide
         }
     }
 
-    val prop = create proposal(op_context.last_block_time, proposal_type.provider_quota, me, system_p_voter_set());
+    val prop = create proposal(op_context.last_block_time, proposal_type.provider_quota, me, system_p_voter_set(), message);
     create pending_provider_quota(prop, tier, provider_quota_type, value);
     internal_vote(me, prop, true);
 }

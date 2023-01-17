@@ -1,20 +1,20 @@
 
 import ^^.common.cluster.*;
 
-operation propose_remove_cluster(my_pubkey: pubkey, name) {
+operation propose_remove_cluster(my_pubkey: pubkey, name, message: text) {
     val me = require_provider(my_pubkey);
     require_provider_auth_with_rl(me);
     val c = require(cluster @? { name }, "Unknown cluster %s".format(name));
     require_cluster_governor(c, me);
     require_cluster_available_for_removal(c);
 
-    val prop = create proposal(op_context.last_block_time, proposal_type.cluster_remove, me, c.governance);
+    val prop = create proposal(op_context.last_block_time, proposal_type.cluster_remove, me, c.governance, message);
     create pending_remove_cluster(prop, c);
     internal_vote(me, prop, true);
 }
 
 // The operation is mostly needed to make rell-maven-plugin generate code for enum `cluster_resource_limit_type`
-operation propose_cluster_limits(my_pubkey: pubkey, cluster_name: text, limits: map<cluster_resource_limit_type, integer>) {
+operation propose_cluster_limits(my_pubkey: pubkey, cluster_name: text, limits: map<cluster_resource_limit_type, integer>, message: text) {
     val limits_map = _get_current_cluster_resource_limits(cluster_name);
     limits_map.put_all(limits);
 
@@ -23,7 +23,7 @@ operation propose_cluster_limits(my_pubkey: pubkey, cluster_name: text, limits: 
     require_provider_auth_with_rl(me);
     val cluster = require_cluster(cluster_name);
     require_cluster_governor(cluster, me);
-    val prop = create proposal(op_context.last_block_time, proposal_type.cluster_limits, me, cluster.governance);
+    val prop = create proposal(op_context.last_block_time, proposal_type.cluster_limits, me, cluster.governance, message);
     create pending_cluster_limits(
         prop,
         cluster,

@@ -10,7 +10,7 @@ function test_container_resource_limits() {
     // 1. Adding a new container
     val alice = provider @ { rell.test.pubkeys.alice };
     rell.test.tx().op(
-        propose_container(alice.pubkey, clusters.system, container1_name, voter_sets.system_p)
+        propose_container(alice.pubkey, clusters.system, container1_name, voter_sets.system_p, "")
     ).sign(rell.test.keypairs.alice).run();
     val container1 = container @ { container1_name };
 
@@ -24,7 +24,7 @@ function test_container_resource_limits() {
     proposed_limits[container_resource_limit_type.ram] = 100;
     proposed_limits[container_resource_limit_type.storage] = 1000;
     rell.test.tx().op(
-        propose_container_limits(alice.pubkey, container1_name, proposed_limits)
+        propose_container_limits(alice.pubkey, container1_name, proposed_limits, "")
     ).sign(rell.test.keypairs.alice).run();
 
     // Asserting new container resource limits
@@ -39,11 +39,11 @@ function test_container_resource_limits() {
     var conf = map<text, gtv>();
     conf["name"] = "foo_chain".to_gtv();
     rell.test.tx().op(
-        propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "foo_chain", container1_name)
+        propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "foo_chain", container1_name, "")
     ).sign(rell.test.keypairs.alice).run();
     conf["name"] = "bar_chain".to_gtv();
     rell.test.tx().op(
-        propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "bar_chain", container1_name)
+        propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "bar_chain", container1_name, "")
     ).sign(rell.test.keypairs.alice).run();
 
     // Asserting 2 dapps deployed
@@ -52,7 +52,7 @@ function test_container_resource_limits() {
     // 4. Trying to deploy more than 2 dapps
     conf["name"] = "foobar_chain".to_gtv();
     rell.test.tx().op(
-        propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "foobar_chain", container1_name)
+        propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "foobar_chain", container1_name, "")
     ).sign(rell.test.keypairs.alice).run_must_fail();
 }
 

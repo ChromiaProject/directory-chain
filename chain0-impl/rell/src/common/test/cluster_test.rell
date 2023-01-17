@@ -22,12 +22,12 @@ function test_add_provider_to_system_cluster() {
 
     // Adding to cluster directly must fail
     rell.test.tx()
-        .op(propose_cluster_provider(p1key.pub, constants.clusters.system, rell.test.pubkeys.bob, true))
+        .op(propose_cluster_provider(p1key.pub, constants.clusters.system, rell.test.pubkeys.bob, true, ""))
         .sign(p1key)
         .run_must_fail();
 
     rell.test.tx()
-        .op(propose_provider_is_system(p1key.pub, rell.test.pubkeys.bob, true))
+        .op(propose_provider_is_system(p1key.pub, rell.test.pubkeys.bob, true, ""))
         .sign(p1key)
         .run();
     assert_not_null(cluster_provider @? { system_cluster(), provider @ { rell.test.pubkeys.bob } });
@@ -57,12 +57,12 @@ function test_remove_cluster() {
 
     // 1. Deleting system cluster. Must fail.
     rell.test.tx().op(
-        propose_remove_cluster(rell.test.pubkeys.alice, clusters.system)
+        propose_remove_cluster(rell.test.pubkeys.alice, clusters.system, "")
     ).sign(rell.test.keypairs.alice).run_must_fail();
 
     // 2. Deleting unknown cluster. Must fail.
     rell.test.tx().op(
-        propose_remove_cluster(rell.test.pubkeys.alice, "unknown")
+        propose_remove_cluster(rell.test.pubkeys.alice, "unknown", "")
     ).sign(rell.test.keypairs.alice).run_must_fail();
 
     // 3. Adding a new cluster
@@ -78,7 +78,7 @@ function test_remove_cluster() {
     val alice = provider @ { rell.test.pubkeys.alice };
     val node = node @ { .provider == alice };
     rell.test.tx().op(
-        propose_cluster_provider(alice.pubkey, cluster1.name, alice.pubkey, true),
+        propose_cluster_provider(alice.pubkey, cluster1.name, alice.pubkey, true, ""),
         add_node_to_cluster(rell.test.pubkeys.alice, node.pubkey, "cluster1")
     ).sign(rell.test.keypairs.alice).run();
 
@@ -89,7 +89,7 @@ function test_remove_cluster() {
 
     // Adding container
     rell.test.tx().op(
-        propose_container(alice.pubkey, cluster1.name, "container1", voter_sets.system_p)
+        propose_container(alice.pubkey, cluster1.name, "container1", voter_sets.system_p, "")
     ).sign(rell.test.keypairs.alice).run();
 
     // Asserting container1 is added
@@ -97,12 +97,12 @@ function test_remove_cluster() {
 
     // Trying to remove cluster1 and fail because it contains container1
     rell.test.tx().op(
-        propose_remove_cluster(rell.test.pubkeys.alice, "cluster1")
+        propose_remove_cluster(rell.test.pubkeys.alice, "cluster1", "")
     ).sign(rell.test.keypairs.alice).run_must_fail();
 
     // Removing container1 from cluster1
     rell.test.tx().op(
-        propose_remove_container(rell.test.pubkeys.alice, "container1")
+        propose_remove_container(rell.test.pubkeys.alice, "container1", "")
     ).sign(rell.test.keypairs.alice).run();
 
     // Asserting container1 is deleted
@@ -110,7 +110,7 @@ function test_remove_cluster() {
 
     // Trying to remove cluster1 again
     rell.test.tx().op(
-        propose_remove_cluster(rell.test.pubkeys.alice, "cluster1")
+        propose_remove_cluster(rell.test.pubkeys.alice, "cluster1", "")
     ).sign(rell.test.keypairs.alice).run();
 
     // Asserting cluster1 is deleted with its stuff

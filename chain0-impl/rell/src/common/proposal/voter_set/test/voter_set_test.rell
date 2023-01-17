@@ -19,7 +19,7 @@ function test_add_low_tier_provider() {
     add_providers.add(dapp_provider.pubkey);
     rell.test.tx()
         .op(create_voter_set(p1.pubkey, test_set, 0, null, constants.voter_sets.system_p))
-        .op(propose_update_voter_set(p1.pubkey, test_set, null, null, add_providers, list<pubkey>()))
+        .op(propose_update_voter_set(p1.pubkey, test_set, null, null, add_providers, list<pubkey>(), ""))
         .sign(rell.test.keypairs.alice)
         .run_must_fail();
 }
@@ -42,19 +42,19 @@ function test_add_high_tier_provider() {
 
     // Should not be possible to add to system vs
     rell.test.tx()
-        .op(propose_update_voter_set(p1.pubkey, constants.voter_sets.system_p, null, null, add_providers, list<pubkey>()))
+        .op(propose_update_voter_set(p1.pubkey, constants.voter_sets.system_p, null, null, add_providers, list<pubkey>(), ""))
         .sign(rell.test.keypairs.alice)
         .run_must_fail();
 
     // Should not be possible to add themselves
     rell.test.tx()
-        .op(propose_update_voter_set(p2.pubkey, test_set, null, null, add_providers, list<pubkey>()))
+        .op(propose_update_voter_set(p2.pubkey, test_set, null, null, add_providers, list<pubkey>(), ""))
         .sign(rell.test.keypairs.bob)
         .run_must_fail();
 
     // Governor can add to vs
     rell.test.tx()
-        .op(propose_update_voter_set(p1.pubkey, test_set, null, null, add_providers, list<pubkey>()))
+        .op(propose_update_voter_set(p1.pubkey, test_set, null, null, add_providers, list<pubkey>(), ""))
         .sign(rell.test.keypairs.alice)
         .run();
 }
@@ -71,10 +71,10 @@ function test_update_voter_set() {
     remove_providers.add(p1.pub);
     rell.test.tx()
         .op(create_voter_set(p1.pub, test_set, 0, remove_providers, null))
-        .op(propose_update_voter_set(p1.pub, test_set, 1, null, list<pubkey>(), list<pubkey>()))
-        .op(propose_update_voter_set(p1.pub, test_set, null, null, add_providers, list<pubkey>()))    // Add p2
-        .op(propose_update_voter_set(p1.pub, test_set, null, null, list<pubkey>(), remove_providers)) // Remove p1
-        .op(propose_update_voter_set(p2.pub, test_set, null, system_voter_set().name, list<pubkey>(), list<pubkey>()))
+        .op(propose_update_voter_set(p1.pub, test_set, 1, null, list<pubkey>(), list<pubkey>(), ""))
+        .op(propose_update_voter_set(p1.pub, test_set, null, null, add_providers, list<pubkey>(), ""))    // Add p2
+        .op(propose_update_voter_set(p1.pub, test_set, null, null, list<pubkey>(), remove_providers, "")) // Remove p1
+        .op(propose_update_voter_set(p2.pub, test_set, null, system_voter_set().name, list<pubkey>(), list<pubkey>(), ""))
         .sign(p1)
         .sign(p2)
         .run();

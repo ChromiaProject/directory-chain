@@ -16,36 +16,36 @@ function test_propose_and_remove_container() {
     system_cluster_limits[cluster_resource_limit_type.max_containers] = 2;
 
     rell.test.tx().op(
-        propose_cluster_limits(initial_provider.pub, clusters.system, system_cluster_limits),
+        propose_cluster_limits(initial_provider.pub, clusters.system, system_cluster_limits, ""),
         register_provider(initial_provider.pub, cnp.pub, provider_tier.COMMUNITY_NODE_PROVIDER),
         register_provider(initial_provider.pub, sp.pub, provider_tier.NODE_PROVIDER),
-        propose_provider_is_system(initial_provider.pub, sp.pub, true)
+        propose_provider_is_system(initial_provider.pub, sp.pub, true, "")
     ).sign(initial_provider).run();
 
     // 1. Deleting system container. Must fail.
     rell.test.tx().op(
-        propose_remove_container(initial_provider.pub, containers.system)
+        propose_remove_container(initial_provider.pub, containers.system, "")
     ).sign(initial_provider).run_must_fail();
 
     // 2. Deleting unknown container. Must fail.
     rell.test.tx().op(
-        propose_remove_container(initial_provider.pub, "unknown")
+        propose_remove_container(initial_provider.pub, "unknown", "")
     ).sign(initial_provider).run_must_fail();
 
     // 3. Proposing container by provider that is not a member of cluster's governance
     rell.test.tx().op(
-        propose_container(cnp.pub, clusters.system, "container1", voter_sets.system_p)
+        propose_container(cnp.pub, clusters.system, "container1", voter_sets.system_p, "")
     ).sign(cnp).run_must_fail();
 
     // 4. Adding a new container
     rell.test.tx().op(
-        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p)
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p, "")
     ).sign(initial_provider).run();
     _make_vote(sp);
 
     // Adding a second container, must fail due to `max_containers` restrictions
     rell.test.tx().op(
-        propose_container(initial_provider.pub, clusters.system, "container2", voter_sets.system_p)
+        propose_container(initial_provider.pub, clusters.system, "container2", voter_sets.system_p, "")
     ).sign(initial_provider).run_must_fail();
 
     // Asserting container is added
@@ -57,7 +57,7 @@ function test_propose_and_remove_container() {
 
     var conf = map<text, text>();
     rell.test.tx().op(
-        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "container1")
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "container1", "")
     ).sign(initial_provider).run();
     _make_vote(sp);
 
@@ -68,12 +68,12 @@ function test_propose_and_remove_container() {
 
     // Trying to remove container and fail due to the fact it contains a foo_chain
     rell.test.tx().op(
-        propose_remove_container(initial_provider.pub, "container1")
+        propose_remove_container(initial_provider.pub, "container1", "")
     ).sign(initial_provider).run_must_fail();
 
     // Deleting blockchain
     rell.test.tx().op(
-        propose_blockchain_action(initial_provider.pub, bcFoo.rid, blockchain_action.remove)
+        propose_blockchain_action(initial_provider.pub, bcFoo.rid, blockchain_action.remove, "")
     ).sign(initial_provider).run();
     _make_vote(sp);
 
@@ -82,8 +82,8 @@ function test_propose_and_remove_container() {
     var conf_bar = map<text, text>();
     conf_bar["foo"] = "bar";
     rell.test.tx().op(
-        propose_container_limits(initial_provider.pub, "container1", limits),
-        propose_blockchain(initial_provider.pub, conf_bar.to_gtv().to_bytes(), "bar_chain", "container1")
+        propose_container_limits(initial_provider.pub, "container1", limits, ""),
+        propose_blockchain(initial_provider.pub, conf_bar.to_gtv().to_bytes(), "bar_chain", "container1", "")
     ).sign(initial_provider).run();
     // _make_vote(sp); Not votes,
     assert_true(exists(pending_container_limits @? { .container.name == "container1" }));
@@ -91,19 +91,19 @@ function test_propose_and_remove_container() {
 
     // Trying to remove container1 and fail due to the fact there are other container1 related proposal(s)
     rell.test.tx().op(
-        propose_remove_container(initial_provider.pub, "container1")
+        propose_remove_container(initial_provider.pub, "container1", "")
     ).sign(initial_provider).run_must_fail();
 
     // IP revokes pending proposal and tries to remove container again
     _revoke_proposal(initial_provider);
     rell.test.tx().op(
-        propose_remove_container(initial_provider.pub, "container1")
+        propose_remove_container(initial_provider.pub, "container1", "")
     ).sign(initial_provider).run_must_fail();
 
     // IP revokes 2nd pending proposal and tries to remove container again
     _revoke_proposal(initial_provider);
     rell.test.tx().op(
-        propose_remove_container(initial_provider.pub, "container1")
+        propose_remove_container(initial_provider.pub, "container1", "")
     ).sign(initial_provider).run();
 
     // SP votes for container removal
