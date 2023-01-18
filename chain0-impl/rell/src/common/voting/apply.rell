@@ -1,5 +1,6 @@
 import ^.proposal.*;
 import ^^.model.util.constants.*;
+import ^.anchoring;
 
 // NB: check authority before calling this function
 function internal_vote(provider, proposal, vote: boolean) {
@@ -21,20 +22,21 @@ function try_to_apply_proposal(prop: proposal) {
         approved -> {
             print("proposal approved:", prop_str);
             when (prop.proposal_type) {
-                other             -> apply_other_voting_result(prop);
-                configuration     -> apply_configuration(prop);
-                configuration_at  -> apply_configuration_at(prop);
-                bc                -> apply_bc(prop);
-                container_limits  -> apply_container_limits(prop);
-                cluster_limits    -> apply_cluster_limits(prop);
-                cluster_provider  -> apply_cluster_provider(prop);
-                cluster_remove    -> apply_remove_cluster(prop);
-                voter_set_update  -> apply_voter_set_update(prop);
-                provider_state    -> apply_provider_state(prop);
-                provider_is_system-> apply_provider_is_system(prop);
-                provider_quota    -> apply_provider_quota(prop);
-                provider_batch    -> apply_provider_batch(prop);
-                blockchain_action -> apply_blockchain_action(prop);
+                other                   -> apply_other_voting_result(prop);
+                configuration           -> apply_configuration(prop);
+                configuration_at        -> apply_configuration_at(prop);
+                bc                      -> apply_bc(prop);
+                container_limits        -> apply_container_limits(prop);
+                cluster_limits          -> apply_cluster_limits(prop);
+                cluster_provider        -> apply_cluster_provider(prop);
+                cluster_remove          -> apply_remove_cluster(prop);
+                voter_set_update        -> apply_voter_set_update(prop);
+                provider_state          -> apply_provider_state(prop);
+                provider_is_system      -> apply_provider_is_system(prop);
+                provider_quota          -> apply_provider_quota(prop);
+                provider_batch          -> apply_provider_batch(prop);
+                blockchain_action       -> apply_blockchain_action(prop);
+                anchoring_configuration -> apply_anchoring_configuration(prop);
             }
             delete_proposal(prop);
         }
@@ -199,6 +201,11 @@ function apply_blockchain_action(proposal) {
         resume -> _apply_resume_blockchain(pba, proposal);
         remove -> _apply_delete_blockchain(pba, proposal);
     }
+}
+
+function apply_anchoring_configuration(proposal) {
+    val ac = pending_anchoring_configuration @ { proposal };
+    anchoring.set_config(ac.data);
 }
 
 // Stop block production by inactivating bc, and keep replicas.
