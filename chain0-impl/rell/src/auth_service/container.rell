@@ -28,7 +28,13 @@ namespace auth_service {
     function create_container_in_cluster(pubkey, cluster) {
         val name = [cluster.to_gtv(), pubkey.to_gtv()].hash().to_hex();
         if (not(exists(provider @? { pubkey }))) {
-            register_and_enable_provider(pubkey, provider_tier.COMMUNITY_NODE_PROVIDER, null, null, enabled_by_default = true);
+            register_and_enable_provider(
+                provider_info(pubkey),
+                provider_tier.COMMUNITY_NODE_PROVIDER,
+                null,
+                null,
+                enabled_by_default = true
+            );
         }
         create_container_impl(provider @ { pubkey }, name, cluster, 1, [pubkey]);
     }

@@ -14,7 +14,7 @@ operation register_provider(my_pubkey: pubkey, pubkey, provider_tier) {
     require(empty(provider @* { pubkey }), "Provider already exists: " + pubkey);
 
     register_and_enable_provider(
-        pubkey,
+        provider_info(pubkey),
         provider_tier,
         cluster = null,
         voter_set = null,
@@ -28,12 +28,12 @@ operation register_provider(my_pubkey: pubkey, pubkey, provider_tier) {
 
 function _is_node_provider(tier: provider_tier) = tier == provider_tier.NODE_PROVIDER;
 
-@extendable function register_and_enable_provider(pubkey, provider_tier, cluster?, voter_set?, name = "", url: text = "", enabled_by_default: boolean = false) {
-    require(empty(node @? { pubkey }), "This pubkey is already registered as a node: " + pubkey);
+@extendable function register_and_enable_provider(provider_info, provider_tier, cluster?, voter_set?, enabled_by_default: boolean = false) {
+    require(empty(node @? { provider_info.pubkey }), "This pubkey is already registered as a node: " + provider_info.pubkey);
     val provider = create provider(
-        pubkey,
-        name = name,
-        url = url,
+        provider_info.pubkey,
+        name = provider_info.name,
+        url = provider_info.url,
         active = enabled_by_default,
         tier = provider_tier
     );
