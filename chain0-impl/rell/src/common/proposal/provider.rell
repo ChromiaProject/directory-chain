@@ -82,21 +82,20 @@ operation propose_providers(my_pubkey: pubkey, provider_infos: list<provider_inf
     val me = require_is_provider_with_rl(my_pubkey);
     require_is_system_provider(my_pubkey);
     if (system) {
-        require(provider_tier.COMMUNITY_NODE_PROVIDER != tier, "COMMUNITY_NODE_PROVIDER tier is incompatible with system = true flag");
+        require(tier == provider_tier.NODE_PROVIDER, "Only NODE_PROVIDER can be marked as system provider");
     }
+    require(not(empty(provider_infos)), "Proposed provider key list is empty");
 
     val providers_map = map<pubkey, provider_info>();
     for (pi in provider_infos) {
         providers_map[pi.pubkey] = pi;
     }
     val providers = providers_map.values();
-
-    require(not(empty(providers)), "Proposed provider key list is empty");
     for (p in providers) {
         require(empty(provider @? { p.pubkey }), "Provider already exists: " + p.pubkey);
     }
 
-    val already_proposed = list<pubkey>();
+    val already_proposed = set<pubkey>();
     for (ppb in pending_provider_batch @* {}) {
         already_proposed.add_all(
             list<provider_info>.from_gtv(gtv.from_bytes(ppb.provider_infos)) @* {} ( .pubkey )
