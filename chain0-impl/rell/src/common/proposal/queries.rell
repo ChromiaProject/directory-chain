@@ -1,7 +1,7 @@
 
 
 query get_proposals_since(since: rowid) {
-  return proposal @* { .rowid >= since } (.rowid, .proposal_type);
+    return proposal @* { .rowid >= since } (.rowid, .proposal_type);
 }
 
 query get_relevant_proposals(my_pubkey: pubkey, since: rowid) {
@@ -9,7 +9,7 @@ query get_relevant_proposals(my_pubkey: pubkey, since: rowid) {
         voter_set_member.voter_set == proposal.voter_set,
         voter_set_member.provider.pubkey == my_pubkey,
         proposal.rowid >= since
-     } (proposal.rowid, proposal.proposal_type);
+    } (proposal.rowid, proposal.proposal_type);
 }
 
 query get_proposal(id: rowid?): (id: rowid, timestamp: integer, type: proposal_type, proposed_by: pubkey, message: text)? {
@@ -94,6 +94,18 @@ query get_provider_quota_proposal(rowid) {
         tier = ppq.provider_tier,
         quota_type = ppq.provider_quota_type,
         value = ppq.value
+    );
+}
+
+query get_provider_batch_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.provider_batch);
+    if (proposal == null) return null;
+    val ppb = pending_provider_batch @ { proposal };
+    return (
+        provider_infos = list<provider_info>.from_gtv(gtv.from_bytes(ppb.provider_infos)),
+        tier = ppb.provider_tier,
+        system = ppb.system,
+        active = ppb.active
     );
 }
 

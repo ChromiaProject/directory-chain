@@ -1,0 +1,113 @@
+@test module;
+
+import ^^^.test.setup.*;
+import ^^^.test.util.*;
+
+val system_provider = rell.test.keypairs.bob;
+val node_provider = rell.test.keypairs.trudy;
+val dapp_provider = rell.test.keypair(
+     priv = x"B39E4CCCB9B0FD71B7AC9FFF1216C34648FA7362ECD9874743776BDFDEE4F6A8",
+     pub = x"03BD01AF899839BDDB5810616C1AF8B61B415E903D73418DED238A8EEA352C72E0"
+);
+val provider1 = rell.test.keypair(
+    priv = x"71C89AE77719E3779EAE09C26A229F7AF33D8C8F7E7E8D82A9A42470C224AB56",
+    pub = x"020EE9063CED9B47CC60EB931443C01F3FD7A0DAB4B2D0505D3A2FAAD4FA9ABF13"
+);
+val provider2 = rell.test.keypair(
+    priv = x"49DB53CB0E1CC472DE90FC833CEDB4E1B412C5AF658342762D1BB8F3886063B6",
+    pub = x"031D22EA1C599A69E35E023E1CBCEAC66C046B445FF5507DBA650B58F28C650A15"
+);
+
+function test_propose_providers() {
+    setup_module(majority_threshold = 1);
+    val keys = [provider_info(provider1.pub), provider_info(provider2.pub)];
+
+    // setup
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, node_provider.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, dapp_provider.pub, provider_tier.COMMUNITY_NODE_PROVIDER)
+    ).sign(initial_provider).run();
+
+    // СNP tries to propose_providers() and fails
+    rell.test.tx().op(
+        propose_providers(dapp_provider.pub, keys, provider_tier.NODE_PROVIDER, false, false)
+    ).sign(dapp_provider).run_must_fail();
+
+    // NP tries to propose_providers() and fails
+    rell.test.tx().op(
+        propose_providers(node_provider.pub, keys, provider_tier.NODE_PROVIDER, false, false)
+    ).sign(node_provider).run_must_fail();
+
+    // IP tries to propose_providers() with empty arg and fails
+    rell.test.tx().op(
+        propose_providers(initial_provider.pub, [], provider_tier.NODE_PROVIDER, false, false)
+    ).sign(initial_provider).run_must_fail();
+
+    // IP tries to propose_providers() with existent provider and fails
+    rell.test.tx().op(
+        propose_providers(initial_provider.pub, [provider_info(node_provider.pub)], provider_tier.NODE_PROVIDER, false, false)
+    ).sign(initial_provider).run_must_fail();
+
+    // IP proposes providers batch
+    val non_system_enabled_keys = [
+        provider_info(x"03BD01AF899839BDDB5810616C1AF8B61B415E903D73418DED238A8EEA352C72EF"),
+        provider_info(x"03BD01AF899839BDDB5810616C1AF8B61B415E903D73418DED238A8EEA352C72E1")
+    ];
+    val system_enabled_keys = [
+        provider_info(x"03BD01AF899839BDDB5810616C1AF8B61B415E903D73418DED238A8EEA352C72E2"),
+        provider_info(x"03BD01AF899839BDDB5810616C1AF8B61B415E903D73418DED238A8EEA352C72E3")
+    ];
+    val non_system_disabled_keys = [
+        provider_info(x"03BD01AF899839BDDB5810616C1AF8B61B415E903D73418DED238A8EEA352C72E4")
+    ];
+    val system_disabled_keys = [
+        provider_info(x"03BD01AF899839BDDB5810616C1AF8B61B415E903D73418DED238A8EEA352C72E5"),
+        provider_info(x"03BD01AF899839BDDB5810616C1AF8B61B415E903D73418DED238A8EEA352C72E6")
+    ];
+    rell.test.tx().op(
+        propose_providers(initial_provider.pub, non_system_enabled_keys, provider_tier.NODE_PROVIDER, false, true),
+        propose_providers(initial_provider.pub, system_enabled_keys, provider_tier.NODE_PROVIDER, true, true),
+        propose_providers(initial_provider.pub, non_system_disabled_keys, provider_tier.NODE_PROVIDER, false, false),
+        propose_providers(initial_provider.pub, system_disabled_keys, provider_tier.NODE_PROVIDER, true, false)
+    ).sign(initial_provider).run();
+
+    assert_true(exists(provider @? { non_system_enabled_keys[0].pubkey, .system == false, .active == true }));
+    assert_true(exists(provider @? { non_system_enabled_keys[1].pubkey, .system == false, .active == true }));
+
+    assert_true(exists(provider @? { system_enabled_keys[0].pubkey, .system == true, .active == true }));
+    assert_true(exists(provider @? { system_enabled_keys[1].pubkey, .system == true, .active == true }));
+
+    assert_true(exists(provider @? { non_system_disabled_keys[0].pubkey, .system == false, .active == false }));
+
+    assert_true(exists(provider @? { system_disabled_keys[0].pubkey, .system == true, .active == false }));
+    assert_true(exists(provider @? { system_disabled_keys[1].pubkey, .system == true, .active == false }));
+}
+
+function test_propose_providers_duplication() {
+    setup_module();
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, system_provider.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, system_provider.pub, true, "")
+    ).sign(initial_provider).run();
+
+    val keys1 = [provider_info(dapp_provider.pub), provider_info(provider1.pub)];
+    val keys2 = [provider_info(dapp_provider.pub), provider_info(provider2.pub)];
+    rell.test.tx().op(
+        propose_providers(initial_provider.pub, keys1, provider_tier.NODE_PROVIDER, true, false)
+    ).sign(initial_provider).run();
+
+    // IP tries to propose_providers() with already proposed provider and fails
+    rell.test.tx().op(
+        propose_providers(initial_provider.pub, keys2, provider_tier.NODE_PROVIDER, true, false)
+    ).sign(initial_provider).run_must_fail();
+
+    // tolerating of incoming duplicates
+    val keys3 = [provider_info(provider2.pub), provider_info(provider2.pub)];
+    rell.test.tx().op(
+        propose_providers(initial_provider.pub, keys3, provider_tier.NODE_PROVIDER, true, false)
+    ).sign(initial_provider).run();
+    rell.test.tx().op(
+        make_vote(system_provider.pub, integer_from_rowid(last_proposal().rowid), true)
+    ).sign(system_provider).run();
+    assert_true(exists(provider @? { keys3[0].pubkey, .system == true, .active == false }));
+}
