@@ -54,7 +54,7 @@ function delete_pending_voter_set_update(proposal) {
     delete p;
 }
 
-operation propose_update_voter_set(my_pubkey: pubkey, voter_set_name: text, new_threshold: integer?, new_governor: name?, new_member: list<pubkey>, remove_member: list<pubkey>) {
+operation propose_update_voter_set(my_pubkey: pubkey, voter_set_name: text, new_threshold: integer?, new_governor: name?, new_member: list<pubkey>, remove_member: list<pubkey>, description: text = "") {
     val provider = require_is_provider_with_rl(my_pubkey);
     val voter_set = require_voter_set(voter_set_name);
     require(voter_set.name != constants.voter_sets.system_p, "Cannot update system voter set. Update this by proposing system provider role");
@@ -65,7 +65,8 @@ operation propose_update_voter_set(my_pubkey: pubkey, voter_set_name: text, new_
         op_context.last_block_time,
         proposal_type.voter_set_update,
         provider,
-        voter_set_governance @ { voter_set }.governor
+        voter_set_governance @ { voter_set }.governor,
+        description
     );
     val update_prop = create pending_voter_set_update(prop, voter_set);
     if (new_threshold != null) {

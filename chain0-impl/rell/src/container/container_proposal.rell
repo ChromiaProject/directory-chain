@@ -62,7 +62,7 @@ entity pending_remove_container {
 }
 
 // Who can create a new container? Cluster deployers' voter set. (They can also update container limits.)
-operation propose_container(my_pubkey: pubkey, cluster_name: text, name, deployer_name: text) {
+operation propose_container(my_pubkey: pubkey, cluster_name: text, name, deployer_name: text, description: text = "") {
     // check that provider authority and that it is cluster's deployer
     val me = require_provider(my_pubkey);
     require_provider_auth_with_rl(me);
@@ -77,7 +77,7 @@ operation propose_container(my_pubkey: pubkey, cluster_name: text, name, deploye
     val ram = _get_cluster_limit_or_default(cluster, cluster_resource_limit_type.default_container_ram);
     val storage = _get_cluster_limit_or_default(cluster, cluster_resource_limit_type.default_container_storage);
 
-    val prop = create proposal(op_context.last_block_time, proposal_type.other, me, cluster.governance);
+    val prop = create proposal(op_context.last_block_time, proposal_type.other, me, cluster.governance, description);
     create pending_container_with_resource_limits(
         prop, name, cluster, deployer, max_blockchains, cpu, ram, storage, me
     );
@@ -85,14 +85,14 @@ operation propose_container(my_pubkey: pubkey, cluster_name: text, name, deploye
     internal_vote(me, prop, true);
 }
 
-operation propose_remove_container(my_pubkey: pubkey, name) {
+operation propose_remove_container(my_pubkey: pubkey, name, description: text = "") {
     val me = require_provider(my_pubkey);
     require_provider_auth_with_rl(me);
     val cont = require_container(name);
     require_cluster_governor(cont.cluster, me);
     require_container_available_for_removal(cont);
 
-    val prop = create proposal(op_context.last_block_time, proposal_type.other, me, cont.cluster.governance);
+    val prop = create proposal(op_context.last_block_time, proposal_type.other, me, cont.cluster.governance, description);
     create pending_remove_container(prop, cont);
     create container_proposal(prop, container_proposal_type.remove_container);
     internal_vote(me, prop, true);

@@ -3,7 +3,7 @@
  * NB: only the deployer voter set of the container can do this.
  */
 //Who can propose a new blockchain? The container deployer voter set
-operation propose_blockchain(my_pubkey: pubkey, config_data: byte_array, bc_name: text, container_name: text) {
+operation propose_blockchain(my_pubkey: pubkey, config_data: byte_array, bc_name: text, container_name: text, description: text = "") {
     val me = require_is_provider_with_rl(my_pubkey);
     val container = require_container(container_name);
     require_container_deployer(container, me);
@@ -17,19 +17,19 @@ operation propose_blockchain(my_pubkey: pubkey, config_data: byte_array, bc_name
 
     // If already proposed, do not add again.
     if (empty(pending_blockchain @* {.data == config_data } limit 1)) {
-        val prop = create proposal(op_context.last_block_time, proposal_type.bc, me, container.deployer);
+        val prop = create proposal(op_context.last_block_time, proposal_type.bc, me, container.deployer, description);
         create pending_blockchain(prop, bc_name, config_data, container);
         internal_vote(me, prop, true);
     }
 }
 
-operation propose_configuration(my_pubkey: pubkey, blockchain_rid: byte_array, config_data: byte_array) {
+operation propose_configuration(my_pubkey: pubkey, blockchain_rid: byte_array, config_data: byte_array, description: text = "") {
     val me = require_is_provider_with_rl(my_pubkey);
     val blockchain = require_blockchain(blockchain_rid);
     val container = container_blockchain @ {blockchain} .container;
     require_container_deployer(container, me);
 
-    val prop = create proposal(op_context.last_block_time, proposal_type.configuration, me, container.deployer);
+    val prop = create proposal(op_context.last_block_time, proposal_type.configuration, me, container.deployer, description);
     create pending_configuration(prop, blockchain, config_data);
     internal_vote(me, prop, true);
 }
@@ -38,7 +38,7 @@ operation propose_configuration(my_pubkey: pubkey, blockchain_rid: byte_array, c
  * Proposes a new configuration for a blockchain.
  * NB: Only the deployer of the container the blockchain is running in can perform operation
  */
-operation propose_configuration_at(my_pubkey: pubkey, blockchain_rid: byte_array, config_data: byte_array, height: integer, force: boolean) {
+operation propose_configuration_at(my_pubkey: pubkey, blockchain_rid: byte_array, config_data: byte_array, height: integer, force: boolean, description: text = "") {
     val me = require_is_provider_with_rl(my_pubkey);
     val blockchain = require_blockchain(blockchain_rid);
     val container = container_blockchain @ { blockchain }.container;
@@ -61,17 +61,17 @@ operation propose_configuration_at(my_pubkey: pubkey, blockchain_rid: byte_array
             .format(blockchain.rid, height, pending_config?.proposal)
     );
 
-    val prop = create proposal(op_context.last_block_time, proposal_type.configuration_at, me, container.deployer);
+    val prop = create proposal(op_context.last_block_time, proposal_type.configuration_at, me, container.deployer, description);
     create pending_configuration_at(prop, blockchain, height, force, data = config_data);
     internal_vote(me, prop, true);
 }
 
-operation propose_blockchain_action(my_pubkey: pubkey, blockchain_rid: byte_array, action: blockchain_action) {
+operation propose_blockchain_action(my_pubkey: pubkey, blockchain_rid: byte_array, action: blockchain_action, description: text = "") {
     val me = require_is_provider_with_rl(my_pubkey);
     val blockchain = require_blockchain(blockchain_rid);
     val container = container_blockchain @ {blockchain} .container;
     require_container_deployer(container, me);
-    val prop = create proposal(op_context.last_block_time, proposal_type.blockchain_action, me, container.deployer);
+    val prop = create proposal(op_context.last_block_time, proposal_type.blockchain_action, me, container.deployer, description);
     create pending_blockchain_action(prop, blockchain, action);
     internal_vote(me, prop, true);
 }
