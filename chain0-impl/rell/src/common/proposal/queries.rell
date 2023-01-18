@@ -12,7 +12,7 @@ query get_relevant_proposals(my_pubkey: pubkey, since: rowid) {
     } (proposal.rowid, proposal.proposal_type);
 }
 
-query get_proposal(id: rowid?): (id: rowid, timestamp: integer, type: proposal_type, proposed_by: pubkey, message: text)? {
+query get_proposal(id: rowid?): (id: rowid, timestamp: integer, type: proposal_type, proposed_by: pubkey, description: text)? {
     val result = if (id == null) proposal @? {} (@sort_desc @omit .rowid, $) limit 1 else proposal @? { id };
     if (result == null) return null;
     return (
@@ -20,7 +20,7 @@ query get_proposal(id: rowid?): (id: rowid, timestamp: integer, type: proposal_t
         timestamp = result.timestamp,
         type = result.proposal_type,
         proposed_by = result.proposed_by.pubkey,
-        message = result.message
+        description = result.description
     );
 }
 
