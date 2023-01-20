@@ -38,7 +38,7 @@ operation create_voter_set(my_pubkey: pubkey, name, threshold: integer, initials
 operation make_vote(my_pubkey: pubkey, proposal_id: integer, vote: boolean) {
     require_is_signer(my_pubkey);
     val provider = require_provider(my_pubkey);
-    val prop = require_proposal(rowid_from_integer(proposal_id));
+    val prop = require_proposal(rowid(proposal_id));
     require_voter_set_member(prop.voter_set, provider);
     require(empty(vote @? {prop, provider}), "Only one vote per pubkey is allowed");
     internal_vote(provider, prop, vote);
@@ -47,7 +47,7 @@ operation make_vote(my_pubkey: pubkey, proposal_id: integer, vote: boolean) {
 operation retract_vote(my_pubkey: pubkey, proposal_id: integer) {
     require_is_signer(my_pubkey);
     val provider = require_provider(my_pubkey);
-    val prop = require_proposal(rowid_from_integer(proposal_id));
+    val prop = require_proposal(rowid(proposal_id));
     require_voter_set_member(prop.voter_set, provider);
 
     if (exists(vote @? { prop, provider })) {
