@@ -101,9 +101,19 @@ function test_propose_provider_quota__max_actions_per_day() {
 function test_propose_provider_quota__max_nodes() {
     setup_module();
 
-    // Is not allowed now
+    assert_equals(get_max_nodes_quota(), (1, 1));
     rell.test.tx().op(
-        propose_provider_quota(initial_provider.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_nodes, 10)
+        propose_provider_quota(initial_provider.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_nodes, 10),
+        propose_provider_quota(initial_provider.pub, provider_tier.COMMUNITY_NODE_PROVIDER, provider_quota_type.max_nodes, 20)
+    ).sign(initial_provider).run();
+    assert_equals(get_max_nodes_quota(), (10, 20));
+
+    // 0 and -1 is not allowed
+    rell.test.tx().op(
+        propose_provider_quota(initial_provider.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_nodes, 0)
+    ).sign(initial_provider).run_must_fail();
+    rell.test.tx().op(
+        propose_provider_quota(initial_provider.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_nodes, -1)
     ).sign(initial_provider).run_must_fail();
 }
 
@@ -145,3 +155,9 @@ function get_max_action_points_quota(): (integer, integer) {
     );
 }
 
+function get_max_nodes_quota(): (integer, integer) {
+    return (
+        provider_quota @ { provider_tier.NODE_PROVIDER, provider_quota_type.max_nodes } (.value),
+        provider_quota @ { provider_tier.COMMUNITY_NODE_PROVIDER, provider_quota_type.max_nodes } (.value)
+    );
+}
