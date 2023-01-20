@@ -60,7 +60,9 @@ operation propose_provider_quota(my_pubkey: pubkey, tier: provider_tier, provide
     // quota value requirements
     when (provider_quota_type) {
         max_actions_per_day -> require(value > 0, "Proposed max_actions_per_day quota value must be > 0: " + value);
-        max_nodes -> require(false, "Proposing max_nodes quota value is not allowed");
+        max_nodes -> {
+            require(value > 0, "Proposed max_nodes quota value must be > 0: " + value);
+        }
         max_containers -> {
             require(value >= -1, "Proposed max_containers quota value must be >= -1: " + value);
             require(tier != provider_tier.COMMUNITY_NODE_PROVIDER, "Proposing max_containers quota is not allowed for COMMUNITY_NODE_PROVIDER");
