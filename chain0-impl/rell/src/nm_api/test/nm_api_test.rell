@@ -44,10 +44,8 @@ function test_nm_get_container_for_blockchain() {
     assert_equals(nm_get_container_for_blockchain(foo_chain), "container1");
 
     // Unknown blockchain
-    // Query wrapped in op to be able to assert require() call
-    rell.test.tx().op(
-        _query_in_op__nm_get_container_for_blockchain(x"")
-    ).sign(initial_provider).run_must_fail();
+    // Using a partial function application to pass a function to assert_fails(), see Rell 0.11.0 Release notes
+    assert_fails("Blockchain with rid not found: 0xff", _query_in_fun__nm_get_container_for_blockchain(x"ff", *));
 }
 
 function test_nm_compute_blockchain_list__and__nm_get_blockchain_replica_node_map() {

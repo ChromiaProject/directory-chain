@@ -23,7 +23,8 @@ query list_clusters_of_node (pubkey) : list<text> {
 }
 
 query get_node_containers(pubkey): list<(cluster:text, name:text, deployer:text)> {
-    val clusters = cluster_node @* { node @ { pubkey } } .cluster;
+    val node = require_node(pubkey);
+    val clusters = cluster_node @* { node } .cluster;
     val res = list<(cluster:text, name:text, deployer:text)>();
     for (cl in clusters) {
         val containers = container @* { cl } (@sort cluster = .cluster.name, @sort name = .name, deployer = .deployer.name);

@@ -46,10 +46,9 @@ function test_get_cluster_containers() {
     // Containers for node
     val node_containers = get_node_containers(initial_signer.pub);
     _assert_equals_all(node_containers, [containers.system, anchoring.container_prefix + containers.system, "foo"]);
-    // Unknown node
-    rell.test.tx().op(
-        _query_in_op__get_node_containers(x"")
-    ).sign(initial_provider).run_must_fail();
+    // Unknown blockchain
+    // Using a partial function application to pass a function to assert_fails(), see Rell 0.11.0 Release notes
+    assert_fails("Node not found: 0xff", _query_in_fun__get_node_containers(x"ff", *));
 }
 
 function _assert_equals_all(actual: list<(cluster:text, name:text, deployer:text)>, expected: list<text>) {
