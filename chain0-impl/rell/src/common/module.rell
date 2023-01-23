@@ -53,15 +53,9 @@ function initialize_module(
         providers=list<pubkey>()
        );
 
-    print("Creating system container");
-    val system_container = create_container_with_resource_limits(
-        provider,
-        containers.system,
-        cluster = system_cluster,
-        voter_set = system_voter_set
-    );
-
     enroll.system(provider);
+
+    val system_container = container @ { .cluster == system_cluster, .system };
 
     print("Adding c0 blockchain to system container");
     val c0_config = map<text,gtv>.from_gtv(chain_context.raw_config);

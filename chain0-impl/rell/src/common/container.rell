@@ -1,5 +1,14 @@
 import ^.model.util.constants.*;
 
+function create_system_container(me: provider, name, cluster, voter_set): container {
+    val c = create container(name, cluster, voter_set, me, system = true);
+    create container_resource_limit(c, container_resource_limit_type.max_blockchains, -1);
+    create container_resource_limit(c, container_resource_limit_type.cpu, -1);
+    create container_resource_limit(c, container_resource_limit_type.ram, -1);
+    create container_resource_limit(c, container_resource_limit_type.storage, -1);
+    return c;
+}
+
 function create_container_with_resource_limits(me: provider, name, cluster, voter_set, max_blockchains: integer = -1, cpu: integer = -1, ram: integer = -1, storage: integer = -1): container {
     val c = create container(name, cluster, voter_set, me);
     create container_resource_limit(c, container_resource_limit_type.max_blockchains, max_blockchains);
@@ -16,7 +25,7 @@ function remove_container_impl(container) {
 
 function is_container_available_for_removal(container): (boolean, text) {
     return when {
-        container.name == containers.system -> (false, "System container can't be deleted");
+        container.system -> (false, "System container can't be deleted");
         exists(container_blockchain @* { container }) -> (false, "Container %s is not empty and can't be deleted. Delete blockchains first".format(container.name));
         exists(pending_container_limits @* { container }) -> (false, "Container %s has pending proposals and can't be deleted. Resolve proposals first".format(container.name));
         exists(pending_blockchain @* { container }) -> (false, "Container %s has pending proposals and can't be deleted. Resolve proposals first".format(container.name));
@@ -27,4 +36,8 @@ function is_container_available_for_removal(container): (boolean, text) {
 function require_container_available_for_removal(container) {
     val (available, msg) = is_container_available_for_removal(container);
     require(available, msg);
+}
+
+@extend(before_cluster_removal) function remove_system_container(cluster) {
+    remove_container_impl(container @ { cluster, .system == true });
 }

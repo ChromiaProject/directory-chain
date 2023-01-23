@@ -2,7 +2,7 @@ import ^.util.*;
 import ^^.cluster.*;
 import ^^.model.*;
 
-val container_prefix = "anchoring_";
+val blockchain_prefix = "anchoring_";
 
 object anchoring_config {
     mutable raw_config: byte_array = map<text, gtv>().to_gtv().to_bytes();
@@ -22,18 +22,13 @@ function set_config(config: byte_array) {
         config_map["cluster"] = cluster.name.to_gtv();
         val unique_config = config_map.to_gtv_pretty();
         val blockchain_rid = unique_config.hash();
-        val blockchain = create blockchain(blockchain_rid, container_prefix + cluster.name, system = true, active = false);
+        val blockchain = create blockchain(blockchain_rid, blockchain_prefix + cluster.name, system = true, active = false);
         create blockchain_configuration(blockchain, 0, unique_config.to_bytes());
 
-        val container = create_container_with_resource_limits(
-            provider,
-            container_prefix + cluster.name,
-            cluster = cluster,
-            voter_set = system_voter_set()
-        );
+        val system_container = container @ { .name == system_container_name(cluster.name), cluster };
 
         create blockchain_added(blockchain, op_context.transaction);
-        create container_blockchain(container, blockchain);
+        create container_blockchain(system_container, blockchain);
         create anchoring_chain(blockchain, cluster);
     }
 }
@@ -63,10 +58,7 @@ function set_config(config: byte_array) {
         delete blockchain_configuration_signers @* { anchor };
         delete blockchain_added @* { anchor };
 
-        val cont = container @ { container_prefix + cluster.name };
-        delete container_resource_limit @* { cont };
         delete container_blockchain @* { anchor };
-        delete cont;
 
         delete anchoring_chain @ { anchor };
         delete blockchain @ { anchor.rid };
