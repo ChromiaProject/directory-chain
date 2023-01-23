@@ -10,23 +10,39 @@ query get_clusters() {
 }
 
 query get_cluster_data(name) {
-    return cluster @ { name } (
-        name = .name,
-         governor = .governance.name,
-         is_operational = .operational
+    val cluster = require_cluster(name);
+    return (
+        name = cluster.name,
+        governor = cluster.governance.name,
+        is_operational = cluster.operational
     );
 }
 
 query get_cluster_providers(name): list<(name:text, pubkey:pubkey)> {
-    val cluster = require(cluster @? { name }, "Cluster " + name + " not found");
-    return cluster_provider @* { cluster }
-    (name = .provider.name, pubkey = .provider.pubkey);
+    val cluster = require_cluster(name);
+    return cluster_provider @* { cluster } (name = .provider.name, pubkey = .provider.pubkey);
 }
 
 query get_cluster_nodes(name) {
-    return node @* {
-        .pubkey in cluster_node @* { cluster @ { name } }.node.pubkey
-    } (pubkey = .pubkey, host = .host, port = .port, api_url = .api_url, active = .active);
+    val cluster = require_cluster(name);
+    return cluster_node @* { cluster } (
+        pubkey = .node.pubkey,
+        host = .node.host,
+        port = .node.port,
+        api_url = .node.api_url,
+        active = .node.active
+    );
+}
+
+query get_cluster_replica_nodes(name) {
+    val cluster = require_cluster(name);
+    return cluster_replica_node @* { cluster } (
+        pubkey = .node.pubkey,
+        host = .node.host,
+        port = .node.port,
+        api_url = .node.api_url,
+        active = .node.active
+    );
 }
 
 query get_cluster_containers(cluster_name: text): list<(name:text, deployer:text)> {
