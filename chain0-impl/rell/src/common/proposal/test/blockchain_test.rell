@@ -30,7 +30,7 @@ function test_propose_blockchain() {
     val prop = last_proposal();
     val config_proposal = get_blockchain_proposal(prop.rowid);
     assert_not_null(config_proposal);
-    assert_equals(config_proposal.container, containers.system);
+    assert_equals(config_proposal.container, system_container_name(cl.name));
     
     rell.test.tx().op(
         create_test_node(alice, rell.test.pubkeys.alice, cl)
@@ -91,7 +91,7 @@ function test_propose_configuration_at() {
 
     var conf = map<text, text>();
     rell.test.tx().op(
-        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", containers.system)
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", system_container_name(clusters.system))
     ).sign(initial_provider).run();
     val bc = blockchain @? { conf.hash() };
     assert_not_null(bc);

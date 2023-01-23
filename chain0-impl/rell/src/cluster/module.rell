@@ -1,6 +1,8 @@
 module;
 
 import ^.model.*;
+import ^.common.*;
+import ^.model.util.constants.*;
 
 function create_cluster_impl(me: provider, name, governor: voter_set, providers: list<pubkey>, max_containers: integer = -1, cpu: integer = -1, ram: integer = -1, storage: integer = -1) {
     require(empty(cluster @* { name }), "Cluster with name %s already exists".format(name));
@@ -15,6 +17,14 @@ function create_cluster_impl(me: provider, name, governor: voter_set, providers:
         require_node_access(provider);
         create cluster_provider(c, provider);
     }
+
+    create_system_container(
+        me,
+        system_container_name(c.name),
+        cluster = c,
+        voter_set = governor
+    );
+
     after_cluster_creation(me, c);
     return c;
 }
@@ -24,7 +34,7 @@ function create_cluster_impl(me: provider, name, governor: voter_set, providers:
 function require_cluster_quotas(cluster) {
     val max_containers = cluster_resource_limit @? { cluster, cluster_resource_limit_type.max_containers } (.value);
     if (max_containers != null and max_containers != -1) {
-        val cluster_container_count = container @ { cluster } (@sum 1);
+        val cluster_container_count = container @ { cluster, .system == false } (@sum 1);
         require(cluster_container_count < max_containers, "Can't propose container, cluster %s is full".format(cluster.name));
     }
 }
