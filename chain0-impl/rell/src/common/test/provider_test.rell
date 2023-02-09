@@ -49,10 +49,11 @@ function test_register_provider() {
     ).sign(dapp_provider1).run_must_fail();
 
     // NP registers CNP
+    val pk3 = x"aaaaaaaaaaaaaaaaaaaaaaaaaaaE4ABFB92936540FDF9B9F1BC7CEB51481286E31";
     rell.test.tx().op(
-        register_provider(node_provider1.pub, x"d3", provider_tier.COMMUNITY_NODE_PROVIDER)
+        register_provider(node_provider1.pub, pk3, provider_tier.COMMUNITY_NODE_PROVIDER)
     ).sign(node_provider1).run();
-    val dp3 = provider @ { x"d3" };
+    val dp3 = provider @ { pk3 };
     assert_true(dp3.active); // CNP is active by default
     assert_false(roles.has_node_access(dp3));
 
@@ -62,12 +63,13 @@ function test_register_provider() {
     ).sign(node_provider1).run_must_fail();
 
     // SP registers CNP, NP
+    val pk4 = x"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb8C20DAE90B217387662503B4C54D50D438E1";
     rell.test.tx().op(
-        register_provider(initial_provider.pub, x"d4", provider_tier.COMMUNITY_NODE_PROVIDER),
+        register_provider(initial_provider.pub, pk4, provider_tier.COMMUNITY_NODE_PROVIDER),
         register_provider(initial_provider.pub, node_provider2.pub, provider_tier.NODE_PROVIDER)
     ).sign(initial_provider).run();
 
-    val dp4 = provider @ { x"d4" };
+    val dp4 = provider @ { pk4 };
     assert_true(dp4.active); // CNP is active by default
     assert_false(roles.has_node_access(dp4));
 

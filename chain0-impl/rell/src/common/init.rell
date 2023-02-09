@@ -11,8 +11,12 @@ struct module_args {
 
 // This operation will check that provider table is empty and if so add the provider supplied as module argument. And
 // enable this first system provider.
-operation init (anchoring_config: byte_array?) {
+operation init(anchoring_config: byte_array?) {
+    require_pubkey(chain_context.args.initial_provider);
+
     val genesis_node = chain_context.args.genesis_node;
+    require_pubkey(genesis_node.pubkey);
+
     initialize_module(
         chain_context.args.initial_provider,
         genesis_node,
