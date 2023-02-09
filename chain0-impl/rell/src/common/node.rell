@@ -3,6 +3,7 @@ operation register_node(my_pubkey: pubkey, node_pubkey: pubkey, host: text, port
     print("------------- Register-Node: %s --------------".format(node_pubkey));
     val provider = require_provider(my_pubkey);
     require_provider_auth_with_rl(provider);
+    require_pubkey(node_pubkey);
     add_node_internal(provider, node_pubkey, host, port, api_url, clusters);
     print("Added node information for node: " + node_pubkey);
     print("-----------------------------------");
@@ -10,12 +11,11 @@ operation register_node(my_pubkey: pubkey, node_pubkey: pubkey, host: text, port
 
 operation replace_node(my_pubkey: pubkey, old_node_key: pubkey, new_node_key: pubkey, new_host: text?, new_port: integer?, new_api_url: text?) {
     print("------------- Replace-Node: %s --------------".format(old_node_key));
-    val provider = provider @ { my_pubkey };
-    require_provider_auth_with_rl(provider);
+    val me = require_is_provider_with_rl(my_pubkey);
     require_is_signer(old_node_key);
     require_is_signer(new_node_key);
     val old_node = node @ { old_node_key };
-    require(old_node.provider == provider, "Node must be owned by provider");
+    require(old_node.provider == me, "Node must be owned by provider");
 
     val host = new_host ?: old_node.host;
     val port = new_port ?: old_node.port;
@@ -27,7 +27,7 @@ operation replace_node(my_pubkey: pubkey, old_node_key: pubkey, new_node_key: pu
     delete cluster_replica_node @* { old_node };
 
     delete old_node;
-    add_node_internal(provider, new_node_key, host, port, api_url, cluster_names);
+    add_node_internal(me, new_node_key, host, port, api_url, cluster_names);
 
     val new_node = node @ { new_node_key };
     for (cl in clusters_replicated_by_node) {
@@ -68,7 +68,7 @@ function add_node_internal(provider, node_pubkey: pubkey, host: text, port: inte
 operation disable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
     val provider = require_provider(my_pubkey);
     require_provider_auth_with_rl(provider);
-    val node_to_disable = node @ { node_pubkey };
+    val node_to_disable = require_node(node_pubkey);
 
     if (provider != node_to_disable.provider) {
         require(roles.has_system_access(provider), "Non system provider is only allowed to disable own nodes");
@@ -99,7 +99,7 @@ operation remove_node(my_pubkey: pubkey, node_pubkey: pubkey) {
     print("------------- Remove-Node: %s --------------".format(node_pubkey));
     val provider = require_provider(my_pubkey);
     require_provider_auth_with_rl(provider);
-    val node_to_remove = node @ { node_pubkey };
+    val node_to_remove = require_node(node_pubkey);
     require(provider == node_to_remove.provider, "It is only allowed to remove own nodes: " + node_pubkey);
     require(not(node_to_remove.active), "Can't remove active nodes: " + node_pubkey);
     delete node_to_remove;
@@ -118,7 +118,7 @@ operation update_node(my_pubkey: pubkey, node_pubkey: pubkey, host: text? = null
 function require_node_provider(node_pubkey: pubkey, provider_pubkey: pubkey) {
     val provider = require(provider @? { provider_pubkey }, "Provider %s does not exist".format(provider_pubkey));
     require_provider_auth_with_rl(provider);
-    val node = require(node @? { node_pubkey }, "Node does not exist: " + node_pubkey);
+    val node = require_node(node_pubkey);
     require(node.provider == provider, "Must be provider of node to update its state");
     return node;
 }

@@ -4,7 +4,7 @@ import ^.*;
 import ^^.model.*;
 import ^^.common.util.*;
 
-operation create_container(me:pubkey, name, cluster_name:text, consensus_threshold: integer, deployers: list<pubkey>) {
+operation create_container(me: pubkey, name, cluster_name: text, consensus_threshold: integer, deployers: list<pubkey>) {
     val provider = require_is_provider_with_rl(me);
     val cluster = require_cluster(cluster_name);
     require_cluster_governor(cluster, provider);
@@ -13,21 +13,18 @@ operation create_container(me:pubkey, name, cluster_name:text, consensus_thresho
     create_container_impl(provider, name, cluster, consensus_threshold, deployers);
 }
 
-operation create_container_from(me:pubkey, name, cluster_name:text, consensus_threshold: integer, voter_set_name:text) {
+operation create_container_from(me: pubkey, name, cluster_name: text, consensus_threshold: integer, voter_set_name: text) {
     val provider = require_is_provider_with_rl(me);
     val cluster = require_cluster(cluster_name);
     require_cluster_governor(cluster, provider);
     require_provider_quota(provider, provider_quota_type.max_containers);
     require_cluster_quotas(cluster);
     val vs = require_voter_set(voter_set_name);
-    val deployers = list<pubkey>();
-    for (member in voter_set_member @* { vs }) {
-        deployers.add(member.provider.pubkey);
-    }
+    val deployers = voter_set_member @* { vs } (.provider.pubkey);
     create_container_impl(provider, name, cluster, consensus_threshold, deployers);
 }
 
-operation add_container_deployer(me:pubkey, container_name:text, deployer_pubkey:pubkey) {
+operation add_container_deployer(me: pubkey, container_name: text, deployer_pubkey: pubkey) {
     val provider = require_is_provider_with_rl(me);
     val container = require_container(container_name);
     require_cluster_governor(container.cluster, provider);
@@ -35,7 +32,7 @@ operation add_container_deployer(me:pubkey, container_name:text, deployer_pubkey
     create voter_set_member(container.deployer, deployer);
 }
 
-operation remove_container_deployer(me:pubkey, container_name:text, deployer_pubkey:pubkey) {
+operation remove_container_deployer(me: pubkey, container_name: text, deployer_pubkey: pubkey) {
     val provider = require_is_provider_with_rl(me);
     val container = require_container(container_name);
     require_cluster_governor(container.cluster, provider);
