@@ -35,6 +35,7 @@ function try_to_apply_proposal(prop: proposal) {
                 provider_is_system      -> apply_provider_is_system(prop);
                 provider_quota          -> apply_provider_quota(prop);
                 provider_batch          -> apply_provider_batch(prop);
+                provider_remove         -> apply_remove_provider(prop);
                 blockchain_action       -> apply_blockchain_action(prop);
                 anchoring_configuration -> apply_anchoring_configuration(prop);
             }
@@ -149,6 +150,12 @@ function apply_provider_batch(proposal) {
             print("Warning: provider already exists: " + pi.pubkey);
         }
     }
+}
+
+function apply_remove_provider(proposal) {
+    val prp = pending_remove_provider @ { proposal };
+    delete node @* { prp.provider };
+    delete prp.provider;
 }
 
 function apply_configuration(proposal) {
