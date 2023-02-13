@@ -2,3 +2,10 @@
 function last_proposal(): proposal {
     return proposal @ {} ( @omit @sort_desc .timestamp, $) limit 1;
 }
+
+function vote_for_last_proposal(approver: rell.test.keypair) {
+    val proposal_id = (proposal @ {} .rowid).to_integer();
+    rell.test.tx().op(
+        make_vote(approver.pub, proposal_id, true)
+    ).sign(approver.priv).run();
+}

@@ -122,3 +122,67 @@ function test_propose_providers_duplication() {
     ).sign(system_provider).run();
     assert_true(exists(provider @? { keys3[0].pubkey, .system == true, .active == false }));
 }
+
+function test_propose_remove_provider() {
+    setup_module();
+
+    // setup
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, node_provider.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, dapp_provider.pub, provider_tier.COMMUNITY_NODE_PROVIDER)
+    ).sign(initial_provider).run();
+
+    // require auth
+    rell.test.tx().op(
+        propose_remove_provider(node_provider.pub, dapp_provider.pub)
+    ).sign(initial_provider).run_must_fail();
+
+    // IP is trying to remove unknown provider and fails
+    rell.test.tx().op(
+        propose_remove_provider(initial_provider.pub, x"ff")
+    ).sign(initial_provider).run_must_fail();
+
+    // IP is trying to remove active CNP and fails
+    rell.test.tx().op(
+        propose_remove_provider(initial_provider.pub, dapp_provider.pub)
+    ).sign(initial_provider).run_must_fail();
+
+    // IP removes NP
+    rell.test.tx().op(
+        propose_remove_provider(initial_provider.pub, node_provider.pub)
+    ).sign(initial_provider).run();
+    assert_true(empty(provider @? { node_provider.pub }));
+
+    // More complex test with second SP
+    // adding SP
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, system_provider.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, system_provider.pub, true)
+    ).sign(initial_provider).run();
+
+    // adding SP's node
+    val sp_node_key = x"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbE7260BA921CD673F";
+    rell.test.tx().op(
+        register_node(system_provider.pub, sp_node_key, "host", 7777, "http://host/api_url", [clusters.system])
+    ).sign(system_provider).run();
+    assert_true(exists(cluster_node @? { system_cluster(), node @ { sp_node_key } }));
+    assert_true(exists(cluster_provider @? { system_cluster(), provider @ { system_provider.pub } }));
+
+    // disabling SP
+    rell.test.tx().op(
+        propose_provider_state(system_provider.pub, system_provider.pub, false)
+    ).sign(system_provider).run();
+    vote_for_last_proposal(initial_provider);
+    assert_true(exists(node @? { sp_node_key }));
+    assert_false(exists(cluster_node @? { system_cluster(), .node.pubkey == sp_node_key }));
+    assert_true(exists(cluster_provider @? { system_cluster(), provider @ { system_provider.pub } }));
+
+    // IP removes SP
+    rell.test.tx().op(
+        propose_remove_provider(initial_provider.pub, system_provider.pub)
+    ).sign(initial_provider).run();
+    assert_false(exists(provider @? { system_provider.pub }));
+    assert_false(exists(node @? { sp_node_key }));
+    assert_false(exists(cluster_node @? { system_cluster(), .node.pubkey == sp_node_key }));
+    assert_false(exists(cluster_provider @? { system_cluster(), .provider.pubkey == system_provider.pub }));
+}
