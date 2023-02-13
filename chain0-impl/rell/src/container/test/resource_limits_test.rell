@@ -16,7 +16,7 @@ function test_container_resource_limits() {
 
     // Asserting default container resource limits
     val default_limits = get_container_resource_limits(container1);
-    assert_container_resource_limits(default_limits, -1, -1, -1, -1);
+    assert_container_resource_limits(default_limits, -1, -1, -1, -1, -1, -1);
 
     // 2. Proposing container resource limits
     val proposed_limits = map<container_resource_limit_type, integer>();
@@ -32,6 +32,8 @@ function test_container_resource_limits() {
     val expected = map<container_resource_limit_type, integer>();
     expected.put_all(proposed_limits);
     expected[container_resource_limit_type.cpu] = -1;
+    expected[container_resource_limit_type.io_read] = -1;
+    expected[container_resource_limit_type.io_write] = -1;
     assert_equals(expected, actual);
 
     // 3. Deploying 2 dapps
@@ -56,11 +58,13 @@ function test_container_resource_limits() {
     ).sign(rell.test.keypairs.alice).run_must_fail();
 }
 
-function assert_container_resource_limits(limits: map<container_resource_limit_type, integer>, max_blockchains: integer, cpu: integer, ram: integer, storage: integer) {
+function assert_container_resource_limits(limits: map<container_resource_limit_type, integer>, max_blockchains: integer, cpu: integer, ram: integer, storage: integer, io_read: integer, io_write: integer) {
     assert_equals(limits[container_resource_limit_type.max_blockchains], max_blockchains);
     assert_equals(limits[container_resource_limit_type.cpu], cpu);
     assert_equals(limits[container_resource_limit_type.ram], ram);
     assert_equals(limits[container_resource_limit_type.storage], storage);
+    assert_equals(limits[container_resource_limit_type.io_read], io_read);
+    assert_equals(limits[container_resource_limit_type.io_write], io_write);
 }
 
 function get_container_resource_limits(container): map<container_resource_limit_type, integer> {
