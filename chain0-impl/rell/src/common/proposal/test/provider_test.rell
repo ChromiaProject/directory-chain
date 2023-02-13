@@ -133,19 +133,22 @@ function test_propose_remove_provider() {
     ).sign(initial_provider).run();
 
     // require auth
-    rell.test.tx().op(
+    val failure = rell.test.tx().op(
         propose_remove_provider(node_provider.pub, dapp_provider.pub)
     ).sign(initial_provider).run_must_fail();
+    assert_true(failure.message.contains("Operation must be signed by"));
 
     // IP is trying to remove unknown provider and fails
-    rell.test.tx().op(
+    val failure2 = rell.test.tx().op(
         propose_remove_provider(initial_provider.pub, x"ff")
     ).sign(initial_provider).run_must_fail();
+    assert_true(failure2.message.contains("Unknown provider"));
 
     // IP is trying to remove active CNP and fails
-    rell.test.tx().op(
+    val failure3 = rell.test.tx().op(
         propose_remove_provider(initial_provider.pub, dapp_provider.pub)
     ).sign(initial_provider).run_must_fail();
+    assert_true(failure3.message.contains("Active provider can't be deleted"));
 
     // IP removes NP
     rell.test.tx().op(
