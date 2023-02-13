@@ -2,6 +2,7 @@
 
 import ^^^.test.setup.*;
 import ^^^.test.util.*;
+import ^^^^.container.container_op.*;
 
 val system_provider = rell.test.keypairs.bob;
 val node_provider = rell.test.keypairs.trudy;
@@ -171,6 +172,16 @@ function test_propose_remove_provider() {
     assert_true(exists(cluster_node @? { system_cluster(), node @ { sp_node_key } }));
     assert_true(exists(cluster_provider @? { system_cluster(), provider @ { system_provider.pub } }));
 
+    // More data for SP
+    // 1. Adding SP to voter_set. SP will be removed from voter_set in propose_provider_state(..., false) operation.
+    rell.test.tx().op(
+        create_voter_set(system_provider.pub, "test_vs", 1, [system_provider.pub], null)
+    ).sign(system_provider).run();
+    // 2. SP creates a container
+    rell.test.tx().op(
+        create_container(system_provider.pub, "sp_container", clusters.system, 1, [system_provider.pub])
+    ).sign(system_provider).run();
+
     // disabling SP
     rell.test.tx().op(
         propose_provider_state(system_provider.pub, system_provider.pub, false)
@@ -179,6 +190,15 @@ function test_propose_remove_provider() {
     assert_true(exists(node @? { sp_node_key }));
     assert_false(exists(cluster_node @? { system_cluster(), .node.pubkey == sp_node_key }));
     assert_true(exists(cluster_provider @? { system_cluster(), provider @ { system_provider.pub } }));
+
+    // IP is trying to delete IP and fails because "sp_container" exists
+    val failure4 = rell.test.tx().op(
+        propose_remove_provider(initial_provider.pub, system_provider.pub)
+    ).sign(initial_provider).run_must_fail();
+    assert_true(failure4.message.contains("Provider is the author of the container(s)"));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "sp_container")
+    ).sign(initial_provider).run();
 
     // IP removes SP
     rell.test.tx().op(

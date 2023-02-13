@@ -45,8 +45,13 @@ operation propose_remove_provider(my_pubkey: pubkey, provider_pubkey: pubkey, de
     val me = require_is_provider_with_rl(my_pubkey);
     require_system_access(me);
 
+    // active (voter set member)
     val prov = require_provider(provider_pubkey);
     require(not(prov.active), "Active provider can't be deleted: " + provider_pubkey);
+
+    // container
+    val containers = container @* { prov } (.name);
+    require(empty(containers), "Provider is the author of the container(s) %s and can't be deleted: %s".format(containers.to_text(), provider_pubkey));
 
     val prop = create proposal(op_context.last_block_time, proposal_type.provider_remove, me, system_p_voter_set(), description);
     create pending_remove_provider(prop, prov);
