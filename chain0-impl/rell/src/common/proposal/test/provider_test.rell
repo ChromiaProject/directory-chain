@@ -209,3 +209,38 @@ function test_propose_remove_provider() {
     assert_false(exists(cluster_node @? { system_cluster(), .node.pubkey == sp_node_key }));
     assert_false(exists(cluster_provider @? { system_cluster(), .provider.pubkey == system_provider.pub }));
 }
+
+function test_propose_remove_provider_with_cross_requirements() {
+    setup_module();
+
+    // setup
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, system_provider.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, system_provider.pub, true),
+        register_provider(initial_provider.pub, rell.test.pubkeys.trudy, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, rell.test.pubkeys.trudy, true)
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(system_provider);
+
+    // propose state, propose removal
+    rell.test.tx().op(
+        propose_provider_state(initial_provider.pub, system_provider.pub, false)
+    ).sign(initial_provider).run();
+    val failure1 = rell.test.tx().op(
+        propose_remove_provider(initial_provider.pub, system_provider.pub)
+    ).sign(initial_provider).run_must_fail();
+    failure1.message.contains("Provider state is proposed for changes");
+
+    // voting for SP disabling
+    vote_for_last_proposal(system_provider);
+    vote_for_last_proposal(rell.test.keypairs.trudy);
+
+    // propose removal, propose state
+    rell.test.tx().op(
+        propose_remove_provider(initial_provider.pub, system_provider.pub)
+    ).sign(initial_provider).run();
+    val failure2 = rell.test.tx().op(
+        propose_provider_state(rell.test.keypairs.trudy.pub, system_provider.pub, false)
+    ).sign(rell.test.keypairs.trudy).run_must_fail();
+    failure2.message.contains("Provider is proposed for removal");
+}
