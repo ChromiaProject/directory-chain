@@ -4,7 +4,7 @@ import ^.model.*;
 import ^.common.*;
 import ^.model.util.constants.*;
 
-function create_cluster_impl(me: provider, name, governor: voter_set, providers: list<pubkey>, max_containers: integer = -1, cpu: integer = -1, ram: integer = -1, storage: integer = -1) {
+function create_cluster_impl(me: provider, name, governor: voter_set, providers: list<pubkey>, max_containers: integer = -1, cpu: integer = -1, ram: integer = -1, storage: integer = -1, io_read: integer = -1, io_write: integer = -1) {
     require(empty(cluster @* { name }), "Cluster with name %s already exists".format(name));
     val c = create cluster(name, governor);
     create cluster_resource_limit(c, cluster_resource_limit_type.max_containers , max_containers);
@@ -12,6 +12,8 @@ function create_cluster_impl(me: provider, name, governor: voter_set, providers:
     create cluster_resource_limit(c, cluster_resource_limit_type.default_container_cpu, cpu);
     create cluster_resource_limit(c, cluster_resource_limit_type.default_container_ram, ram);
     create cluster_resource_limit(c, cluster_resource_limit_type.default_container_storage, storage);
+    create cluster_resource_limit(c, cluster_resource_limit_type.default_container_io_read, io_read);
+    create cluster_resource_limit(c, cluster_resource_limit_type.default_container_io_write, io_write);
     for (p_key in providers) {
         val provider = require_provider(p_key);
         require_node_access(provider);

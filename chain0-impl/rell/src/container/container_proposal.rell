@@ -32,6 +32,8 @@ entity pending_container_with_resource_limits {
     cpu: integer;
     ram: integer;
     storage: integer;
+    io_read: integer;
+    io_write: integer;
     proposed_by: provider;
 }
 
@@ -76,10 +78,12 @@ operation propose_container(my_pubkey: pubkey, cluster_name: text, name, deploye
     val cpu = _get_cluster_limit_or_default(cluster, cluster_resource_limit_type.default_container_cpu);
     val ram = _get_cluster_limit_or_default(cluster, cluster_resource_limit_type.default_container_ram);
     val storage = _get_cluster_limit_or_default(cluster, cluster_resource_limit_type.default_container_storage);
+    val io_read = _get_cluster_limit_or_default(cluster, cluster_resource_limit_type.default_container_io_read);
+    val io_write = _get_cluster_limit_or_default(cluster, cluster_resource_limit_type.default_container_io_write);
 
     val prop = create proposal(op_context.last_block_time, proposal_type.other, me, cluster.governance, description);
     create pending_container_with_resource_limits(
-        prop, name, cluster, deployer, max_blockchains, cpu, ram, storage, me
+        prop, name, cluster, deployer, max_blockchains, cpu, ram, storage, io_read, io_write, me
     );
     create container_proposal(prop, container_proposal_type.create_container_with_resource_limits);
     internal_vote(me, prop, true);
@@ -118,7 +122,9 @@ function apply_container_with_resource_limits(proposal) {
         pps.max_blockchains,
         pps.cpu,
         pps.ram,
-        pps.storage
+        pps.storage,
+        pps.io_read,
+        pps.io_write
     );
 }
 
