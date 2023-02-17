@@ -1,0 +1,88 @@
+@test module;
+
+import ^^^^.cluster.cluster_op.*;
+import ^^^.test.setup.*;
+import ^^^.test.util.*;
+
+function test_cluster_anchoring() {
+    setup_module(anchoring_config = ["any": "value".to_gtv()]);
+    val system_node1 = node @ { .provider == initial_provider() };
+    val node_provider1 = rell.test.keypairs.bob;
+    val np1_node_key = x"fffffffffffffffffffffffffffffffffffffffff4B1FCAC8D888F2272982EC3C1";
+
+    // Creating cluster 1
+    val cluster1_name = "cluster1";
+    rell.test.tx().op(
+        create_cluster(initial_provider.pub, cluster1_name, voter_sets.system_p, list()),
+        register_provider(initial_provider.pub, node_provider1.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, node_provider1.pub, true)
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        register_node(node_provider1.pub, np1_node_key, "host", 7777, "http://host/api_url", [cluster1_name])
+    ).sign(node_provider1).run();
+
+    val cluster1_node = node @ { .pubkey == np1_node_key };
+
+    val node_provider2 = rell.test.keypairs.trudy;
+    val np2_node_key = x"026ACA0462715E7B897D22023D4734C22222222222222222222222222222222222";
+
+    // Creating cluster 2
+    val cluster2_name = "cluster2";
+    rell.test.tx().op(
+        create_cluster(initial_provider.pub, cluster2_name, voter_sets.system_p, list()),
+        register_provider(initial_provider.pub, node_provider2.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, node_provider2.pub, true)
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        register_node(node_provider2.pub, np2_node_key, "host2", 7777, "http://host2/api_url", [cluster2_name])
+    ).sign(node_provider2).run();
+
+    val cluster2_node = node @ { .pubkey == np2_node_key };
+
+    // Assert that cluster anchoring chains are created
+    assert_equals(set(container_blockchain @* { .container.cluster.name == clusters.system } ( .blockchain.name )), set(["c0", "anchoring_system"]));
+    assert_equals(set(blockchain_replica_node @* { .node == system_node1 } ( .blockchain.name )), set(["anchoring_cluster1", "anchoring_cluster2"]));
+
+    assert_equals(set(container_blockchain @* { .container.cluster.name == cluster1_name } ( .blockchain.name )), set(["anchoring_cluster1"]));
+    assert_equals(set(blockchain_replica_node @* { .node == cluster1_node } ( .blockchain.name )), set<text>());
+
+    assert_equals(set(container_blockchain @* { .container.cluster.name == cluster2_name } ( .blockchain.name )), set(["anchoring_cluster2"]));
+    assert_equals(set(blockchain_replica_node @* { .node == cluster2_node } ( .blockchain.name )), set<text>());
+
+
+    // Add a new system provider
+    val system_provider2 = rell.test.keypair(
+        priv = x"B39E4CCCB9B0FD71B7AC9FFF1216C34648FA7362ECD9874743776BDFDEE4F6A8",
+        pub = x"03BD01AF899839BDDB5810616C1AF8B61B415E903D73418DED238A8EEA352C72E0"
+    );
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, system_provider2.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, system_provider2.pub, true)
+    ).sign(initial_provider).run();
+
+    // Add a new node to system cluster
+    val system_node2_key = x"1111111111111111111111111111111B8DD00AC8E5CB0869F267212F35425E3C8F";
+    rell.test.tx().op(
+        register_node(system_provider2.pub, system_node2_key, "hostsystem2", 7777, "http://hostsystem2/api_url", [clusters.system])
+    ).sign(system_provider2).run();
+
+    val system_node2 = node @ { .pubkey == system_node2_key };
+
+    assert_equals(set(blockchain_replica_node @* { .node == system_node2 } ( .blockchain.name )), set(["anchoring_cluster1", "anchoring_cluster2"]));
+
+    // Remove cluster 2
+    rell.test.tx().op(
+        propose_remove_cluster(initial_provider.pub, cluster2_name)
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        make_vote(system_provider2.pub, last_proposal().rowid.to_integer(), true)
+    ).sign(system_provider2).run();
+
+    // Assert that cluster 2 anchoring chain is no longer replicated by system cluster nodes
+    assert_equals(set(blockchain_replica_node @* { .node == system_node1 } ( .blockchain.name )), set(["anchoring_cluster1"]));
+    assert_equals(set(blockchain_replica_node @* { .node == system_node2 } ( .blockchain.name )), set(["anchoring_cluster1"]));
+}

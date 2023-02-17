@@ -30,6 +30,14 @@ function set_config(config: byte_array) {
         create blockchain_added(blockchain, op_context.transaction);
         create container_blockchain(system_container, blockchain);
         create anchoring_chain(blockchain, cluster);
+
+        if (cluster.name != clusters.system) {
+            // Add replication of this chain to all system nodes
+            val system_cluster_nodes = cluster_node @* { .cluster.name == clusters.system  } ( .node );
+            for (node in system_cluster_nodes) {
+                create blockchain_replica_node(blockchain, node);
+            }
+        }
     }
 }
 
@@ -49,7 +57,7 @@ function set_config(config: byte_array) {
     }
 }
 
-@extend(before_cluster_removal) function remove_cluster_anchoring_chain(cluster) {
+@extend(before_system_container_removal) function remove_cluster_anchoring_chain(cluster) {
     val config_map = map<text,gtv>.from_gtv(gtv.from_bytes(anchoring_config.raw_config));
     // feature toggle
     if (config_map.size() > 0) {
@@ -61,7 +69,19 @@ function set_config(config: byte_array) {
         delete container_blockchain @* { anchor };
 
         delete anchoring_chain @ { anchor };
+        delete blockchain_replica_node @* { anchor };
         delete blockchain @ { anchor.rid };
+    }
+}
+
+@extend(after_node_added_to_cluster) function replicate_cluster_anchor_chain_on_system_node(cluster, node) {
+    if (cluster.name == clusters.system) {
+        val cluster_anchoring_chains = anchoring_chain @* { .cluster.name != clusters.system } ( .blockchain );
+        for (blockchain in cluster_anchoring_chains) {
+            if (not(exists(blockchain_replica_node @? { blockchain, node }))) {
+                create blockchain_replica_node(blockchain, node);
+            }
+        }
     }
 }
 
