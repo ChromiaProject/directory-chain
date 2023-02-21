@@ -17,13 +17,13 @@ struct cm_cluster_info {
 }
 
 query cm_get_cluster_info(name): cm_cluster_info {
-    val cluster_peer = (cluster_node, cluster, anchoring_chain) @* {
+    val cluster_peer = (cluster_node, cluster, cluster_anchoring_chain) @* {
         cluster_node.cluster == cluster,
-        anchoring_chain.cluster == cluster,
+        cluster_anchoring_chain.cluster == cluster,
         cluster.name == name
     } (
         name = cluster.name,
-        anchoring_chain = anchoring_chain.blockchain.rid,
+        anchoring_chain = cluster_anchoring_chain.blockchain.rid,
         peer = cluster_node.node.pubkey,
         peer_api_url = cluster_node.node.api_url
     ); 
@@ -67,4 +67,14 @@ query cm_get_blockchain_api_urls(blockchain_rid: byte_array) {
     } (
         cluster_node.node.api_url
     );
+}
+
+query cm_get_cluster_anchoring_chains(): list<byte_array> {
+    return cluster_anchoring_chain @* {} ( .blockchain.rid );
+}
+
+query cm_get_system_anchoring_chain(): byte_array? {
+    if (system_anchoring_chain.rid.empty()) return null;
+
+    return system_anchoring_chain.rid;
 }

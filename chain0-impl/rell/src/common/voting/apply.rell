@@ -1,6 +1,6 @@
 import ^.proposal.*;
 import ^^.model.util.constants.*;
-import ^.anchoring;
+import ^^.cluster_anchoring;
 
 // NB: check authority before calling this function
 function internal_vote(provider, proposal, vote: boolean) {
@@ -37,7 +37,7 @@ function try_to_apply_proposal(prop: proposal) {
                 provider_batch          -> apply_provider_batch(prop);
                 provider_remove         -> apply_remove_provider(prop);
                 blockchain_action       -> apply_blockchain_action(prop);
-                anchoring_configuration -> apply_anchoring_configuration(prop);
+                cluster_anchoring_configuration -> apply_cluster_anchoring_configuration(prop);
             }
             delete_proposal(prop);
         }
@@ -200,18 +200,13 @@ function apply_configuration_at(proposal) {
 // Initial signers of new bc are the ones in cluster_node table.
 function apply_bc(proposal) {
     val bc = pending_blockchain @ {proposal};
-    val config = map<text, gtv>.from_gtv(gtv.from_bytes(bc.data));
-    val blockchain_rid = config.hash();
-    val blockchain = create blockchain(blockchain_rid, bc.name);
-    print("Added blockchain", blockchain_rid);
-    create blockchain_configuration (blockchain, 0, bc.data);
+
     val nodes = cluster_node @* { bc.container.cluster } (@sort .node.pubkey);
     // do not write new configuration when size is 0 since it's impossible to recover from that
     require(nodes.size() > 0, "Cluster must have at least one node");
-    create blockchain_configuration_signers(blockchain, 0, nodes.to_gtv().to_bytes());
-    create blockchain_added(blockchain, op_context.transaction);
-    create container_blockchain(bc.container, blockchain);
-    add_dependencies(bc.data, blockchain_rid, 0);
+
+    val blockchain_rid = add_blockchain(bc.data, nodes.to_gtv().to_bytes(), bc.name, bc.container);
+    print("Added blockchain", blockchain_rid);
 }
 
 function apply_blockchain_action(proposal) {
@@ -223,9 +218,9 @@ function apply_blockchain_action(proposal) {
     }
 }
 
-function apply_anchoring_configuration(proposal) {
-    val ac = pending_anchoring_configuration @ { proposal };
-    anchoring.set_config(ac.data);
+function apply_cluster_anchoring_configuration(proposal) {
+    val ac = pending_cluster_anchoring_configuration @ { proposal };
+    cluster_anchoring.set_config(ac.data);
 }
 
 // Stop block production by inactivating bc, and keep replicas.

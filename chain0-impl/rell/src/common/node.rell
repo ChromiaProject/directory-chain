@@ -37,7 +37,7 @@ operation replace_node(my_pubkey: pubkey, old_node_key: pubkey, new_node_key: pu
     }
 
     for (blockchain in blockchains_replicated_by_node) {
-        if (not(exists(blockchain_replica_node @? { blockchain, .node == new_node }))) {
+        if (not(exists(blockchain_replica_node @? { blockchain, new_node }))) {
             create blockchain_replica_node(blockchain, new_node);
         }
     }
@@ -70,6 +70,7 @@ function add_node_internal(provider, node_pubkey: pubkey, host: text, port: inte
         }
         node_list.last_update = op_context.last_block_time;
     }
+    after_node_added(node);
     return node;
 }
 
@@ -130,3 +131,5 @@ function require_node_provider(node_pubkey: pubkey, provider_pubkey: pubkey) {
     require(node.provider == provider, "Must be provider of node to update its state");
     return node;
 }
+
+@extendable function after_node_added(node) {}

@@ -1,5 +1,16 @@
 import ^.model.util.*;
 
+function add_blockchain(raw_configuration: byte_array, signers: byte_array, name: text, container, system: boolean = false): byte_array {
+    val blockchain_rid = map<text, gtv>.from_gtv(gtv.from_bytes(raw_configuration)).hash();
+    val blockchain = create blockchain(blockchain_rid, name, system);
+    create blockchain_configuration(blockchain, 0, raw_configuration);
+    create blockchain_configuration_signers(blockchain, 0, signers);
+    create blockchain_added(blockchain, op_context.transaction);
+    create container_blockchain(container, blockchain);
+    add_dependencies(raw_configuration, blockchain_rid, 0);
+    return blockchain_rid;
+}
+
 function add_dependencies(data: byte_array, me_brid: byte_array, height: integer) {
     val config_map = map<text, gtv>.from_gtv(gtv.from_bytes(data));
     if (config_map.contains("dependencies")) {

@@ -1,33 +1,90 @@
-module;
+import ^.common.util.*;
+import ^.cluster.*;
+import ^.model.*;
 
-entity anchor_block {
-    key blockchain_rid: byte_array, block_height: integer;
-    block_rid: byte_array;
-    block_header: byte_array;
-    witness: byte_array;
+val blockchain_prefix = "cluster_anchoring_";
+
+object cluster_anchoring_config {
+    mutable raw_config: byte_array = map<text, gtv>().to_gtv().to_bytes();
 }
 
-struct block_header {
-    blockchain_rid: byte_array;
-    previous_block_rid: byte_array;
-    merkle_root_hash: byte_array;
-    timestamp: integer;
-    height: integer;
-    dependencies: gtv; // Can be either GtvNull or GtvArray
-    extra: map<text,gtv>;
+function set_config(config: byte_array) {
+    map<text, gtv>.from_gtv(gtv.from_bytes(config)); // Validate that config is a map
+    cluster_anchoring_config.raw_config = config;
 }
 
-operation __anchor_block_header(block_rid: byte_array, header: gtv, witness: byte_array) {
-    val decoded_header = block_header.from_gtv(header);
-    create anchor_block(blockchain_rid = decoded_header.blockchain_rid, block_height = decoded_header.height, block_rid = block_rid, block_header = header.to_bytes(), witness = witness);
+@extend(after_cluster_creation) function create_cluster_anchoring_chain(provider, cluster) {
+    val config_map = map<text,gtv>.from_gtv(gtv.from_bytes(cluster_anchoring_config.raw_config));
+    // feature toggle
+    if (config_map.size() > 0) {
+        require(empty(cluster_anchoring_chain @? { cluster }), "Anchoring chain already exists for cluster " + cluster.name);
 
-    process_icmf(block_rid, decoded_header);
+        config_map["cluster"] = cluster.name.to_gtv();
+        val unique_config = config_map.to_gtv_pretty();
+        val blockchain_rid = unique_config.hash();
+        val blockchain = create blockchain(blockchain_rid, blockchain_prefix + cluster.name, system = true, active = false);
+        create blockchain_configuration(blockchain, 0, unique_config.to_bytes());
+
+        val system_container = container @ { .name == system_container_name(cluster.name), cluster };
+
+        create blockchain_added(blockchain, op_context.transaction);
+        create container_blockchain(system_container, blockchain);
+        create cluster_anchoring_chain(blockchain, cluster);
+
+        if (cluster.name != clusters.system) {
+            // Add replication of this chain to all system nodes
+            val system_cluster_nodes = cluster_node @* { .cluster.name == clusters.system  } ( .node );
+            for (node in system_cluster_nodes) {
+                create blockchain_replica_node(blockchain, node);
+            }
+        }
+    }
 }
 
-query get_last_anchored_block(blockchain_rid: byte_array): struct<anchor_block>? {
-    return anchor_block @? { blockchain_rid } (@omit @sort_desc .block_height, $.to_struct()) limit 1;
+@extend(after_cluster_operational) function activate_cluster_anchoring_chain(cluster) {
+    val anchoring_chain = cluster_anchoring_chain @? { cluster } (.blockchain);
+
+    if (anchoring_chain != null and not anchoring_chain.active) {
+        val cluster_signers = cluster_node @* { cluster } (.node.pubkey).to_gtv().to_bytes();
+        val current_anchoring_signers = blockchain_configuration_signers @? { anchoring_chain, 0 };
+        if (current_anchoring_signers == null) {
+            create blockchain_configuration_signers(anchoring_chain, 0, cluster_signers);
+        } else {
+            current_anchoring_signers.signers = cluster_signers;
+        }
+
+        anchoring_chain.active = true;
+    }
 }
 
-query get_anchored_block_at_height(blockchain_rid: byte_array, height: integer): struct<anchor_block>? {
-    return anchor_block @? { blockchain_rid, .block_height == height } ($.to_struct());
+@extend(before_system_container_removal) function remove_cluster_anchoring_chain(cluster) {
+    val config_map = map<text,gtv>.from_gtv(gtv.from_bytes(cluster_anchoring_config.raw_config));
+    // feature toggle
+    if (config_map.size() > 0) {
+        val anchor = cluster_anchoring_chain @ { cluster } (.blockchain);
+        delete blockchain_configuration @* { anchor };
+        delete blockchain_configuration_signers @* { anchor };
+        delete blockchain_added @* { anchor };
+
+        delete container_blockchain @* { anchor };
+
+        delete cluster_anchoring_chain @ { anchor };
+        delete blockchain_replica_node @* { anchor };
+        delete blockchain @ { anchor.rid };
+    }
+}
+
+@extend(after_node_added_to_cluster) function replicate_cluster_anchor_chain_on_system_node(cluster, node) {
+    if (cluster.name == clusters.system) {
+        val cluster_anchoring_chains = cluster_anchoring_chain @* { .cluster.name != clusters.system } ( .blockchain );
+        for (blockchain in cluster_anchoring_chains) {
+            if (not(exists(blockchain_replica_node @? { blockchain, node }))) {
+                create blockchain_replica_node(blockchain, node);
+            }
+        }
+    }
+}
+
+query get_cluster_anchoring_configuration(): byte_array {
+    return cluster_anchoring_config.raw_config;
 }
