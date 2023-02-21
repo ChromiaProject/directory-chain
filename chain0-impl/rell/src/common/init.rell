@@ -11,16 +11,21 @@ struct module_args {
 
 // This operation will check that provider table is empty and if so add the provider supplied as module argument. And
 // enable this first system provider.
-operation init(anchoring_config: byte_array?) {
+operation init(system_anchoring_config: byte_array?, cluster_anchoring_config: byte_array?) {
     require_pubkey(chain_context.args.initial_provider);
 
     val genesis_node = chain_context.args.genesis_node;
     require_pubkey(genesis_node.pubkey);
 
+    if (system_anchoring_config != null) {
+        require(cluster_anchoring_config, "System anchoring requires cluster anchoring");
+    }
+
     initialize_module(
         chain_context.args.initial_provider,
         genesis_node,
-        anchoring_config = anchoring_config ?: map<text, gtv>().to_gtv().to_bytes()
+        system_anchoring_config = system_anchoring_config ?: map<text, gtv>().to_gtv().to_bytes(),
+        cluster_anchoring_config = cluster_anchoring_config ?: map<text, gtv>().to_gtv().to_bytes()
     );
     after_init();
 }

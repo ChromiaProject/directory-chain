@@ -20,7 +20,7 @@ enum proposal_type {
     provider_batch,
     provider_remove,
     blockchain_action,
-    anchoring_configuration
+    cluster_anchoring_configuration
     // and a lot more
 }
 
@@ -128,7 +128,7 @@ entity pending_provider_quota {
     value: integer;
 }
 
-entity pending_anchoring_configuration {
+entity pending_cluster_anchoring_configuration {
     key proposal;
     data: byte_array;  // map<string, gtv>
 }
@@ -157,22 +157,22 @@ operation revoke_proposal(my_pubkey: pubkey, proposal_rowid: rowid) {
 
 function delete_proposal(prop: proposal) {
     when (prop.proposal_type) {
-        other                   -> delete_other_proposal(prop);
-        configuration_at        -> delete pending_configuration_at @ { prop };
-        configuration           -> delete pending_configuration @ { prop };
-        bc                      -> delete pending_blockchain @ { prop };
-        container_limits        -> delete pending_container_limits @ { prop };
-        cluster_limits          -> delete pending_cluster_limits @ { prop };
-        cluster_provider        -> delete pending_cluster_provider @ { prop };
-        cluster_remove          -> delete pending_remove_cluster @? { prop };
-        voter_set_update        -> delete_pending_voter_set_update(prop);
-        provider_state          -> delete pending_provider_state @ { prop };
-        provider_is_system      -> delete pending_provider_is_system @ { prop };
-        provider_quota          -> delete pending_provider_quota @ { prop };
-        provider_batch          -> delete pending_provider_batch @ { prop };
-        provider_remove         -> delete pending_remove_provider @? { prop };
-        blockchain_action       -> delete pending_blockchain_action @? { prop };
-        anchoring_configuration -> delete pending_anchoring_configuration @? { prop };
+        other                           -> delete_other_proposal(prop);
+        configuration_at                -> delete pending_configuration_at @ { prop };
+        configuration                   -> delete pending_configuration @ { prop };
+        bc                              -> delete pending_blockchain @ { prop };
+        container_limits                -> delete pending_container_limits @ { prop };
+        cluster_limits                  -> delete pending_cluster_limits @ { prop };
+        cluster_provider                -> delete pending_cluster_provider @ { prop };
+        cluster_remove                  -> delete pending_remove_cluster @? { prop };
+        voter_set_update                -> delete_pending_voter_set_update(prop);
+        provider_state                  -> delete pending_provider_state @ { prop };
+        provider_is_system              -> delete pending_provider_is_system @ { prop };
+        provider_quota                  -> delete pending_provider_quota @ { prop };
+        provider_batch                  -> delete pending_provider_batch @ { prop };
+        provider_remove                 -> delete pending_remove_provider @? { prop };
+        blockchain_action               -> delete pending_blockchain_action @? { prop };
+        cluster_anchoring_configuration -> delete pending_cluster_anchoring_configuration @? { prop };
     }
     delete vote @* { .proposal == prop };
     delete proposal @ { .rowid == prop.rowid };

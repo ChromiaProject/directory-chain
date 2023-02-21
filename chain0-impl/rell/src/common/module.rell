@@ -3,7 +3,7 @@ module;
 import ^.model.*;
 import ^.cm_api.*;
 import ^.nm_api.*;
-import .anchoring;
+import ^.cluster_anchoring;
 import .cluster.*;
 import .voting.*;
 import .proposal.*;
@@ -15,7 +15,8 @@ import ^.cluster.*;
 function initialize_module(
     initial_provider: pubkey,
     genesis_node: node_info,
-    anchoring_config: byte_array,
+    system_anchoring_config: byte_array,
+    cluster_anchoring_config: byte_array,
     majority_threshold: integer = 0,
     provider_quota_max_actions_per_day: integer = provider_quota_defaults.MAX_ACTIONS_PER_DAY,
     provider_quota_max_containers: integer = provider_quota_defaults.MAX_CONTAINERS
@@ -45,7 +46,7 @@ function initialize_module(
     val provider = provider @ { initial_provider };
 
     print("Creating system cluster with SYSTEM_P as governor");
-    anchoring.set_config(anchoring_config);
+    cluster_anchoring.set_config(cluster_anchoring_config);
     val system_cluster = create_cluster_impl(
         provider,
         clusters.system,
@@ -60,11 +61,14 @@ function initialize_module(
     print("Adding c0 blockchain to system container");
     val c0_config = map<text,gtv>.from_gtv(chain_context.raw_config);
     val c0_signers_gtv = c0_config["signers"];
-    val blockchain = create blockchain(chain_context.blockchain_rid, blockchains.c0, system = true);
-    create blockchain_configuration (blockchain, 0, chain_context.raw_config.to_bytes());
-    create blockchain_configuration_signers(blockchain, 0, c0_signers_gtv.to_bytes());
-    create blockchain_added (blockchain, op_context.transaction);
-    create container_blockchain(system_container, blockchain);
+    add_blockchain(chain_context.raw_config.to_bytes(), c0_signers_gtv.to_bytes(), blockchains.c0, system_container, true);
+
+    val system_anchoring_config_map = map<text,gtv>.from_gtv(gtv.from_bytes(system_anchoring_config));
+    if (system_anchoring_config_map.size() > 0) {
+        print("Adding system anchoring blockchain to system container");
+        val system_anchoring_blockchain_rid = add_blockchain(system_anchoring_config, c0_signers_gtv.to_bytes(), blockchains.system_anchoring, system_container, true);
+        update system_anchoring_chain ( rid = system_anchoring_blockchain_rid );
+    }
 
     val signer_node_keys = list<byte_array>.from_gtv(c0_signers_gtv);
     require(signer_node_keys.size() == 1, "C0 must have exactly one initial signer");

@@ -1,4 +1,4 @@
-import ^.anchoring;
+import ^^.cluster_anchoring;
 
 query get_proposals_since(since: rowid) {
     return proposal @* { .rowid >= since } (.rowid, .proposal_type);
@@ -178,11 +178,11 @@ query get_blockchain_action_proposal(rowid) {
     );
 }
 
-query get_anchoring_configuration_proposal(rowid) {
-    val proposal = get_latest_proposal(rowid, proposal_type.anchoring_configuration);
+query get_cluster_anchoring_configuration_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.cluster_anchoring_configuration);
     if (proposal == null) return null;
-    val pac = pending_anchoring_configuration @ { proposal };
-    val current_conf = anchoring.get_anchoring_configuration();
+    val pac = pending_cluster_anchoring_configuration @ { proposal };
+    val current_conf = cluster_anchoring.get_cluster_anchoring_configuration();
     return (
         current_conf = current_conf,
         proposed_conf = pac.data

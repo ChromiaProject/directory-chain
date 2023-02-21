@@ -1,3 +1,5 @@
+import ^.anchoring_chain_common.*;
+
 entity icmf_messages_height {
     key topic: text,
         sender: byte_array,
@@ -12,7 +14,7 @@ struct signed_block_header_with_anchor_height {
     anchor_height: integer;
 }
 
-function process_icmf(block_rid: byte_array, header: block_header) {
+@extend(after_anchoring_block) function process_icmf(block_rid: byte_array, header: block_header) {
     if (not header.extra.contains("icmf_send")) return;
 
     val icmf_data = map<text,gtv>.from_gtv_pretty(header.extra["icmf_send"]);
