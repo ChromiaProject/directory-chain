@@ -2,7 +2,7 @@ import ^.anchoring_chain_common.*;
 import ^.icmf.*;
 
 entity current_configuration {
-    key rid: byte_array;
+    key blockchain_rid: byte_array;
     mutable config_hash: byte_array;
 }
 
@@ -10,13 +10,14 @@ entity current_configuration {
     if (not header.extra.contains("config_hash")) return;
     val new_config_hash = byte_array.from_gtv(header.extra["config_hash"]);
 
-    val current_config_hash = current_configuration @? { .rid == header.blockchain_rid } (.config_hash);
+    val current_config_hash = current_configuration @? { .blockchain_rid == header.blockchain_rid } (.config_hash);
 
-    if (current_config_hash != null and new_config_hash != current_config_hash) {
+    if (current_config_hash == null) {
+        create current_configuration(blockchain_rid = header.blockchain_rid, config_hash = new_config_hash);
+    } else if (new_config_hash != current_config_hash) {
         report_updated_configuration(header.blockchain_rid, header.height, new_config_hash);
+        update current_configuration @ { .blockchain_rid == header.blockchain_rid } (.config_hash = new_config_hash);
     }
-
-    update current_configuration @ { .rid == header.blockchain_rid } (.config_hash = new_config_hash);
 }
 
 struct configuration_updated {
