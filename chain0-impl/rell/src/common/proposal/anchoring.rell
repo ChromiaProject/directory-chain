@@ -1,8 +1,14 @@
+import ^^.cluster_anchoring.*;
+
 operation propose_cluster_anchoring_configuration(my_pubkey: pubkey, config_data: byte_array) {
     val me = require_is_provider_with_rl(my_pubkey);
     require_is_system_provider(my_pubkey);
 
-    map<text, gtv>.from_gtv(gtv.from_bytes(config_data)); // Validate that config is a map
+    val current_config = map<text,gtv>.from_gtv(gtv.from_bytes(cluster_anchoring_config.raw_config));
+    require(current_config.size() > 0, "Cluster anchoring is disabled");
+
+    val new_config = map<text, gtv>.from_gtv(gtv.from_bytes(config_data)); // Validate that config is a map
+    require(new_config.size() > 0, "Configuration must not be empty");
 
     val prop = create proposal(op_context.last_block_time, proposal_type.cluster_anchoring_configuration, me, system_p_voter_set());
     create pending_cluster_anchoring_configuration(prop, config_data);
