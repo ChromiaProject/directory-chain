@@ -6,7 +6,7 @@ import ^^.cluster_anchoring;
 function internal_vote(provider, proposal, vote: boolean) {
     require(voter_set_member @? { proposal.voter_set, provider }, provider.pubkey + " must be a member of the voter set");
     create vote(proposal, provider, vote);
-    print("vote added with value:", if (vote) "Yes" else "False");
+    log("vote added with value:", if (vote) "Yes" else "False");
     try_to_apply_proposal(proposal);
 }
 
@@ -14,13 +14,13 @@ function try_to_apply_proposal(prop: proposal) {
     val prop_str = proposal_str(prop);
     val results = get_proposal_voting_results(prop.rowid);
     when (results.voting_result) {
-        pending -> print("proposal is still under discussion:", prop_str);
+        pending -> log("proposal is still under discussion:", prop_str);
         rejected -> {
-            print("proposal rejected:", prop_str);
+            log("proposal rejected:", prop_str);
             delete_proposal(prop);
         }
         approved -> {
-            print("proposal approved:", prop_str);
+            log("proposal approved:", prop_str);
             when (prop.proposal_type) {
                 other                   -> apply_other_voting_result(prop);
                 configuration           -> apply_configuration(prop);
@@ -151,7 +151,7 @@ function apply_provider_batch(proposal) {
                 _is_node_provider(ppb.provider_tier) -> enroll.node(provider @ { pi.pubkey });
             }
         } else {
-            print("Warning: provider already exists: " + pi.pubkey);
+            log("Warning: provider already exists: " + pi.pubkey);
         }
     }
 }
@@ -206,7 +206,7 @@ function apply_bc(proposal) {
     require(nodes.size() > 0, "Cluster must have at least one node");
 
     val blockchain_rid = add_blockchain(bc.data, nodes.to_gtv().to_bytes(), bc.name, bc.container);
-    print("Added blockchain", blockchain_rid);
+    log("Added blockchain", blockchain_rid);
 }
 
 function apply_blockchain_action(proposal) {
