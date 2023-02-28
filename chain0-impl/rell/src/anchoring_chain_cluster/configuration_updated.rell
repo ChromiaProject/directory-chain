@@ -1,5 +1,6 @@
 import ^.anchoring_chain_common.*;
 import ^.icmf.*;
+import ^.config_common.*;
 
 @extend(after_anchoring_block) function process_configuration_updated(block_rid: byte_array, header: block_header) {
     if (not header.extra.contains("config_hash")) return;
@@ -15,18 +16,8 @@ import ^.icmf.*;
         null;
 
     if (current_config_hash != null and new_config_hash != current_config_hash) {
-        log("Updated configuration for %s at height %d to %s".format(blockchain_rid, header.height, new_config_hash));
-        report_updated_configuration(header.blockchain_rid, header.height, new_config_hash);
+        log("Detected updated configuration for chain %s at height %d to %s".format(blockchain_rid, header.height, new_config_hash));
+        send_message(configuration_updated_topic,
+            configuration_updated(blockchain_rid = blockchain_rid, header.height, config_hash = new_config_hash).to_gtv());
     }
-}
-
-struct configuration_updated {
-    blockchain_rid: byte_array;
-    height: integer;
-    config_hash: byte_array;
-}
-
-function report_updated_configuration(blockchain_rid: byte_array, height: integer, config_hash: byte_array) {
-    send_message("configuration_updated",
-        configuration_updated(blockchain_rid = blockchain_rid, height, config_hash = config_hash).to_gtv());
 }
