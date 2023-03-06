@@ -167,11 +167,22 @@ function apply_remove_provider(proposal) {
 
 function apply_configuration(proposal) {
     val pc = pending_configuration @ { proposal };
-    if (proposal.description == "pcu") {
+    val is_chain0 = pc.blockchain.rid == chain_context.blockchain_rid;
+
+    if (is_chain0) {
+        apply_configuration_chain0(pc);
+    } else if (proposal.description == "pcu") { // TODO remove this feature toggle and always do PCU
         apply_configuration_pcu(pc);
     } else {
         apply_configuration_legacy(pc);
     }
+}
+
+function apply_configuration_chain0(pc: pending_configuration) {
+    val apply_at_height = op_context.block_height + 1;
+    require(empty(blockchain_configuration @? { pc.blockchain, apply_at_height }), "Configuration at height %d already exists".format(apply_at_height));
+    create blockchain_configuration(pc.blockchain, apply_at_height, pc.data);
+    add_dependencies(pc.data, pc.blockchain.rid, apply_at_height);
 }
 
 function apply_configuration_pcu(pc: pending_configuration) {
