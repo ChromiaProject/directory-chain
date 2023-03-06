@@ -5,10 +5,20 @@ import ^.model.*;
     Thus, not needed to check here.
 */
 function get_blockchain_configuration_with_signers(blockchain, height: integer, config_height: integer) : byte_array {
-    val current_config = blockchain_configuration @ { blockchain, .height == config_height };
-    val config_dict = map<text, gtv>.from_gtv(gtv.from_bytes(current_config.data));
-    config_dict["signers"] = get_signers_for_configuration(blockchain, height);
+    val (base_config, signers) = get_blockchain_configuration_and_signers(blockchain, height, config_height);
+    val config_dict = map<text, gtv>.from_gtv(gtv.from_bytes(base_config));
+    config_dict["signers"] = signers.to_gtv();
     return config_dict.to_gtv().to_bytes();
+}
+
+/*
+    Checking that signers.size() is non-zero is done when population blockchain_configuration_signers.
+    Thus, not needed to check here.
+*/
+function get_blockchain_configuration_and_signers(blockchain, height: integer, config_height: integer):
+        (base_config: byte_array, signers: list<pubkey>) {
+    val base_config = blockchain_configuration @ { blockchain, .height == config_height } (.data);
+    return (base_config=base_config, signers=list<pubkey>.from_gtv(get_signers_for_configuration(blockchain, height)));
 }
 
 function get_cluster_node_blockchains(node) = set(

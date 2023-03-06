@@ -1,12 +1,13 @@
 
 import ^.model.*;
 import ^.common.queries.*;
+import ^.config.*;
 
 /*
     Returns NM API Version
     NM API Version: 1
 */
-query nm_api_version () = 4;
+query nm_api_version () = 5;
 
 /*
     Returns version of peerlist
@@ -47,7 +48,7 @@ query nm_find_next_configuration_height(blockchain_rid: byte_array, height: inte
     NM API Version: 1
 */
 query nm_get_blockchain_configuration(blockchain_rid: byte_array, height: integer): byte_array? {
-    val bc = blockchain @ { blockchain_rid };
+    val bc = require_blockchain(blockchain_rid);
     // Find configuration height -- the latest height up to given height.
     // If conf_h exist, so does signer_h, thus no need to check both.
     val config_h = blockchain_configuration @? { bc, .height <= height } (@sort_desc .height) limit 1;
@@ -176,7 +177,7 @@ query nm_get_blockchains_for_container(container_name: text): list<byte_array> {
     NM API Version: 3
 */
 query nm_get_container_for_blockchain(blockchain_rid: byte_array): text {
-    val bc = require(blockchain @? { blockchain_rid }, "Blockchain with rid not found: " + blockchain_rid);
+    val bc = require_blockchain(blockchain_rid);
     return container_blockchain @ { bc } .container.name;
 }
 
@@ -195,4 +196,44 @@ query nm_get_blockchain_dependencies(blockchain, height: integer): list<(byte_ar
         }
     }
     return res;
+}
+
+/*
+    NM API Version: 5
+*/
+query nm_get_blockchain_configuration_v5(blockchain_rid: byte_array, height: integer):
+        (base_config: byte_array, signers: list<pubkey>)? {
+    val bc = require_blockchain(blockchain_rid);
+    // Find configuration height -- the latest height up to given height.
+    // If conf_h exist, so does signer_h, thus no need to check both.
+    val config_h = blockchain_configuration @? { bc, .height <= height } (@sort_desc .height) limit 1;
+    if (config_h != null)
+        return get_blockchain_configuration_and_signers(bc, height, config_h);
+    else
+        return null;
+}
+
+/*
+    Precise Configuration Update
+    NM API Version: 5
+*/
+query nm_get_pending_blockchain_configuration(blockchain_rid: byte_array, height: integer):
+        (base_config: byte_array, signers: list<pubkey>)? {
+    val bc = require_blockchain(blockchain_rid);
+    val base_config = pending_blockchain_configuration @? { bc, .minimum_height <= height }
+        (@omit @sort .minimum_height, .base_config) limit 1;
+    if (base_config != null) {
+        return (base_config=base_config, signers=list<pubkey>.from_gtv(get_signers_for_configuration(bc, height)));
+    } else {
+        return null;
+    }
+}
+
+/*
+    Precise Configuration Update
+    NM API Version: 5
+*/
+query nm_is_pending_blockchain_configuration_applied(blockchain_rid: byte_array, height: integer, base_config_hash: byte_array): boolean {
+    val bc = require_blockchain(blockchain_rid);
+    return (pending_blockchain_configuration @* { bc, .minimum_height <= height, base_config_hash }).empty();
 }

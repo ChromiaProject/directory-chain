@@ -3,21 +3,21 @@ import ^.icmf.*;
 import ^.config_common.*;
 
 @extend(after_anchoring_block) function process_configuration_updated(block_rid: byte_array, header: block_header) {
-    if (not header.extra.contains("config_hash")) return;
-    val new_config_hash = byte_array.from_gtv(header.extra["config_hash"]);
+    if (not header.extra.contains("base_config_hash")) return;
+    val new_base_config_hash = byte_array.from_gtv(header.extra["base_config_hash"]);
     val blockchain_rid = header.blockchain_rid;
 
     val last_anchored_block_header = anchor_block @? { blockchain_rid, .block_height < header.height } (@omit @sort_desc .block_height,
         block_header.from_gtv(gtv.from_bytes($.block_header))
     ) limit 1;
-    val current_config_hash = if (last_anchored_block_header != null and last_anchored_block_header.extra.contains("config_hash"))
-        byte_array.from_gtv(last_anchored_block_header.extra["config_hash"])
+    val current_base_config_hash = if (last_anchored_block_header != null and last_anchored_block_header.extra.contains("base_config_hash"))
+        byte_array.from_gtv(last_anchored_block_header.extra["base_config_hash"])
     else
         null;
 
-    if (current_config_hash != null and new_config_hash != current_config_hash) {
-        log("Detected updated configuration for chain %s at height %d to %s".format(blockchain_rid, header.height, new_config_hash));
+    if (current_base_config_hash != null and new_base_config_hash != current_base_config_hash) {
+        log("Detected updated configuration for chain %s at height %d to %s".format(blockchain_rid, header.height, new_base_config_hash));
         send_message(configuration_updated_topic,
-            configuration_updated(blockchain_rid = blockchain_rid, header.height, config_hash = new_config_hash).to_gtv());
+            configuration_updated(blockchain_rid = blockchain_rid, header.height, base_config_hash = new_base_config_hash).to_gtv());
     }
 }

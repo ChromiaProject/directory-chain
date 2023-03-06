@@ -167,6 +167,23 @@ function apply_remove_provider(proposal) {
 
 function apply_configuration(proposal) {
     val pc = pending_configuration @ { proposal };
+    if (proposal.description == "pcu") {
+        apply_configuration_pcu(pc);
+    } else {
+        apply_configuration_legacy(pc);
+    }
+}
+
+function apply_configuration_pcu(pc: pending_configuration) {
+    val base_config = pc.data;
+    val base_config_hash = gtv.from_bytes(base_config).hash();
+    val last_configuration_height = (blockchain_configuration @? { pc.blockchain } (@sort_desc .height) limit 1) ?: 0;
+    val last_pending_configuration_height = (pending_blockchain_configuration @? { pc.blockchain } (@sort_desc .minimum_height) limit 1) ?: 0;
+    val minimum_height = last_configuration_height.max(last_pending_configuration_height) + 1;
+    create pending_blockchain_configuration(pc.blockchain, minimum_height, base_config_hash, base_config);
+}
+
+function apply_configuration_legacy(pc: pending_configuration) {
     val apply_at_height = get_last_height(pc.blockchain) + 10;
     require(empty(blockchain_configuration @? { pc.blockchain, apply_at_height }), "Configuration at height %d already exists".format(apply_at_height));
     create blockchain_configuration(pc.blockchain, apply_at_height, pc.data);
