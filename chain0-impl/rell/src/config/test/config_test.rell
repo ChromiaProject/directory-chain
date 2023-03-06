@@ -1,0 +1,210 @@
+@test module;
+
+import ^.helpers.*;
+import ^^.*;
+import ^^^.common.test.setup.*;
+import ^^^.common.test.util.*;
+import ^^^.config_common.*;
+
+function test_precise_configuration_update_happy() {
+    val (anchor_chain, bc_rid) = setup();
+
+    val config1 = ["number": (1).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "pcu")
+    ).sign(initial_provider).run();
+    assert_equals(
+        map<text,gtv>.from_gtv(gtv.from_bytes(require(nm_get_blockchain_configuration_v5(bc_rid, 5)).base_config))["number"],
+        (0).to_gtv()
+    );
+    val pending_config1 = require(nm_get_pending_blockchain_configuration(bc_rid, 1));
+    val pending_config1_hash = gtv.from_bytes(pending_config1.base_config).hash();
+    assert_equals(
+        map<text,gtv>.from_gtv(gtv.from_bytes(pending_config1.base_config))["number"],
+        (1).to_gtv()
+    );
+    assert_false(nm_is_pending_blockchain_configuration_applied(bc_rid, 1, pending_config1_hash));
+
+    rell.test.tx().op(
+        receive_configuration_updated_op(
+            anchor_chain.rid,
+            configuration_updated_topic,
+            configuration_updated(
+                blockchain_rid=bc_rid,
+                height=5,
+                base_config_hash=pending_config1_hash
+            ).to_gtv()
+        )
+    ).run();
+    assert_equals(
+        map<text,gtv>.from_gtv(gtv.from_bytes(require(nm_get_blockchain_configuration_v5(bc_rid, 5)).base_config))["number"],
+        (1).to_gtv()
+    );
+    assert_null(nm_get_pending_blockchain_configuration(bc_rid, 1));
+    assert_true(nm_is_pending_blockchain_configuration_applied(bc_rid, 1, pending_config1_hash));
+}
+
+function test_precise_configuration_update_rejected_invalid_config_no_config_consensus_strategy() {
+    val (anchor_chain, bc_rid) = setup();
+
+    val config1 = ["number": (1).to_gtv()];
+    val failure = rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "pcu")
+    ).sign(initial_provider).run_must_fail();
+    assert_true(failure.message.contains("Configuration must contain \"config_consensus_strategy\"=\"HEADER_HASH\""));
+}
+
+function test_precise_configuration_update_rejected_invalid_config_wrong_config_consensus_strategy() {
+    val (anchor_chain, bc_rid) = setup();
+
+    val config1 = ["number": (1).to_gtv(), "config_consensus_strategy": "bogus".to_gtv()];
+    val failure = rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "pcu")
+    ).sign(initial_provider).run_must_fail();
+    assert_true(failure.message.contains("Configuration must contain \"config_consensus_strategy\"=\"HEADER_HASH\""));
+}
+
+function test_precise_configuration_update_rejected_invalid_config_has_signers() {
+    val (anchor_chain, bc_rid) = setup();
+
+    val config1 = ["number": (1).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv(),
+        "signers": [x"1111".to_gtv(), x"2222".to_gtv()].to_gtv()];
+    val failure = rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "pcu")
+    ).sign(initial_provider).run_must_fail();
+    assert_true(failure.message.contains("Configuration must not contain \"signers\""));
+}
+
+function test_precise_configuration_update_ignored_wrong_topic() {
+    val (anchor_chain, bc_rid) = setup();
+
+    val config1 = ["number": (1).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "pcu")
+    ).sign(initial_provider).run();
+    val pending_config1 = require(nm_get_pending_blockchain_configuration(bc_rid, 1));
+    val pending_config1_hash = gtv.from_bytes(pending_config1.base_config).hash();
+
+    rell.test.tx().op(
+        receive_configuration_updated_op(
+            anchor_chain.rid,
+            "bogus_topic",
+            configuration_updated(
+                blockchain_rid=bc_rid,
+                height=5,
+                base_config_hash=pending_config1_hash
+            ).to_gtv()
+        )
+    ).run();
+
+    assert_equals(
+        map<text,gtv>.from_gtv(gtv.from_bytes(require(nm_get_blockchain_configuration_v5(bc_rid, 5)).base_config))["number"],
+        (0).to_gtv()
+    );
+    assert_equals(
+        map<text,gtv>.from_gtv(gtv.from_bytes(pending_config1.base_config))["number"],
+        (1).to_gtv()
+    );
+    assert_false(nm_is_pending_blockchain_configuration_applied(bc_rid, 5, pending_config1_hash));
+}
+
+function test_precise_configuration_update_rejected_not_from_anchor_chain() {
+    val (anchor_chain, bc_rid) = setup();
+
+    val config1 = ["number": (1).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "pcu")
+    ).sign(initial_provider).run();
+    val pending_config1 = require(nm_get_pending_blockchain_configuration(bc_rid, 1));
+    val pending_config1_hash = gtv.from_bytes(pending_config1.base_config).hash();
+
+    val failure = rell.test.tx().op(
+        receive_configuration_updated_op(
+            bc_rid,
+            configuration_updated_topic,
+            configuration_updated(
+                blockchain_rid=bc_rid,
+                height=5,
+                base_config_hash=pending_config1_hash
+            ).to_gtv()
+        )
+    ).run_must_fail();
+    assert_true(failure.message.contains("which is not anchor chain for cluster"));
+}
+
+function test_precise_configuration_update_rejected_wrong_hash() {
+    val (anchor_chain, bc_rid) = setup();
+
+    val config1 = ["number": (1).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "pcu")
+    ).sign(initial_provider).run();
+    val pending_config1 = require(nm_get_pending_blockchain_configuration(bc_rid, 1));
+    val pending_config1_hash = gtv.from_bytes(pending_config1.base_config).hash();
+
+    val failure = rell.test.tx().op(
+        receive_configuration_updated_op(
+            anchor_chain.rid,
+            configuration_updated_topic,
+            configuration_updated(
+                blockchain_rid=bc_rid,
+                height=5,
+                base_config_hash="bogus".hash()
+            ).to_gtv()
+        )
+    ).run_must_fail();
+    assert_true(failure.message.contains("Configuration with hash %s not found for chain".format("bogus".hash())));
+}
+
+function test_precise_configuration_update_rejected_config_already_exists() {
+    val (anchor_chain, bc_rid) = setup();
+
+    val config1 = ["number": (1).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "pcu")
+    ).sign(initial_provider).run();
+    val pending_config1 = require(nm_get_pending_blockchain_configuration(bc_rid, 1));
+    val pending_config1_hash = gtv.from_bytes(pending_config1.base_config).hash();
+
+    val config2 = ["number": (2).to_gtv()];
+    rell.test.tx().op(
+        propose_configuration_at(initial_provider.pub, bc_rid, config2.to_gtv_pretty().to_bytes(), 5, false)
+    ).sign(initial_provider).run();
+    assert_equals(
+        map<text,gtv>.from_gtv(gtv.from_bytes(require(nm_get_blockchain_configuration_v5(bc_rid, 5)).base_config))["number"],
+        (2).to_gtv()
+    );
+
+    val failure = rell.test.tx().op(
+        receive_configuration_updated_op(
+            anchor_chain.rid,
+            configuration_updated_topic,
+            configuration_updated(
+                blockchain_rid=bc_rid,
+                height=5,
+                base_config_hash=pending_config1_hash
+            ).to_gtv()
+        )
+    ).run_must_fail();
+    assert_true(failure.message.contains("Configuration at height 5 already exists for chain"));
+}
+
+function setup(): (anchor_chain: blockchain, bc_rid: byte_array) {
+    setup_module(cluster_anchoring_config = ["any": "value".to_gtv()]);
+
+    val cluster = require_cluster(clusters.system);
+    val anchor_chain = cluster_anchoring_chain @ { cluster } (.blockchain);
+
+    val config0 = ["number": (0).to_gtv()];
+    rell.test.tx().op(
+        propose_blockchain(initial_provider.pub, config0.to_gtv_pretty().to_bytes(), "foo_chain", system_container_name(clusters.system))
+    ).sign(initial_provider).run();
+    val bc_rid = blockchain @ { "foo_chain" } (.rid);
+    assert_equals(
+        map<text,gtv>.from_gtv(gtv.from_bytes(require(nm_get_blockchain_configuration_v5(bc_rid, 1)).base_config))["number"],
+        (0).to_gtv()
+    );
+    assert_null(nm_get_pending_blockchain_configuration(bc_rid, 1));
+
+    return (anchor_chain=anchor_chain, bc_rid=bc_rid);
+}
