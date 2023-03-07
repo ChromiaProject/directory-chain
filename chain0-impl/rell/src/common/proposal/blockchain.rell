@@ -8,7 +8,8 @@ operation propose_blockchain(my_pubkey: pubkey, config_data: byte_array, bc_name
     val container = require_container(container_name);
     require_container_deployer(container, me);
 
-    validate_blockchain_configuration(config_data, pcu=description=="pcu");
+    // TODO remove this feature toggle and always require header_hash
+    validate_blockchain_configuration(config_data, signers=true, header_hash=description=="pcu");
 
     // Require container resource limits are honored
     val max_blockchains = container_resource_limit @ { container, container_resource_limit_type.max_blockchains } (.value);
@@ -30,8 +31,10 @@ operation propose_configuration(my_pubkey: pubkey, blockchain_rid: byte_array, c
     val blockchain = require_blockchain(blockchain_rid);
     val container = container_blockchain @ {blockchain} .container;
     require_container_deployer(container, me);
+    val is_chain0 = blockchain.rid == chain_context.blockchain_rid;
 
-    validate_blockchain_configuration(config_data, pcu=description=="pcu");
+    // TODO remove this feature toggle and always require header_hash (if not chain0)
+    validate_blockchain_configuration(config_data, signers=not is_chain0, header_hash=description=="pcu" and not is_chain0);
 
     val prop = create proposal(op_context.last_block_time, proposal_type.configuration, me, container.deployer, description);
     create pending_configuration(prop, blockchain, config_data);
@@ -47,8 +50,9 @@ operation propose_configuration_at(my_pubkey: pubkey, blockchain_rid: byte_array
     val blockchain = require_blockchain(blockchain_rid);
     val container = container_blockchain @ { blockchain }.container;
     require_container_deployer(container, me);
+    val is_chain0 = blockchain.rid == chain_context.blockchain_rid;
 
-    validate_blockchain_configuration(config_data, pcu=false);
+    validate_blockchain_configuration(config_data, signers=not is_chain0, header_hash=false);
 
     val last_height = get_last_height(blockchain);
     val cant_apply_message = "Height (%d) must be greater than current height (%d)".format(height, last_height);
@@ -82,10 +86,12 @@ operation propose_blockchain_action(my_pubkey: pubkey, blockchain_rid: byte_arra
     internal_vote(me, prop, true);
 }
 
-function validate_blockchain_configuration(config_data: byte_array, pcu: boolean) {
+function validate_blockchain_configuration(config_data: byte_array, signers: boolean, header_hash: boolean) {
     val config_map = map<text, gtv>.from_gtv(gtv.from_bytes(config_data));
-    if (pcu) {
+    if (signers) {
         require("signers" not in config_map, "Configuration must not contain \"signers\"");
+    }
+    if (header_hash) {
         require("config_consensus_strategy" in config_map,
             "Configuration must contain \"config_consensus_strategy\"=\"HEADER_HASH\"");
         require(config_map["config_consensus_strategy"] == "HEADER_HASH".to_gtv(),
