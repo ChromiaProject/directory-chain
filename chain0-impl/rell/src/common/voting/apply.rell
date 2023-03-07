@@ -191,6 +191,7 @@ function apply_configuration_pcu(pc: pending_configuration) {
     val last_configuration_height = (blockchain_configuration @? { pc.blockchain } (@sort_desc .height) limit 1) ?: 0;
     val last_pending_configuration_height = (pending_blockchain_configuration @? { pc.blockchain } (@sort_desc .minimum_height) limit 1) ?: 0;
     val minimum_height = last_configuration_height.max(last_pending_configuration_height) + 1;
+    log("Applying configuration update with PCU for chain %s at minimum height %d".format(pc.blockchain.rid, minimum_height));
     create pending_blockchain_configuration(pc.blockchain, minimum_height, base_config_hash, base_config);
 }
 
