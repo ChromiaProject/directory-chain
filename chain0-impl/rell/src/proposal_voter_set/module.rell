@@ -29,8 +29,9 @@ namespace voter_set_update {
     }
 }
 
-function apply_voter_set_update(proposal) {
-    val vsp = pending_voter_set_update @ { proposal };
+@extend(apply_other_voting_result) function apply_voter_set_update(proposal) {
+    val vsp = pending_voter_set_update @? { proposal };
+    if (vsp == null) return;
     val threshold = voter_set_update.threshold @? { vsp }.threshold;
     if (threshold != null) vsp.voter_set.threshold = threshold;
     val governor = voter_set_update.governor @? { vsp }.governor;
@@ -45,8 +46,9 @@ function apply_voter_set_update(proposal) {
     }
 }
 
-function delete_pending_voter_set_update(proposal) {
-    val p = pending_voter_set_update @ { proposal };
+@extend(delete_other_proposal) function delete_pending_voter_set_update(proposal) {
+    val p = pending_voter_set_update @? { proposal };
+    if (p == null) return;
     delete voter_set_update.threshold @? { p };
     delete voter_set_update.governor  @? { p };
     delete voter_set_update.new_member  @* { p };
