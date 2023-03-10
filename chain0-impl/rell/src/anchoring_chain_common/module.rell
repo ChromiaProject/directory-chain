@@ -1,10 +1,11 @@
 module;
 
-entity anchor_block {
+@log entity anchor_block {
     key blockchain_rid: byte_array, block_height: integer;
     block_rid: byte_array;
     block_header: byte_array;
     witness: byte_array;
+    anchoring_tx_op_index: integer;
 }
 
 struct block_header {
@@ -17,9 +18,15 @@ struct block_header {
     extra: map<text,gtv>;
 }
 
+struct anchoring_tx_with_op_index {
+    tx_rid: byte_array;
+    tx_data: byte_array;
+    tx_op_index: integer;
+}
+
 operation __anchor_block_header(block_rid: byte_array, header: gtv, witness: byte_array) {
     val decoded_header = block_header.from_gtv(header);
-    create anchor_block(blockchain_rid = decoded_header.blockchain_rid, block_height = decoded_header.height, block_rid = block_rid, block_header = header.to_bytes(), witness = witness);
+    create anchor_block(blockchain_rid = decoded_header.blockchain_rid, block_height = decoded_header.height, block_rid = block_rid, block_header = header.to_bytes(), witness = witness, anchoring_tx_op_index = op_context.op_index);
 
     after_anchoring_block(block_rid, decoded_header);
 }
@@ -30,6 +37,18 @@ query get_last_anchored_block(blockchain_rid: byte_array): struct<anchor_block>?
 
 query get_anchored_block_at_height(blockchain_rid: byte_array, height: integer): struct<anchor_block>? {
     return anchor_block @? { blockchain_rid, .block_height == height } ($.to_struct());
+}
+
+query get_anchoring_transaction_for_block_rid(blockchain_rid: byte_array, block_rid: byte_array): anchoring_tx_with_op_index? {
+    return anchor_block @? { blockchain_rid, block_rid } (anchoring_tx_with_op_index(
+        tx_rid = .transaction.tx_rid,
+        tx_data = .transaction.tx_data,
+        tx_op_index = .anchoring_tx_op_index
+    ));
+}
+
+query is_block_anchored(blockchain_rid: byte_array, block_rid: byte_array): boolean {
+    return exists(anchor_block @? { blockchain_rid, block_rid });
 }
 
 @extendable function after_anchoring_block(block_rid: byte_array, decoded_header: block_header) {}
