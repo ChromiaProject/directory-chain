@@ -1,9 +1,12 @@
 
-import ^.model.*;
-import ^.container.*;
-import ^.common.*;
-
 namespace auth_service {
+
+    operation create_provider(pubkey, name?, url: text?) {
+        require_module_auth();
+        require_pubkey(pubkey);
+        require(not(exists(provider @? { pubkey })), "Provider with pubkey %s already exists".format(pubkey));
+        register_and_enable_provider(provider_info(pubkey, name = name ?: "", url = url ?: ""), provider_tier.COMMUNITY_NODE_PROVIDER, null, null, true);
+    }
 
     operation create_container(pubkey, cluster_name: text?) {
         require_module_auth();
