@@ -29,6 +29,7 @@ query get_node_containers(pubkey): list<(cluster:text, name:text, deployer:text)
     return res;
 }
 
+// deprecated
 query get_nodes_with_provider() {
     return node @* {} (
         pubkey = .pubkey,
@@ -39,5 +40,15 @@ query get_nodes_with_provider() {
         name = .provider.name,
         provider_active = .provider.active,
         @sort provider = .provider.pubkey
+    );
+}
+
+query get_all_nodes(include_inactive: boolean) {
+    val nodes = if (include_inactive) node @* {} else node @* { .active };
+    return nodes @* {} (
+        info = node_info(.pubkey, host = .host, port = .port, api_url = .api_url),
+        active = .active,
+        last_updated = .last_updated,
+        provider = .provider.to_struct()
     );
 }
