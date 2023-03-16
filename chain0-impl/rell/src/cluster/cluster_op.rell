@@ -20,3 +20,23 @@ operation create_cluster_from(my_pubkey: pubkey, name, governor_voter_set: text,
     val node_provider_set = require_voter_set(provider_voter_set);
     create_cluster_impl(me, name, governor, voter_set_member @* { node_provider_set }.provider.pubkey);
 }
+
+operation request_cluster(my_pubkey: pubkey, name, size: integer, require_full: boolean) {
+    require(size >= 4, "At least 4 nodes should be requested to be able to reach bft majority");
+    val me = require_is_provider_with_rl(my_pubkey);
+    require_system_access(me);
+
+    val available_nodes = node @* { not(.pubkey in cluster_node @* {} (.node.pubkey)) };
+    val unique_providers = set<provider>();
+    unique_providers.add_all(available_nodes @* {}.provider);
+    val chosen_providers = unique_providers @* {} limit size;
+    require(chosen_providers.size() >= 4, "Clusters can only be created when at least four nodes are available");
+    require(chosen_providers.size() == size or not(require_full), "Not enough providers have available nodes, found %d, requested %d".format(chosen_providers.size(), size));
+
+    log("Creating cluster " + name + " with providers " + chosen_providers @*{}.pubkey);
+    val cluster = create_cluster_impl(me, name, system_voter_set(), chosen_providers @* {}.pubkey);
+    for (p in chosen_providers) {
+        val node = available_nodes @ { .provider == p } limit 1;
+        add_node_to_cluster_internal(p, node, cluster);
+    }
+}
