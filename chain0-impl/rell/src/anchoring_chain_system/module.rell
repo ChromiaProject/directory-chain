@@ -1,3 +1,32 @@
 module;
 
 import ^.anchoring_chain_common.*;
+
+object system_anchoring_config_hash {
+    mutable config_hash: byte_array = x"";
+}
+
+operation __begin_block(height: integer) {
+    log("chain_context.blockchain_rid: " + chain_context.blockchain_rid);
+    log("chain_context.current_config_hash: " + chain_context.raw_config.hash());
+
+    send_message("hello_kitty", [1].to_gtv());
+
+    if (system_anchoring_config_hash.config_hash == x"") {
+        log("init system_anchoring_config_hash obj");
+        system_anchoring_config_hash.config_hash = chain_context.raw_config.hash();
+    } else {
+        val new_config_hash = chain_context.raw_config.hash();
+        if (system_anchoring_config_hash.config_hash != new_config_hash) {
+            log("Detected updated configuration for system anchoring chain %s at height %d to %s"
+                .format(chain_context.blockchain_rid, height, new_config_hash)
+            );
+            val config_updated_msg = configuration_updated(
+                blockchain_rid = chain_context.blockchain_rid,
+                height,
+                config_hash = new_config_hash
+            ).to_gtv();
+            send_message(configuration_updated_topic, config_updated_msg);
+        }
+    }
+}
