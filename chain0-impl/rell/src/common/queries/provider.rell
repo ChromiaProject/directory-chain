@@ -28,6 +28,14 @@ query get_all_providers(): list<struct<provider>> {
     return provider @* {} ($.to_struct());
 }
 
+query get_providers(tier: provider_tier, system: boolean): list<struct<provider>> {
+    if (system) {
+        require(tier == provider_tier.NODE_PROVIDER, "System providers are always node providers");
+        return provider @* { tier, system } ($.to_struct());
+    }
+    return provider @* { tier } ($.to_struct());
+}
+
 query get_provider_quotas(): list<struct<provider_quota>> {
     return provider_quota @* {} ($.to_struct());
 }
