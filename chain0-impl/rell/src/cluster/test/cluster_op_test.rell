@@ -97,3 +97,43 @@ function test_add_remove_cluster() {
     assert_null(cluster_node @? { cluster1 });
     assert_null(cluster_provider @? { cluster1 });
 }
+
+function test_request_cluster() {
+    setup_module();
+
+    rell.test.tx()
+    .op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, rell.test.pubkeys.trudy, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, rell.test.pubkeys.charlie, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, rell.test.pubkeys.dave, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.bob, true),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.trudy, true),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.charlie, true),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.dave, true)
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        register_node(rell.test.pubkeys.bob, rell.test.pubkeys.eve, "localhost", 1, "http:")
+    ).sign(rell.test.keypairs.bob).run();
+    rell.test.tx().op(
+        register_node(rell.test.pubkeys.trudy, rell.test.pubkeys.frank, "localhost", 2, "http:")
+    ).sign(rell.test.keypairs.trudy).run();
+    rell.test.tx().op(
+        register_node(rell.test.pubkeys.charlie, rell.test.pubkeys.grace, "localhost", 3, "http:")
+    ).sign(rell.test.keypairs.charlie).run();
+    rell.test.tx().op(
+        register_node(rell.test.pubkeys.dave, rell.test.pubkeys.heidi, "localhost", 4, "http:")
+    ).sign(rell.test.keypairs.dave).run();
+
+    assert_equals((node @* {}).size(), 5);
+    rell.test.tx().op(
+        request_cluster(initial_provider.pub, "new_cluster", 4, true)
+    ).sign(initial_provider).run();
+
+    assert_not_null(cluster @? { "new_cluster"});    
+    
+    rell.test.tx().op(
+        request_cluster(initial_provider.pub, "2nd_cluster", 4, true)
+    ).sign(initial_provider).run_must_fail();
+}

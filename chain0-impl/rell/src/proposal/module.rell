@@ -164,7 +164,7 @@ function delete_proposal(prop: proposal) {
         cluster_limits                  -> delete pending_cluster_limits @ { prop };
         cluster_provider                -> delete pending_cluster_provider @ { prop };
         cluster_remove                  -> delete pending_remove_cluster @? { prop };
-        voter_set_update                -> delete_other_proposal(prop);
+        voter_set_update                -> delete_proposal_handlers()[prop.proposal_type.name](prop);
         provider_state                  -> delete pending_provider_state @ { prop };
         provider_is_system              -> delete pending_provider_is_system @ { prop };
         provider_quota                  -> delete pending_provider_quota @ { prop };
@@ -178,3 +178,5 @@ function delete_proposal(prop: proposal) {
 }
 
 @extendable function delete_other_proposal(proposal) { /* Should be extended */ }
+
+@extendable function delete_proposal_handlers(): map<text, (proposal) -> unit>;

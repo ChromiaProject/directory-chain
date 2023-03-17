@@ -1,7 +1,7 @@
 
 query get_node(pubkey) = node @ { pubkey };
 
-query get_node_data (pubkey) {
+query get_node_data(pubkey) {
     val node = require_node(pubkey);
     return (
         provider = node.provider.pubkey,
@@ -9,11 +9,12 @@ query get_node_data (pubkey) {
         active = node.active,
         host = node.host,
         port = node.port,
-        last_updated = node.last_updated
+        last_updated = node.last_updated,
+        api_url = node.api_url
     );
 }
 
-query list_clusters_of_node (pubkey): list<text> {
+query list_clusters_of_node(pubkey): list<text> {
     val node = require_node(pubkey);
     return cluster_node @* { node }.cluster.name;
 }
@@ -29,6 +30,7 @@ query get_node_containers(pubkey): list<(cluster:text, name:text, deployer:text)
     return res;
 }
 
+// deprecated
 query get_nodes_with_provider() {
     return node @* {} (
         pubkey = .pubkey,
@@ -39,5 +41,15 @@ query get_nodes_with_provider() {
         name = .provider.name,
         provider_active = .provider.active,
         @sort provider = .provider.pubkey
+    );
+}
+
+query get_all_nodes(include_inactive: boolean) {
+    val nodes = if (include_inactive) node @* {} else node @* { .active };
+    return nodes @* {} (
+        info = node_info(.pubkey, host = .host, port = .port, api_url = .api_url),
+        active = .active,
+        last_updated = .last_updated,
+        provider = .provider.to_struct()
     );
 }

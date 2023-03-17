@@ -30,7 +30,6 @@ function try_to_apply_proposal(prop: proposal) {
                 cluster_limits          -> apply_cluster_limits(prop);
                 cluster_provider        -> apply_cluster_provider(prop);
                 cluster_remove          -> apply_remove_cluster(prop);
-                voter_set_update        -> apply_other_voting_result(prop);
                 provider_state          -> apply_provider_state(prop);
                 provider_is_system      -> apply_provider_is_system(prop);
                 provider_quota          -> apply_provider_quota(prop);
@@ -38,6 +37,7 @@ function try_to_apply_proposal(prop: proposal) {
                 provider_remove         -> apply_remove_provider(prop);
                 blockchain_action       -> apply_blockchain_action(prop);
                 cluster_anchoring_configuration -> apply_cluster_anchoring_configuration(prop);
+                else -> apply_voting_result_handlers()[prop.proposal_type.name](prop);
             }
             delete_proposal(prop);
         }
@@ -45,8 +45,7 @@ function try_to_apply_proposal(prop: proposal) {
 }
 
 @extendable function apply_other_voting_result(proposal) { /* Should be extended */ }
-
-
+@extendable function apply_voting_result_handlers(): map<text, (proposal) -> unit>;
 
 function apply_container_limits(proposal) {
     val pps = pending_container_limits @ { proposal };

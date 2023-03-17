@@ -29,7 +29,9 @@ namespace voter_set_update {
     }
 }
 
-@extend(apply_other_voting_result) function apply_voter_set_update(proposal) {
+@extend(apply_voting_result_handlers) function() = [proposal_type.voter_set_update.name: apply_voter_set_update(*)];
+
+function apply_voter_set_update(proposal) {
     val vsp = pending_voter_set_update @? { proposal };
     if (vsp == null) return;
     val threshold = voter_set_update.threshold @? { vsp }.threshold;
@@ -46,7 +48,9 @@ namespace voter_set_update {
     }
 }
 
-@extend(delete_other_proposal) function delete_pending_voter_set_update(proposal) {
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.voter_set_update.name: delete_pending_voter_set_update(*)];
+
+function delete_pending_voter_set_update(proposal) {
     val p = pending_voter_set_update @? { proposal };
     if (p == null) return;
     delete voter_set_update.threshold @? { p };
