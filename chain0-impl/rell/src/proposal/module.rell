@@ -164,7 +164,6 @@ function delete_proposal(prop: proposal) {
         cluster_limits                  -> delete pending_cluster_limits @ { prop };
         cluster_provider                -> delete pending_cluster_provider @ { prop };
         cluster_remove                  -> delete pending_remove_cluster @? { prop };
-        voter_set_update                -> delete_proposal_handlers()[prop.proposal_type.name](prop);
         provider_state                  -> delete pending_provider_state @ { prop };
         provider_is_system              -> delete pending_provider_is_system @ { prop };
         provider_quota                  -> delete pending_provider_quota @ { prop };
@@ -172,6 +171,7 @@ function delete_proposal(prop: proposal) {
         provider_remove                 -> delete pending_remove_provider @? { prop };
         blockchain_action               -> delete pending_blockchain_action @? { prop };
         cluster_anchoring_configuration -> delete pending_cluster_anchoring_configuration @? { prop };
+        else -> delete_proposal_handlers()[prop.proposal_type.name](prop);
     }
     delete vote @* { .proposal == prop };
     delete proposal @ { .rowid == prop.rowid };
