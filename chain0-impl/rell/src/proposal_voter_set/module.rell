@@ -1,7 +1,7 @@
 module;
 
-import ^.*;
-import ^^^.model.*;
+import ^.proposal.*;
+import ^.model.*;
 
 entity pending_voter_set_update {
     key proposal, voter_set;
@@ -29,8 +29,11 @@ namespace voter_set_update {
     }
 }
 
+@extend(apply_voting_result_handlers) function() = [proposal_type.voter_set_update.name: apply_voter_set_update(*)];
+
 function apply_voter_set_update(proposal) {
-    val vsp = pending_voter_set_update @ { proposal };
+    val vsp = pending_voter_set_update @? { proposal };
+    if (vsp == null) return;
     val threshold = voter_set_update.threshold @? { vsp }.threshold;
     if (threshold != null) vsp.voter_set.threshold = threshold;
     val governor = voter_set_update.governor @? { vsp }.governor;
@@ -45,8 +48,11 @@ function apply_voter_set_update(proposal) {
     }
 }
 
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.voter_set_update.name: delete_pending_voter_set_update(*)];
+
 function delete_pending_voter_set_update(proposal) {
-    val p = pending_voter_set_update @ { proposal };
+    val p = pending_voter_set_update @? { proposal };
+    if (p == null) return;
     delete voter_set_update.threshold @? { p };
     delete voter_set_update.governor  @? { p };
     delete voter_set_update.new_member  @* { p };

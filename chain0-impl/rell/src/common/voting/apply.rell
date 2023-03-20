@@ -1,4 +1,4 @@
-import ^.proposal.*;
+import ^^.proposal.*;
 import ^^.model.util.constants.*;
 import ^^.cluster_anchoring;
 
@@ -21,24 +21,7 @@ function try_to_apply_proposal(prop: proposal) {
         }
         approved -> {
             log("proposal approved:", prop_str);
-            when (prop.proposal_type) {
-                other                   -> apply_other_voting_result(prop);
-                configuration           -> apply_configuration(prop);
-                configuration_at        -> apply_configuration_at(prop);
-                bc                      -> apply_bc(prop);
-                container_limits        -> apply_container_limits(prop);
-                cluster_limits          -> apply_cluster_limits(prop);
-                cluster_provider        -> apply_cluster_provider(prop);
-                cluster_remove          -> apply_remove_cluster(prop);
-                voter_set_update        -> apply_voter_set_update(prop);
-                provider_state          -> apply_provider_state(prop);
-                provider_is_system      -> apply_provider_is_system(prop);
-                provider_quota          -> apply_provider_quota(prop);
-                provider_batch          -> apply_provider_batch(prop);
-                provider_remove         -> apply_remove_provider(prop);
-                blockchain_action       -> apply_blockchain_action(prop);
-                cluster_anchoring_configuration -> apply_cluster_anchoring_configuration(prop);
-            }
+            apply_voting_result_handlers()[prop.proposal_type.name](prop);
             delete_proposal(prop);
         }
     }
@@ -46,7 +29,24 @@ function try_to_apply_proposal(prop: proposal) {
 
 @extendable function apply_other_voting_result(proposal) { /* Should be extended */ }
 
-
+// TODO: Move implemetation to modules
+@extendable function apply_voting_result_handlers(): map<text, (proposal) -> unit> = [
+    proposal_type.configuration.name: apply_configuration(*),
+    proposal_type.configuration_at.name: apply_configuration_at(*),
+    proposal_type.bc.name: apply_bc(*),
+    proposal_type.container_limits.name: apply_container_limits(*),
+    proposal_type.cluster_limits.name: apply_cluster_limits(*),
+    proposal_type.cluster_provider.name: apply_cluster_provider(*),
+    proposal_type.cluster_remove.name: apply_remove_cluster(*),
+    proposal_type.provider_state.name: apply_provider_state(*),
+    proposal_type.provider_is_system.name: apply_provider_is_system(*),
+    proposal_type.provider_quota.name: apply_provider_quota(*),
+    proposal_type.provider_batch.name: apply_provider_batch(*),
+    proposal_type.provider_remove.name: apply_remove_provider(*),
+    proposal_type.blockchain_action.name: apply_blockchain_action(*),
+    proposal_type.cluster_anchoring_configuration.name: apply_cluster_anchoring_configuration(*),
+    proposal_type.other.name: apply_other_voting_result(*)
+];
 
 function apply_container_limits(proposal) {
     val pps = pending_container_limits @ { proposal };
