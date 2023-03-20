@@ -30,6 +30,12 @@ entity pending_blockchain_configuration {
     require(sender == anchor_chain.rid or sender == system_anchoring_chain.rid,
         "Received updated configuration from chain %s, which is not anchor chain for cluster %s".format(sender, cluster.name));
 
+    if (message.blockchain_rid == chain_context.blockchain_rid) {
+        log("Received updated configuration from chain %s If %d to %s, ignoring"
+            .format(sender, message.height, message.config_hash));
+        return;
+    }
+
     log("Received updated configuration from chain %s for chain %s at height %d to %s"
         .format(sender, message.blockchain_rid, message.height, message.config_hash));
 
