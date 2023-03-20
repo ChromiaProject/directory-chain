@@ -26,7 +26,11 @@ operation request_cluster(my_pubkey: pubkey, name, size: integer, require_full: 
     val me = require_is_provider_with_rl(my_pubkey);
     require_system_access(me);
 
-    val available_nodes = node @* { not(.pubkey in cluster_node @* {} (.node.pubkey)) };
+    val available_nodes = (node, node_capabilities) @* { 
+        node_capabilities.node == node,
+        node_capabilities.type == node_capability_type.SYSTEM_MANAGED,
+        not(.pubkey in cluster_node @* {} (.node.pubkey)) 
+        }.node;
     val unique_providers = set<provider>();
     unique_providers.add_all(available_nodes @* {}.provider);
     val chosen_providers = unique_providers @* {} limit size;

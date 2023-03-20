@@ -129,6 +129,15 @@ function test_request_cluster() {
     assert_equals((node @* {}).size(), 5);
     rell.test.tx().op(
         request_cluster(initial_provider.pub, "new_cluster", 4, true)
+    ).sign(initial_provider).run_must_fail();
+
+    make_node_system_managed(rell.test.keypairs.bob, rell.test.pubkeys.eve);
+    make_node_system_managed(rell.test.keypairs.trudy, rell.test.pubkeys.frank);
+    make_node_system_managed(rell.test.keypairs.charlie, rell.test.pubkeys.grace);
+    make_node_system_managed(rell.test.keypairs.dave, rell.test.pubkeys.heidi);
+    
+    rell.test.tx().op(
+        request_cluster(initial_provider.pub, "new_cluster", 4, true)
     ).sign(initial_provider).run();
 
     assert_not_null(cluster @? { "new_cluster"});    
@@ -136,4 +145,10 @@ function test_request_cluster() {
     rell.test.tx().op(
         request_cluster(initial_provider.pub, "2nd_cluster", 4, true)
     ).sign(initial_provider).run_must_fail();
+}
+
+function make_node_system_managed(keypair: rell.test.keypair, node: pubkey) {
+    rell.test.tx().op(
+        update_node_capability(keypair.pub, node, node_capability_type.SYSTEM_MANAGED, true)
+    ).sign(keypair).run();
 }
