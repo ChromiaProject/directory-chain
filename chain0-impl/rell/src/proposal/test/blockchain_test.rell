@@ -21,7 +21,7 @@ function test_propose_blockchain() {
     val bob = provider @ { rell.test.pubkeys.bob };
     rell.test.tx().op(add_test_member(system_p_voter_set(), bob)).run();
 
-    var conf = map<text, text>();
+    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
     rell.test.tx().op(
         propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "foo_chain", co.name)
     ).sign(rell.test.keypairs.alice).run();
@@ -89,7 +89,7 @@ function assert_action_proposed(action: blockchain_action) {
 function test_propose_configuration_at() {
     setup_module();
 
-    var conf = map<text, text>();
+    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
     rell.test.tx().op(
         propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", system_container_name(clusters.system))
     ).sign(initial_provider).run();
@@ -111,18 +111,18 @@ function test_propose_configuration_at() {
     propose_config(bc.rid, conf, -2, false).run_must_fail();
 
     // 2. force == true
-    var conf2 = map<text, text>();
-    conf2["name"] = "conf2";
+    var conf2 = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    conf2["name"] = "conf2".to_gtv();
     propose_config(bc.rid, conf2, 8, true).run();
     val actual_config_bytes = blockchain_configuration @ { bc, 8 } (.data);
-    val actual_config = map<text, text>.from_gtv(gtv.from_bytes(actual_config_bytes));
-    assert_equals(actual_config["name"], "conf2");
-    // NB: we can't test `height = -1` case, since `get_blockchain_last_height()` returns -1;
+    val actual_config = map<text, gtv>.from_gtv(gtv.from_bytes(actual_config_bytes));
+    assert_equals(actual_config["name"], "conf2".to_gtv());
+    // NB: we can't test `height = -1` case
     // propose_config(bc.rid, conf, -1, false).run();
     // See kotlin test
 }
 
-function propose_config(brid: byte_array, conf: map<text, text>, height: integer, force: boolean) {
+function propose_config(brid: byte_array, conf: map<text, gtv>, height: integer, force: boolean) {
     return rell.test.tx().op(
         propose_configuration_at(initial_provider.pub, brid, conf.to_gtv().to_bytes(), height, force)
     ).sign(initial_provider);

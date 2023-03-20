@@ -7,21 +7,22 @@ definitions:
       - 9870
       - ${GENESIS_API_URL:-http://localhost:7740}
   config: &common_config
+    config_consensus_strategy: HEADER_HASH
     blockstrategy:
       maxblocktime: 2000
     fast_revolt_status_timeout: 1000
     signers:
       - x"0350fe40766bc0ce8d08b3f5b810e49a8352fdd458606bd5fafe5acdcdc8ff3f57"
-    sync_ext:
-      - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
-    gtx:
-      modules:
-        - "net.postchain.d1.icmf.IcmfReceiverGTXModule"
-    icmf:
-      receiver:
-        cluster-anchor:
-          topics:
-            - configuration_updated
+#    sync_ext:
+#      - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
+#    gtx:
+#      modules:
+#        - "net.postchain.d1.icmf.IcmfReceiverGTXModule"
+#    icmf:
+#      receiver:
+#        anchoring:
+#          topics:
+#            - configuration_updated
 
 blockchains:
   manager:
@@ -29,11 +30,15 @@ blockchains:
     config: *common_config
     moduleArgs:
       common.init: *common_init
+      config:
+        enable_pcu: false
   devnet:
     module: management_chain_testnet
     config: *common_config
     moduleArgs:
       common.init: *common_init
+      config:
+        enable_pcu: false
       auth_service:
         pubkey: x"02B6F2967CF9AFC4D289EF475A2C2DDEC9EAB79AC60C1C99683E3134074619E635"
         include_system_cluster: true
@@ -43,20 +48,29 @@ blockchains:
   system_anchoring:
     module: anchoring_chain_system
     config:
+      config_consensus_strategy: HEADER_HASH
       blockstrategy:
         maxblocktime: 2000
       gtx:
         modules:
           - "net.postchain.d1.anchoring.system.SystemAnchoringGTXModule"
+#          - "net.postchain.d1.icmf.IcmfSenderGTXModule"
+    moduleArgs:
+      anchoring_chain_common:
+        enable_pcu: false
   cluster_anchoring:
     module: anchoring_chain_cluster
     config:
+      config_consensus_strategy: HEADER_HASH
       blockstrategy:
         maxblocktime: 2000
       gtx:
         modules:
           - "net.postchain.d1.anchoring.cluster.ClusterAnchoringGTXModule"
-          - "net.postchain.d1.icmf.IcmfSenderGTXModule"
+#          - "net.postchain.d1.icmf.IcmfSenderGTXModule"
+    moduleArgs:
+      anchoring_chain_common:
+        enable_pcu: false
 
 database: # Used for running tests
   logSqlErrors: true
@@ -89,6 +103,8 @@ test:
     - cluster.test.resource_limits_test
     - nm_api.test.nm_api_test
     - config.test.config_test
-#  moduleArgs:
-#    module:
-#      foo: bar
+  moduleArgs:
+    config:
+      enable_pcu: true
+    anchoring_chain_common:
+      enable_pcu: true

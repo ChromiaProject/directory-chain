@@ -1,6 +1,7 @@
 import ^^.proposal.*;
 import ^^.model.util.constants.*;
 import ^^.cluster_anchoring;
+import ^^.config.*;
 
 // NB: check authority before calling this function
 function internal_vote(provider, proposal, vote: boolean) {
@@ -171,7 +172,7 @@ function apply_configuration(proposal) {
 
     if (is_chain0) {
         apply_configuration_chain0(pc);
-    } else if (proposal.description == "pcu") { // TODO remove this feature toggle and always do PCU
+    } else if (pcu_enabled()) {
         apply_configuration_pcu(pc);
     } else {
         apply_configuration_legacy(pc);
@@ -180,6 +181,7 @@ function apply_configuration(proposal) {
 
 function apply_configuration_chain0(pc: pending_configuration) {
     val apply_at_height = op_context.block_height + 1;
+    log("Applying base configuration update chain0 at height %d".format(apply_at_height));
     require(empty(blockchain_configuration @? { pc.blockchain, apply_at_height }), "Configuration at height %d already exists".format(apply_at_height));
     create blockchain_configuration(pc.blockchain, apply_at_height, pc.data);
     add_dependencies(pc.data, pc.blockchain.rid, apply_at_height);
@@ -187,16 +189,30 @@ function apply_configuration_chain0(pc: pending_configuration) {
 
 function apply_configuration_pcu(pc: pending_configuration) {
     val base_config = pc.data;
-    val base_config_hash = gtv.from_bytes(base_config).hash();
+
     val last_configuration_height = (blockchain_configuration @? { pc.blockchain } (@sort_desc .height) limit 1) ?: 0;
-    val last_pending_configuration_height = (pending_blockchain_configuration @? { pc.blockchain } (@sort_desc .minimum_height) limit 1) ?: 0;
-    val minimum_height = last_configuration_height.max(last_pending_configuration_height) + 1;
-    log("Applying configuration update with PCU for chain %s at minimum height %d".format(pc.blockchain.rid, minimum_height));
-    create pending_blockchain_configuration(pc.blockchain, minimum_height, base_config_hash, base_config);
+    val last_pending_configuration = pending_blockchain_configuration @? { pc.blockchain } (@sort_desc @omit .minimum_height, $) limit 1;
+    val (minimum_height, signers) = if (last_pending_configuration != null)
+        (last_configuration_height.max(last_pending_configuration.minimum_height) + 1,
+         last_pending_configuration.signers)
+     else
+        (last_configuration_height + 1,
+         blockchain_configuration_signers @ { pc.blockchain } (@omit @sort_desc .height, .signers) limit 1);
+    log("Applying base configuration update with PCU for chain %s at minimum height %d".format(pc.blockchain.rid, minimum_height));
+    val full_config = map<text, gtv>.from_gtv(gtv.from_bytes(base_config));
+    full_config["signers"] = gtv.from_bytes(signers);
+    create pending_blockchain_configuration(
+        pc.blockchain,
+        minimum_height,
+        config_hash=full_config.to_gtv().hash(),
+        base_config,
+        signers
+    );
 }
 
 function apply_configuration_legacy(pc: pending_configuration) {
     val apply_at_height = get_last_height(pc.blockchain) + 10;
+    log("Applying base configuration update without PCU for chain %s at height %d".format(pc.blockchain.rid, apply_at_height));
     require(empty(blockchain_configuration @? { pc.blockchain, apply_at_height }), "Configuration at height %d already exists".format(apply_at_height));
     create blockchain_configuration(pc.blockchain, apply_at_height, pc.data);
     add_dependencies(pc.data, pc.blockchain.rid, apply_at_height);
