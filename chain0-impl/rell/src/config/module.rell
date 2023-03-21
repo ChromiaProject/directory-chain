@@ -24,11 +24,27 @@ entity pending_blockchain_configuration {
 
     val message = configuration_updated.from_gtv(body);
 
-    val bc = require_blockchain(message.blockchain_rid);
+    if (message.blockchain_rid == chain_context.blockchain_rid) {
+        log("Received updated configuration from chain %s for chain0 at height %d to %s, ignoring"
+            .format(sender, message.height, message.config_hash));
+        return;
+    }
+    val bc = blockchain @? { message.blockchain_rid };
+    if (bc == null) {
+        log("Unknown blockchain " + message.blockchain_rid);
+        return;
+    }
+
     val cluster = get_cluster_for_blockchain(message.blockchain_rid);
-    val anchor_chain = cluster_anchoring_chain @ { cluster } (.blockchain);
-    require(sender == anchor_chain.rid or sender == system_anchoring_chain.rid,
-        "Received updated configuration from chain %s, which is not anchor chain for cluster %s".format(sender, cluster.name));
+    val anchoring_chain = cluster_anchoring_chain @? { cluster } (.blockchain);
+    if (anchoring_chain == null) {
+        log("No anchoring chain for cluster %s".format(cluster.name));
+        return;
+    }
+    if (sender != anchoring_chain.rid and sender != system_anchoring_chain.rid) {
+        log("Received updated configuration from chain %s, which is not anchor chain for cluster %s".format(sender, cluster.name));
+        return;
+    }
 
     if (message.blockchain_rid == chain_context.blockchain_rid) {
         log("Received updated configuration from chain %s for chain0 at height %d to %s, ignoring"
@@ -39,16 +55,20 @@ entity pending_blockchain_configuration {
     log("Received updated configuration from chain %s for chain %s at height %d to %s"
         .format(sender, message.blockchain_rid, message.height, message.config_hash));
 
-    val pending_configuration = require(
-        pending_blockchain_configuration @? { bc, .config_hash == message.config_hash, .minimum_height <= message.height }
-            (@omit @sort .minimum_height, $) limit 1,
-        "Configuration with hash %s not found for chain %s".format(message.config_hash, message.blockchain_rid)
-    );
+    val pending_configuration = pending_blockchain_configuration @?
+        { bc, .config_hash == message.config_hash, .minimum_height <= message.height }
+        (@omit @sort .minimum_height, $) limit 1;
+    if (pending_configuration == null) {
+        log("Configuration with hash %s not found for chain %s".format(message.config_hash, message.blockchain_rid));
+        return;
+    }
 
     val pending_base_config = pending_configuration.base_config;
     val pending_signers = pending_configuration.signers;
-    require(empty(blockchain_configuration @? { bc, message.height }),
-        "Configuration at height %d already exists for chain %s".format(message.height, message.blockchain_rid));
+    if (blockchain_configuration @? { bc, message.height } != null) {
+        log("Configuration at height %d already exists for chain %s".format(message.height, message.blockchain_rid));
+        return;
+    }
 
     delete pending_configuration;
 
