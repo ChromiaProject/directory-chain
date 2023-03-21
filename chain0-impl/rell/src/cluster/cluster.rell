@@ -96,7 +96,7 @@ function update_configuration_signers(cluster) {
 
 function update_configuration_signers_chain0(blockchain, signers: list<pubkey>) {
     val height = op_context.block_height + 1;
-    log("Applying signers update for chain0 at height %d".format(height));
+    log("Signers update for chain0 at height %d: %s".format(height, signers));
     val bc_signers = blockchain_configuration_signers @? { blockchain, height };
     if (bc_signers == null) {
         create blockchain_configuration_signers(blockchain, height, signers.to_gtv().to_bytes());
@@ -114,7 +114,7 @@ function update_configuration_signers_pcu(blockchain, signers: list<pubkey>) {
     else
         (last_signers_height + 1,
          blockchain_configuration @ { blockchain } (@omit @sort_desc .height, .data) limit 1);
-    log("Applying signers update with PCU for chain %s at minimum height %d".format(blockchain.rid, minimum_height));
+    log("Signers update with PCU for chain %s at minimum height %d: %s".format(blockchain.rid, minimum_height, signers));
     val full_config = map<text, gtv>.from_gtv(gtv.from_bytes(base_config));
     full_config["signers"] = signers.to_gtv();
     create pending_blockchain_configuration(
@@ -128,7 +128,7 @@ function update_configuration_signers_pcu(blockchain, signers: list<pubkey>) {
 
 function update_configuration_signers_legacy(blockchain, signers: list<pubkey>) {
     val height = get_last_height(blockchain) + 5;
-    log("Applying signers update without PCU for chain %s at height %d".format(blockchain.rid, height));
+    log("Signers update without PCU for chain %s at height %d: %s".format(blockchain.rid, height, signers));
     val bc_signers = blockchain_configuration_signers @? { blockchain, height };
     if (bc_signers == null) {
         create blockchain_configuration_signers(blockchain, height, signers.to_gtv().to_bytes());
