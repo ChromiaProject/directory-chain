@@ -231,21 +231,10 @@ query nm_get_blockchain_dependencies(blockchain, height: integer): list<(byte_ar
     NM API Version: 5
 */
 query nm_get_pending_blockchain_configuration(blockchain_rid: byte_array, height: integer):
-        (base_config: byte_array, signers: list<pubkey>)? {
+        list<(base_config: byte_array, signers: list<pubkey>, minimum_height: integer)> {
     val bc = require_blockchain(blockchain_rid);
-    val pending_config = pending_blockchain_configuration @? { bc, .minimum_height <= height }
-        (@omit @sort .minimum_height, $) limit 1;
-    return if (pending_config != null)
-        (base_config=pending_config.base_config, signers=list<pubkey>.from_gtv(gtv.from_bytes(pending_config.signers)))
-    else
-        null;
-}
-
-/*
-    Precise Configuration Update
-    NM API Version: 5
-*/
-query nm_is_pending_blockchain_configuration_applied(blockchain_rid: byte_array, height: integer, config_hash: byte_array): boolean {
-    val bc = require_blockchain(blockchain_rid);
-    return (pending_blockchain_configuration @* { bc, .minimum_height <= height, config_hash }).empty();
+    return pending_blockchain_configuration @* { bc, .minimum_height <= height }
+        (base_config=.base_config,
+         signers=list<pubkey>.from_gtv(gtv.from_bytes(.signers)),
+         @sort minimum_height=.minimum_height);
 }
