@@ -124,6 +124,17 @@ operation update_node(my_pubkey: pubkey, node_pubkey: pubkey, host: text? = null
     if (host != null or port != null) node_list.last_update = op_context.last_block_time;
 }
 
+operation update_node_capability(my_pubkey: pubkey, node_pubkey: pubkey, type: node_capability_type, add: boolean) {
+    val node = require_node_provider(node_pubkey, my_pubkey);
+    if (add) {
+        require(node_capabilities @? { node, type } == null, "Node already has this cabability");
+        create node_capabilities(node, type);
+    } else {
+        require(node_capabilities @? { node, type } != null, "Node does not have this capability");
+        delete node_capabilities @ { node, type };
+    }
+}
+
 function require_node_provider(node_pubkey: pubkey, provider_pubkey: pubkey) {
     val provider = require(provider @? { provider_pubkey }, "Provider %s does not exist".format(provider_pubkey));
     require_provider_auth_with_rl(provider);
