@@ -14,7 +14,7 @@ function pcu_enabled() = chain_context.args.enable_pcu;
 
 entity pending_blockchain_configuration {
     key blockchain, minimum_height: integer;
-    index config_hash: byte_array;
+    key blockchain, config_hash: byte_array;
     base_config: byte_array;
     signers: byte_array;
 }
@@ -50,8 +50,7 @@ entity pending_blockchain_configuration {
         .format(sender, message.blockchain_rid, message.height, message.config_hash));
 
     val pending_configuration = pending_blockchain_configuration @?
-        { bc, .config_hash == message.config_hash, .minimum_height <= message.height }
-        (@omit @sort .minimum_height, $) limit 1;
+        { bc, .config_hash == message.config_hash, .minimum_height <= message.height };
     if (pending_configuration == null) {
         log("Configuration with hash %s and minimum_height<=%d not found for chain %s".format(message.config_hash, message.height, message.blockchain_rid));
         return;
