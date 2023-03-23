@@ -127,11 +127,6 @@ entity pending_provider_quota {
     value: integer;
 }
 
-entity pending_cluster_anchoring_configuration {
-    key proposal;
-    data: byte_array;  // map<string, gtv>
-}
-
 entity pending_provider_batch {
     key proposal;
     provider_infos: byte_array; // list<provider_info>.to_gtv().to_bytes()
@@ -170,7 +165,6 @@ function delete_proposal(prop: proposal) {
         provider_batch                  -> delete pending_provider_batch @ { prop };
         provider_remove                 -> delete pending_remove_provider @? { prop };
         blockchain_action               -> delete pending_blockchain_action @? { prop };
-        cluster_anchoring_configuration -> delete pending_cluster_anchoring_configuration @? { prop };
         else -> delete_proposal_handlers()[prop.proposal_type.name](prop);
     }
     delete vote @* { .proposal == prop };
