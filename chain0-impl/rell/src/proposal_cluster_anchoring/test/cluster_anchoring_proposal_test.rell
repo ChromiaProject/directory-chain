@@ -1,0 +1,42 @@
+@test module;
+
+import ^^.*;
+import ^^^.common.test.ops.*;
+import ^^^.common.test.setup.*;
+import ^^^.common.test.util.*;
+
+function test_cluster_anchoring_proposal() {
+    // setup
+    val originalConf = ["any": "value".to_gtv()];
+    val newConf = ["any": "value2".to_gtv()];
+    setup_module(cluster_anchoring_config = originalConf);
+    val system_provider2 = rell.test.keypairs.bob;
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, system_provider2.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, system_provider2.pub, true)
+    ).sign(initial_provider).run();
+
+    // do proposal
+    rell.test.tx().op(
+        propose_cluster_anchoring_configuration(initial_provider.pub, newConf.to_gtv().to_bytes())
+    ).sign(initial_provider).run();
+
+    // verify proposal
+    val prop = last_proposal();
+    val config_proposal = get_cluster_anchoring_configuration_proposal(prop.rowid);
+    assert_not_null(config_proposal);
+    assert_equals(config_proposal.current_conf, originalConf.to_gtv().to_bytes());
+    assert_equals(config_proposal.proposed_conf, newConf.to_gtv().to_bytes());
+
+    // verify config before
+    val config_map_old = map<text,gtv>.from_gtv(gtv.from_bytes(cluster_anchoring_config.raw_config));
+    assert_equals(config_map_old, originalConf);
+
+    // pass proposal
+    vote_for_last_proposal(system_provider2);
+
+    // verify config after
+    val config_map_new = map<text,gtv>.from_gtv(gtv.from_bytes(cluster_anchoring_config.raw_config));
+    assert_equals(config_map_new, newConf);
+}
