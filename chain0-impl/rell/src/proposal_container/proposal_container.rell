@@ -1,0 +1,79 @@
+entity pending_container {
+    key proposal;
+    key name;
+    cluster;
+    deployer: voter_set;
+    max_blockchains: integer;
+    cpu: integer;
+    ram: integer;
+    storage: integer;
+    io_read: integer;
+    io_write: integer;
+    proposed_by: provider;
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.container.name: apply_container(*)];
+
+function apply_container(proposal) {
+    val pps = pending_container @? { proposal };
+    if (pps == null) return;
+    create_container_with_resource_limits(
+        pps.proposed_by,
+        pps.name,
+        pps.cluster,
+        pps.deployer,
+        pps.max_blockchains,
+        pps.cpu,
+        pps.ram,
+        pps.storage,
+        pps.io_read,
+        pps.io_write
+    );
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.container.name: delete_pending_container(*)];
+
+function delete_pending_container(proposal) {
+    delete pending_container @? { proposal };
+}
+
+// Who can create a new container? Cluster deployers' voter set. (They can also update container limits.)
+operation propose_container(my_pubkey: pubkey, cluster_name: text, name, deployer_name: text, description: text = "") {
+    // check that provider authority and that it is cluster's deployer
+    val me = require_provider(my_pubkey);
+    require_provider_auth_with_rl(me);
+    val cluster = require_cluster(cluster_name);
+    val deployer = require_voter_set(deployer_name);
+    require_cluster_governor(cluster, me);
+    require_provider_quota(me, provider_quota_type.max_containers);
+    require_cluster_quotas(cluster);
+
+    val max_blockchains = _get_cluster_limit_or_default(cluster, cluster_resource_limit_type.default_container_max_blockchains);
+    val cpu = _get_cluster_limit_or_default(cluster, cluster_resource_limit_type.default_container_cpu);
+    val ram = _get_cluster_limit_or_default(cluster, cluster_resource_limit_type.default_container_ram);
+    val storage = _get_cluster_limit_or_default(cluster, cluster_resource_limit_type.default_container_storage);
+    val io_read = _get_cluster_limit_or_default(cluster, cluster_resource_limit_type.default_container_io_read);
+    val io_write = _get_cluster_limit_or_default(cluster, cluster_resource_limit_type.default_container_io_write);
+
+    val prop = create proposal(op_context.last_block_time, proposal_type.container, me, cluster.governance, description);
+    create pending_container(
+        prop, name, cluster, deployer, max_blockchains, cpu, ram, storage, io_read, io_write, me
+    );
+    internal_vote(me, prop, true);
+}
+
+query get_container_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.container);
+    if (proposal == null) return null;
+    val pcwl = pending_container @ { proposal };
+    return (
+        container = pcwl.name,
+        max_blockchains = pcwl.max_blockchains,
+        cpu = pcwl.cpu,
+        ram = pcwl.ram,
+        storage = pcwl.storage,
+        io_read = pcwl.io_read,
+        io_write = pcwl.io_write
+    );
+}
+

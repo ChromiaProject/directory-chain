@@ -31,22 +31,11 @@ function try_to_apply_proposal(prop: proposal) {
 
 // TODO: Move implemetation to modules
 @extendable function apply_voting_result_handlers(): map<text, (proposal) -> unit> = [
-    proposal_type.container_limits.name: apply_container_limits(*),
     proposal_type.cluster_limits.name: apply_cluster_limits(*),
     proposal_type.cluster_provider.name: apply_cluster_provider(*),
     proposal_type.cluster_remove.name: apply_remove_cluster(*),
     proposal_type.other.name: apply_other_voting_result(*)
 ];
-
-function apply_container_limits(proposal) {
-    val pps = pending_container_limits @ { proposal };
-    update container_resource_limit @ {pps.container, container_resource_limit_type.max_blockchains} (pps.max_blockchains);
-    update container_resource_limit @ {pps.container, container_resource_limit_type.cpu} (pps.cpu);
-    update container_resource_limit @ {pps.container, container_resource_limit_type.ram} (pps.ram);
-    update container_resource_limit @ {pps.container, container_resource_limit_type.storage} (pps.storage);
-    update container_resource_limit @ {pps.container, container_resource_limit_type.io_read} (pps.io_read);
-    update container_resource_limit @ {pps.container, container_resource_limit_type.io_write} (pps.io_write);
-}
 
 function apply_cluster_limits(proposal) {
     val pps = pending_cluster_limits @ { proposal };

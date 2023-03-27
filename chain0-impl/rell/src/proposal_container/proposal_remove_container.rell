@@ -1,0 +1,38 @@
+entity pending_remove_container {
+    key proposal;
+    key container;
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.container_remove.name: apply_container_remove(*)];
+
+function apply_container_remove(proposal) {
+    val cont = pending_remove_container @? { proposal } .container;
+    if (cont == null) return;
+    delete container_resource_limit @* { cont };
+    delete pending_remove_container @ { proposal };
+    delete container @ { cont.name };
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.container_remove.name: delete_pending_remove_container(*)];
+
+function delete_pending_remove_container(proposal) {
+    delete pending_remove_container @? { proposal };
+}
+
+operation propose_remove_container(my_pubkey: pubkey, name, description: text = "") {
+    val me = require_provider(my_pubkey);
+    require_provider_auth_with_rl(me);
+    val cont = require_container(name);
+    require_cluster_governor(cont.cluster, me);
+    require_container_available_for_removal(cont);
+
+    val prop = create proposal(op_context.last_block_time, proposal_type.container_remove, me, cont.cluster.governance, description);
+    create pending_remove_container(prop, cont);
+    internal_vote(me, prop, true);
+}
+
+query get_container_remove_proposal(rowid?) {
+    val proposal = get_latest_proposal(rowid, proposal_type.container_remove);
+    if (proposal == null) return null;
+    return pending_remove_container @ { proposal } .container.name;
+}
