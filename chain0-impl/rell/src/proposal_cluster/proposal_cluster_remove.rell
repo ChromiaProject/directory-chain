@@ -1,0 +1,37 @@
+entity pending_remove_cluster {
+    key proposal;
+    key cluster;
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.cluster_remove.name: apply_remove_cluster(*)];
+
+function apply_remove_cluster(proposal) {
+    val cl = pending_remove_cluster @? { proposal } .cluster;
+    if (cl == null) return;
+    delete pending_remove_cluster @ { proposal };
+    remove_cluster_impl(cl);
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.cluster_remove.name: delete_pending_cluster_remove(*)];
+
+function delete_pending_cluster_remove(proposal) {
+    delete pending_remove_cluster @? { proposal };
+}
+
+operation propose_remove_cluster(my_pubkey: pubkey, name, description: text = "") {
+    val me = require_provider(my_pubkey);
+    require_provider_auth_with_rl(me);
+    val c = require(cluster @? { name }, "Unknown cluster %s".format(name));
+    require_cluster_governor(c, me);
+    require_cluster_available_for_removal(c);
+
+    val prop = create proposal(op_context.last_block_time, proposal_type.cluster_remove, me, c.governance, description);
+    create pending_remove_cluster(prop, c);
+    internal_vote(me, prop, true);
+}
+
+query get_cluster_remove_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.cluster_remove);
+    if (proposal == null) return null;
+    return pending_remove_cluster @ { proposal } .cluster.name;
+}
