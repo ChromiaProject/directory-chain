@@ -32,30 +32,6 @@ entity proposal {
     description: text = "";
 }
 
-entity pending_cluster_limits {
-    key proposal;
-    key cluster;
-    max_containers: integer;
-    default_container_max_blockchains: integer;
-    default_container_cpu: integer;
-    default_container_ram: integer;
-    default_container_storage: integer;
-    default_container_io_read: integer;
-    default_container_io_write: integer;
-}
-
-entity pending_cluster_provider {
-    key proposal;
-    key cluster;
-    provider;
-    add: boolean;
-}
-
-entity pending_remove_cluster {
-    key proposal;
-    key cluster;
-}
-
 entity pending_voter_set_governor{
     key proposal;
     key voter_set;
@@ -81,9 +57,6 @@ operation revoke_proposal(my_pubkey: pubkey, proposal_rowid: rowid) {
 function delete_proposal(prop: proposal) {
     when (prop.proposal_type) {
         other                           -> delete_other_proposal(prop);
-        cluster_limits                  -> delete pending_cluster_limits @ { prop };
-        cluster_provider                -> delete pending_cluster_provider @ { prop };
-        cluster_remove                  -> delete pending_remove_cluster @? { prop };
         else -> delete_proposal_handlers()[prop.proposal_type.name](prop);
     }
     delete vote @* { .proposal == prop };

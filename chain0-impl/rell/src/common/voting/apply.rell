@@ -31,37 +31,8 @@ function try_to_apply_proposal(prop: proposal) {
 
 // TODO: Move implemetation to modules
 @extendable function apply_voting_result_handlers(): map<text, (proposal) -> unit> = [
-    proposal_type.cluster_limits.name: apply_cluster_limits(*),
-    proposal_type.cluster_provider.name: apply_cluster_provider(*),
-    proposal_type.cluster_remove.name: apply_remove_cluster(*),
     proposal_type.other.name: apply_other_voting_result(*)
 ];
-
-function apply_cluster_limits(proposal) {
-    val pps = pending_cluster_limits @ { proposal };
-    update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.max_containers} (pps.max_containers);
-    update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.default_container_max_blockchains} (pps.default_container_max_blockchains);
-    update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.default_container_cpu} (pps.default_container_cpu);
-    update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.default_container_ram} (pps.default_container_ram);
-    update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.default_container_storage} (pps.default_container_storage);
-    update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.default_container_io_read} (pps.default_container_io_read);
-    update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.default_container_io_write} (pps.default_container_io_write);
-}
-
-function apply_remove_cluster(proposal) {
-    val cl = pending_remove_cluster @ { proposal } .cluster;
-    delete pending_remove_cluster @ { proposal };
-    remove_cluster_impl(cl);
-}
-
-function apply_cluster_provider(proposal) {
-    val pps = pending_cluster_provider @ {proposal};
-    if (pps.add) {
-        create cluster_provider(pps.cluster, pps.provider);
-    } else {
-        delete cluster_provider @ {pps.cluster, pps.provider};
-    }
-}
 
 function proposal_str(prop: proposal) {
     return "%s:%d".format(prop.proposal_type, prop.rowid);

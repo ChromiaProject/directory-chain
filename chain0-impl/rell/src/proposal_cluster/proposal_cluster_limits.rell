@@ -1,0 +1,81 @@
+entity pending_cluster_limits {
+    key proposal;
+    key cluster;
+    max_containers: integer;
+    default_container_max_blockchains: integer;
+    default_container_cpu: integer;
+    default_container_ram: integer;
+    default_container_storage: integer;
+    default_container_io_read: integer;
+    default_container_io_write: integer;
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.cluster_limits.name: apply_cluster_limits(*)];
+
+function apply_cluster_limits(proposal) {
+    val pps = pending_cluster_limits @? { proposal };
+    if (pps == null) return;
+    update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.max_containers} (pps.max_containers);
+    update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.default_container_max_blockchains} (pps.default_container_max_blockchains);
+    update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.default_container_cpu} (pps.default_container_cpu);
+    update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.default_container_ram} (pps.default_container_ram);
+    update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.default_container_storage} (pps.default_container_storage);
+    update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.default_container_io_read} (pps.default_container_io_read);
+    update cluster_resource_limit @ {pps.cluster, cluster_resource_limit_type.default_container_io_write} (pps.default_container_io_write);
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.cluster_limits.name: delete_pending_cluster_limits(*)];
+
+function delete_pending_cluster_limits(proposal) {
+    delete pending_cluster_limits @? { proposal };
+}
+
+// The operation is mostly needed to make rell-maven-plugin generate code for enum `cluster_resource_limit_type`
+operation propose_cluster_limits(my_pubkey: pubkey, cluster_name: text, limits: map<cluster_resource_limit_type, integer>, description: text = "") {
+    val limits_map = _get_current_cluster_resource_limits(cluster_name);
+    limits_map.put_all(limits);
+
+    val me = require_provider(my_pubkey);
+    //check that provider authority and that it is a cluster governor
+    require_provider_auth_with_rl(me);
+    val cluster = require_cluster(cluster_name);
+    require_cluster_governor(cluster, me);
+    val prop = create proposal(op_context.last_block_time, proposal_type.cluster_limits, me, cluster.governance, description);
+    create pending_cluster_limits(
+        prop,
+        cluster,
+        max_containers = limits_map[cluster_resource_limit_type.max_containers],
+        default_container_max_blockchains = limits_map[cluster_resource_limit_type.default_container_max_blockchains],
+        default_container_cpu = limits_map[cluster_resource_limit_type.default_container_cpu],
+        default_container_ram = limits_map[cluster_resource_limit_type.default_container_ram],
+        default_container_storage = limits_map[cluster_resource_limit_type.default_container_storage],
+        default_container_io_read = limits_map[cluster_resource_limit_type.default_container_io_read],
+        default_container_io_write = limits_map[cluster_resource_limit_type.default_container_io_write]
+    );
+    internal_vote(me, prop, true);
+}
+
+function _get_current_cluster_resource_limits(cluster_name: text): map<cluster_resource_limit_type, integer> {
+    var limits_map = map<cluster_resource_limit_type, integer>();
+    val cur_limits_list = cluster_resource_limit @* { .cluster.name == cluster_name };
+    for (l in cur_limits_list) {
+        limits_map[l.cluster_resource_limit_type] = l.value;
+    }
+    return limits_map;
+}
+
+query get_cluster_limits_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.cluster_limits);
+    if (proposal == null) return null;
+    val pcl = pending_cluster_limits @ { proposal };
+    return (
+        cluster = pcl.cluster.name,
+        max_containers = pcl.max_containers,
+        default_container_max_blockchains = pcl.default_container_max_blockchains,
+        default_container_cpu = pcl.default_container_cpu,
+        default_container_ram = pcl.default_container_ram,
+        default_container_storage = pcl.default_container_storage,
+        default_container_io_read = pcl.default_container_io_read,
+        default_container_io_write = pcl.default_container_io_write
+    );
+}

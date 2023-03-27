@@ -1,0 +1,48 @@
+entity pending_cluster_provider {
+    key proposal;
+    key cluster;
+    provider;
+    add: boolean;
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.cluster_provider.name: apply_cluster_provider(*)];
+
+function apply_cluster_provider(proposal) {
+    val pps = pending_cluster_provider @? {proposal};
+    if (pps == null) return;
+    if (pps.add) {
+        create cluster_provider(pps.cluster, pps.provider);
+    } else {
+        delete cluster_provider @ {pps.cluster, pps.provider};
+    }
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.cluster_provider.name: delete_pending_cluster_provider(*)];
+
+function delete_pending_cluster_provider(proposal) {
+    delete pending_cluster_provider @? { proposal };
+}
+
+operation propose_cluster_provider(my_pubkey: pubkey, cluster_name: text, provider_pubkey: pubkey, add: boolean, description: text = "") {
+    val me = require_is_provider_with_rl(my_pubkey);
+    val provider = require_provider(provider_pubkey);
+    require_node_access(provider);
+    // Check that provider authority and that it is a cluster governor
+    val cluster = require_cluster(cluster_name);
+    require(cluster.name != clusters.system, "Cannot add provider to system cluster manually");
+    require_cluster_governor(cluster, me);
+    val prop = create proposal(op_context.last_block_time, proposal_type.cluster_provider, me, cluster.governance, description);
+    create pending_cluster_provider(prop, cluster, provider, add);
+    internal_vote(me, prop, true);
+}
+
+query get_cluster_provider_proposal(rowid?) {
+    val proposal = get_latest_proposal(rowid, proposal_type.cluster_provider);
+    if (proposal == null) return null;
+    val pcp = pending_cluster_provider @ { proposal };
+    return (
+        cluster = pcp.cluster.name,
+        provider = pcp.provider.pubkey,
+        add = pcp.add
+    );
+}
