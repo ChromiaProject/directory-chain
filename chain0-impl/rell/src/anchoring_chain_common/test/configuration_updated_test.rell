@@ -1,0 +1,83 @@
+@test module;
+
+import ^.helpers.*;
+import ^^.*;
+
+function test_configuration_updated() {
+    val config0 = ["number": (0).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    val blockchain_rid = config0.to_gtv().hash();
+    val block_witness = x"abcd";
+
+    val block_header0 = block_header(
+        blockchain_rid = blockchain_rid,
+        previous_block_rid = blockchain_rid,
+        merkle_root_hash = ["foo": "zero".to_gtv()].to_gtv().hash(),
+        timestamp = 10,
+        height = 0,
+        dependencies = null.to_gtv(),
+        extra = ["config_hash": config0.to_gtv().hash().to_gtv()]
+    ).to_gtv();
+    val block_rid0 = block_header0.hash();
+    rell.test.tx().op(
+        anchor_block_header_op(block_rid0, block_header0, block_witness)
+    ).run();
+    val anchored_block0 = require(get_last_anchored_block(blockchain_rid));
+    assert_equals(anchored_block0.blockchain_rid, blockchain_rid);
+    assert_equals(anchored_block0.block_height, 0);
+    assert_equals(anchored_block0.block_rid, block_rid0);
+    assert_equals(anchored_block0.block_header, block_header0.to_bytes());
+    assert_equals(anchored_block0.witness, block_witness);
+    assert_equals(anchored_block0.anchoring_tx_op_index, 0);
+    assert_true((sent_icmf_message @* { .topic == configuration_updated_topic }).empty());
+
+    val block_header1 = block_header(
+        blockchain_rid = blockchain_rid,
+        previous_block_rid = block_rid0,
+        merkle_root_hash = ["foo": "one".to_gtv()].to_gtv().hash(),
+        timestamp = 20,
+        height = 1,
+        dependencies = null.to_gtv(),
+        extra = ["config_hash": config0.to_gtv().hash().to_gtv()]
+    ).to_gtv();
+    val block_rid1 = block_header1.hash();
+    rell.test.tx().op(
+        anchor_block_header_op(block_rid1, block_header1, block_witness)
+    ).run();
+    val anchored_block1 = require(get_last_anchored_block(blockchain_rid));
+    assert_equals(anchored_block1.blockchain_rid, blockchain_rid);
+    assert_equals(anchored_block1.block_height, 1);
+    assert_equals(anchored_block1.block_rid, block_rid1);
+    assert_equals(anchored_block1.block_header, block_header1.to_bytes());
+    assert_equals(anchored_block1.witness, block_witness);
+    assert_equals(anchored_block1.anchoring_tx_op_index, 0);
+    assert_true((sent_icmf_message @* { .topic == configuration_updated_topic }).empty());
+
+    val config2 = ["number": (2).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    val block_header2 = block_header(
+        blockchain_rid = blockchain_rid,
+        previous_block_rid = block_rid1,
+        merkle_root_hash = ["foo": "two".to_gtv()].to_gtv().hash(),
+        timestamp = 30,
+        height = 2,
+        dependencies = null.to_gtv(),
+        extra = ["config_hash": config2.to_gtv().hash().to_gtv()]
+    ).to_gtv();
+    val block_rid2 = block_header2.hash();
+    rell.test.tx().op(
+        anchor_block_header_op(block_rid2, block_header2, block_witness)
+    ).run_must_fail(); // TODO test op_context.emit_event when possible https://chromaway.atlassian.net/browse/RELL-116
+    /*
+    val anchored_block2 = require(get_last_anchored_block(blockchain_rid));
+    assert_equals(anchored_block2.blockchain_rid, blockchain_rid);
+    assert_equals(anchored_block2.block_height, 1);
+    assert_equals(anchored_block2.block_rid, block_rid1);
+    assert_equals(anchored_block2.block_header, block_header1.to_bytes());
+    assert_equals(anchored_block2.witness, block_witness);
+    assert_equals(anchored_block2.anchoring_tx_op_index, 0);
+    val sent_message = sent_icmf_message @ { .topic == configuration_updated_topic }
+        (configuration_updated.from_gtv(gtv.from_bytes(.body)));
+    assert_equals(sent_message.blockchain_rid, blockchain_rid);
+    assert_equals(sent_message.height, 2);
+    assert_equals(sent_message.config_hash, config2.to_gtv().hash());
+    */
+}
