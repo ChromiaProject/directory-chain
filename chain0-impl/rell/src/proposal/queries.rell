@@ -35,39 +35,6 @@ query get_cluster_provider_proposal(rowid?) {
     );
 }
 
-query get_system_provider_proposal(rowid) {
-    val proposal = get_latest_proposal(rowid, proposal_type.provider_is_system);
-    if (proposal == null) return null;
-    val pis = pending_provider_is_system @ { proposal };
-    return (
-        provider = pis.provider.pubkey,
-        add = pis.system
-    );
-}
-
-query get_provider_quota_proposal(rowid) {
-    val proposal = get_latest_proposal(rowid, proposal_type.provider_quota);
-    if (proposal == null) return null;
-    val ppq = pending_provider_quota @ { proposal };
-    return (
-        tier = ppq.provider_tier,
-        quota_type = ppq.provider_quota_type,
-        value = ppq.value
-    );
-}
-
-query get_provider_batch_proposal(rowid) {
-    val proposal = get_latest_proposal(rowid, proposal_type.provider_batch);
-    if (proposal == null) return null;
-    val ppb = pending_provider_batch @ { proposal };
-    return (
-        provider_infos = list<provider_info>.from_gtv(gtv.from_bytes(ppb.provider_infos)),
-        tier = ppb.provider_tier,
-        system = ppb.system,
-        active = ppb.active
-    );
-}
-
 query get_container_limits_proposal(rowid) {
     val proposal = get_latest_proposal(rowid, proposal_type.container_limits);
     if (proposal == null) return null;
@@ -103,27 +70,6 @@ query get_cluster_remove_proposal(rowid) {
     val proposal = get_latest_proposal(rowid, proposal_type.cluster_remove);
     if (proposal == null) return null;
     return pending_remove_cluster @ { proposal } .cluster.name;
-}
-
-query get_provider_state_proposal(rowid) {
-    val proposal = get_latest_proposal(rowid, proposal_type.provider_state);
-    if (proposal == null) return null;
-    val pps = pending_provider_state @ { proposal };
-    return (
-        provider = pps.provider.pubkey,
-        provider_name = pps.provider.name,
-        active = pps.active
-    );
-}
-
-query get_provider_remove_proposal(rowid) {
-    val proposal = get_latest_proposal(rowid, proposal_type.provider_remove);
-    if (proposal == null) return null;
-    val pps = pending_remove_provider @ { proposal };
-    return (
-        provider = pps.provider.pubkey,
-        provider_name = pps.provider.name
-    );
 }
 
 function get_latest_proposal(rowid?, proposal_type) = if (rowid == null) proposal @ { proposal_type } ( @max proposal ) else proposal @ { rowid };

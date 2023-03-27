@@ -1,0 +1,48 @@
+// Proposed promotion/demotion of provider to/from being system provider
+entity pending_provider_is_system {
+    key proposal;
+    provider;
+    system: boolean;
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.provider_is_system.name: apply_provider_is_system(*)];
+
+// For promotion and demotion of system providers
+function apply_provider_is_system(proposal) {
+    val pps = pending_provider_is_system @? {proposal};
+    if (pps == null) return;
+    // If promotion, update SYSTEM_P voter set
+    if (pps.system) {
+        enroll.system(pps.provider);
+    } else {
+        revoke.system(pps.provider);
+    }
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.provider_is_system.name: delete_pending_provider_is_system(*)];
+
+function delete_pending_provider_is_system(proposal) {
+    delete pending_provider_is_system @? { proposal };
+}
+
+operation propose_provider_is_system(my_pubkey: pubkey, provider_pubkey: pubkey, promote: boolean, description: text = "") {
+    val me = require_is_provider_with_rl(my_pubkey);
+    require_is_system_provider(my_pubkey);
+    val other_prov = require_provider(provider_pubkey);
+
+    if (empty(pending_provider_is_system @* { .provider == other_prov, .system == promote } limit 1)) {
+        val prop = create proposal(op_context.last_block_time, proposal_type.provider_is_system, me, system_p_voter_set(), description);
+        create pending_provider_is_system(prop, other_prov, .system = promote);
+        internal_vote(me, prop, true);
+    }
+}
+
+query get_system_provider_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.provider_is_system);
+    if (proposal == null) return null;
+    val pis = pending_provider_is_system @ { proposal };
+    return (
+        provider = pis.provider.pubkey,
+        add = pis.system
+    );
+}
