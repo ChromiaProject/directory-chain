@@ -31,9 +31,6 @@ function try_to_apply_proposal(prop: proposal) {
 
 // TODO: Move implemetation to modules
 @extendable function apply_voting_result_handlers(): map<text, (proposal) -> unit> = [
-    proposal_type.configuration.name: apply_configuration(*),
-    proposal_type.configuration_at.name: apply_configuration_at(*),
-    proposal_type.bc.name: apply_bc(*),
     proposal_type.container_limits.name: apply_container_limits(*),
     proposal_type.cluster_limits.name: apply_cluster_limits(*),
     proposal_type.cluster_provider.name: apply_cluster_provider(*),
@@ -43,7 +40,6 @@ function try_to_apply_proposal(prop: proposal) {
     proposal_type.provider_quota.name: apply_provider_quota(*),
     proposal_type.provider_batch.name: apply_provider_batch(*),
     proposal_type.provider_remove.name: apply_remove_provider(*),
-    proposal_type.blockchain_action.name: apply_blockchain_action(*),
     proposal_type.other.name: apply_other_voting_result(*)
 ];
 
@@ -162,136 +158,6 @@ function apply_remove_provider(proposal) {
     delete provider_rl_state @* { provider };
     delete pending_remove_provider @ { proposal };
     delete provider;
-}
-
-function apply_configuration(proposal) {
-    val pc = pending_configuration @ { proposal };
-    val is_chain0 = pc.blockchain.rid == chain_context.blockchain_rid;
-
-    if (is_chain0) {
-        apply_configuration_chain0(pc);
-    } else if (pcu_enabled()) {
-        apply_configuration_pcu(pc);
-    } else {
-        apply_configuration_legacy(pc);
-    }
-}
-
-function apply_configuration_chain0(pc: pending_configuration) {
-    val apply_at_height = op_context.block_height + 1;
-    log("Base configuration update chain0 at height %d".format(apply_at_height));
-    require(empty(blockchain_configuration @? { pc.blockchain, apply_at_height }), "Configuration at height %d already exists".format(apply_at_height));
-    create blockchain_configuration(pc.blockchain, apply_at_height, pc.data);
-    add_dependencies(pc.data, pc.blockchain.rid, apply_at_height);
-}
-
-function apply_configuration_pcu(pc: pending_configuration) {
-    val base_config = pc.data;
-
-    val last_configuration_height = (blockchain_configuration @? { pc.blockchain } (@sort_desc .height) limit 1) ?: 0;
-    val last_pending_configuration = pending_blockchain_configuration @? { pc.blockchain } (@sort_desc @omit .minimum_height, $) limit 1;
-    val (minimum_height, signers) = if (last_pending_configuration != null)
-        (last_configuration_height.max(last_pending_configuration.minimum_height) + 1,
-         last_pending_configuration.signers)
-     else
-        (last_configuration_height + 1,
-         blockchain_configuration_signers @ { pc.blockchain } (@omit @sort_desc .height, .signers) limit 1);
-    log("Base configuration update with PCU for chain %s at minimum height %d".format(pc.blockchain.rid, minimum_height));
-    val full_config = map<text, gtv>.from_gtv(gtv.from_bytes(base_config));
-    full_config["signers"] = gtv.from_bytes(signers);
-    create pending_blockchain_configuration(
-        pc.blockchain,
-        minimum_height,
-        config_hash=full_config.to_gtv().hash(),
-        base_config,
-        signers
-    );
-}
-
-function apply_configuration_legacy(pc: pending_configuration) {
-    val apply_at_height = get_last_height(pc.blockchain) + 10;
-    log("Base configuration update without PCU for chain %s at height %d".format(pc.blockchain.rid, apply_at_height));
-    require(empty(blockchain_configuration @? { pc.blockchain, apply_at_height }), "Configuration at height %d already exists".format(apply_at_height));
-    create blockchain_configuration(pc.blockchain, apply_at_height, pc.data);
-    add_dependencies(pc.data, pc.blockchain.rid, apply_at_height);
-}
-
-function apply_configuration_at(proposal) {
-    val pc = pending_configuration_at @ { proposal };
-
-    val last_height = get_last_height(pc.blockchain);
-    val cant_apply_message = "Proposed configuration for height %d can't be applied, current height: %d".format(pc.height, last_height);
-    if (pc.force) {
-        if (pc.height != -1) {
-            require(last_height < pc.height, cant_apply_message);
-        }
-    } else {
-        require(last_height < pc.height, cant_apply_message);
-        require(empty(blockchain_configuration @? { pc.blockchain, pc.height } limit 1), "Configuration at height %d already exists for blockchain %s".format(pc.height, pc.blockchain.rid));
-    }
-
-    val height = if (pc.height == -1) last_height + 1 else pc.height;
-
-    if (not(exists(blockchain_configuration @? { pc.blockchain, height }))) {
-        create blockchain_configuration(pc.blockchain, height, data = pc.data);
-        add_dependencies(pc.data, pc.blockchain.rid, height);
-    } else {
-        update blockchain_configuration @ { pc.blockchain, height } ( .data = pc.data );
-    }
-}
-
-// Initial signers of new bc are the ones in cluster_node table.
-function apply_bc(proposal) {
-    val bc = pending_blockchain @ {proposal};
-
-    val nodes = cluster_node @* { bc.container.cluster } (@sort .node.pubkey);
-    // do not write new configuration when size is 0 since it's impossible to recover from that
-    require(nodes.size() > 0, "Cluster must have at least one node");
-
-    val blockchain_rid = add_blockchain(bc.data, nodes.to_gtv().to_bytes(), bc.name, bc.container);
-    log("Added blockchain", blockchain_rid);
-}
-
-function apply_blockchain_action(proposal) {
-    val pba = pending_blockchain_action @ { proposal };
-    when (pba.action) {
-        pause -> _apply_pause_blockchain(pba, proposal);
-        resume -> _apply_resume_blockchain(pba, proposal);
-        remove -> _apply_delete_blockchain(pba, proposal);
-    }
-}
-
-// Stop block production by inactivating bc, and keep replicas.
-function _apply_pause_blockchain(action: pending_blockchain_action, proposal) {
-    update blockchain @ { action.blockchain.rid } (.active = false);
-    // Keep replicas
-    for (signer in get_blockchain_signers(action.blockchain.rid)) {
-        create blockchain_replica_node(action.blockchain, node @ { signer[0] });
-    }
-}
-
-// Restart block production; block builders will be the ones in cluster_node.
-function _apply_resume_blockchain(action: pending_blockchain_action, proposal) {
-    update blockchain @ { action.blockchain.rid } (.active = true);
-    // Removing replicas if they are cluster nodes
-    val nodes = get_blockchain_signers(action.blockchain.rid);
-    for (node_info in nodes) {
-        delete blockchain_replica_node @? { action.blockchain, node @ { node_info[0] } };
-    }
-}
-
-// Delete everything about this bc
-function _apply_delete_blockchain(action: pending_blockchain_action, proposal) {
-    val bc = action.blockchain;
-    before_delete_blockchain(bc);
-    delete container_blockchain @ { bc };
-    delete blockchain_configuration @* { bc };
-    delete blockchain_configuration_signers @* { bc };
-    delete blockchain_added @* { bc };
-    delete blockchain_replica_node @* { bc };
-    delete blockchain_dependency @* { .me == bc };
-    delete pending_blockchain_action @ { proposal };
-    delete blockchain @ { bc.rid };
 }
 
 function proposal_str(prop: proposal) {
