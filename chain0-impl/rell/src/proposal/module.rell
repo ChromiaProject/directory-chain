@@ -30,20 +30,6 @@ entity proposal {
     description: text = "";
 }
 
-entity pending_configuration_at {
-    key proposal;
-    blockchain;
-    height: integer;
-    force: boolean;
-    data: byte_array;
-}
-
-entity pending_configuration {
-    key proposal;
-    blockchain;
-    data: byte_array;
-}
-
 entity pending_container_limits {
     key proposal;
     key container;
@@ -92,20 +78,6 @@ entity pending_voter_set_provider {
     add: boolean;
 }
 
-entity pending_blockchain_action {
-    key proposal;
-    key blockchain;
-    action: blockchain_action;
-}
-
-// Proposed bc:s are put here while waiting for enough positive votes.
-entity pending_blockchain {
-    key proposal;
-    name;
-    data: byte_array;
-    container;
-}
-
 // Proposed enabling/disabling of providers are put here while waiting for enough positive votes.
 entity pending_provider_state {
     key proposal;
@@ -152,9 +124,6 @@ operation revoke_proposal(my_pubkey: pubkey, proposal_rowid: rowid) {
 function delete_proposal(prop: proposal) {
     when (prop.proposal_type) {
         other                           -> delete_other_proposal(prop);
-        configuration_at                -> delete pending_configuration_at @ { prop };
-        configuration                   -> delete pending_configuration @ { prop };
-        bc                              -> delete pending_blockchain @ { prop };
         container_limits                -> delete pending_container_limits @ { prop };
         cluster_limits                  -> delete pending_cluster_limits @ { prop };
         cluster_provider                -> delete pending_cluster_provider @ { prop };
@@ -164,7 +133,6 @@ function delete_proposal(prop: proposal) {
         provider_quota                  -> delete pending_provider_quota @ { prop };
         provider_batch                  -> delete pending_provider_batch @ { prop };
         provider_remove                 -> delete pending_remove_provider @? { prop };
-        blockchain_action               -> delete pending_blockchain_action @? { prop };
         else -> delete_proposal_handlers()[prop.proposal_type.name](prop);
     }
     delete vote @* { .proposal == prop };

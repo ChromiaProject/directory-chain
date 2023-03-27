@@ -1,0 +1,14 @@
+module;
+
+function validate_blockchain_configuration(config_data: byte_array, signers: boolean, header_hash: boolean) {
+    val config_map = map<text, gtv>.from_gtv(gtv.from_bytes(config_data));
+    if (signers) {
+        require("signers" not in config_map, "Configuration must not contain \"signers\"");
+    }
+    if (header_hash) {
+        require("config_consensus_strategy" in config_map,
+            "Configuration must contain \"config_consensus_strategy\"=\"HEADER_HASH\"");
+        require(config_map["config_consensus_strategy"] == "HEADER_HASH".to_gtv(),
+            "Configuration must contain \"config_consensus_strategy\"=\"HEADER_HASH\"");
+    }
+}
