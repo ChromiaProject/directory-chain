@@ -35,11 +35,6 @@ function try_to_apply_proposal(prop: proposal) {
     proposal_type.cluster_limits.name: apply_cluster_limits(*),
     proposal_type.cluster_provider.name: apply_cluster_provider(*),
     proposal_type.cluster_remove.name: apply_remove_cluster(*),
-    proposal_type.provider_state.name: apply_provider_state(*),
-    proposal_type.provider_is_system.name: apply_provider_is_system(*),
-    proposal_type.provider_quota.name: apply_provider_quota(*),
-    proposal_type.provider_batch.name: apply_provider_batch(*),
-    proposal_type.provider_remove.name: apply_remove_provider(*),
     proposal_type.other.name: apply_other_voting_result(*)
 ];
 
@@ -77,87 +72,6 @@ function apply_cluster_provider(proposal) {
     } else {
         delete cluster_provider @ {pps.cluster, pps.provider};
     }
-}
-
-// For promotion and demotion of system providers
-function apply_provider_is_system(proposal) {
-    val pps = pending_provider_is_system @ {proposal};
-
-    // If promotion, update SYSTEM_P voter set
-    if (pps.system) {
-        enroll.system(pps.provider);
-    } else {
-        revoke.system(pps.provider);
-    }
-}
-
-// For both enabling and disabling of providers:
-function apply_provider_state(proposal) {
-    val pps = pending_provider_state @ { proposal };
-    update_provider_state(pps.provider, pps.active);
-}
-
-function update_provider_state(provider, active: boolean) {
-    provider.active = active;
-    if (active == false) {
-        update node @* { provider } ( .active = false );
-        // cluster nodes
-        delete cluster_node @* { .node.provider == provider };
-        for (cl in cluster_provider @* { provider } (.cluster)) {
-            // Removing the last node of a cluster is not allowed:
-            require(not(empty(cluster_node @* { cl })), "Cannot deactivate the last node of a cluster: " + cl.name);
-            update_configuration_signers(cl);
-        }
-        // cluster replica nodes
-        delete cluster_replica_node @* { .node.provider == provider };
-        // blockchain replica nodes
-        delete blockchain_replica_node @* { .node.provider == provider };
-        // remove disabled provider from voter_set_member table
-        delete voter_set_member @* { .provider == provider };
-        // updating node list timestamp
-        node_list.last_update = op_context.last_block_time;
-    } else { // enable
-        // If enabled provider is a system provider, update SYSTEM_P voter set
-        if (roles.has_system_access(provider)) {
-            create voter_set_member(voter_set @ { voter_sets.system_p }, provider);
-        }
-    }
-}
-
-function apply_provider_quota(proposal) {
-    val ppq = pending_provider_quota @ { proposal };
-    update provider_quota @? { ppq.provider_tier, ppq.provider_quota_type } (ppq.value);
-}
-
-function apply_provider_batch(proposal) {
-    val ppb = pending_provider_batch @ { proposal };
-    val providers = list<provider_info>.from_gtv(gtv.from_bytes(ppb.provider_infos));
-    for (pi in providers) {
-        if (empty(provider @? { pi.pubkey })) {
-            register_and_enable_provider(pi, ppb.provider_tier, null, null, ppb.active);
-            when {
-                ppb.system -> {
-                    val provider = provider @ { pi.pubkey };
-                    enroll.system(provider);
-                    if (not(ppb.active)) {
-                        update_provider_state(provider, false);
-                    }
-                }
-                _is_node_provider(ppb.provider_tier) -> enroll.node(provider @ { pi.pubkey });
-            }
-        } else {
-            log("Warning: provider already exists: " + pi.pubkey);
-        }
-    }
-}
-
-function apply_remove_provider(proposal) {
-    val provider = pending_remove_provider @ { proposal } (.provider);
-    delete node @* { provider };
-    delete cluster_provider @* { provider };
-    delete provider_rl_state @* { provider };
-    delete pending_remove_provider @ { proposal };
-    delete provider;
 }
 
 function proposal_str(prop: proposal) {

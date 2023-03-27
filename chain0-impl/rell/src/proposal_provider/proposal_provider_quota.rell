@@ -1,0 +1,52 @@
+entity pending_provider_quota {
+    key proposal;
+    provider_tier;
+    provider_quota_type;
+    value: integer;
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.provider_quota.name: apply_provider_quota(*)];
+
+function apply_provider_quota(proposal) {
+    val ppq = pending_provider_quota @? { proposal };
+    if (ppq == null) return;
+    update provider_quota @? { ppq.provider_tier, ppq.provider_quota_type } (ppq.value);
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.provider_quota.name: delete_pending_provider_quota(*)];
+
+function delete_pending_provider_quota(proposal) {
+    delete pending_provider_quota @? { proposal };
+}
+
+operation propose_provider_quota(my_pubkey: pubkey, tier: provider_tier, provider_quota_type, value: integer, description: text = "") {
+    val me = require_is_provider_with_rl(my_pubkey);
+    require_is_system_provider(my_pubkey);
+
+    // quota value requirements
+    when (provider_quota_type) {
+        max_actions_per_day -> require(value > 0, "Proposed max_actions_per_day quota value must be > 0: " + value);
+        max_nodes -> {
+            require(value > 0, "Proposed max_nodes quota value must be > 0: " + value);
+        }
+        max_containers -> {
+            require(value >= -1, "Proposed max_containers quota value must be >= -1: " + value);
+            require(tier != provider_tier.COMMUNITY_NODE_PROVIDER, "Proposing max_containers quota is not allowed for COMMUNITY_NODE_PROVIDER");
+        }
+    }
+
+    val prop = create proposal(op_context.last_block_time, proposal_type.provider_quota, me, system_p_voter_set(), description);
+    create pending_provider_quota(prop, tier, provider_quota_type, value);
+    internal_vote(me, prop, true);
+}
+
+query get_provider_quota_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.provider_quota);
+    if (proposal == null) return null;
+    val ppq = pending_provider_quota @ { proposal };
+    return (
+        tier = ppq.provider_tier,
+        quota_type = ppq.provider_quota_type,
+        value = ppq.value
+    );
+}

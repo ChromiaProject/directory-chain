@@ -1,0 +1,90 @@
+// Proposed enabling/disabling of providers are put here while waiting for enough positive votes.
+entity pending_provider_state {
+    key proposal;
+    provider;
+    active: boolean;
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.provider_state.name: apply_provider_state(*)];
+
+// For both enabling and disabling of providers:
+function apply_provider_state(proposal) {
+    val pps = pending_provider_state @? { proposal };
+    if (pps == null) return;
+    update_provider_state(pps.provider, pps.active);
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.provider_state.name: delete_pending_provider_state(*)];
+
+function delete_pending_provider_state(proposal) {
+    delete pending_provider_state @? { proposal };
+}
+
+/*
+    The provider with type in line can (+) / can not (-) change the state of the other one in the column:
+
+         | CNP | NP  | SP
+    -----|-----|-----|-----
+     CNP |  -  |  -  |  -
+     NP  |  +  |  -  |  -
+     SP  |  +  |  +  |  +
+*/
+operation propose_provider_state(my_pubkey: pubkey, provider_pubkey: pubkey, active: boolean, description: text = "") {
+    val me = require_provider(my_pubkey);
+    require_provider_auth_with_rl(me);
+
+    val other_prov = require_provider(provider_pubkey);
+    require(empty(pending_remove_provider @? { other_prov }), "Provider is proposed for removal: " + provider_pubkey);
+
+    // Only SP and NP can enable/disable providers
+    require_node_access(me);
+
+    if (roles.has_node_access(me) and other_prov.tier == provider_tier.COMMUNITY_NODE_PROVIDER) {
+        update_provider_state(other_prov, active);
+    } else {
+        require_system_access(me);
+        if (empty(pending_provider_state @* { .provider == other_prov, .active == active } limit 1)) {
+            val prop = create proposal(op_context.last_block_time, proposal_type.provider_state, me, system_p_voter_set(), description);
+            create pending_provider_state(prop, other_prov, .active = active);
+            internal_vote(me, prop, true);
+        }
+    }
+}
+
+function update_provider_state(provider, active: boolean) {
+    provider.active = active;
+    if (active == false) {
+        update node @* { provider } ( .active = false );
+        // cluster nodes
+        delete cluster_node @* { .node.provider == provider };
+        for (cl in cluster_provider @* { provider } (.cluster)) {
+            // Removing the last node of a cluster is not allowed:
+            require(not(empty(cluster_node @* { cl })), "Cannot deactivate the last node of a cluster: " + cl.name);
+            update_configuration_signers(cl);
+        }
+        // cluster replica nodes
+        delete cluster_replica_node @* { .node.provider == provider };
+        // blockchain replica nodes
+        delete blockchain_replica_node @* { .node.provider == provider };
+        // remove disabled provider from voter_set_member table
+        delete voter_set_member @* { .provider == provider };
+        // updating node list timestamp
+        node_list.last_update = op_context.last_block_time;
+    } else { // enable
+        // If enabled provider is a system provider, update SYSTEM_P voter set
+        if (roles.has_system_access(provider)) {
+            create voter_set_member(voter_set @ { voter_sets.system_p }, provider);
+        }
+    }
+}
+
+query get_provider_state_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.provider_state);
+    if (proposal == null) return null;
+    val pps = pending_provider_state @ { proposal };
+    return (
+        provider = pps.provider.pubkey,
+        provider_name = pps.provider.name,
+        active = pps.active
+    );
+}

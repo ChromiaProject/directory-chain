@@ -1,0 +1,52 @@
+entity pending_remove_provider {
+    key proposal;
+    provider;
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.provider_remove.name: apply_remove_provider(*)];
+
+function apply_remove_provider(proposal) {
+    val provider = pending_remove_provider @? { proposal } (.provider);
+    if (provider == null) return;
+    delete node @* { provider };
+    delete cluster_provider @* { provider };
+    delete provider_rl_state @* { provider };
+    delete pending_remove_provider @ { proposal };
+    delete provider;
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.provider_remove.name: delete_pending_remove_provider(*)];
+
+function delete_pending_remove_provider(proposal) {
+    delete pending_remove_provider @? { proposal };
+}
+
+operation propose_remove_provider(my_pubkey: pubkey, provider_pubkey: pubkey, description: text = "") {
+    val me = require_is_provider_with_rl(my_pubkey);
+    require_system_access(me);
+
+    // no state proposals
+    val prov = require_provider(provider_pubkey);
+    require(empty(pending_provider_state @? { prov }), "Provider state is proposed for changes: " + provider_pubkey);
+
+    // active (voter set member)
+    require(not(prov.active), "Active provider can't be deleted: " + provider_pubkey);
+
+    // container
+    val containers = container @* { prov } (.name);
+    require(empty(containers), "Provider is the author of the container(s) %s and can't be deleted: %s".format(containers.to_text(), provider_pubkey));
+
+    val prop = create proposal(op_context.last_block_time, proposal_type.provider_remove, me, system_p_voter_set(), description);
+    create pending_remove_provider(prop, prov);
+    internal_vote(me, prop, true);
+}
+
+query get_provider_remove_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.provider_remove);
+    if (proposal == null) return null;
+    val pps = pending_remove_provider @ { proposal };
+    return (
+        provider = pps.provider.pubkey,
+        provider_name = pps.provider.name
+    );
+}

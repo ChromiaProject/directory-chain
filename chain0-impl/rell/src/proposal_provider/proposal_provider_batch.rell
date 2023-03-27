@@ -1,0 +1,82 @@
+entity pending_provider_batch {
+    key proposal;
+    provider_infos: byte_array; // list<provider_info>.to_gtv().to_bytes()
+    provider_tier;
+    system: boolean;
+    active: boolean;
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.provider_batch.name: apply_provider_batch(*)];
+
+function apply_provider_batch(proposal) {
+    val ppb = pending_provider_batch @? { proposal };
+    if (ppb == null) return;
+    val providers = list<provider_info>.from_gtv(gtv.from_bytes(ppb.provider_infos));
+    for (pi in providers) {
+        if (empty(provider @? { pi.pubkey })) {
+            register_and_enable_provider(pi, ppb.provider_tier, null, null, ppb.active);
+            when {
+                ppb.system -> {
+                    val provider = provider @ { pi.pubkey };
+                    enroll.system(provider);
+                    if (not(ppb.active)) {
+                        update_provider_state(provider, false);
+                    }
+                }
+                _is_node_provider(ppb.provider_tier) -> enroll.node(provider @ { pi.pubkey });
+            }
+        } else {
+            log("Warning: provider already exists: " + pi.pubkey);
+        }
+    }
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.provider_batch.name: delete_pending_provider_batch(*)];
+
+function delete_pending_provider_batch(proposal) {
+    delete pending_provider_batch @? { proposal };
+}
+
+operation propose_providers(my_pubkey: pubkey, provider_infos: list<provider_info>, tier: provider_tier, system: boolean, active: boolean, description: text = "") {
+    val me = require_is_provider_with_rl(my_pubkey);
+    require_is_system_provider(my_pubkey);
+    if (system) {
+        require(tier == provider_tier.NODE_PROVIDER, "Only NODE_PROVIDER can be marked as system provider");
+    }
+    require(not(empty(provider_infos)), "Proposed provider key list is empty");
+
+    val providers_map = map<pubkey, provider_info>();
+    for (pi in provider_infos) {
+        providers_map[pi.pubkey] = pi;
+    }
+    val providers = providers_map.values();
+    for (p in providers) {
+        require(empty(provider @? { p.pubkey }), "Provider already exists: " + p.pubkey);
+    }
+
+    val already_proposed = set<pubkey>();
+    for (ppb in pending_provider_batch @* {}) {
+        already_proposed.add_all(
+            list<provider_info>.from_gtv(gtv.from_bytes(ppb.provider_infos)) @* {} ( .pubkey )
+        );
+    }
+    for (p in providers) {
+        require(not(p.pubkey in already_proposed), "Provider is already proposed: " + p.pubkey);
+    }
+
+    val prop = create proposal(op_context.last_block_time, proposal_type.provider_batch, me, system_p_voter_set(), description);
+    create pending_provider_batch(prop, providers.to_gtv().to_bytes(), tier, system, active);
+    internal_vote(me, prop, true);
+}
+
+query get_provider_batch_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.provider_batch);
+    if (proposal == null) return null;
+    val ppb = pending_provider_batch @ { proposal };
+    return (
+        provider_infos = list<provider_info>.from_gtv(gtv.from_bytes(ppb.provider_infos)),
+        tier = ppb.provider_tier,
+        system = ppb.system,
+        active = ppb.active
+    );
+}
