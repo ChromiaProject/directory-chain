@@ -32,19 +32,6 @@ entity proposal {
     description: text = "";
 }
 
-entity pending_voter_set_governor{
-    key proposal;
-    key voter_set;
-    governor: voter_set;
-}
-
-entity pending_voter_set_provider {
-    key proposal;
-    key voter_set;
-    provider;
-    add: boolean;
-}
-
 operation revoke_proposal(my_pubkey: pubkey, proposal_rowid: rowid) {
     val me = require_is_provider_with_rl(my_pubkey);
     require_provider_auth_with_rl(me);
@@ -55,14 +42,10 @@ operation revoke_proposal(my_pubkey: pubkey, proposal_rowid: rowid) {
 }
 
 function delete_proposal(prop: proposal) {
-    when (prop.proposal_type) {
-        other                           -> delete_other_proposal(prop);
-        else -> delete_proposal_handlers()[prop.proposal_type.name](prop);
-    }
+    require(prop.proposal_type != proposal_type.other, "Proposal of type 'other' is not allowed");
+    delete_proposal_handlers()[prop.proposal_type.name](prop);
     delete vote @* { .proposal == prop };
     delete proposal @ { .rowid == prop.rowid };
 }
-
-@extendable function delete_other_proposal(proposal) { /* Should be extended */ }
 
 @extendable function delete_proposal_handlers(): map<text, (proposal) -> unit>;
