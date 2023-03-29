@@ -5,25 +5,25 @@ import ^.config_common.*;
     if (not pcu_enabled()) return;
 
     if (not header.extra.contains("config_hash")) return;
-    val new_config_hash = byte_array.from_gtv(header.extra["config_hash"]);
+    val current_config_hash = header.extra["config_hash"];
     val blockchain_rid = header.blockchain_rid;
 
     // TODO debug logging, remove later
     log("Anchor chain %s anchoring for chain %s at height %d with config_hash %s".format(
-        chain_context.blockchain_rid, blockchain_rid, header.height, new_config_hash));
+        chain_context.blockchain_rid, blockchain_rid, header.height, current_config_hash));
 
-    val last_anchored_block_header = anchor_block @? { blockchain_rid, .block_height < header.height } (@omit @sort_desc .block_height,
-        block_header.from_gtv(gtv.from_bytes($.block_header))
+    val prev_config_hash = anchor_block @? { blockchain_rid, .block_height < header.height } (
+        @omit @sort_desc .block_height,
+        block_header.from_bytes($.block_header).extra.get_or_null("config_hash")
     ) limit 1;
-    val current_config_hash = if (last_anchored_block_header != null and last_anchored_block_header.extra.contains("config_hash"))
-        byte_array.from_gtv(last_anchored_block_header.extra["config_hash"])
-    else
-        null;
+    log("prev_config_hash: " + prev_config_hash);
 
-    if (current_config_hash != null and new_config_hash != current_config_hash) {
+    if (prev_config_hash != null and current_config_hash != prev_config_hash) {
         log("Anchoring chain %s detected updated configuration for chain %s at height %d to %s".format(
-            chain_context.blockchain_rid, blockchain_rid, header.height, new_config_hash));
-        send_message(configuration_updated_topic,
-            configuration_updated(blockchain_rid = blockchain_rid, header.height, config_hash = new_config_hash).to_gtv());
+            chain_context.blockchain_rid, blockchain_rid, header.height, current_config_hash));
+        send_message(
+            configuration_updated_topic,
+            configuration_updated(blockchain_rid, header.height, config_hash = byte_array.from_gtv(current_config_hash)).to_gtv()
+        );
     }
 }
