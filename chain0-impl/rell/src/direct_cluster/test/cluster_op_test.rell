@@ -16,7 +16,7 @@ function test_add_remove_cluster() {
     rell.test.tx().op(
         register_provider(initial_provider.pub, dapp_provider1.pub, provider_tier.COMMUNITY_NODE_PROVIDER),
         register_provider(initial_provider.pub, node_provider1.pub, provider_tier.NODE_PROVIDER),
-        propose_provider_state(initial_provider.pub, node_provider1.pub, true)
+        propose_provider_is_system(initial_provider.pub, node_provider1.pub, true)
     ).sign(initial_provider).run();
 
     // 1. Deleting system cluster. Must fail.
@@ -91,6 +91,9 @@ function test_add_remove_cluster() {
     rell.test.tx().op(
         propose_remove_cluster(initial_provider.pub, "cluster1")
     ).sign(initial_provider).run();
+    rell.test.tx().op(
+        make_vote(node_provider1.pub, last_proposal().rowid.to_integer(), true)
+    ).sign(node_provider1).run();
 
     // Asserting cluster1 is deleted with its stuff
     assert_null(cluster @? { "cluster1" });
