@@ -27,7 +27,7 @@ function _apply_pause_blockchain(action: pending_blockchain_action, proposal) {
     update blockchain @ { action.blockchain.rid } (.active = false);
     // Keep replicas
     for (signer in get_blockchain_signer_nodes(action.blockchain)) {
-        create blockchain_replica_node(action.blockchain, node @ { signer[0] });
+        create blockchain_replica_node(action.blockchain, signer);
     }
 }
 
@@ -37,7 +37,7 @@ function _apply_resume_blockchain(action: pending_blockchain_action, proposal) {
     // Removing replicas if they are cluster nodes
     val nodes = get_blockchain_signer_nodes(action.blockchain);
     for (node_info in nodes) {
-        delete blockchain_replica_node @? { action.blockchain, node @ { node_info[0] } };
+        delete blockchain_replica_node @? { action.blockchain, node_info };
     }
 }
 

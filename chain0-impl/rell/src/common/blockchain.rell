@@ -40,20 +40,11 @@ function get_last_height(blockchain): integer {
     }
 }
 
-function get_blockchain_signer_nodes(blockchain: blockchain?): list<(byte_array, text, integer, boolean, integer)> {
-    if (exists(blockchain)) {
-        return (cluster_node, container_blockchain) @* {
-            container_blockchain.blockchain == blockchain,
-            cluster_node.cluster == container_blockchain.container.cluster
-        } (
-            @sort .node.pubkey,
-            .node.host,
-            .node.port,
-            .node.active,
-            .node.last_updated
-        );
-    }
-    return list();
+function get_blockchain_signer_nodes(blockchain: blockchain): list<node> {
+    return (cluster_node, container_blockchain) @* {
+        container_blockchain.blockchain == blockchain,
+        cluster_node.cluster == container_blockchain.container.cluster
+    } ( .node );
 }
 
 // Cannot use function get_last_height, since it uses an op_context.
