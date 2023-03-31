@@ -102,7 +102,11 @@ function test_propose_configuration_at() {
     assert_not_null(blockchain_configuration @? { bc, 10 });
     // 1.2. before 10
     propose_config(bc.rid, conf, 8, false).run();
-    assert_not_null(blockchain_configuration @? { bc, .height == 8 });
+    assert_not_null(blockchain_configuration @? { bc, 8 });
+
+    // assert unique configurations
+    assert_not_equals(blockchain_configuration @? { bc, 10 } (.data), blockchain_configuration @? { bc, 8 } (.data));
+
     // 1.3. again 10
     propose_config(bc.rid, conf, 10, false).run_must_fail();
     // 1.4. height is null
