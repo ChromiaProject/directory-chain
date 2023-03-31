@@ -35,8 +35,6 @@ function apply_configuration_chain0(pc: pending_configuration) {
 }
 
 function apply_configuration_pcu(pc: pending_configuration) {
-    val base_config = pc.data;
-
     val last_configuration_height = (blockchain_configuration @? { pc.blockchain } (@sort_desc .height) limit 1) ?: 0;
     val last_pending_configuration = pending_blockchain_configuration @? { pc.blockchain } (@sort_desc @omit .minimum_height, $) limit 1;
     val (minimum_height, signers) = if (last_pending_configuration != null)
@@ -46,13 +44,14 @@ function apply_configuration_pcu(pc: pending_configuration) {
         (last_configuration_height + 1,
          blockchain_configuration_signers @ { pc.blockchain } (@omit @sort_desc .height, .signers) limit 1);
     log("Base configuration update with PCU for chain %s at minimum height %d".format(pc.blockchain.rid, minimum_height));
-    val full_config = map<text, gtv>.from_gtv(gtv.from_bytes(base_config));
+    val unique_base_config = make_config_unique(pc.data);
+    val full_config = map<text, gtv>.from_gtv(gtv.from_bytes(unique_base_config));
     full_config["signers"] = gtv.from_bytes(signers);
     create pending_blockchain_configuration(
         pc.blockchain,
         minimum_height,
         config_hash=full_config.to_gtv().hash(),
-        base_config,
+        base_config=unique_base_config,
         signers
     );
 }

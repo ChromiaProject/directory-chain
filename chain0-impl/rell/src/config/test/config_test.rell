@@ -58,6 +58,24 @@ function test_precise_configuration_update_config_happy() {
     assert_true(is_pending_blockchain_configuration_applied(bc_rid, 5, pending_config1_hash));
 }
 
+function test_precise_configuration_update_config_happy_unique_config() {
+    val (anchor_chain, bc_rid) = setup();
+
+    val config = ["number": (1).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv()];
+
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config.to_gtv_pretty().to_bytes(), "first")
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config.to_gtv_pretty().to_bytes(), "second")
+    ).sign(initial_provider).run();
+
+    val pending_configs = nm_get_pending_blockchain_configuration(bc_rid, 5);
+    assert_equals(pending_configs.size(), 2);
+    assert_not_equals(pending_configs[0].base_config, pending_configs[1].base_config);
+}
+
 function test_precise_configuration_update_signers_happy() {
     val (anchor_chain, bc_rid) = setup();
 
