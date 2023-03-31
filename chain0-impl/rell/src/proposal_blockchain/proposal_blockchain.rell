@@ -6,6 +6,11 @@ entity pending_blockchain {
     container;
 }
 
+@extend(is_container_available_for_removal) function(container) = 
+        if (exists(pending_blockchain @* { container }))
+            "Container %s has pending proposals and can't be deleted. Resolve proposals first".format(container.name)
+        else null;
+
 @extend(apply_voting_result_handlers) function() = [proposal_type.bc.name: apply_blockchain_proposal(*)];
 
 // Initial signers of new bc are the ones in cluster_node table.

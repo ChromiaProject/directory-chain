@@ -1,6 +1,4 @@
 import ^.model.util.constants.*;
-import ^.proposal_blockchain.*;
-import ^.proposal_container.proposal_container_limits.*;
 
 function create_system_container(me: provider, name, cluster, voter_set): container {
     val c = create container(name, cluster, voter_set, me, system = true);
@@ -29,19 +27,17 @@ function remove_container_impl(container) {
     delete container;
 }
 
-function is_container_available_for_removal(container): (boolean, text) {
+@extendable function is_container_available_for_removal(container): text? {
     return when {
-        container.system -> (false, "System container can't be deleted");
-        exists(container_blockchain @* { container }) -> (false, "Container %s is not empty and can't be deleted. Delete blockchains first".format(container.name));
-        exists(pending_container_limits @* { container }) -> (false, "Container %s has pending proposals and can't be deleted. Resolve proposals first".format(container.name));
-        exists(pending_blockchain @* { container }) -> (false, "Container %s has pending proposals and can't be deleted. Resolve proposals first".format(container.name));
-        else -> (true, "");
+        container.system -> "System container can't be deleted";
+        exists(container_blockchain @* { container }) -> "Container %s is not empty and can't be deleted. Delete blockchains first".format(container.name);
+        else -> null;
     };
 }
 
 function require_container_available_for_removal(container) {
-    val (available, msg) = is_container_available_for_removal(container);
-    require(available, msg);
+    val objections = is_container_available_for_removal(container);
+    require(empty(objections), objections!!);
 }
 
 @extend(before_cluster_removal) function remove_system_container(cluster) {
