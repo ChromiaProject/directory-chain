@@ -1,14 +1,5 @@
-import ^.common.util.*;
-import ^.cluster.*;
-import ^.model.*;
 
-val blockchain_prefix = "cluster_anchoring_";
-
-object cluster_anchoring_config {
-    mutable raw_config: byte_array = map<text, gtv>().to_gtv().to_bytes();
-}
-
-function set_config(config: byte_array) {
+function set_cluster_anchoring_config(config: byte_array) {
     map<text, gtv>.from_gtv(gtv.from_bytes(config)); // Validate that config is a map
     cluster_anchoring_config.raw_config = config;
 }
@@ -22,7 +13,7 @@ function set_config(config: byte_array) {
         config_map["cluster"] = cluster.name.to_gtv();
         val unique_config = config_map.to_gtv_pretty();
         val blockchain_rid = unique_config.hash();
-        val blockchain = create blockchain(blockchain_rid, blockchain_prefix + cluster.name, system = true, active = false);
+        val blockchain = create blockchain(blockchain_rid, blockchains.cluster_anchoring_prefix + cluster.name, system = true, active = false);
         create blockchain_configuration(blockchain, 0, unique_config.to_bytes());
 
         val system_container = container @ { .name == system_container_name(cluster.name), cluster };
@@ -83,8 +74,4 @@ function set_config(config: byte_array) {
             }
         }
     }
-}
-
-query get_cluster_anchoring_configuration(): byte_array {
-    return cluster_anchoring_config.raw_config;
 }
