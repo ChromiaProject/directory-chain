@@ -40,4 +40,30 @@ function get_last_height(blockchain): integer {
     }
 }
 
+function get_blockchain_signer_nodes(blockchain: blockchain?): list<(byte_array, text, integer, boolean, integer)> {
+    if (exists(blockchain)) {
+        return (cluster_node, container_blockchain) @* {
+            container_blockchain.blockchain == blockchain,
+            cluster_node.cluster == container_blockchain.container.cluster
+        } (
+            @sort .node.pubkey,
+            .node.host,
+            .node.port,
+            .node.active,
+            .node.last_updated
+        );
+    }
+    return list();
+}
+
+// Cannot use function get_last_height, since it uses an op_context.
+// Deprecated: relies on legacy anchoring which will be removed
+function deprecated_get_blockchain_last_height(blockchain_rid: byte_array): integer {
+    if (blockchain_rid == chain_context.blockchain_rid) {
+        return (block @? {} (@sort_desc .block_height) limit 1) ?: -1;
+    } else {
+        return (anchored_block @? { blockchain @ { blockchain_rid } } (@sort_desc .height) limit 1) ?: -1;
+    }
+}
+
 @extendable function before_delete_blockchain(blockchain) {}

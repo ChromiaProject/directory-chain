@@ -1,21 +1,8 @@
-
 query get_blockchain(rid: byte_array) = blockchain @ { rid };
 
 query get_blockchain_signers(blockchain_rid: byte_array): list<(byte_array, text, integer, boolean, integer)> {
     val blockchain = blockchain @? { blockchain_rid, .active == true };
-    if (exists(blockchain)) {
-        return (cluster_node, container_blockchain) @* {
-            container_blockchain.blockchain == blockchain,
-            cluster_node.cluster == container_blockchain.container.cluster
-        } (
-            @sort .node.pubkey,
-            .node.host,
-            .node.port,
-            .node.active,
-            .node.last_updated
-        );
-    }
-    return list();
+    return get_blockchain_signer_nodes(blockchain);
 }
 
 query get_blockchain_replicas(blockchain_rid: byte_array) {
@@ -31,11 +18,7 @@ query get_blockchain_replicas(blockchain_rid: byte_array) {
 // Cannot use function get_last_height, since it uses an op_context.
 // Deprecated: relies on legacy anchoring which will be removed
 query get_blockchain_last_height(blockchain_rid: byte_array): integer {
-    if (blockchain_rid == chain_context.blockchain_rid) {
-        return (block @? {} (@sort_desc .block_height) limit 1) ?: -1;
-    } else {
-        return (anchored_block @? { blockchain @ { blockchain_rid } } (@sort_desc .height) limit 1) ?: -1;
-    }
+    return deprecated_get_blockchain_last_height(blockchain_rid);
 }
 
 query get_blockchains(include_inactive: boolean): list<struct<blockchain>> {
