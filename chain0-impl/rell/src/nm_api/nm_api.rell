@@ -233,8 +233,17 @@ query nm_get_blockchain_dependencies(blockchain, height: integer): list<(byte_ar
 query nm_get_pending_blockchain_configuration(blockchain_rid: byte_array, height: integer):
         list<(base_config: byte_array, signers: list<pubkey>, minimum_height: integer)> {
     val bc = require_blockchain(blockchain_rid);
-    return pending_blockchain_configuration @* { bc, .minimum_height <= height }
-        (base_config=.base_config,
-         signers=list<pubkey>.from_gtv(gtv.from_bytes(.signers)),
-         @sort minimum_height=.minimum_height);
+    val pbc = pending_blockchain_configuration @* { bc, .minimum_height <= height } (
+        base_config = .base_config,
+        signers = list<pubkey>.from_gtv(gtv.from_bytes(.signers)),
+        @sort minimum_height = .minimum_height
+    );
+
+    log("------- pbc:2: ");
+    for (p in pbc) {
+        log("p: " + p.signers);
+    }
+    log("------- pbc:2:end");
+
+    return pbc;
 }
