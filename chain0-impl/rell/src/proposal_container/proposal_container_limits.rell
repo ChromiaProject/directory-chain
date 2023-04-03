@@ -15,6 +15,11 @@ entity pending_container_limits {
     io_write: integer;
 }
 
+@extend(is_container_available_for_removal) function(container) = 
+if (exists(pending_container_limits @* { container })) 
+    "Container %s has pending proposals and can't be deleted. Resolve proposals first".format(container.name) 
+else null;
+
 @extend(apply_voting_result_handlers) function() = [proposal_type.container_limits.name: apply_container_limits(*)];
 
 function apply_container_limits(proposal) {

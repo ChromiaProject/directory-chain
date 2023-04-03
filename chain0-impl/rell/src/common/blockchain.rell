@@ -40,23 +40,21 @@ function get_last_height(blockchain): integer {
     }
 }
 
-operation add_blockchain_replica(my_pubkey: pubkey, blockchain_rid: byte_array, node_pubkey: byte_array) {
-    val provider = require_provider(my_pubkey);
-    require_provider_auth_with_rl(provider);
-    val node = require_node(node_pubkey);
-    val blockchain = require_blockchain(blockchain_rid);
-    require(empty(blockchain_replica_node @? { blockchain, node }), "Node is already a replica of blockchain %s".format(node.pubkey, blockchain.rid));
-    require(node.provider == provider, "It is only allowed to add own node as a blockchain replica");
-    create blockchain_replica_node(blockchain, node);
+function get_blockchain_signer_nodes(blockchain: blockchain): list<node> {
+    return (cluster_node, container_blockchain) @* {
+        container_blockchain.blockchain == blockchain,
+        cluster_node.cluster == container_blockchain.container.cluster
+    } ( .node );
 }
 
-operation remove_blockchain_replica(my_pubkey: pubkey, blockchain_rid: byte_array, node_pubkey: byte_array) {
-    val provider = require_provider(my_pubkey);
-    require_provider_auth_with_rl(provider);
-    val blockchain = require_blockchain(blockchain_rid);
-    val node = require_node(node_pubkey);
-    require(node.provider == provider, "It is only allowed to remove own blockchain replica node; provider:%s, node: %s".format(provider.pubkey, node.pubkey));
-    delete blockchain_replica_node @? { blockchain, node };
+// Cannot use function get_last_height, since it uses an op_context.
+// Deprecated: relies on legacy anchoring which will be removed
+function deprecated_get_blockchain_last_height(blockchain_rid: byte_array): integer {
+    if (blockchain_rid == chain_context.blockchain_rid) {
+        return (block @? {} (@sort_desc .block_height) limit 1) ?: -1;
+    } else {
+        return (anchored_block @? { blockchain @ { blockchain_rid } } (@sort_desc .height) limit 1) ?: -1;
+    }
 }
 
 @extendable function before_delete_blockchain(blockchain) {}

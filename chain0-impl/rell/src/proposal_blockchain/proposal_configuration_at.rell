@@ -24,11 +24,13 @@ function apply_configuration_at(proposal) {
 
     val height = if (pc.height == -1) last_height + 1 else pc.height;
 
+    val is_chain0 = pc.blockchain.rid == chain_context.blockchain_rid;
+    val config_data = if (not is_chain0 and pcu_enabled()) make_config_unique(pc.data) else pc.data;
     if (not(exists(blockchain_configuration @? { pc.blockchain, height }))) {
-        create blockchain_configuration(pc.blockchain, height, data = pc.data);
-        add_dependencies(pc.data, pc.blockchain.rid, height);
+        create blockchain_configuration(pc.blockchain, height, data = config_data);
+        add_dependencies(config_data, pc.blockchain.rid, height);
     } else {
-        update blockchain_configuration @ { pc.blockchain, height } ( .data = pc.data );
+        update blockchain_configuration @ { pc.blockchain, height } ( .data = config_data );
     }
 }
 

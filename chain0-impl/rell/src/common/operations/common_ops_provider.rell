@@ -1,0 +1,44 @@
+/*
+    The provider with type in line can (+) / can not (-) register a provider with the type in the column:
+
+         | CNP | NP
+    -----|-----|-----
+     CNP |  +  |  -
+     NP  |  +  |  -
+     SP  |  +  |  +
+*/
+operation register_provider(my_pubkey: pubkey, pubkey, provider_tier) {
+    val me = require_provider(my_pubkey);
+    require_provider_auth_with_rl(me);
+    require_pubkey(pubkey);
+    require(empty(provider @* { pubkey }), "Provider already exists: " + pubkey);
+
+    register_and_enable_provider(
+        provider_info(pubkey),
+        provider_tier,
+        cluster = null,
+        voter_set = null,
+        enabled_by_default = _is_node_provider(me.tier) and not(_is_node_provider(provider_tier))
+    );
+    if (_is_node_provider(provider_tier)) {
+        require(roles.has_system_access(me), "Must be system provider to add a node provider");
+        enroll.node(provider @ { pubkey });
+    }
+}
+
+operation promote_node_provider(my_pubkey: pubkey, provider_pubkey: pubkey) { // TODO: Should be able to demote
+    val me = require_is_provider_with_rl(my_pubkey);
+    require_is_system_provider(my_pubkey);
+    val p = require_provider(provider_pubkey);
+    require(p.tier != provider_tier.NODE_PROVIDER, "Provider already has this role");
+    enroll.node(p);
+}
+
+
+operation transfer_action_points(from: pubkey, to: pubkey, amount: integer) {
+    val _from = require_is_provider_with_rl(from);
+    val _to = require_provider(to);
+    require(provider_rl_state @ { _from } .points >= amount, "Not enough action points to transfer from.");
+    update provider_rl_state @ { _from } ( .points -= amount );
+    update provider_rl_state @ { _to } ( .points += amount );
+}
