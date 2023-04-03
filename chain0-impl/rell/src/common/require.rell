@@ -1,9 +1,3 @@
-module;
-
-import ^.*;
-import ^^.roles.*;
-import .constants.*;
-
 function require_is_signer(pubkey) {
     require(op_context.is_signer(pubkey), "Operation must be signed by " + pubkey);
 }
@@ -40,4 +34,20 @@ function require_container_deployer(container, provider) {
 
 function require_voter_set_member(voter_set, provider) {
     require (exists(voter_set_member @* { voter_set, provider}), "Provider is not a member of voter set " + voter_set.name);
+}
+
+function require_is_provider_with_rl(pubkey) {
+    val provider = require_provider(pubkey);
+    require_provider_auth_with_rl(provider);
+    return provider;
+}
+
+// This is the function we should use for auth
+function require_provider_auth_with_rl(provider) {
+    require_is_signer(provider.pubkey);
+    provider_rate_limit(provider);
+}
+
+function require_pubkey(pubkey) {
+    require(pubkey.size() == 33 or pubkey.size() == 65, "Value is not pubkey: " + pubkey);
 }

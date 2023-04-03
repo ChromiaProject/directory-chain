@@ -1,5 +1,3 @@
-import ^.model.util.*;
-
 function add_blockchain(raw_configuration: byte_array, signers: byte_array, name: text, container, system: boolean = false): byte_array {
     val blockchain_rid = map<text, gtv>.from_gtv(gtv.from_bytes(raw_configuration)).hash();
     val blockchain = create blockchain(blockchain_rid, name, system);
@@ -55,6 +53,12 @@ function deprecated_get_blockchain_last_height(blockchain_rid: byte_array): inte
     } else {
         return (anchored_block @? { blockchain @ { blockchain_rid } } (@sort_desc .height) limit 1) ?: -1;
     }
+}
+
+function get_signers_for_configuration(blockchain, height: integer): gtv {
+    val raw_signers = blockchain_configuration_signers @ { blockchain, .height <= height }
+        (@omit @sort_desc .height, .signers) limit 1;
+    return gtv.from_bytes(raw_signers);
 }
 
 @extendable function before_delete_blockchain(blockchain) {}
