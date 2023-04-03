@@ -1,38 +1,40 @@
-/**
- * Adding a node to a cluster automatically makes it signer of all bc in this cluster.
- * Only one node per provider and cluster.
- */
-operation add_node_to_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cluster_name: text) {
-    val provider = require_provider(my_pubkey);
-    require_provider_auth_with_rl(provider);
-    val cluster = require_cluster(cluster_name);
-    val node = require_node(node_pubkey);
-    add_node_to_cluster_internal(provider, node, cluster);
+function create_cluster_impl(me: provider, name, governor: voter_set, providers: list<pubkey>, max_containers: integer = -1, cpu: integer = -1, ram: integer = -1, storage: integer = -1, io_read: integer = -1, io_write: integer = -1) {
+    require(empty(cluster @* { name }), "Cluster with name %s already exists".format(name));
+    val c = create cluster(name, governor);
+    create cluster_resource_limit(c, cluster_resource_limit_type.max_containers , max_containers);
+    create cluster_resource_limit(c, cluster_resource_limit_type.default_container_max_blockchains, -1);
+    create cluster_resource_limit(c, cluster_resource_limit_type.default_container_cpu, cpu);
+    create cluster_resource_limit(c, cluster_resource_limit_type.default_container_ram, ram);
+    create cluster_resource_limit(c, cluster_resource_limit_type.default_container_storage, storage);
+    create cluster_resource_limit(c, cluster_resource_limit_type.default_container_io_read, io_read);
+    create cluster_resource_limit(c, cluster_resource_limit_type.default_container_io_write, io_write);
+    for (p_key in providers) {
+        val provider = require_provider(p_key);
+        require_node_access(provider);
+        create cluster_provider(c, provider);
+    }
+
+    create_system_container(
+        me,
+        system_container_name(c.name),
+        cluster = c,
+        voter_set = governor
+    );
+
+    after_cluster_creation(me, c);
+    return c;
 }
 
-operation add_replica_node_to_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cluster_name: text) {
-    val provider = require_provider(my_pubkey);
-    require_provider_auth_with_rl(provider);
-    val cluster = require_cluster(cluster_name);
-    val node = require_node(node_pubkey);
-    require(empty(cluster_replica_node @* { cluster, node }), "Node %s is already a replica of the cluster %s".format(node_pubkey, cluster_name));
-    require(node.provider == provider, "It is only allowed to add own node as a container replica");
-    require(empty(cluster_node @* { cluster, node }), "Node %s is a cluster node and can't be added to cluster %s as a replica node".format(node_pubkey, cluster_name));
-    _add_replica_node_to_cluster_internal(cluster, node);
+function require_cluster_quotas(cluster) {
+    val max_containers = cluster_resource_limit @? { cluster, cluster_resource_limit_type.max_containers } (.value);
+    if (max_containers != null and max_containers != -1) {
+        val cluster_container_count = container @ { cluster, .system == false } (@sum 1);
+        require(cluster_container_count < max_containers, "Can't propose container, cluster %s is full".format(cluster.name));
+    }
 }
 
 function _add_replica_node_to_cluster_internal(cluster, node) {
     create cluster_replica_node(cluster, node);
-}
-
-operation remove_replica_node_from_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cluster_name: text) {
-    val provider = require_provider(my_pubkey);
-    require_provider_auth_with_rl(provider);
-    val cluster = require_cluster(cluster_name);
-    val node = require_node(node_pubkey);
-    require(exists(cluster_replica_node @* { cluster, node }), "Node %s is not a replica of the cluster %s".format(node_pubkey, cluster_name));
-    require(node.provider == provider, "It is only allowed to remove own container replica node");
-    _remove_replica_node_from_cluster_internal(node);
 }
 
 function _remove_replica_node_from_cluster_internal(node) {
@@ -155,6 +157,8 @@ function get_cluster_for_blockchain(blockchain_rid: byte_array): cluster {
     return (container_blockchain, blockchain) @ { blockchain.rid == blockchain_rid, blockchain == container_blockchain.blockchain }
                  ( container_blockchain.container.cluster );
 }
+
+@extendable function after_cluster_creation(provider, cluster) {}
 
 @extendable function after_cluster_operational(cluster) {}
 
