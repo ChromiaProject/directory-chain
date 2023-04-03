@@ -8,7 +8,7 @@ entity pending_cluster_anchoring_configuration {
 function apply_cluster_anchoring_configuration(proposal) {
     val pcac = pending_cluster_anchoring_configuration @? { proposal };
     if (pcac == null) return;
-    cluster_anchoring.set_config(pcac.data);
+    set_cluster_anchoring_config(pcac.data);
 }
 
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.cluster_anchoring_configuration.name: delete_pending_cluster_anchoring_configuration(*)];
@@ -36,7 +36,7 @@ query get_cluster_anchoring_configuration_proposal(rowid?) {
     val proposal = get_latest_proposal(rowid, proposal_type.cluster_anchoring_configuration);
     if (proposal == null) return null;
     val pcac = pending_cluster_anchoring_configuration @ { proposal };
-    val current_conf = cluster_anchoring.get_cluster_anchoring_configuration();
+    val current_conf = cluster_anchoring_config.raw_config;
     return (
         current_conf = current_conf,
         proposed_conf = pcac.data
