@@ -53,8 +53,8 @@ query nm_get_blockchain_configuration(blockchain_rid: byte_array, height: intege
     val base_config = blockchain_configuration @? { bc, .height <= height } (@omit @sort_desc .height, $) limit 1;
     if (base_config != null) {
         // Checking that signers.size() is non-zero is done when population blockchain_configuration_signers.
-        // Thus, not needed to check here.
-        val signers = blockchain_configuration_signers @ { bc, .height <= height } (@omit @sort_desc .height, .signers) limit 1;
+        val signers = require(blockchain_configuration_signers @? { bc, .height <= height } (@omit @sort_desc .height, .signers) limit 1,
+            "No signers configuration for blockchain %s for height %d".format(blockchain_rid, height));
 
         val full_config = map<text, gtv>.from_gtv(gtv.from_bytes(base_config.data));
         full_config["signers"] = gtv.from_bytes(signers);
@@ -75,8 +75,8 @@ query nm_get_blockchain_configuration_v5(blockchain_rid: byte_array, height: int
     val base_config = blockchain_configuration @? { bc, .height <= height } (@omit @sort_desc .height, .data) limit 1;
     if (base_config != null) {
         // Checking that signers.size() is non-zero is done when population blockchain_configuration_signers.
-        // Thus, not needed to check here.
-        val signers = blockchain_configuration_signers @ { bc, .height <= height } (@omit @sort_desc .height, .signers) limit 1;
+        val signers = require(blockchain_configuration_signers @? { bc, .height <= height } (@omit @sort_desc .height, .signers) limit 1,
+            "No signers configuration for blockchain %s for height %d".format(blockchain_rid, height));
         return (base_config=base_config, signers=list<pubkey>.from_gtv(gtv.from_bytes(signers)));
     } else {
         return null;
