@@ -463,6 +463,54 @@ function test_precise_configuration_update_rejected_config_already_exists() {
     assert_false(is_pending_blockchain_configuration_applied(bc_rid, 5, pending_config1_hash));
 }
 
+function test_precise_configuration_update_config_failed() {
+    val (anchor_chain, bc_rid) = setup();
+
+    val config1 = ["number": (1).to_gtv(), "txqueuecapacity": "bogus".to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
+    ).sign(initial_provider).run();
+    assert_equals(
+        map<text,gtv>.from_gtv(gtv.from_bytes(require(nm_get_blockchain_configuration_v5(bc_rid, 5)).base_config))["number"],
+        (0).to_gtv()
+    );
+    val pending_config1 = nm_get_pending_blockchain_configuration(bc_rid, 5) @ {};
+    val full_config1 = map<text, gtv>.from_gtv(gtv.from_bytes(pending_config1.base_config));
+    full_config1["signers"] = pending_config1.signers.to_gtv();
+    val pending_config1_hash = full_config1.to_gtv().hash();
+    assert_equals(
+        map<text,gtv>.from_gtv(gtv.from_bytes(pending_config1.base_config))["number"],
+        (1).to_gtv()
+    );
+    assert_equals(
+        pending_config1.signers,
+        [c.test_node.pubkey]
+    );
+    assert_false(is_pending_blockchain_configuration_applied(bc_rid, 1, pending_config1_hash));
+
+    rell.test.tx().op(
+        receive_configuration_failed_op(
+            anchor_chain.rid,
+            configuration_failed_topic,
+            configuration_failed(
+                blockchain_rid=bc_rid,
+                height=5,
+                config_hash=pending_config1_hash
+            ).to_gtv()
+        )
+    ).run();
+    val not_updated_config = require(nm_get_blockchain_configuration_v5(bc_rid, 5));
+    assert_equals(
+        map<text,gtv>.from_gtv(gtv.from_bytes(not_updated_config.base_config))["number"],
+        (0).to_gtv()
+    );
+    assert_equals(
+        not_updated_config.signers,
+        [c.test_node.pubkey]
+    );
+    assert_true(nm_get_pending_blockchain_configuration(bc_rid, 5).empty());
+}
+
 function setup(): (anchor_chain: blockchain, bc_rid: byte_array) {
     setup_module(cluster_anchoring_config = ["any": "value".to_gtv()]);
 
