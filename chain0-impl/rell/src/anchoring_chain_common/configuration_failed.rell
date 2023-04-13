@@ -1,0 +1,12 @@
+@extend(after_anchoring_block) function process_configuration_failed(block_rid: byte_array, header: block_header) {
+    if (not pcu_enabled()) return;
+
+    if (not header.extra.contains("failed_config_hash")) return;
+    val failed_config_hash = byte_array.from_gtv(header.extra["failed_config_hash"]);
+    val blockchain_rid = header.blockchain_rid;
+
+    log("Anchoring chain %s detected failed configuration for chain %s at height %d".format(
+        chain_context.blockchain_rid, blockchain_rid, header.height));
+    send_message(configuration_failed_topic,
+        configuration_failed(blockchain_rid = blockchain_rid, header.height, config_hash = failed_config_hash).to_gtv());
+}

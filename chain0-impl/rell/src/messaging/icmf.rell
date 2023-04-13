@@ -1,6 +1,6 @@
 module;
 
-val MAX_ICMF_MESSAGE_SIZE = 16 * 1024 * 1024; // 16 MiB
+import ^.icmf_constants.*;
 
 @log
 entity sent_icmf_message {
@@ -25,7 +25,9 @@ query icmf_get_messages_at_height(topic: text, height: integer): list<gtv> {
 
 function send_message(topic: text, body: gtv) {
     val encoded_body = body.to_bytes();
-    require(encoded_body.size() < MAX_ICMF_MESSAGE_SIZE, "Message body too big, max size is %d bytes".format(MAX_ICMF_MESSAGE_SIZE));
+    require(topic.starts_with(ICMF_TOPIC_GLOBAL_PREFIX) or topic.starts_with(ICMF_TOPIC_LOCAL_PREFIX),
+        "Topic must start with " + ICMF_TOPIC_GLOBAL_PREFIX + " or " + ICMF_TOPIC_LOCAL_PREFIX);
+    require(encoded_body.size() < ICMF_MESSAGE_MAX_SIZE, "Message body too big, max size is %d bytes".format(ICMF_MESSAGE_MAX_SIZE));
     create sent_icmf_message(
         topic = topic,
         block_height = op_context.block_height,

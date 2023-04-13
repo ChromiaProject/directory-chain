@@ -1,3 +1,4 @@
+import ^.messaging.icmf_constants.*;
 
 entity icmf_messages_height {
     key topic: text,
@@ -18,6 +19,7 @@ struct signed_block_header_with_anchor_height {
 
     val icmf_data = map<text,gtv>.from_gtv_pretty(header.extra["icmf_send"]);
     for (topic in icmf_data.keys()) {
+        if (not(topic.starts_with(ICMF_TOPIC_GLOBAL_PREFIX))) continue;
         val previous_anchor_height = icmf_messages_height @? { topic, .anchor_height < op_context.block_height } (@max .anchor_height) ?: -1;
         op_context.emit_event("icmf_header", (block_rid = block_rid, topic = topic, previous_anchor_height = previous_anchor_height).to_gtv_pretty());
 
