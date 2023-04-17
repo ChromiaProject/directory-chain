@@ -52,10 +52,27 @@ query cm_get_cluster_blockchains(name): list<byte_array> {
 query cm_get_peer_info(brid: byte_array, height: integer): set<pubkey> {
     val bc = blockchain @ { brid };
     if (pcu_enabled()) {
-        val signers = pending_blockchain_configuration @? { bc } (@sort_desc @omit .minimum_height <= height, gtv.from_bytes(.signers)) limit 1;
-        return set<pubkey>.from_gtv(
-            signers ?: get_signers_for_configuration(bc, height)
-        );
+        val signers = if (height == 0)
+            get_signers_for_configuration(bc, height)
+        else
+            get_signers_for_configuration(bc, height);
+//            (pending_blockchain_configuration @? { bc } (
+//                @sort_desc @omit .minimum_height <= height,
+//                gtv.from_bytes(.signers)
+//            ) limit 1) ?: get_signers_for_configuration(bc, height);
+
+        if (brid == x"68F92827F1E9D4B29951630FC1E472768D0734C9DFAC7F65F68A51785D1D800C") {
+            log("&&&&&&&-------------");
+            log("brid = " + brid);
+            log("height = " + height);
+            log("signers = " + signers);
+            log("&&&&&&&---------");
+            val all = pending_blockchain_configuration @* {} (brid = .blockchain.rid, minimum_height = .minimum_height, config_hash = .config_hash, signers = set<pubkey>.from_gtv(gtv.from_bytes(.signers)));
+            log("all : " + all);
+            log("&&&&&&&-------------====================");
+        }
+
+        return set<pubkey>.from_gtv(signers);
     } else {
         return set<pubkey>.from_gtv(
             get_signers_for_configuration(bc, height)
