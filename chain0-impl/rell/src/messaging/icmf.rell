@@ -2,38 +2,11 @@ module;
 
 import ^.icmf_constants.*;
 
-@log
-entity sent_icmf_message {
-    topic: text;
-    block_height: integer;
-    body: byte_array;
-    index topic, block_height;
-}
-
-struct icmf_message {
-    height: integer;
-    body: gtv;
-}
-
-query icmf_get_messages_after_height(topic: text, height: integer): list<icmf_message> {
-    return sent_icmf_message @* { topic, .block_height > height } ( icmf_message(.block_height, gtv.from_bytes(.body)), @omit @sort .rowid );
-}
-
-query icmf_get_messages_at_height(topic: text, height: integer): list<gtv> {
-    return sent_icmf_message @* { topic, .block_height == height } ( gtv.from_bytes(.body), @omit @sort .rowid );
-}
-
 function send_message(topic: text, body: gtv) {
     val encoded_body = body.to_bytes();
     require(topic.starts_with(ICMF_TOPIC_GLOBAL_PREFIX) or topic.starts_with(ICMF_TOPIC_LOCAL_PREFIX),
         "Topic must start with " + ICMF_TOPIC_GLOBAL_PREFIX + " or " + ICMF_TOPIC_LOCAL_PREFIX);
     require(encoded_body.size() < ICMF_MESSAGE_MAX_SIZE, "Message body too big, max size is %d bytes".format(ICMF_MESSAGE_MAX_SIZE));
-    create sent_icmf_message(
-        topic = topic,
-        block_height = op_context.block_height,
-        body = encoded_body
-    );
 
-    val previous_message_block_height = sent_icmf_message @? { topic, .block_height < op_context.block_height } ( @max .block_height ) ?: -1;
-    op_context.emit_event("icmf_message", (topic = topic, body = body, previous_message_block_height = previous_message_block_height).to_gtv_pretty());
+    op_context.emit_event("icmf_message", (topic = topic, body = body, block_height = op_context.block_height).to_gtv_pretty());
 }
