@@ -50,17 +50,9 @@ query cm_get_cluster_blockchains(name): list<byte_array> {
 
 // Returns signers of blockchain at specific height
 query cm_get_peer_info(brid: byte_array, height: integer): set<pubkey> {
-    val bc = blockchain @ { brid };
-    if (pcu_enabled()) {
-        val signers = pending_blockchain_configuration @? { bc } (@sort_desc @omit .minimum_height <= height, gtv.from_bytes(.signers)) limit 1;
-        return set<pubkey>.from_gtv(
-            signers ?: get_signers_for_configuration(bc, height)
-        );
-    } else {
-        return set<pubkey>.from_gtv(
-            get_signers_for_configuration(bc, height)
-        );
-    }
+    return set<pubkey>.from_gtv(
+        get_signers_for_configuration(blockchain @ { brid }, height)
+    );
 }
 
 query cm_get_blockchain_cluster(brid: byte_array): text {
