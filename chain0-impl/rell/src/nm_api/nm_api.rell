@@ -231,42 +231,31 @@ query nm_get_blockchain_dependencies(blockchain, height: integer): list<(byte_ar
 }
 
 /*
-    Precise Configuration Update
+    Precise Configuration Update: Returns list of pending configs with minimum_height <= height
     NM API Version: 5
 */
 query nm_get_pending_blockchain_configuration(blockchain_rid: byte_array, height: integer):
         list<(base_config: byte_array, signers: list<pubkey>, minimum_height: integer)> {
     if (not pcu_enabled()) return list();
     val bc = require_blockchain(blockchain_rid);
-    val pbc = pending_blockchain_configuration @* { bc, .minimum_height <= height } (
+    return pending_blockchain_configuration @* { bc, .minimum_height <= height } (
         base_config = .base_config,
         signers = list<pubkey>.from_gtv(gtv.from_bytes(.signers)),
         @sort minimum_height = .minimum_height
     );
-
-    if (blockchain_rid == x"68F92827F1E9D4B29951630FC1E472768D0734C9DFAC7F65F68A51785D1D800C") {
-        log("------- pbc-by-height: ");
-        for (p in pbc) {
-            log("p: " + p.signers);
-        }
-        log("------- pbc-by-height: end");
-    }
-
-    return pbc;
 }
 
+/*
+    Precise Configuration Update: Returns a pending config by config hash
+    NM API Version: 5
+*/
 query nm_get_pending_blockchain_configuration_by_hash(blockchain_rid: byte_array, config_hash: byte_array):
         (base_config: byte_array, signers: list<pubkey>, minimum_height: integer)? {
     if (not pcu_enabled()) return null;
     val bc = require_blockchain(blockchain_rid);
-    val pbc = pending_blockchain_configuration @? { bc, config_hash } (
+    return pending_blockchain_configuration @? { bc, config_hash } (
         base_config = .base_config,
         signers = list<pubkey>.from_gtv(gtv.from_bytes(.signers)),
         @sort minimum_height = .minimum_height
     );
-
-    if (blockchain_rid == x"68F92827F1E9D4B29951630FC1E472768D0734C9DFAC7F65F68A51785D1D800C") {
-        log("------- pbc-by-hash:" + pbc?.signers);
-    }
-    return pbc;
 }
