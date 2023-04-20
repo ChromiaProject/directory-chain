@@ -5,7 +5,7 @@ import ^.model.*;
     Returns NM API Version
     NM API Version: 1
 */
-query nm_api_version () = 5;
+query nm_api_version () = 6;
 
 /*
     Returns version of peerlist
@@ -258,4 +258,12 @@ query nm_get_pending_blockchain_configuration_by_hash(blockchain_rid: byte_array
         signers = list<pubkey>.from_gtv(gtv.from_bytes(.signers)),
         @sort minimum_height = .minimum_height
     );
+}
+
+/*
+    NM API Version: 6
+*/
+query nm_get_faulty_blockchain_configuration(blockchain_rid: byte_array, height: integer): byte_array? {
+    val bc = require_blockchain(blockchain_rid);
+    return faulty_blockchain_configuration @? { bc, .reported_at_height == height }.config_hash;
 }
