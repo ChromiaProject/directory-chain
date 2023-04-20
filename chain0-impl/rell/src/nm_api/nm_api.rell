@@ -68,7 +68,7 @@ query nm_get_blockchain_configuration(blockchain_rid: byte_array, height: intege
     NM API Version: 5
 */
 query nm_get_blockchain_configuration_v5(blockchain_rid: byte_array, height: integer):
-        (base_config: byte_array, signers: list<pubkey>)? {
+        (base_config: byte_array, signers: list<pubkey>, config_hash: byte_array)? {
     val bc = require_blockchain(blockchain_rid);
     // Find configuration height -- the latest height up to given height.
     // If conf_h exist, so does signer_h, thus no need to check both.
@@ -77,7 +77,13 @@ query nm_get_blockchain_configuration_v5(blockchain_rid: byte_array, height: int
         // Checking that signers.size() is non-zero is done when population blockchain_configuration_signers.
         val signers = require(blockchain_configuration_signers @? { bc, .height <= height } (@omit @sort_desc .height, .signers) limit 1,
             "No signers configuration for blockchain %s for height %d".format(blockchain_rid, height));
-        return (base_config=base_config, signers=list<pubkey>.from_gtv(gtv.from_bytes(signers)));
+        val full_config = map<text, gtv>.from_gtv(gtv.from_bytes(base_config));
+        full_config["signers"] = gtv.from_bytes(signers);
+        return (
+            base_config = base_config,
+            signers = list<pubkey>.from_gtv(gtv.from_bytes(signers)),
+            config_hash = full_config.to_gtv().hash()
+        );
     } else {
         return null;
     }
@@ -225,14 +231,31 @@ query nm_get_blockchain_dependencies(blockchain, height: integer): list<(byte_ar
 }
 
 /*
-    Precise Configuration Update
+    Precise Configuration Update: Returns list of pending configs with minimum_height <= height
     NM API Version: 5
 */
 query nm_get_pending_blockchain_configuration(blockchain_rid: byte_array, height: integer):
         list<(base_config: byte_array, signers: list<pubkey>, minimum_height: integer)> {
+    if (not pcu_enabled()) return list();
     val bc = require_blockchain(blockchain_rid);
-    return pending_blockchain_configuration @* { bc, .minimum_height <= height }
-        (base_config=.base_config,
-         signers=list<pubkey>.from_gtv(gtv.from_bytes(.signers)),
-         @sort minimum_height=.minimum_height);
+    return pending_blockchain_configuration @* { bc, .minimum_height <= height } (
+        base_config = .base_config,
+        signers = list<pubkey>.from_gtv(gtv.from_bytes(.signers)),
+        @sort minimum_height = .minimum_height
+    );
+}
+
+/*
+    Precise Configuration Update: Returns a pending config by config hash
+    NM API Version: 5
+*/
+query nm_get_pending_blockchain_configuration_by_hash(blockchain_rid: byte_array, config_hash: byte_array):
+        (base_config: byte_array, signers: list<pubkey>, minimum_height: integer)? {
+    if (not pcu_enabled()) return null;
+    val bc = require_blockchain(blockchain_rid);
+    return pending_blockchain_configuration @? { bc, config_hash } (
+        base_config = .base_config,
+        signers = list<pubkey>.from_gtv(gtv.from_bytes(.signers)),
+        @sort minimum_height = .minimum_height
+    );
 }

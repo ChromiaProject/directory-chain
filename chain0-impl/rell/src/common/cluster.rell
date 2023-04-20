@@ -107,16 +107,19 @@ function update_configuration_signers_chain0(blockchain, signers: list<pubkey>) 
 
 function update_configuration_signers_pcu(blockchain, signers: list<pubkey>) {
     val last_signers_config = blockchain_configuration_signers @? { blockchain } (@sort_desc .height, .signers) limit 1;
-    val last_signers_height = if (last_signers_config != null) last_signers_config.height else 0;
+    val last_signers_height = last_signers_config?.height ?: 0;
+
     val last_pending_configuration = pending_blockchain_configuration @? { blockchain } (@sort_desc @omit .minimum_height, $) limit 1;
-    val (minimum_height, base_config, last_signers) = if (last_pending_configuration != null)
-        (last_signers_height.max(last_pending_configuration.minimum_height) + 1,
-         last_pending_configuration.base_config,
-         last_pending_configuration.signers)
-    else
-        (last_signers_height + 1,
-         blockchain_configuration @ { blockchain } (@omit @sort_desc .height, .data) limit 1,
-         if (last_signers_config != null) last_signers_config.signers else x"");
+    val (minimum_height, base_config, last_signers) = if (last_pending_configuration != null) (
+        last_signers_height.max(last_pending_configuration.minimum_height) + 1,
+        last_pending_configuration.base_config,
+        last_pending_configuration.signers
+    ) else (
+        last_signers_height + 1,
+        blockchain_configuration @ { blockchain } (@omit @sort_desc .height, .data) limit 1,
+        last_signers_config?.signers ?: x""
+    );
+
     if (signers.to_gtv().to_bytes() == last_signers) {
         log("Signers update for chain %s not necessary, already %s".format(blockchain.rid, signers));
         return;
@@ -128,9 +131,9 @@ function update_configuration_signers_pcu(blockchain, signers: list<pubkey>) {
     create pending_blockchain_configuration(
         blockchain,
         minimum_height,
-        config_hash=full_config.to_gtv().hash(),
+        config_hash = full_config.to_gtv().hash(),
         base_config,
-        signers=signers.to_gtv().to_bytes()
+        signers = signers.to_gtv().to_bytes()
     );
 }
 
