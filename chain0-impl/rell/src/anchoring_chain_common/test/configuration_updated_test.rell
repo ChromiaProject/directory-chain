@@ -63,19 +63,17 @@ function test_configuration_updated() {
     val block_rid2 = block_header2.hash();
     rell.test.tx().op(
         anchor_block_header_op(block_rid2, block_header2, block_witness)
-    ).run_must_fail(); // TODO test op_context.emit_event when possible https://chromaway.atlassian.net/browse/RELL-116
-    /*
+    ).run();
     val anchored_block2 = require(get_last_anchored_block(blockchain_rid));
     assert_equals(anchored_block2.blockchain_rid, blockchain_rid);
-    assert_equals(anchored_block2.block_height, 1);
-    assert_equals(anchored_block2.block_rid, block_rid1);
-    assert_equals(anchored_block2.block_header, block_header1.to_bytes());
+    assert_equals(anchored_block2.block_height, 2);
+    assert_equals(anchored_block2.block_rid, block_rid2);
+    assert_equals(anchored_block2.block_header, block_header2.to_bytes());
     assert_equals(anchored_block2.witness, block_witness);
     assert_equals(anchored_block2.anchoring_tx_op_index, 0);
-    val sent_message = sent_icmf_message @ { .topic == configuration_updated_topic }
-        (configuration_updated.from_gtv(gtv.from_bytes(.body)));
-    assert_equals(sent_message.blockchain_rid, blockchain_rid);
-    assert_equals(sent_message.height, 2);
-    assert_equals(sent_message.config_hash, config2.to_gtv().hash());
-    */
+
+    assert_events(("icmf_message", (
+        topic = configuration_updated_topic,
+        body = configuration_updated(blockchain_rid, 2, config_hash = config2.to_gtv().hash()).to_gtv(),
+        block_height = 2).to_gtv_pretty()));
 }
