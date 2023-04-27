@@ -1,0 +1,8 @@
+operation __self_report_faulty_config(failed_config_hash: byte_array) {
+    val previous_height = op_context.block_height - 1;
+    log("System anchoring chain %s detected failed configuration for itself at height %d with hash %s"
+        .format(chain_context.blockchain_rid, previous_height, failed_config_hash)
+    );
+    send_message(configuration_failed_topic,
+        configuration_failed(blockchain_rid = chain_context.blockchain_rid, previous_height, config_hash = failed_config_hash).to_gtv());
+}
