@@ -1,28 +1,21 @@
 @extend(after_anchoring_block) function process_configuration_updated(block_rid: byte_array, header: block_header) {
-    log("-------------- process_configuration_updated ----------------");
     if (not pcu_enabled()) return;
 
     if (not header.extra.contains("config_hash")) return;
     val current_config_hash = header.extra["config_hash"];
     val blockchain_rid = header.blockchain_rid;
 
-    // TODO debug logging, remove later
-    log("Anchor chain %s anchoring for chain %s at height %d with config_hash %s".format(
-        chain_context.blockchain_rid, blockchain_rid, header.height, current_config_hash));
-
     val prev_config_hash = anchor_block @? { blockchain_rid, .block_height < header.height } (
         @omit @sort_desc .block_height,
         block_header.from_bytes($.block_header).extra.get_or_null("config_hash")
     ) limit 1;
-    log("prev_config_hash: " + prev_config_hash);
 
     if (prev_config_hash != null and current_config_hash != prev_config_hash) {
-        log("Anchoring chain %s detected updated configuration for chain %s at height %d to %s".format(
-            chain_context.blockchain_rid, blockchain_rid, header.height, current_config_hash));
+        log("Anchoring chain %s detected updated configuration for chain %s at height %d from %s to %s".format(
+            chain_context.blockchain_rid, blockchain_rid, header.height, prev_config_hash, current_config_hash));
         send_message(
             configuration_updated_topic,
             configuration_updated(blockchain_rid, header.height, config_hash = byte_array.from_gtv(current_config_hash)).to_gtv()
         );
     }
-    log("-------------- END of process_configuration_updated ----------------");
 }
