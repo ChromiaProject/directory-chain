@@ -58,7 +58,11 @@ function check_operational(cl: cluster) {
  * add node as block signer to this cluster. blockchain_configuration_signers update is included.
  */
 function add_node_to_cluster_internal(provider, node, cluster) {
-    if (exists(cluster_node @? { cluster, node })) return; // Node already part of cluster
+    if (exists(cluster_node @? { cluster, node })) {
+        log("Node %s already is part of cluster %s".format(node.pubkey, cluster.name));
+        return;
+    }
+
     if (exists(cluster_provider @* { cluster, provider })) {
         val provider_cluster_nodes = cluster_node @* { cluster, .node in node @* { provider } };
         require(empty(provider_cluster_nodes), "A provider can only provide one node to each cluster");
@@ -68,8 +72,9 @@ function add_node_to_cluster_internal(provider, node, cluster) {
         // check if cluster now is operational, if so update the flag:
         check_operational(cluster);
         log("blockchain configuration signers are updated");
-
         after_node_added_to_cluster(cluster, node);
+    } else {
+        log("Provider %s is not a member of cluster %s".format(provider.pubkey, cluster.name));
     }
 }
 
