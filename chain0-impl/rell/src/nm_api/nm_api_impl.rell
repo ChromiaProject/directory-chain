@@ -1,12 +1,21 @@
 import ^.model.*;
 
-function get_cluster_node_blockchains(node) = set(
-    (cluster_node, container_blockchain) @* {
-        cluster_node.node == node,
-        cluster_node.cluster == container_blockchain.container.cluster,
-        container_blockchain.blockchain.active == true
-    } ( blockchain_info(container_blockchain.blockchain.rid, container_blockchain.blockchain.system) )
-);
+function get_cluster_node_blockchains(node): set<blockchain_info> {
+    val blockchains = set(
+        (cluster_node, container_blockchain) @* {
+            cluster_node.node == node,
+            cluster_node.cluster == container_blockchain.container.cluster,
+            container_blockchain.blockchain.active == true
+        } ( blockchain_info(container_blockchain.blockchain.rid, container_blockchain.blockchain.system) )
+    );
+
+    blockchains.add_all(
+        signer_excluded_from_pending_configuration @* { .pubkey == node.pubkey }
+            ( blockchain_info(.blockchain.rid, .blockchain.system) )
+    );
+
+    return blockchains;
+}
 
 function get_cluster_replica_node_blockchains(node) = set(
     (cluster_replica_node, container_blockchain) @* {

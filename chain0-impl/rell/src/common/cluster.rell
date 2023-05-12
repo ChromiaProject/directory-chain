@@ -79,20 +79,35 @@ function add_node_to_cluster_internal(provider, node, cluster) {
 }
 
 // Use this to update signers after a change in cluster_node table.
-function update_configuration_signers(cluster) {
-    val bcs = container_blockchain @*{ .container.cluster == cluster} .blockchain;
+function pcu_update_configuration_signers(cluster, excluded_node: node) {
+    val signers = cluster_node @* { cluster, .node != excluded_node } (@sort .node.pubkey);
+    // do not write new configuration when size is 0 since it's impossible to recover from that
+    require(signers.size() > 0);
+
+    val bcs = container_blockchain @*{ .container.cluster == cluster } .blockchain;
     for (blockchain in bcs) {
-        val container = container_blockchain @ {blockchain} .container;
-        val signers = cluster_node @* { container.cluster } (@sort .node.pubkey);
-        // do not write new configuration when size is 0 since it's impossible to recover from that
-        require(signers.size() > 0);
-
         val is_chain0 = blockchain.rid == chain_context.blockchain_rid;
+        if (is_chain0) {
+            update_configuration_signers_chain0(blockchain, signers);
+        } else {
+            update_configuration_signers_pcu(blockchain, signers, excluded_node.pubkey);
+        }
+    }
+    delete cluster_node @? { cluster, excluded_node };
+}
 
+function update_configuration_signers(cluster) {
+    val signers = cluster_node @* { cluster } (@sort .node.pubkey);
+    // do not write new configuration when size is 0 since it's impossible to recover from that
+    require(signers.size() > 0);
+
+    val bcs = container_blockchain @*{ .container.cluster == cluster } .blockchain;
+    for (blockchain in bcs) {
+        val is_chain0 = blockchain.rid == chain_context.blockchain_rid;
         if (is_chain0) {
             update_configuration_signers_chain0(blockchain, signers);
         } else if (pcu_enabled()) {
-            update_configuration_signers_pcu(blockchain, signers);
+            update_configuration_signers_pcu(blockchain, signers, null);
         } else {
             update_configuration_signers_legacy(blockchain, signers);
         }
@@ -110,7 +125,7 @@ function update_configuration_signers_chain0(blockchain, signers: list<pubkey>) 
     }
 }
 
-function update_configuration_signers_pcu(blockchain, signers: list<pubkey>) {
+function update_configuration_signers_pcu(blockchain, signers: list<pubkey>, excluded_signer: pubkey?) {
     val last_signers_config = blockchain_configuration_signers @? { blockchain } (@sort_desc .height, .signers) limit 1;
 
     if (last_signers_config == null) {
@@ -138,13 +153,22 @@ function update_configuration_signers_pcu(blockchain, signers: list<pubkey>) {
     log("Signers update with PCU for chain %s at minimum height %d: %s".format(blockchain.rid, minimum_height, signers));
     val full_config = map<text, gtv>.from_gtv(gtv.from_bytes(base_config));
     full_config["signers"] = signers.to_gtv();
+    val config_hash = full_config.to_gtv().hash();
     create pending_blockchain_configuration(
         blockchain,
         minimum_height,
-        config_hash = full_config.to_gtv().hash(),
+        config_hash = config_hash,
         base_config,
         signers = signers.to_gtv().to_bytes()
     );
+
+    if (excluded_signer != null) {
+        create signer_excluded_from_pending_configuration(
+            blockchain,
+            config_hash = config_hash,
+            pubkey = excluded_signer
+        );
+    }
 }
 
 function update_configuration_signers_legacy(blockchain, signers: list<pubkey>) {

@@ -55,13 +55,21 @@ function update_provider_state(provider, active: boolean) {
     provider.active = active;
     if (active == false) {
         update node @* { provider } ( .active = false );
+
         // cluster nodes
-        delete cluster_node @* { .node.provider == provider };
-        for (cl in cluster_provider @* { provider } (.cluster)) {
-            // Removing the last node of a cluster is not allowed:
-            require(not(empty(cluster_node @* { cl })), "Cannot deactivate the last node of a cluster: " + cl.name);
-            update_configuration_signers(cl);
+        if (pcu_enabled()) {
+            for (cn in cluster_node @* { .node.provider == provider }) {
+                pcu_update_configuration_signers(cn.cluster, cn.node);
+            }
+        } else {
+            delete cluster_node @* { .node.provider == provider };
+            for (cl in cluster_provider @* { provider } (.cluster)) {
+                // Removing the last node of a cluster is not allowed:
+                require(not(empty(cluster_node @* { cl })), "Cannot deactivate the last node of a cluster: " + cl.name);
+                update_configuration_signers(cl);
+            }
         }
+
         // cluster replica nodes
         delete cluster_replica_node @* { .node.provider == provider };
         // blockchain replica nodes
