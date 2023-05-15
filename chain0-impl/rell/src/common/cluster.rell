@@ -67,7 +67,11 @@ function add_node_to_cluster_internal(provider, node, cluster) {
         val provider_cluster_nodes = cluster_node @* { cluster, .node in node @* { provider } };
         require(empty(provider_cluster_nodes), "A provider can only provide one node to each cluster");
         create cluster_node(cluster, node);
-        update_configuration_signers(cluster);
+        if (pcu_enabled()) {
+            pcu_update_configuration_signers(cluster, null);
+        } else {
+            update_configuration_signers(cluster);
+        }
         _remove_replica_node_from_cluster_internal(node);
         // check if cluster now is operational, if so update the flag:
         check_operational(cluster);
@@ -79,21 +83,20 @@ function add_node_to_cluster_internal(provider, node, cluster) {
 }
 
 // Use this to update signers after a change in cluster_node table.
-function pcu_update_configuration_signers(cluster, excluded_node: node) {
-    val signers = cluster_node @* { cluster, .node != excluded_node } (@sort .node.pubkey);
+function pcu_update_configuration_signers(cluster, excluded_node: node?) {
+    val signers = cluster_node @* { cluster } (@sort .node.pubkey);
     // do not write new configuration when size is 0 since it's impossible to recover from that
     require(signers.size() > 0);
 
-    val bcs = container_blockchain @*{ .container.cluster == cluster } .blockchain;
+    val bcs = container_blockchain @* { .container.cluster == cluster } .blockchain;
     for (blockchain in bcs) {
         val is_chain0 = blockchain.rid == chain_context.blockchain_rid;
         if (is_chain0) {
             update_configuration_signers_chain0(blockchain, signers);
         } else {
-            update_configuration_signers_pcu(blockchain, signers, excluded_node.pubkey);
+            update_configuration_signers_pcu(blockchain, signers, excluded_node?.pubkey);
         }
     }
-    delete cluster_node @? { cluster, excluded_node };
 }
 
 function update_configuration_signers(cluster) {
@@ -101,13 +104,11 @@ function update_configuration_signers(cluster) {
     // do not write new configuration when size is 0 since it's impossible to recover from that
     require(signers.size() > 0);
 
-    val bcs = container_blockchain @*{ .container.cluster == cluster } .blockchain;
+    val bcs = container_blockchain @* { .container.cluster == cluster } .blockchain;
     for (blockchain in bcs) {
         val is_chain0 = blockchain.rid == chain_context.blockchain_rid;
         if (is_chain0) {
             update_configuration_signers_chain0(blockchain, signers);
-        } else if (pcu_enabled()) {
-            update_configuration_signers_pcu(blockchain, signers, null);
         } else {
             update_configuration_signers_legacy(blockchain, signers);
         }

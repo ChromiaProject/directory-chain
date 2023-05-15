@@ -58,7 +58,9 @@ function update_provider_state(provider, active: boolean) {
 
         // cluster nodes
         if (pcu_enabled()) {
-            for (cn in cluster_node @* { .node.provider == provider }) {
+            val cluster_nodes = cluster_node @* { .node.provider == provider } ( .cluster, .node );
+            delete cluster_node @* { .node.provider == provider };
+            for (cn in cluster_nodes) {
                 pcu_update_configuration_signers(cn.cluster, cn.node);
             }
         } else {

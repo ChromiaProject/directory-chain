@@ -74,8 +74,10 @@ operation disable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
 
     // cluster nodes
     if (pcu_enabled()) {
-        for (cn in cluster_node @* { node_to_disable }) {
-            pcu_update_configuration_signers(cn.cluster, node_to_disable);
+        val clusters = cluster_node @* { node_to_disable } .cluster;
+        delete cluster_node @* { node_to_disable };
+        for (cl in clusters) {
+            pcu_update_configuration_signers(cl, node_to_disable);
         }
     } else {
         val clusters = cluster_node @* { node_to_disable } .cluster;
