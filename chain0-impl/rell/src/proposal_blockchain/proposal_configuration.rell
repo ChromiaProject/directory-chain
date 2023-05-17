@@ -30,8 +30,9 @@ function apply_configuration_chain0(pc: pending_configuration) {
     val apply_at_height = op_context.block_height + 1;
     log("Base configuration update chain0 at height %d".format(apply_at_height));
     require(empty(blockchain_configuration @? { pc.blockchain, apply_at_height }), "Configuration at height %d already exists".format(apply_at_height));
-    create blockchain_configuration(pc.blockchain, apply_at_height, pc.data);
-    add_dependencies(pc.data, pc.blockchain.rid, apply_at_height);
+    val unique_base_config = make_config_unique(pc.data);
+    create blockchain_configuration(pc.blockchain, apply_at_height, unique_base_config);
+    add_dependencies(unique_base_config, pc.blockchain.rid, apply_at_height);
 }
 
 function apply_configuration_pcu(pc: pending_configuration) {
@@ -50,8 +51,8 @@ function apply_configuration_pcu(pc: pending_configuration) {
     create pending_blockchain_configuration(
         pc.blockchain,
         minimum_height,
-        config_hash=full_config.to_gtv().hash(),
-        base_config=unique_base_config,
+        config_hash = full_config.to_gtv().hash(),
+        base_config = unique_base_config,
         signers
     );
 }

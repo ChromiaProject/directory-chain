@@ -1,3 +1,5 @@
+import ^.proposal_blockchain.util.*;
+
 function create_cluster_impl(me: provider, name, governor: voter_set, providers: list<pubkey>, max_containers: integer = -1, cpu: integer = -1, ram: integer = -1, storage: integer = -1, io_read: integer = -1, io_write: integer = -1) {
     require(empty(cluster @* { name }), "Cluster with name %s already exists".format(name));
     val c = create cluster(name, governor);
@@ -108,7 +110,7 @@ function update_configuration_signers(cluster) {
     for (blockchain in bcs) {
         val is_chain0 = blockchain.rid == chain_context.blockchain_rid;
         if (is_chain0) {
-            update_configuration_signers_chain0(blockchain, signers);
+            update_configuration_signers_chain0_legacy(blockchain, signers);
         } else {
             update_configuration_signers_legacy(blockchain, signers);
         }
@@ -120,6 +122,14 @@ function update_configuration_signers_chain0(blockchain, signers: list<pubkey>) 
     log("Signers update for chain0 at height %d: %s".format(height, signers));
     val bc_signers = blockchain_configuration_signers @? { blockchain, height };
     if (bc_signers == null) {
+        // base config
+        if (empty(blockchain_configuration @? { blockchain, height })) {
+            val base_config = blockchain_configuration @? { blockchain, .height < height } (@omit @sort_desc .height, .data) limit 1;
+            val unique_base_config = make_config_unique(base_config!!);
+            create blockchain_configuration(blockchain, height, unique_base_config);
+            add_dependencies(unique_base_config, blockchain.rid, height);
+        }
+        // signers
         create blockchain_configuration_signers(blockchain, height, signers.to_gtv().to_bytes());
     } else {
         bc_signers.signers = signers.to_gtv().to_bytes();
@@ -152,14 +162,15 @@ function update_configuration_signers_pcu(blockchain, signers: list<pubkey>, exc
     }
 
     log("Signers update with PCU for chain %s at minimum height %d: %s".format(blockchain.rid, minimum_height, signers));
-    val full_config = map<text, gtv>.from_gtv(gtv.from_bytes(base_config));
+    val unique_base_config = make_config_unique(base_config);
+    val full_config = map<text, gtv>.from_gtv(gtv.from_bytes(unique_base_config));
     full_config["signers"] = signers.to_gtv();
     val config_hash = full_config.to_gtv().hash();
     create pending_blockchain_configuration(
         blockchain,
         minimum_height,
         config_hash = config_hash,
-        base_config,
+        base_config = unique_base_config,
         signers = signers.to_gtv().to_bytes()
     );
 
@@ -169,6 +180,17 @@ function update_configuration_signers_pcu(blockchain, signers: list<pubkey>, exc
             config_hash = config_hash,
             pubkey = excluded_signer
         );
+    }
+}
+
+function update_configuration_signers_chain0_legacy(blockchain, signers: list<pubkey>) {
+    val height = op_context.block_height + 1;
+    log("Signers update for chain0 at height %d: %s".format(height, signers));
+    val bc_signers = blockchain_configuration_signers @? { blockchain, height };
+    if (bc_signers == null) {
+        create blockchain_configuration_signers(blockchain, height, signers.to_gtv().to_bytes());
+    } else {
+        bc_signers.signers = signers.to_gtv().to_bytes();
     }
 }
 
