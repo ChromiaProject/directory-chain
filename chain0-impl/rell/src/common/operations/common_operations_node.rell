@@ -71,14 +71,24 @@ operation disable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
     }
 
     node_to_disable.active = false;
+
     // cluster nodes
-    val clusters = cluster_node @* { .node.pubkey == node_pubkey } .cluster;
-    delete cluster_node @* { .node.pubkey == node_pubkey };
-    for (cl in clusters) {
-        // Disabling the last node of a cluster is not allowed:
-        require(not(empty(cluster_node @* { cl })), "Cannot disable the last node of a cluster " + cl.name);
-        update_configuration_signers(cl);
+    if (pcu_enabled()) {
+        val clusters = cluster_node @* { node_to_disable } .cluster;
+        delete cluster_node @* { node_to_disable };
+        for (cl in clusters) {
+            pcu_update_configuration_signers(cl, node_to_disable);
+        }
+    } else {
+        val clusters = cluster_node @* { node_to_disable } .cluster;
+        delete cluster_node @* { node_to_disable };
+        for (cl in clusters) {
+            // Disabling the last node of a cluster is not allowed:
+            require(not(empty(cluster_node @* { cl })), "Cannot disable the last node of a cluster " + cl.name);
+            update_configuration_signers(cl);
+        }
     }
+
     // cluster replica nodes
     delete cluster_replica_node @* { .node.pubkey == node_pubkey };
     // blockchain replica nodes

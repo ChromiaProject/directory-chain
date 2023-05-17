@@ -39,5 +39,20 @@
         config_hash = message.config_hash,
         reported_at_height = message.height
     );
+
+    // Moving excluded signers of failed pending config back to cluster signers.
+    val cluster_signers = cluster_node @* { cluster } ( .node.pubkey );
+    val excluded_signers = signer_excluded_from_pending_configuration @* {
+        bc, .config_hash == pending_configuration.config_hash, .pubkey not in cluster_signers
+    } ( .pubkey );
+    if (exists(excluded_signers)) {
+        log("Pending config %s failed, removed signers will be re-added to the cluster %s".format(pending_configuration.config_hash, cluster.name));
+        for (signer in excluded_signers) {
+            create cluster_node(cluster, require_node(signer));
+            log("cluster_node created: " + signer);
+        }
+    }
+    delete signer_excluded_from_pending_configuration @* { bc, .config_hash == pending_configuration.config_hash };
+
     delete pending_configuration;
 }
