@@ -118,18 +118,20 @@ function update_configuration_signers(cluster) {
 }
 
 function update_configuration_signers_chain0(blockchain, signers: list<pubkey>) {
-    val height = op_context.block_height + 1;
+    val height = op_context.block_height + 1; // NB: compute_blockchain_info_list()/get_cluster_node_blockchains() relies on this
     log("Signers update for chain0 at height %d: %s".format(height, signers));
+
+    // make a base_config at `height` unique
+    if (empty(blockchain_configuration @? { blockchain, height })) {
+        val base_config = blockchain_configuration @? { blockchain, .height < height } (@omit @sort_desc .height, .data) limit 1;
+        val unique_base_config = make_config_unique(base_config!!);
+        create blockchain_configuration(blockchain, height, unique_base_config);
+        add_dependencies(unique_base_config, blockchain.rid, height);
+    }
+
+    // signers
     val bc_signers = blockchain_configuration_signers @? { blockchain, height };
     if (bc_signers == null) {
-        // base config
-        if (empty(blockchain_configuration @? { blockchain, height })) {
-            val base_config = blockchain_configuration @? { blockchain, .height < height } (@omit @sort_desc .height, .data) limit 1;
-            val unique_base_config = make_config_unique(base_config!!);
-            create blockchain_configuration(blockchain, height, unique_base_config);
-            add_dependencies(unique_base_config, blockchain.rid, height);
-        }
-        // signers
         create blockchain_configuration_signers(blockchain, height, signers.to_gtv().to_bytes());
     } else {
         bc_signers.signers = signers.to_gtv().to_bytes();
