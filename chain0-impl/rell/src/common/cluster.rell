@@ -1,13 +1,11 @@
-function create_cluster_impl(me: provider, name, governor: voter_set, providers: list<pubkey>, max_containers: integer = -1, cpu: integer = -1, ram: integer = -1, storage: integer = -1, io_read: integer = -1, io_write: integer = -1) {
+function create_cluster_impl(
+        me: provider, name, governor: voter_set, providers: list<pubkey>,
+        cluster_units: integer = standard_cluster_defaults.cluster_units
+    ) {
     require(empty(cluster @* { name }), "Cluster with name %s already exists".format(name));
-    val c = create cluster(name, governor);
-    create cluster_resource_limit(c, cluster_resource_limit_type.max_containers , max_containers);
-    create cluster_resource_limit(c, cluster_resource_limit_type.default_container_max_blockchains, -1);
-    create cluster_resource_limit(c, cluster_resource_limit_type.default_container_cpu, cpu);
-    create cluster_resource_limit(c, cluster_resource_limit_type.default_container_ram, ram);
-    create cluster_resource_limit(c, cluster_resource_limit_type.default_container_storage, storage);
-    create cluster_resource_limit(c, cluster_resource_limit_type.default_container_io_read, io_read);
-    create cluster_resource_limit(c, cluster_resource_limit_type.default_container_io_write, io_write);
+    require(cluster_units > 0, "Cluster must have at least 1 cluster unit");
+    val c = create cluster(name, governor, false, cluster_units);
+
     for (p_key in providers) {
         val provider = require_provider(p_key);
         require_node_access(provider);
@@ -25,15 +23,37 @@ function create_cluster_impl(me: provider, name, governor: voter_set, providers:
     return c;
 }
 
-function require_cluster_quotas(cluster) {
-    val max_containers = cluster_resource_limit @? { cluster, cluster_resource_limit_type.max_containers } (.value);
-    if (max_containers != null and max_containers != -1) {
-        val cluster_container_count = container @ { cluster, .system == false } (@sum 1);
-        require(cluster_container_count < max_containers, "Can't propose container, cluster %s is full".format(cluster.name));
-    }
+function require_cluster_quotas(cluster, wanted_container_units: integer) {
+    if (wanted_container_units < 1) return;
+    val available_container_units = get_available_container_units(cluster);
+    require(wanted_container_units <= available_container_units,
+        "Can not propose container, cluster %s has %d available container units but wanted %d".format(cluster.name, available_container_units, wanted_container_units));
+}
+
+function get_available_container_units(cluster): integer {
+    val max_container_units = get_max_container_units_for_cluster(cluster);
+    val used_container_units = get_used_container_units(cluster);
+    return max_container_units - used_container_units;
+}
+
+function get_max_container_units_for_cluster(cluster): integer {
+    return standard_cluster_unit.container_units * cluster.cluster_units;
+}
+
+function get_used_container_units(cluster): integer {
+    return container_resource_limit @ {
+        .container.cluster == cluster,
+        container_resource_limit_type.container_units
+    } (@sum .value);
+}
+
+function get_minimum_cluster_units_for_current_container_units(cluster): integer {
+    val currently_used_container_units = get_used_container_units(cluster);
+    return currently_used_container_units / standard_cluster_unit.container_units + 1;
 }
 
 function _add_replica_node_to_cluster_internal(cluster, node) {
+    require_cluster_units_for_node(cluster, node);
     create cluster_replica_node(cluster, node);
 }
 
@@ -66,13 +86,14 @@ function add_node_to_cluster_internal(provider, node, cluster) {
     if (exists(cluster_provider @* { cluster, provider })) {
         val provider_cluster_nodes = cluster_node @* { cluster, .node in node @* { provider } };
         require(empty(provider_cluster_nodes), "A provider can only provide one node to each cluster");
+        _remove_replica_node_from_cluster_internal(node);
+        require_cluster_units_for_node(cluster, node);
         create cluster_node(cluster, node);
         if (pcu_enabled()) {
             pcu_update_configuration_signers(cluster, null);
         } else {
             update_configuration_signers(cluster);
         }
-        _remove_replica_node_from_cluster_internal(node);
         // check if cluster now is operational, if so update the flag:
         check_operational(cluster);
         log("blockchain configuration signers are updated");
@@ -198,7 +219,6 @@ function get_cluster_for_blockchain(blockchain_rid: byte_array): cluster {
 
 function remove_cluster_impl(cluster) {
     before_cluster_removal(cluster);
-    delete cluster_resource_limit @* { cluster };
     delete cluster_node @* { cluster };
     delete cluster_replica_node @* { cluster };
     delete cluster_provider @* { cluster };

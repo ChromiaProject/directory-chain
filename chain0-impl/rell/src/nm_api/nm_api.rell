@@ -155,28 +155,31 @@ query nm_get_blockchain_last_height_map(blockchain_rids: list<byte_array>) : lis
     NM API Version: 3
 */
 query nm_get_container_limits(name): map<text, integer> {
-    val container = container @ {name};
     var return_map = map<text, integer>();
-    val limits_list = container_resource_limit @* { container };
-    for (l in limits_list) {
-        val r = l.container_resource_limit_type;
-        return_map.put(r.name, l.value);
-    }
+
+    val container_limits = get_current_container_resource_limits(name);
+
+    val container_units = container_limits[container_resource_limit_type.container_units];
+    val max_blockchains = container_limits[container_resource_limit_type.max_blockchains];
+
+    val cpu = _get_container_limit_or_default(standard_container_unit.cpu, container_units);
+    val ram = _get_container_limit_or_default(standard_container_unit.ram, container_units);
+    val io_read = _get_container_limit_or_default(standard_container_unit.io_read, container_units);
+    val io_write = _get_container_limit_or_default(standard_container_unit.io_write, container_units);
+    val storage = _get_container_limit_or_default(standard_container_unit.storage, container_units);
+
+    return_map.put("max_blockchains", max_blockchains);
+    return_map.put("storage", storage);
+    return_map.put("cpu", cpu);
+    return_map.put("ram", ram);
+    return_map.put("io_read", io_read);
+    return_map.put("io_write", io_write);
+
     return return_map;
 }
 
-/*
-    NM API Version: 3
-*/
-query nm_get_cluster_limits(name): map<text, integer> {
-    val cluster = cluster @ {name};
-    var return_map = map<text, integer>();
-    val limits_list = cluster_resource_limit @* {cluster};
-    for (l in limits_list) {
-        val r = l.cluster_resource_limit_type;
-        return_map.put(r.name, l.value);
-    }
-    return return_map;
+function _get_container_limit_or_default(value: integer, container_units: integer): integer {
+    return if (container_units == -1 or value == -1) -1 else container_units * value;
 }
 
 /*
@@ -184,7 +187,7 @@ query nm_get_cluster_limits(name): map<text, integer> {
     NM API Version: 3
 */
 query nm_get_containers(pubkey): list<text> {
-    val clusters = cluster_node @* {node @ { pubkey }} .cluster;
+    val clusters = cluster_node @* { node @ { pubkey } } .cluster;
     val res = list<text>();
     for (cl in clusters) {
         val containers = container @* { cl } .name;

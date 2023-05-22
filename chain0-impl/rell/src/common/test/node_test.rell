@@ -243,13 +243,22 @@ function test_update_node() {
     ).sign(initial_provider).run();
     assert_equals(_get_node_data(prov), before);
 
+    // Updating cluster_units
+    rell.test.tx().op(
+        update_node_with_units(initial_provider.pub, initial_signer.pub, cluster_units = 0)
+    ).sign(initial_provider).run_must_fail();
+
+    rell.test.tx().op(
+        update_node_with_units(initial_provider.pub, initial_signer.pub, cluster_units = 2)
+    ).sign(initial_provider).run();
+
     // Updating host:port
     rell.test.tx().op(
-        update_node(initial_provider.pub, initial_signer.pub, host = "new_host", port = 777)
+        update_node_with_units(initial_provider.pub, initial_signer.pub, host = "new_host", port = 777)
     ).sign(initial_provider).run();
     assert_equals(
         _get_node_data(prov),
-        ("new_host", 777, before[2], _prev_block_time(), _prev_block_time())
+        ("new_host", 777, before[2], _prev_block_time(), _prev_block_time(), 2)
     );
 
     // Updating api_port
@@ -259,7 +268,7 @@ function test_update_node() {
     val prev_node_list = node_list.last_update;
     assert_equals(
         _get_node_data(prov),
-        ("new_host", 777, "http://localhost/api", _prev_block_time(), prev_node_list)
+        ("new_host", 777, "http://localhost/api", _prev_block_time(), prev_node_list, 2)
     );
 }
 
@@ -296,7 +305,7 @@ function test_remove_node() {
 }
 
 function _get_node_data(provider)
-    = node @ { provider } ( _ = .host, _ = .port, _ = .api_url, _ = .last_updated, _ = node_list.last_update );
+    = node @ { provider } ( _ = .host, _ = .port, _ = .api_url, _ = .last_updated, _ = node_list.last_update, _ = .cluster_units );
 
 function _prev_block_time()
     = (block @* { } ( @omit @sort_desc .block_height, .timestamp ) limit 2)[1];
