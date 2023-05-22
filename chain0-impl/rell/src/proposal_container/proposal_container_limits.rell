@@ -6,12 +6,8 @@ import ^^.model.*;
 entity pending_container_limits {
     key proposal;
     key container;
+    container_units: integer;
     max_blockchains: integer;
-    cpu: integer;
-    ram: integer;
-    storage: integer;
-    io_read: integer;
-    io_write: integer;
 }
 
 @extend(is_container_available_for_removal) function(container) = 
@@ -24,12 +20,8 @@ else null;
 function apply_container_limits(proposal) {
     val pps = pending_container_limits @? { proposal };
     if (pps == null) return;
-    update container_resource_limit @ {pps.container, container_resource_limit_type.max_blockchains} (pps.max_blockchains);
-    update container_resource_limit @ {pps.container, container_resource_limit_type.cpu} (pps.cpu);
-    update container_resource_limit @ {pps.container, container_resource_limit_type.ram} (pps.ram);
-    update container_resource_limit @ {pps.container, container_resource_limit_type.storage} (pps.storage);
-    update container_resource_limit @ {pps.container, container_resource_limit_type.io_read} (pps.io_read);
-    update container_resource_limit @ {pps.container, container_resource_limit_type.io_write} (pps.io_write);
+    update container_resource_limit @ { pps.container, container_resource_limit_type.container_units } ( pps.container_units );
+    update container_resource_limit @ { pps.container, container_resource_limit_type.max_blockchains } ( pps.max_blockchains );
 }
 
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.container_limits.name: delete_pending_container_limits(*)];
@@ -39,36 +31,33 @@ function delete_pending_container_limits(proposal) {
 }
 
 operation propose_container_limits(my_pubkey: pubkey, container_name: text, limits: map<container_resource_limit_type, integer>, description: text = "") {
-    val limits_map = _get_current_container_resource_limits(container_name);
+    val limits_map = get_current_container_resource_limits(container_name);
     limits_map.put_all(limits);
 
     // check that provider authority and that it is cluster's deployer
     val me = require_provider(my_pubkey);
-    require_provider_auth_with_rl(me);
+    require_provider_auth_with_rate_limit(me);
     val container = require_container(container_name);
     require_cluster_governor(container.cluster, me);
-
+    _require_container_units(container, limits_map[container_resource_limit_type.container_units]);
     val prop = create proposal(op_context.last_block_time, proposal_type.container_limits, me, container.cluster.governance, description);
     create pending_container_limits(
         prop,
         container,
-        max_blockchains = limits_map[container_resource_limit_type.max_blockchains],
-        cpu = limits_map[container_resource_limit_type.cpu],
-        ram = limits_map[container_resource_limit_type.ram],
-        storage = limits_map[container_resource_limit_type.storage],
-        io_read = limits_map[container_resource_limit_type.io_read],
-        io_write = limits_map[container_resource_limit_type.io_write]
+        container_units = limits_map[container_resource_limit_type.container_units],
+        max_blockchains = limits_map[container_resource_limit_type.max_blockchains]
     );
     internal_vote(me, prop, true);
 }
 
-function _get_current_container_resource_limits(container_name: text): map<container_resource_limit_type, integer> {
-    var limits_map = map<container_resource_limit_type, integer>();
-    val cur_limits_list = container_resource_limit @* { .container.name == container_name };
-    for (l in cur_limits_list) {
-        limits_map[l.container_resource_limit_type] = l.value;
-    }
-    return limits_map;
+function _require_container_units(container, new_container_units: integer) {
+    val current_container_units = get_container_limit_or_default(container, container_resource_limit_type.container_units, standard_container_defaults.container_units);
+    val available_container_units = get_available_container_units(container.cluster);
+    val required_container_units = new_container_units - current_container_units;
+    require(
+        required_container_units <= 0 or required_container_units <= available_container_units,
+        "Can not propose container limits since container_units is too high for current cluster. Available container_units in cluster are %d but needed is %d".format(available_container_units, required_container_units)
+    );
 }
 
 query get_container_limits_proposal(rowid) {
@@ -77,11 +66,7 @@ query get_container_limits_proposal(rowid) {
     val pcl = pending_container_limits @ { proposal };
     return (
         container = pcl.container.name,
-        max_blockchains = pcl.max_blockchains,
-        cpu = pcl.cpu,
-        ram = pcl.ram,
-        storage = pcl.storage,
-        io_read = pcl.io_read,
-        io_write = pcl.io_write
+        container_units = pcl.container_units,
+        max_blockchains = pcl.max_blockchains
     );
 }

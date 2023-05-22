@@ -17,13 +17,15 @@ function test_container_resource_limits() {
 
     // Asserting default container resource limits
     val default_limits = get_container_resource_limits(container1);
-    assert_container_resource_limits(default_limits, -1, -1, -1, -1, -1, -1);
+    assert_container_resource_limits(default_limits, 1, 10);
 
     // 2. Proposing container resource limits
+    val available_container_units = get_available_container_units(container1.cluster);
+    assert_equals(available_container_units, 11);
+
     val proposed_limits = map<container_resource_limit_type, integer>();
+    proposed_limits[container_resource_limit_type.container_units] = 2;
     proposed_limits[container_resource_limit_type.max_blockchains] = 2;
-    proposed_limits[container_resource_limit_type.ram] = 100;
-    proposed_limits[container_resource_limit_type.storage] = 1000;
     rell.test.tx().op(
         propose_container_limits(alice.pubkey, container1_name, proposed_limits)
     ).sign(rell.test.keypairs.alice).run();
@@ -32,10 +34,19 @@ function test_container_resource_limits() {
     val actual = get_container_resource_limits(container1);
     val expected = map<container_resource_limit_type, integer>();
     expected.put_all(proposed_limits);
-    expected[container_resource_limit_type.cpu] = -1;
-    expected[container_resource_limit_type.io_read] = -1;
-    expected[container_resource_limit_type.io_write] = -1;
+    expected[container_resource_limit_type.container_units] = 2;
+    expected[container_resource_limit_type.max_blockchains] = 2;
     assert_equals(expected, actual);
+    val available_container_units_after = get_available_container_units(container1.cluster);
+    assert_equals(available_container_units_after, 10);
+
+    // Proposing too high container resource limits
+    val proposed_too_high_limits = map<container_resource_limit_type, integer>();
+    proposed_too_high_limits[container_resource_limit_type.container_units] = 20;
+    proposed_too_high_limits[container_resource_limit_type.max_blockchains] = 2;
+    rell.test.tx().op(
+        propose_container_limits(alice.pubkey, container1_name, proposed_too_high_limits)
+    ).sign(rell.test.keypairs.alice).run_must_fail();
 
     // 3. Deploying 2 dapps
     val blockchain_count0 = blockchain_count();
@@ -59,13 +70,9 @@ function test_container_resource_limits() {
     ).sign(rell.test.keypairs.alice).run_must_fail();
 }
 
-function assert_container_resource_limits(limits: map<container_resource_limit_type, integer>, max_blockchains: integer, cpu: integer, ram: integer, storage: integer, io_read: integer, io_write: integer) {
+function assert_container_resource_limits(limits: map<container_resource_limit_type, integer>, container_units: integer, max_blockchains: integer) {
+    assert_equals(limits[container_resource_limit_type.container_units], container_units);
     assert_equals(limits[container_resource_limit_type.max_blockchains], max_blockchains);
-    assert_equals(limits[container_resource_limit_type.cpu], cpu);
-    assert_equals(limits[container_resource_limit_type.ram], ram);
-    assert_equals(limits[container_resource_limit_type.storage], storage);
-    assert_equals(limits[container_resource_limit_type.io_read], io_read);
-    assert_equals(limits[container_resource_limit_type.io_write], io_write);
 }
 
 function get_container_resource_limits(container): map<container_resource_limit_type, integer> {

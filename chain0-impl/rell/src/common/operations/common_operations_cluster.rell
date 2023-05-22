@@ -4,7 +4,7 @@
  */
 operation add_node_to_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cluster_name: text) {
     val provider = require_provider(my_pubkey);
-    require_provider_auth_with_rl(provider);
+    require_provider_auth_with_rate_limit(provider);
     val cluster = require_cluster(cluster_name);
     val node = require_node(node_pubkey);
     add_node_to_cluster_internal(provider, node, cluster);
@@ -12,7 +12,7 @@ operation add_node_to_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cluster_na
 
 operation add_replica_node_to_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cluster_name: text) {
     val provider = require_provider(my_pubkey);
-    require_provider_auth_with_rl(provider);
+    require_provider_auth_with_rate_limit(provider);
     val cluster = require_cluster(cluster_name);
     val node = require_node(node_pubkey);
     require(empty(cluster_replica_node @* { cluster, node }), "Node %s is already a replica of the cluster %s".format(node_pubkey, cluster_name));
@@ -23,7 +23,7 @@ operation add_replica_node_to_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cl
 
 operation remove_replica_node_from_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cluster_name: text) {
     val provider = require_provider(my_pubkey);
-    require_provider_auth_with_rl(provider);
+    require_provider_auth_with_rate_limit(provider);
     val cluster = require_cluster(cluster_name);
     val node = require_node(node_pubkey);
     require(exists(cluster_replica_node @* { cluster, node }), "Node %s is not a replica of the cluster %s".format(node_pubkey, cluster_name));

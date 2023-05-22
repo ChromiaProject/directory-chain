@@ -1,0 +1,60 @@
+@test module;
+
+import ^^.*;
+import ^^^.common.operations.*;
+import ^^^.common.test.setup.*;
+import ^^^.common.test.util.*;
+import ^^^.direct_cluster.*;
+import ^^^.direct_container.*;
+import ^^^.model.*;
+import ^^^.proposal_container.*;
+import ^^^.proposal_provider.*;
+
+function test_propose_and_remove_cluster() {
+    setup_module();
+
+    val cluster1_name = "cluster1";
+
+    // Adding a new cluster
+    rell.test.tx().op(
+        create_cluster(rell.test.pubkeys.alice, cluster1_name, voter_sets.system_p, list())
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Asserting cluster1 added
+    val cluster1 = cluster @? { cluster1_name };
+    assert_not_null(cluster1);
+
+    // Adding a node into cluster1
+    val alice = provider @ { rell.test.pubkeys.alice };
+    val node = node @ { .provider == alice };
+    rell.test.tx().op(
+        update_node_with_units(rell.test.pubkeys.alice, node.pubkey, cluster_units = 5),
+        propose_cluster_provider(alice.pubkey, cluster1.name, alice.pubkey, true),
+        add_node_to_cluster(rell.test.pubkeys.alice, node.pubkey, cluster1_name)
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Propose 0 cluster_units must fail
+    rell.test.tx().op(
+        propose_cluster_limits(initial_provider.pub, cluster1_name, 0)
+    ).sign(initial_provider).run_must_fail();
+
+    // Propose too many cluster units to fit into node must fail
+    rell.test.tx().op(
+        propose_cluster_limits(initial_provider.pub, cluster1_name, 10)
+    ).sign(initial_provider).run_must_fail();
+
+    // Propose cluster units
+    rell.test.tx().op(
+        propose_cluster_limits(initial_provider.pub, cluster1_name, 2)
+    ).sign(initial_provider).run();
+
+    // Adding container that forces more then 1 cluster_unit on cluster
+     rell.test.tx().op(
+        create_container_from_with_units(initial_provider.pub, "big_container", cluster1_name, 1, voter_sets.system_p, 20)
+    ).sign(initial_provider).run();
+
+    // Propose cluster units that is too low for container_units needed must fail
+    rell.test.tx().op(
+        propose_cluster_limits(initial_provider.pub, cluster1_name, 1)
+    ).sign(initial_provider).run_must_fail();
+}

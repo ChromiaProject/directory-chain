@@ -1,16 +1,28 @@
 
 query get_node(pubkey) = node @ { pubkey };
 
+struct node_data {
+    provider: pubkey;
+    pubkey;
+    active: boolean;
+    host: text;
+    port: integer;
+    last_updated: timestamp;
+    api_url: text;
+    cluster_units: integer?;
+}
+
 query get_node_data(pubkey) {
     val node = require_node(pubkey);
-    return (
+    return node_data(
         provider = node.provider.pubkey,
         pubkey = node.pubkey,
         active = node.active,
         host = node.host,
         port = node.port,
         last_updated = node.last_updated,
-        api_url = node.api_url
+        api_url = node.api_url,
+        cluster_units = node.cluster_units
     );
 }
 
