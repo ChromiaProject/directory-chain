@@ -18,17 +18,25 @@ function test_create_container() {
         create_test_provider("", deployer2.pub, provider_tier.COMMUNITY_NODE_PROVIDER)
     ).run();
 
-    val system_cluster_limits = map<cluster_resource_limit_type, integer>();
-    system_cluster_limits[cluster_resource_limit_type.max_containers] = 1;
-
     val deployers = list<pubkey>();
     deployers.add(deployer1.pub);
 
+    // Try to create container with too many cluster units
     rell.test.tx().op(
-        propose_cluster_limits(initial_provider.pub, clusters.system, system_cluster_limits),
+        create_container_with_units(initial_provider.pub, "too_big", clusters.system, 1, deployers, 100)
+    ).sign(initial_provider).run_must_fail();
+
+    // Try to create container with too few cluster units
+    rell.test.tx().op(
+        create_container_with_units(initial_provider.pub, "too_small", clusters.system, 1, deployers, 0)
+    ).sign(initial_provider).run_must_fail();
+
+    // Create first container
+    rell.test.tx().op(
         create_container(initial_provider.pub, "foo", clusters.system, 1, deployers)
     ).sign(initial_provider).run();
-    // The second container, must fail due to `max_containers` restrictions
+
+    // The second container, must fail due to providers `max_containers` restrictions
     rell.test.tx().op(
         create_container(initial_provider.pub, "foo2", clusters.system, 1, deployers)
     ).sign(initial_provider).run_must_fail();
@@ -51,7 +59,7 @@ function test_create_container() {
     rell.test.tx().op(
         remove_container(initial_provider.pub, "foo")
         ).sign(initial_provider).run();
-        
+
     assert_null(container @? { "foo" });
     assert_null(voter_set @? { "container_foo_deployer" });
 }

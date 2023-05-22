@@ -1,11 +1,6 @@
-
 enum container_resource_limit_type {
-    max_blockchains,
-    cpu,
-    ram,
-    storage,
-    io_read,
-    io_write
+    container_units,
+    max_blockchains
 }
 
 entity container {
@@ -16,7 +11,7 @@ entity container {
     system: boolean = false;
     mutable latest_bc_removal: timestamp = if (op_context.exists) op_context.last_block_time else -1;
 }
- 
+
 entity container_resource_limit {
     key container, container_resource_limit_type;
     mutable value: integer;
@@ -25,4 +20,22 @@ entity container_resource_limit {
 //Defines which container a blockchain belongs to
 entity container_blockchain { 
     key container, blockchain; 
+}
+
+object standard_container_unit {
+    mutable cpu: integer = 50; // Percent of cpus, i.e. 50 = 0.5 vCPU
+    mutable ram: integer = 2048; // MiB
+    mutable io_read: integer = 25; // MiB/s
+    mutable io_write: integer = 20; // MiB/s
+    mutable storage: integer = 16384; // MiB
+}
+
+object standard_container_defaults {
+    mutable container_units: integer = 1;
+    mutable max_blockchains: integer = 10;
+}
+
+object system_container_defaults {
+    mutable container_units: integer = 4;
+    mutable max_blockchains: integer = -1;
 }

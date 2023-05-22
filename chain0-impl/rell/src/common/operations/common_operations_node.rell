@@ -1,21 +1,38 @@
-
 operation register_node(my_pubkey: pubkey, node_pubkey: pubkey, host: text, port: integer, api_url: text, clusters:list<text> = list<text>()) {
+    register_node_with_units_impl(my_pubkey, node_pubkey, host, port, api_url, clusters, 1);
+}
+
+operation register_node_with_units(my_pubkey: pubkey, node_pubkey: pubkey, host: text, port: integer, api_url: text, clusters:list<text> = list<text>(), cluster_units: integer) {
+    register_node_with_units_impl(my_pubkey, node_pubkey, host, port, api_url, clusters, cluster_units);
+}
+
+function register_node_with_units_impl(my_pubkey: pubkey, node_pubkey: pubkey, host: text, port: integer, api_url: text, clusters:list<text> = list<text>(), cluster_units: integer) {
     log("------------- Register-Node: %s --------------".format(node_pubkey));
     val provider = require_provider(my_pubkey);
-    require_provider_auth_with_rl(provider);
+    require_provider_auth_with_rate_limit(provider);
     require_pubkey(node_pubkey);
-    add_node_internal(provider, node_pubkey, host, port, api_url, clusters);
+    add_node_internal(provider, node_pubkey, host, port, api_url, clusters, cluster_units);
     log("Added node information for node: " + node_pubkey);
     log("-----------------------------------");
 }
 
 operation replace_node(my_pubkey: pubkey, old_node_key: pubkey, new_node_key: pubkey, new_host: text?, new_port: integer?, new_api_url: text?) {
+    replace_node_with_units_impl(my_pubkey, old_node_key, new_node_key, new_host, new_port, new_api_url, 1);
+}
+
+operation replace_node_with_units(my_pubkey: pubkey, old_node_key: pubkey, new_node_key: pubkey, new_host: text?, new_port: integer?, new_api_url: text?, cluster_units: integer) {
+    replace_node_with_units_impl(my_pubkey, old_node_key, new_node_key, new_host, new_port, new_api_url, cluster_units);
+}
+
+function replace_node_with_units_impl(my_pubkey: pubkey, old_node_key: pubkey, new_node_key: pubkey, new_host: text?, new_port: integer?, new_api_url: text?, new_cluster_units: integer) {
     log("------------- Replace-Node: %s --------------".format(old_node_key));
-    val me = require_is_provider_with_rl(my_pubkey);
+    val me = require_is_provider_with_rate_limit(my_pubkey);
     require_is_signer(old_node_key);
     require_is_signer(new_node_key);
     val old_node = node @ { old_node_key };
     require(old_node.provider == me, "Node must be owned by provider");
+    val old_cluster_units_used = get_used_cluster_units_for_node(old_node);
+    require(new_cluster_units >= old_cluster_units_used, "Node must have at least %d cluster_units".format(old_cluster_units_used));
 
     val host = new_host ?: old_node.host;
     val port = new_port ?: old_node.port;
@@ -29,7 +46,7 @@ operation replace_node(my_pubkey: pubkey, old_node_key: pubkey, new_node_key: pu
     delete blockchain_replica_node @* { old_node };
 
     delete old_node;
-    add_node_internal(me, new_node_key, host, port, api_url, cluster_names);
+    add_node_internal(me, new_node_key, host, port, api_url, cluster_names, new_cluster_units);
 
     val new_node = node @ { new_node_key };
     for (cl in clusters_replicated_by_node) {
@@ -48,7 +65,7 @@ operation replace_node(my_pubkey: pubkey, old_node_key: pubkey, new_node_key: pu
 
 operation enable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
     log("------------- Enable-Node: %s --------------".format(node_pubkey));
-    val provider = require_is_provider_with_rl(my_pubkey);
+    val provider = require_is_provider_with_rate_limit(my_pubkey);
     val node = require_node(node_pubkey);
     require(node.provider == provider, "Node must be owned by provider: " + node_pubkey);
     require(not(node.active), "Node is already active: " + node_pubkey);
@@ -60,7 +77,7 @@ operation enable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
 
 operation disable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
     val provider = require_provider(my_pubkey);
-    require_provider_auth_with_rl(provider);
+    require_provider_auth_with_rate_limit(provider);
     val node_to_disable = require_node(node_pubkey);
 
     if (provider != node_to_disable.provider) {
@@ -101,7 +118,7 @@ operation disable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
 operation remove_node(my_pubkey: pubkey, node_pubkey: pubkey) {
     log("------------- Remove-Node: %s --------------".format(node_pubkey));
     val provider = require_provider(my_pubkey);
-    require_provider_auth_with_rl(provider);
+    require_provider_auth_with_rate_limit(provider);
     val node_to_remove = require_node(node_pubkey);
     require(provider == node_to_remove.provider, "It is only allowed to remove own nodes: " + node_pubkey);
     require(not(node_to_remove.active), "Can't remove active nodes: " + node_pubkey);
@@ -110,12 +127,27 @@ operation remove_node(my_pubkey: pubkey, node_pubkey: pubkey) {
 }
 
 operation update_node(my_pubkey: pubkey, node_pubkey: pubkey, host: text? = null, port: integer? = null, api_url: text? = null) {
+    update_node_with_units_impl(my_pubkey, node_pubkey, host, port, api_url, null);
+}
+
+operation update_node_with_units(my_pubkey: pubkey, node_pubkey: pubkey, host: text? = null, port: integer? = null, api_url: text? = null, cluster_units: integer? = null) {
+    update_node_with_units_impl(my_pubkey, node_pubkey, host, port, api_url, cluster_units);
+}
+
+function update_node_with_units_impl(my_pubkey: pubkey, node_pubkey: pubkey, host: text?, port: integer?, api_url: text?, cluster_units: integer?) {
     val node = require_node_provider(node_pubkey, my_pubkey);
     if (host != null) node.host = host;
     if (port != null) node.port = port;
     if (api_url != null) node.api_url = api_url;
     if (host != null or port != null or api_url != null) node.last_updated = op_context.last_block_time;
     if (host != null or port != null) node_list.last_update = op_context.last_block_time;
+    if (cluster_units != null) {
+        require(cluster_units > 0, "Node must have at least 1 cluster_unit");
+        val needed_cluster_units = get_used_cluster_units_for_node(node);
+        require(cluster_units >= needed_cluster_units,
+            "Can not update cluster units to %d since the node needs at least %d to support current clusters.".format(cluster_units, needed_cluster_units));
+        node.cluster_units = cluster_units;
+    }
 }
 
 operation update_node_capability(my_pubkey: pubkey, node_pubkey: pubkey, type: node_capability_type, add: boolean) {

@@ -42,11 +42,11 @@ function test_add_remove_cluster() {
     // Adding a node into cluster1
     val node = node @ { .provider == initial_provider() };
     rell.test.tx().op(
+        update_node_with_units(initial_provider.pub, node.pubkey, cluster_units = 2),
         add_node_to_cluster(initial_provider.pub, node.pubkey, "cluster1")
     ).sign(initial_provider).run();
 
     // Asserting cluster1's stuff added
-    assert_false(empty(cluster_resource_limit @* { cluster1 }));
     assert_not_null(cluster_node @? { cluster1 });
     assert_not_null(cluster_provider @? { cluster1 });
 
@@ -98,7 +98,6 @@ function test_add_remove_cluster() {
 
     // Asserting cluster1 is deleted with its stuff
     assert_null(cluster @? { "cluster1" });
-    assert_true(empty(cluster_resource_limit @* { cluster1 }));
     assert_null(cluster_node @? { cluster1 });
     assert_null(cluster_provider @? { cluster1 });
 }

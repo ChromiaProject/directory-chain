@@ -1,8 +1,8 @@
-function add_node_internal(provider, node_pubkey: pubkey, host: text, port: integer, api_url: text, clusters: list<text>): node {
+function add_node_internal(provider, node_pubkey: pubkey, host: text, port: integer, api_url: text, clusters: list<text>, cluster_units: integer): node {
     require(empty(provider @? { node_pubkey }), "This pubkey is already registered as a provider: " + node_pubkey);
     require(empty(node @? { node_pubkey }), "Node already exists: " + node_pubkey);
     require_provider_quota(provider, provider_quota_type.max_nodes);
-    val node = create node(provider, node_pubkey, host, port = port, api_url = api_url, last_updated = op_context.last_block_time);
+    val node = create node(provider, node_pubkey, host, port = port, api_url = api_url, last_updated = op_context.last_block_time, cluster_units = cluster_units);
     for (cluster_name in clusters) {
         val cluster = require_cluster(cluster_name);
         if (roles.has_node_access(provider)) {
@@ -18,10 +18,26 @@ function add_node_internal(provider, node_pubkey: pubkey, host: text, port: inte
 
 function require_node_provider(node_pubkey: pubkey, provider_pubkey: pubkey) {
     val provider = require(provider @? { provider_pubkey }, "Provider %s does not exist".format(provider_pubkey));
-    require_provider_auth_with_rl(provider);
+    require_provider_auth_with_rate_limit(provider);
     val node = require_node(node_pubkey);
     require(node.provider == provider, "Must be provider of node to update its state");
     return node;
+}
+
+function require_cluster_units_for_node(cluster, node) {
+    val available_cluster_units = get_available_cluster_units_for_node(node);
+    require(available_cluster_units >= cluster.cluster_units,
+        "Node %s has %d cluster unit(s). To support cluster %s %d more unit(s) are required."
+            .format(node.pubkey, node.cluster_units, cluster.name, cluster.cluster_units - available_cluster_units));
+}
+
+function get_available_cluster_units_for_node(node): integer {
+    return node.cluster_units - get_used_cluster_units_for_node(node);
+}
+
+function get_used_cluster_units_for_node(node): integer {
+    return (cluster_node, cluster) @ { node, cluster_node.cluster == cluster } (@sum cluster.cluster_units) +
+        (cluster_replica_node, cluster) @ { node, cluster_replica_node.cluster == cluster } (@sum cluster.cluster_units);
 }
 
 @extendable function after_node_added(node) {}
