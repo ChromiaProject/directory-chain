@@ -31,31 +31,44 @@ query get_blockchains(include_inactive: boolean): list<struct<blockchain>> {
     if (include_inactive) {
         return blockchain @* {} ($.to_struct());
     }
-    return blockchain @* { .active == true } ($.to_struct());
+    return blockchain @* { .state == blockchain_state.RUNNING } ($.to_struct());
 }
 
 query get_added_blockchain_rid(tx_rid: byte_array) {
     return blockchain_added @ { transaction @ { tx_rid } }.blockchain.rid;
 }
 
-function get_blockchains_with_container(include_inactive:boolean) {
+// Will return RUNNING and PAUSED if include_inactive == true
+function get_blockchains_with_container(include_inactive: boolean) {
     if (include_inactive) {
         return (b: blockchain, c: container_blockchain) @* { c.blockchain == b } (blockchain=b, c.container) ;
     } else {
-        return (b: blockchain, c: container_blockchain) @* { c.blockchain ==b and b.active == true} (blockchain=b, c.container);
+        return (b: blockchain, c: container_blockchain) @* { c.blockchain == b and b.state == blockchain_state.RUNNING } (blockchain = b, c.container);
     }
 }
 
-query get_blockchain_info_list(include_inactive: boolean): list<(rid:byte_array, name:text, active:boolean, container:name, cluster:name)> {
-    val bc_infos = get_blockchains_with_container(include_inactive);
-    val result = list<(rid:byte_array, name:text, active:boolean, container:name, cluster:name)>();
+// Will return RUNNING, PAUSED and REMOVED if include_inactive == true
+query get_blockchain_info_list(include_inactive: boolean): list<(rid: byte_array, name: text, state: blockchain_state, container: name?, cluster: name?)> {
+    var bc_infos = list<(blockchain: blockchain, container: container?)>();
+    if (include_inactive) {
+        val connected_blockchains = container_blockchain @* {} (.blockchain, .container);
+        val removed_blockchains = blockchain @* {
+            blockchain not in connected_blockchains @* {}.blockchain
+        } (blockchain = blockchain, container = null);
+        bc_infos.add_all(connected_blockchains);
+        bc_infos.add_all(removed_blockchains);
+    } else {
+        bc_infos.add_all((b: blockchain, c: container_blockchain) @* { c.blockchain == b and b.state == blockchain_state.RUNNING } (blockchain = b, c.container));
+    }
+    
+    val result = list<(rid: byte_array, name: text, state: blockchain_state, container: name?, cluster: name?)>();
     for (bc in bc_infos) {
         result.add((
             rid = bc.blockchain.rid,
             name = bc.blockchain.name,
-            active = bc.blockchain.active,
-            container = bc.container.name,
-            cluster = bc.container.cluster.name
+            state = bc.blockchain.state,
+            container = bc.container?.name,
+            cluster = bc.container?.cluster?.name
         ));
     }
     return result;
