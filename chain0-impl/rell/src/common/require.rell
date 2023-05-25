@@ -3,11 +3,15 @@ function require_is_signer(pubkey) {
 }
 
 function require_provider(pubkey) = require(provider @? { pubkey }, "Unknown provider " + pubkey);
-function require_blockchain(blockchain_rid: byte_array, require_active: boolean = false) = require(blockchain @? { blockchain_rid, not(require_active) or .active == true }, "Unknown blockchain " + blockchain_rid);
 function require_cluster(name) = require(cluster @? { name }, "Cluster %s not found".format(name));
 function require_node(pubkey) = require(node @? { pubkey }, "Node not found: " + pubkey);
 function require_container(name) = require(container @? { name }, "Container %s not found".format(name));
 function require_voter_set(name) = require(voter_set @? { name }, "Voter set %s does not exist".format(name));
+
+function require_blockchain(blockchain_rid: byte_array, require_active: boolean = false) = require(blockchain @? {
+        blockchain_rid,
+        (require_active and .state == blockchain_state.RUNNING) or .state in [blockchain_state.RUNNING, blockchain_state.PAUSED]
+    }, "Unknown blockchain or blockchain is removed " + blockchain_rid);
 
 function require_is_system_provider(pubkey) {
     val p = require_provider(pubkey);
