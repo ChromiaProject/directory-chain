@@ -30,7 +30,7 @@ function delete_pending_blockchain_action(proposal) {
 
 // Stop block production by inactivating bc, and keep replicas.
 function _apply_pause_blockchain(action: pending_blockchain_action, proposal) {
-    update blockchain @ { action.blockchain.rid } (.active = false);
+    update blockchain @ { action.blockchain.rid } (.state = blockchain_state.PAUSED);
     // Keep replicas
     for (signer in get_blockchain_signer_nodes(action.blockchain)) {
         create blockchain_replica_node(action.blockchain, signer);
@@ -39,7 +39,7 @@ function _apply_pause_blockchain(action: pending_blockchain_action, proposal) {
 
 // Restart block production; block builders will be the ones in cluster_node.
 function _apply_resume_blockchain(action: pending_blockchain_action, proposal) {
-    update blockchain @ { action.blockchain.rid } (.active = true);
+    update blockchain @ { action.blockchain.rid } (.state = blockchain_state.RUNNING);
     // Removing replicas if they are cluster nodes
     val nodes = get_blockchain_signer_nodes(action.blockchain);
     for (node_info in nodes) {
@@ -49,16 +49,24 @@ function _apply_resume_blockchain(action: pending_blockchain_action, proposal) {
 
 // Delete everything about this bc
 function _apply_delete_blockchain(action: pending_blockchain_action, proposal) {
+    // TODO: Do not remove D1 information
+    // - Change the blockchain to state removed
+    // - Disconnect chain from container
+    // - Remove any dapp data from the DB (how do we handle depdendencies between chains?)
     val bc = action.blockchain;
     before_delete_blockchain(bc);
+
+    update blockchain @ { action.blockchain.rid } (.state = blockchain_state.REMOVED);
     delete container_blockchain @ { bc };
+    delete blockchain_replica_node @* { bc };
+    delete pending_blockchain_action @ { proposal };
+
+    // TODO: When REMOVED is implemented delete this deletions
     delete blockchain_configuration @* { bc };
     delete blockchain_configuration_signers @* { bc };
     delete faulty_blockchain_configuration @* { bc };
     delete blockchain_added @* { bc };
-    delete blockchain_replica_node @* { bc };
     delete blockchain_dependency @* { .me == bc };
-    delete pending_blockchain_action @ { proposal };
     delete blockchain @ { bc.rid };
 }
 

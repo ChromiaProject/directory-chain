@@ -40,19 +40,19 @@ function test_propose_blockchain() {
 
     // Asserting blockchain is running
     val bc = blockchain @ { .name == "foo_chain" };
-    assert_true(bc.active);
+    assert_equals(bc.state, blockchain_state.RUNNING);
 
     // 2. Proposing blockchain pause
     alice_proposes_action(bc, blockchain_action.pause);
     assert_action_proposed(blockchain_action.pause);
     bob_votes();
-    assert_false(bc.active);
+    assert_equals(bc.state, blockchain_state.PAUSED);
 
     // 3. Proposing blockchain resume
     alice_proposes_action(bc, blockchain_action.resume);
     assert_action_proposed(blockchain_action.resume);
     bob_votes();
-    assert_true(bc.active);
+    assert_equals(bc.state, blockchain_state.RUNNING);
 
     // 4. Proposing blockchain deleted
     val brid = bc.rid;

@@ -1,11 +1,8 @@
-import ^.common.*;
-import ^.model.*;
-
 /*
     Returns NM API Version
     NM API Version: 1
 */
-query nm_api_version() = 5;
+query nm_api_version() = 6;
 
 /*
     Returns version of peerlist
@@ -119,7 +116,7 @@ function compute_blockchain_info_list(node_id: pubkey): list<blockchain_info> {
         res.add_all(get_blockchains_replicated_by_node(node));
         return list(res);
     } else {
-        return [blockchain_info(chain_context.blockchain_rid, true)];
+        return [blockchain_info(chain_context.blockchain_rid, true, blockchain_state.RUNNING)];
     }
 }
 
@@ -204,7 +201,7 @@ query nm_get_blockchains_for_container(container_name: text): list<byte_array> {
     val res = list<byte_array>();
     if (exists(container)) {
         val cluster = container.cluster;
-        res.add_all(container_blockchain @* {container, .blockchain.active == true} .blockchain.rid);
+        res.add_all(container_blockchain @* {container, .blockchain.state in [blockchain_state.RUNNING, blockchain_state.PAUSED]} .blockchain.rid);
     }
     return res;
 }
@@ -271,4 +268,13 @@ query nm_get_pending_blockchain_configuration_by_hash(blockchain_rid: byte_array
 query nm_get_faulty_blockchain_configuration(blockchain_rid: byte_array, height: integer): byte_array? {
     val bc = require_blockchain(blockchain_rid);
     return faulty_blockchain_configuration @? { bc, .reported_at_height == height }.config_hash;
+}
+
+/*
+    Returns current state of blockchain
+    NM API Version: 6
+*/
+query nm_get_blockchain_state(blockchain_rid: byte_array): text {
+    val bc = require_blockchain(blockchain_rid);
+    return bc.state.name;
 }
