@@ -37,20 +37,13 @@ function set_cluster_anchoring_config(config: byte_array) {
 }
 
 @extend(before_system_container_removal) function remove_cluster_anchoring_chain(cluster) {
-    val config_map = map<text,gtv>.from_gtv(gtv.from_bytes(cluster_anchoring_config.raw_config));
-    // feature toggle
-    if (config_map.size() > 0) {
-        val anchor = cluster_anchoring_chain @ { cluster } (.blockchain);
-        delete blockchain_configuration @* { anchor };
-        delete blockchain_configuration_signers @* { anchor };
-        delete faulty_blockchain_configuration @* { anchor };
+    val anchor = cluster_anchoring_chain @? { cluster } (.blockchain);
+    if (exists(anchor)) {
+        anchor.state = blockchain_state.REMOVED;
         delete blockchain_added @* { anchor };
-
         delete container_blockchain @* { anchor };
-
         delete cluster_anchoring_chain @ { anchor };
         delete blockchain_replica_node @* { anchor };
-        delete blockchain @ { anchor.rid };
     }
 }
 

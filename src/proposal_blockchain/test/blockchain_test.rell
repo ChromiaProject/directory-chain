@@ -54,12 +54,15 @@ function test_propose_blockchain() {
     bob_votes();
     assert_equals(bc.state, blockchain_state.RUNNING);
 
-    // 4. Proposing blockchain deleted
+    // 4. Proposing blockchain remove
     val brid = bc.rid;
     alice_proposes_action(bc, blockchain_action.remove);
     assert_action_proposed(blockchain_action.remove);
     bob_votes();
-    assert_null( blockchain @? { .rid == brid } );
+    assert_not_null( blockchain @? { .rid == brid } );
+    assert_equals(bc.state, blockchain_state.REMOVED);
+    assert_false(empty(blockchain_configuration @* { bc }));
+    assert_false(empty(blockchain_configuration_signers @* { bc }));
 
     // Proposal(s) is removed
     assert_null(proposal @? {} limit 1);
