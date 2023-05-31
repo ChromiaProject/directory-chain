@@ -8,10 +8,16 @@ function require_node(pubkey) = require(node @? { pubkey }, "Node not found: " +
 function require_container(name) = require(container @? { name }, "Container %s not found".format(name));
 function require_voter_set(name) = require(voter_set @? { name }, "Voter set %s does not exist".format(name));
 
-function require_blockchain(blockchain_rid: byte_array, require_active: boolean = false) = require(blockchain @? {
-        blockchain_rid,
-        (require_active and .state == blockchain_state.RUNNING) or .state in [blockchain_state.RUNNING, blockchain_state.PAUSED]
-    }, "Unknown blockchain or blockchain is removed " + blockchain_rid);
+function require_blockchain(
+    blockchain_rid: byte_array,
+    require_running: boolean = false,
+    include_removed: boolean = false) = require(
+        blockchain @? {
+            blockchain_rid,
+            include_removed or
+            (require_running and .state == blockchain_state.RUNNING) or
+            .state in [blockchain_state.RUNNING, blockchain_state.PAUSED]
+        }, "Unknown blockchain " + blockchain_rid);
 
 function require_is_system_provider(pubkey) {
     val p = require_provider(pubkey);
