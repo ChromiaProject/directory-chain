@@ -1,8 +1,14 @@
 function allow_blockchain_dependencies() = chain_context.args.allow_blockchain_dependencies;
 
-function add_blockchain(raw_configuration: byte_array, signers: byte_array, name: text, container, system: boolean = false): byte_array {
+function add_blockchain(
+    raw_configuration: byte_array,
+    signers: byte_array,
+    name: text, container,
+    system: boolean = false,
+    state: blockchain_state = blockchain_state.RUNNING
+): byte_array {
     val blockchain_rid = map<text, gtv>.from_gtv(gtv.from_bytes(raw_configuration)).hash();
-    val blockchain = create blockchain(blockchain_rid, name, system);
+    val blockchain = create blockchain(blockchain_rid, name, system, state);
     create blockchain_configuration(blockchain, 0, raw_configuration);
     create blockchain_configuration_signers(blockchain, 0, signers);
     create blockchain_added(blockchain, op_context.transaction);
@@ -22,7 +28,7 @@ function add_dependencies(raw_config: byte_array, brid: byte_array, height: inte
             val dependency_blockchain = blockchain @? { dependency_brid };
             if (exists(dependency_blockchain)) {
                 require(brid != dependency_brid);
-                require(container_blockchain @ { dependency_blockchain }.container == container, 
+                require(container_blockchain @ { dependency_blockchain }.container == container,
                     "Blockchain dependencies are only allowed within the same container");
                 create blockchain_dependency(
                     me = blockchain,

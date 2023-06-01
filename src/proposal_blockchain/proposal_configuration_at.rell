@@ -76,15 +76,15 @@ operation propose_configuration_at(my_pubkey: pubkey, blockchain_rid: byte_array
 }
 
 query get_configuration_proposal_at(rowid?): (
-    current_conf:struct<blockchain_configuration>,
-    proposed_conf:struct<pending_configuration_at>
+    current_conf: struct<blockchain_configuration>,
+    proposed_conf: struct<pending_configuration_at>
 )? {
     val proposal = get_latest_proposal(rowid, proposal_type.configuration_at);
     if (proposal == null) return null;
     val config = pending_configuration_at @? { require_proposal(proposal.rowid) };
     if (config == null) return null;
-    val current = (blockchain_configuration @ { config.blockchain, .height < config.height }
-     (@omit @sort_desc .height, $) limit 1);
+    val current = blockchain_configuration @ { config.blockchain, .height < config.height }
+    (@omit @sort_desc .height, $) limit 1;
 
     return (
         current_conf = current.to_struct(),
