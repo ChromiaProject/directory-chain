@@ -19,7 +19,6 @@ function set_cluster_anchoring_config(config: byte_array) {
 
         val system_container = container @ { .name == system_container_name(cluster.name), cluster };
 
-        create blockchain_added(blockchain, op_context.transaction);
         create container_blockchain(system_container, blockchain);
         create cluster_anchoring_chain(blockchain, cluster);
 
@@ -40,7 +39,6 @@ function set_cluster_anchoring_config(config: byte_array) {
     val anchor = cluster_anchoring_chain @? { cluster } (.blockchain);
     if (exists(anchor)) {
         anchor.state = blockchain_state.REMOVED;
-        delete blockchain_added @* { anchor };
         delete container_blockchain @* { anchor };
         delete cluster_anchoring_chain @ { anchor };
         delete blockchain_replica_node @* { anchor };
