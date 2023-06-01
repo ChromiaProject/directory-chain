@@ -2,7 +2,7 @@
     Returns NM API Version
     NM API Version: 1
 */
-query nm_api_version() = 6;
+query nm_api_version() = 7;
 
 /*
     Returns version of peerlist
@@ -277,4 +277,31 @@ query nm_get_faulty_blockchain_configuration(blockchain_rid: byte_array, height:
 query nm_get_blockchain_state(blockchain_rid: byte_array): text {
     val bc = require_blockchain(blockchain_rid, false, true);
     return bc.state.name;
+}
+
+/*
+    Add configuration which was previously proposed with hash only.
+    NM API Version: 7
+*/
+operation nm_add_configuration(node_pubkey: pubkey, blockchain_rid: byte_array, height: integer, config_data: byte_array) {
+    val node = require_node(node_pubkey);
+    require_is_signer(node.pubkey);
+
+    val config_gtv = gtv.from_bytes(config_data);
+
+    val bc = require_blockchain(blockchain_rid);
+    val expected_config_hash = require(blockchain_configuration_hash @? { bc, height } (.config_hash), 
+        "No configuration proposed at height %d for blockchain %s".format(height, blockchain_rid));
+    require(config_gtv.hash() == expected_config_hash, 
+        "Submitted configuration does not match proposed hash at height %d for blockchain %s".format(height, blockchain_rid));
+
+    val config_map = map<text, gtv>.from_gtv(config_gtv);
+    val signers = require_not_empty(config_map.remove_or_null("signers"), 
+        "Configuration must contain \"signers\" at height %d for blockchain %s".format(height, blockchain_rid));
+
+    create blockchain_configuration(bc, height, data = config_map.to_gtv().to_bytes());
+    add_dependencies(config_data, blockchain_rid, height);
+    create blockchain_configuration_signers(bc, height, signers.to_bytes());
+
+    delete blockchain_configuration_hash @ { bc, height };
 }

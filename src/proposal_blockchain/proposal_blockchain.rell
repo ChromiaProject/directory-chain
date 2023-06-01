@@ -20,6 +20,7 @@ function apply_blockchain_proposal(proposal) {
     val nodes = cluster_node @* { bc.container.cluster } (@sort .node.pubkey);
     // do not write new configuration when size is 0 since it's impossible to recover from that
     require(nodes.size() > 0, "Cluster must have at least one node");
+    require_container_is_not_full(bc.container);
 
     val blockchain_rid = add_blockchain(bc.data, nodes.to_gtv().to_bytes(), bc.name, bc.container);
     log("Added blockchain", blockchain_rid);
@@ -44,11 +45,7 @@ operation propose_blockchain(my_pubkey: pubkey, config_data: byte_array, bc_name
     validate_blockchain_configuration(config_data, signers=true, header_hash=pcu_enabled());
 
     // Require container resource limits are honored
-    val max_blockchains = container_resource_limit @ { container, container_resource_limit_type.max_blockchains } (.value);
-    if (max_blockchains > 0) {
-        val container_dapps_count = container_blockchain @* { container } (@sum 1)[0];
-        require(container_dapps_count < max_blockchains, "Can't propose blockchain, container %s is full".format(container_name));
-    }
+    require_container_is_not_full(container);
 
     // If already proposed, do not add again.
     if (empty(pending_blockchain @* {.data == config_data } limit 1)) {

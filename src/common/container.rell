@@ -71,3 +71,11 @@ function get_current_container_resource_limits(container_name: text): map<contai
 function get_container_limit_or_default(container, type: container_resource_limit_type, default: integer): integer {
     return container_resource_limit @? { container, .container_resource_limit_type == type } (.value) ?: default;
 }
+
+function require_container_is_not_full(container) {
+    val max_blockchains = container_resource_limit @ { container, container_resource_limit_type.max_blockchains } (.value);
+    if (max_blockchains > 0) {
+        val container_dapps_count = container_blockchain @* { container } (@sum 1)[0];
+        require(container_dapps_count < max_blockchains, "Can't add blockchain, container %s is full".format(container.name));
+    }
+}

@@ -5,6 +5,7 @@ import common.test.ops.*;
 import common.test.setup.*;
 import common.test.util.*;
 import proposal.voting.test.ops.*;
+import proposal_container.*;
 
 function setup() {
     setup_module();
@@ -30,7 +31,7 @@ function test_propose_blockchain() {
     val config_proposal = get_blockchain_proposal(prop.rowid);
     assert_not_null(config_proposal);
     assert_equals(config_proposal.container, system_container_name(cl.name));
-    
+
     rell.test.tx().op(
         create_test_node(alice, rell.test.pubkeys.alice, cl)
     ).sign(rell.test.keypairs.alice).run_must_fail();
@@ -132,4 +133,69 @@ function propose_config(brid: byte_array, conf: map<text, gtv>, height: integer,
     return rell.test.tx().op(
         propose_configuration_at(initial_provider.pub, brid, conf.to_gtv().to_bytes(), height, force)
     ).sign(initial_provider);
+}
+
+function test_propose_import_blockchain() {
+    setup_module();
+
+    val conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv(), "signers": [initial_provider.pub].to_gtv()];
+    val brid = conf.hash();
+    val conf_bytes = conf.to_gtv().to_bytes();
+    val container = system_container_name(clusters.system);
+    val configurations = map<integer, byte_array>();
+
+    // proposing a config at height 10 for unknown blockchain
+    configurations.clear();
+    configurations[10] = conf.hash();
+    rell.test.tx().op(
+        propose_import_blockchain(initial_provider.pub, "foo_chain", brid, configurations, container)
+    ).sign(initial_provider).run_must_fail("Initial configuration needed for non-existing blockchain");
+
+    // proposing an initial config, blockchain will be created in PAUSED state
+    configurations.clear();
+    configurations[0] = conf.hash();
+    rell.test.tx().op(
+        propose_import_blockchain(initial_provider.pub, "foo_chain", brid, configurations, container)
+    ).sign(initial_provider).run();
+    val bc = blockchain @? { brid };
+    assert_not_null(bc);
+    assert_equals(bc.state, blockchain_state.PAUSED);
+    assert_true(exists(blockchain_configuration_hash @? { bc, 0 }));
+    assert_false(exists(blockchain_configuration @? { bc, 0 }));
+
+    // proposing a new config
+    configurations.clear();
+    configurations[10] = conf.hash();
+    rell.test.tx().op(
+        propose_import_blockchain(initial_provider.pub, "foo_chain", brid, configurations, container)
+    ).sign(initial_provider).run();
+    assert_true(exists(blockchain_configuration_hash @? { bc, 10 }));
+    assert_false(exists(blockchain_configuration @? { bc, 10 }));
+
+    // activating blockchain
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, brid, blockchain_action.resume)
+    ).sign(initial_provider).run();
+    assert_equals(bc.state, blockchain_state.RUNNING);
+
+    // proposing a new config import for a running blockchain
+    configurations.clear();
+    configurations[100] = conf.hash();
+    rell.test.tx().op(
+        propose_import_blockchain(initial_provider.pub, "foo_chain", brid, configurations, container)
+    ).sign(initial_provider).run_must_fail("Can't import blockchain in a state other than PAUSED");
+
+    // importing blockchain to a full container
+    val limits = map<container_resource_limit_type, integer>();
+    limits[container_resource_limit_type.max_blockchains] = 2;
+    val conf2 = conf;
+    conf2.put("name", "bar_chain".to_gtv());
+    val brid2 = conf2.hash();
+    val conf2_bytes = conf2.to_gtv().to_bytes();
+    configurations.clear();
+    configurations[0] = conf2.hash();
+    rell.test.tx().op(
+        propose_container_limits(initial_provider.pub, container, limits),
+        propose_import_blockchain(initial_provider.pub, "bar_chain", brid2, configurations, container)
+    ).sign(initial_provider).run_must_fail("Can't add blockchain, container system is full");
 }
