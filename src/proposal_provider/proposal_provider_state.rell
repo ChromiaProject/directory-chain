@@ -11,7 +11,7 @@ entity pending_provider_state {
 function apply_provider_state(proposal) {
     val pps = pending_provider_state @? { proposal };
     if (pps == null) return;
-    update_provider_state(pps.provider, pps.active);
+    update_provider_state(pps.provider, pps.active, proposal);
 }
 
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.provider_state.name: delete_pending_provider_state(*)];
@@ -51,7 +51,7 @@ operation propose_provider_state(my_pubkey: pubkey, provider_pubkey: pubkey, act
     }
 }
 
-function update_provider_state(provider, active: boolean) {
+function update_provider_state(provider, active: boolean, proposal: proposal? = null) {
     provider.active = active;
     if (active == false) {
         update node @* { provider } ( .active = false );
@@ -72,6 +72,8 @@ function update_provider_state(provider, active: boolean) {
             }
         }
 
+        val pending_proposals_with_provider_as_voter = (prop: proposal, vsm: voter_set_member) @* { prop.voter_set == vsm.voter_set, vsm.provider == provider } ( prop );
+
         // cluster replica nodes
         delete cluster_replica_node @* { .node.provider == provider };
         // blockchain replica nodes
@@ -80,6 +82,11 @@ function update_provider_state(provider, active: boolean) {
         delete voter_set_member @* { .provider == provider };
         // updating node list timestamp
         node_list.last_update = op_context.last_block_time;
+        // if provider is last to vote on proposals make sure the proposals are voted on
+        for (prop in pending_proposals_with_provider_as_voter) {
+            if (proposal != null and prop == proposal) continue;
+            try_to_apply_proposal(prop);
+        }
     } else { // enable
         // If enabled provider is a system provider, update SYSTEM_P voter set
         if (roles.has_system_access(provider)) {

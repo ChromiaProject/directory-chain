@@ -246,3 +246,52 @@ function test_propose_remove_provider_with_cross_requirements() {
     ).sign(rell.test.keypairs.trudy).run_must_fail();
     failure2.message.contains("Provider is proposed for removal");
 }
+
+function test_propose_remove_provider_with_pending_proposals() {
+    setup_module();
+
+    // setup providers
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, node_provider.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, node_provider.pub, true)
+    ).sign(initial_provider).run();
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, provider1.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, provider1.pub, true)
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(node_provider);
+
+    // create a proposal
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, provider2.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, provider2.pub, true)
+    ).sign(initial_provider).run();
+    // Do not vote with provider1 to keep the proposal pending
+    vote_for_last_proposal(node_provider);
+
+    val np1 = provider @ { provider1.pub };
+    val np2 = provider @ { provider2.pub };
+    assert_false(np2.system);
+
+    // deactivate provider
+    log("deactivate provider");
+    assert_true(np1.active);
+    rell.test.tx().op(
+        propose_provider_state(provider1.pub, provider1.pub, false)
+    ).sign(provider1).run();
+    val proposal_id = (proposal @ { proposal_type.provider_state } .rowid limit 1).to_integer();
+    vote_for_proposal(proposal_id, initial_provider);
+    vote_for_proposal(proposal_id, node_provider);
+    assert_false(np1.active);
+
+    // since provider1 should have been removed from voter set during deactivation,
+    // and the is_system proposal should have been voted on, the proposal for setting
+    // provider2 to system should have passed
+    assert_true(np2.system);
+}
+
+function vote_for_proposal(proposal_id: integer, approver: rell.test.keypair) {
+    rell.test.tx().op(
+        make_vote(approver.pub, proposal_id, true)
+    ).sign(approver.priv).run();
+}
