@@ -10,6 +10,7 @@ import c: ^^.test.util.constants.*;
 import nm_api.*;
 import proposal_blockchain.*;
 import proposal_provider.*;
+import direct_container.*;
 
 function test_precise_configuration_update_config_happy() {
     val (anchor_chain, bc_rid) = setup();
@@ -520,7 +521,8 @@ function setup(): (anchor_chain: blockchain, bc_rid: byte_array) {
 
     val config0 = ["number": (0).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv()];
     rell.test.tx().op(
-        propose_blockchain(initial_provider.pub, config0.to_gtv_pretty().to_bytes(), "foo_chain", system_container_name(clusters.system), "")
+        create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
+        propose_blockchain(initial_provider.pub, config0.to_gtv_pretty().to_bytes(), "foo_chain", "container", "")
     ).sign(initial_provider).run();
     val bc_rid = blockchain @ { "foo_chain" } (.rid);
     assert_equals(

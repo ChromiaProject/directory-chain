@@ -6,6 +6,7 @@ import common.operations.*;
 import common.test.setup.*;
 import common.test.util.*;
 import direct_cluster.*;
+import direct_container.*;
 import model.*;
 import proposal.*;
 import proposal_blockchain.*;
@@ -17,12 +18,12 @@ function test_nm_get_blockchains_for_container() {
 
     var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
     rell.test.tx().op(
-        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", system_container_name(clusters.system))
+        create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "container")
     ).sign(initial_provider).run();
 
-    val chains = nm_get_blockchains_for_container(system_container_name(clusters.system));
-    assert_equals(chains.size(), 2);
-    assert_true(chains.contains(blockchain @ { blockchains.c0 } (.rid)));
+    val chains = nm_get_blockchains_for_container("container");
+    assert_equals(chains.size(), 1);
     assert_true(chains.contains(blockchain @ { "foo_chain" } (.rid)));
 }
 
