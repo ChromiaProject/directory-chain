@@ -101,43 +101,46 @@ function test_propose_configuration_at() {
 
     var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
     rell.test.tx().op(
-        create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
-        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "container")
+        create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub])
     ).sign(initial_provider).run();
-    val bc = blockchain @? { conf.hash() };
-    assert_not_null(bc);
+
+    // NB: Proposing config at a specific chain for non-chain0 can not be tested due to limitations of Unit Test Framework
+    val c0 = blockchain @ { blockchains.c0 };
 
     // 1. force == false
     // 1.1. at height 10
-    propose_config(bc.rid, conf, 10, false).run();
-    assert_not_null(blockchain_configuration @? { bc, 10 });
+    propose_config_at(c0.rid, conf, 10, false).run();
+    assert_not_null(blockchain_configuration @? { c0, 10 });
     // 1.2. before 10
-    propose_config(bc.rid, conf, 8, false).run();
-    assert_not_null(blockchain_configuration @? { bc, 8 });
+    propose_config_at(c0.rid, conf, 8, false).run();
+    assert_not_null(blockchain_configuration @? { c0, 8 });
 
     // assert unique configurations
-    assert_not_equals(blockchain_configuration @? { bc, 10 } (.data), blockchain_configuration @? { bc, 8 } (.data));
+    assert_not_equals(
+        blockchain_configuration @? { c0, 10 } (.data),
+        blockchain_configuration @? { c0, 8 } (.data)
+    );
 
     // 1.3. again 10
-    propose_config(bc.rid, conf, 10, false).run_must_fail();
+    propose_config_at(c0.rid, conf, 10, false).run_must_fail();
     // 1.4. height is null
-    propose_config(bc.rid, conf, -1, false).run_must_fail();
+    propose_config_at(c0.rid, conf, -1, false).run_must_fail();
     // 1.5. height is -2, to be less than last_height (-1)
-    propose_config(bc.rid, conf, -2, false).run_must_fail();
+    propose_config_at(c0.rid, conf, -2, false).run_must_fail();
 
     // 2. force == true
     var conf2 = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
     conf2["name"] = "conf2".to_gtv();
-    propose_config(bc.rid, conf2, 8, true).run();
-    val actual_config_bytes = blockchain_configuration @ { bc, 8 } (.data);
+    propose_config_at(c0.rid, conf2, 8, true).run();
+    val actual_config_bytes = blockchain_configuration @ { c0, 8 } (.data);
     val actual_config = map<text, gtv>.from_gtv(gtv.from_bytes(actual_config_bytes));
     assert_equals(actual_config["name"], "conf2".to_gtv());
     // NB: we can't test `height = -1` case
-    // propose_config(bc.rid, conf, -1, false).run();
+    // propose_config_at(c0.rid, conf, -1, false).run();
     // See kotlin test
 }
 
-function propose_config(brid: byte_array, conf: map<text, gtv>, height: integer, force: boolean) {
+function propose_config_at(brid: byte_array, conf: map<text, gtv>, height: integer, force: boolean) {
     return rell.test.tx().op(
         propose_configuration_at(initial_provider.pub, brid, conf.to_gtv().to_bytes(), height, force)
     ).sign(initial_provider);
