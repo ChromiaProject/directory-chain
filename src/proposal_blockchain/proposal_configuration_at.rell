@@ -49,8 +49,11 @@ operation propose_configuration_at(my_pubkey: pubkey, blockchain_rid: byte_array
     val blockchain = require_blockchain(blockchain_rid);
     val container = container_blockchain @ { blockchain }.container;
     require_container_deployer(container, me);
-    val is_chain0 = blockchain.rid == chain_context.blockchain_rid;
-
+    val is_chain0 = blockchain.rid == chain_context.blockchain_rid or
+        chain_context.blockchain_rid == x"0000000000000000000000000000000000000000000000000000000000000000"; // for unit tests
+    if (pcu_enabled()) {
+        require(is_chain0, "Proposing configuration at a specific height disallowed for chain: " + blockchain_rid);
+    }
     validate_blockchain_configuration(config_data, signers=not is_chain0, header_hash=false);
 
     val last_height = get_last_height(blockchain);
