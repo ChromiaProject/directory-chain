@@ -34,7 +34,6 @@ operation propose_provider_state(my_pubkey: pubkey, provider_pubkey: pubkey, act
     require_provider_auth_with_rate_limit(me);
 
     val other_prov = require_provider(provider_pubkey);
-    require(empty(pending_remove_provider @? { other_prov }), "Provider is proposed for removal: " + provider_pubkey);
 
     // Only SP and NP can enable/disable providers
     require_node_access(me);
@@ -43,7 +42,7 @@ operation propose_provider_state(my_pubkey: pubkey, provider_pubkey: pubkey, act
         update_provider_state(other_prov, active);
     } else {
         require_system_access(me);
-        if (empty(pending_provider_state @* { .provider == other_prov, .active == active } limit 1)) {
+        if (empty(pending_provider_state @* { .provider == other_prov, .active == active, .proposal.state == proposal_state.PENDING } limit 1)) {
             val prop = create proposal(op_context.last_block_time, proposal_type.provider_state, me, system_p_voter_set(), description);
             create pending_provider_state(prop, other_prov, .active = active);
             internal_vote(me, prop, true);
@@ -72,7 +71,7 @@ function update_provider_state(provider, active: boolean, proposal: proposal? = 
             }
         }
 
-        val pending_proposals_with_provider_as_voter = (prop: proposal, vsm: voter_set_member) @* { prop.voter_set == vsm.voter_set, vsm.provider == provider } ( prop );
+        val pending_proposals_with_provider_as_voter = (prop: proposal, vsm: voter_set_member) @* { prop.voter_set == vsm.voter_set, vsm.provider == provider, prop.state == proposal_state.PENDING } ( prop );
 
         // cluster replica nodes
         delete cluster_replica_node @* { .node.provider == provider };

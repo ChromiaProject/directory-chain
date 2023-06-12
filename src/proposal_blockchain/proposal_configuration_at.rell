@@ -54,7 +54,7 @@ operation propose_configuration_at(my_pubkey: pubkey, blockchain_rid: byte_array
     if (pcu_enabled()) {
         require(is_chain0, "Proposing configuration at a specific height disallowed for chain: " + blockchain_rid);
     }
-    validate_blockchain_configuration(config_data, signers=not is_chain0, header_hash=false);
+    validate_blockchain_configuration(config_data, signers = not is_chain0, header_hash = false);
 
     val last_height = get_last_height(blockchain);
     val cant_apply_message = "Height (%d) must be greater than current height (%d)".format(height, last_height);
@@ -67,7 +67,7 @@ operation propose_configuration_at(my_pubkey: pubkey, blockchain_rid: byte_array
         require(empty(blockchain_configuration @? { blockchain, height } limit 1), "Configuration at height %d already exists for blockchain %s".format(height, blockchain_rid));
     }
 
-    val pending_config = pending_configuration_at @? { blockchain, height } limit 1;
+    val pending_config = pending_configuration_at @? { blockchain, height, .proposal.state == proposal_state.PENDING } limit 1;
     require(empty(pending_config),
         "Pending configuration proposal already exists: blockchain_rid: %s, height: %d. Revoke the proposal %d first."
             .format(blockchain.rid, height, pending_config?.proposal)
