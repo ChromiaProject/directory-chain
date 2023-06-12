@@ -4,7 +4,6 @@ import common.*;
 import .voting.*;
 
 enum proposal_type {
-    other,
     configuration_at,
     configuration,
     bc,
@@ -17,7 +16,6 @@ enum proposal_type {
     provider_is_system,
     provider_quota,
     provider_batch,
-    provider_remove,
     blockchain_action,
     cluster_anchoring_configuration,
     container,
@@ -27,11 +25,17 @@ enum proposal_type {
     finish_blockchain_import
 }
 
+enum proposal_state {
+    PENDING, APPROVED, REJECTED, REVOKED
+}
+
 entity proposal {
     index timestamp, proposal_type;
     proposed_by: provider;
     index voter_set;
     description: text = "";
+    transaction = op_context.transaction;
+    mutable state: proposal_state = proposal_state.PENDING;
 }
 
 operation revoke_proposal(my_pubkey: pubkey, proposal_rowid: rowid) {
@@ -40,14 +44,12 @@ operation revoke_proposal(my_pubkey: pubkey, proposal_rowid: rowid) {
     val prop = proposal @? { proposal_rowid };
     require(exists(prop), "Proposal not found: %d".format(proposal_rowid));
     require(prop!!.proposed_by == me, "It is only allowed to revoke own proposals");
-    delete_proposal(prop);
+    delete_proposal(prop, proposal_state.REVOKED);
 }
 
-function delete_proposal(prop: proposal) {
-    require(prop.proposal_type != proposal_type.other, "Proposal of type 'other' is not allowed");
+function delete_proposal(prop: proposal, state: proposal_state) {
     delete_proposal_handlers()[prop.proposal_type.name](prop);
-    delete vote @* { .proposal == prop };
-    delete proposal @ { .rowid == prop.rowid };
+    prop.state = state;
 }
 
 @extendable function delete_proposal_handlers(): map<text, (proposal) -> unit>;

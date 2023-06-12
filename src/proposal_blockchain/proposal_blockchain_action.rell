@@ -63,7 +63,10 @@ operation propose_blockchain_action(my_pubkey: pubkey, blockchain_rid: byte_arra
     val blockchain = require_blockchain(blockchain_rid);
     val container = container_blockchain @ {blockchain} .container;
     require_container_deployer(container, me);
-    if (action == blockchain_action.remove) require_no_dependencies_on_me(blockchain);
+    if (action == blockchain_action.remove) 
+        require_no_dependencies_on_me(blockchain);
+    else
+        require(blockchain.state != blockchain_state.REMOVED, "Removed blockchain can not be revived");
     val prop = create proposal(op_context.last_block_time, proposal_type.blockchain_action, me, container.deployer, description);
     create pending_blockchain_action(prop, blockchain, action);
     internal_vote(me, prop, true);
