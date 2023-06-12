@@ -11,6 +11,10 @@ namespace auth_service {
     operation create_container(pubkey, cluster_name: text?) {
         require_module_auth();
         require_pubkey(pubkey);
+        require(empty((voter_set_member, container) @? {
+            container.deployer == voter_set_member.voter_set,
+            voter_set_member.provider.pubkey == pubkey
+        }), "Only one container per provider can be created");
         if (cluster_name != null) {
             val cluster = require_cluster(cluster_name);
             create_container_in_cluster(pubkey, cluster);
@@ -29,7 +33,7 @@ namespace auth_service {
     }
 
     function create_container_in_cluster(pubkey, cluster) {
-        val name = [cluster.to_gtv(), pubkey.to_gtv()].hash().to_hex();
+        val name = [cluster.to_gtv(), pubkey.to_gtv(), op_context.transaction.tx_rid.to_gtv()].hash().to_hex();
         if (not(exists(provider @? { pubkey }))) {
             register_and_enable_provider(
                 provider_info(pubkey),

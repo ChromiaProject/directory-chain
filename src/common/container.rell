@@ -42,7 +42,9 @@ function require_container_available_for_removal(container) {
 function create_container_impl(me: provider, name, cluster, consensus_threshold: integer, deployers: list<pubkey>, container_units: integer, max_blockchains: integer) {
     require(consensus_threshold >= -1 and consensus_threshold <= deployers.size(), "Invalid threshold");
 
-    val vs = create_voter_set_internal("container_" + name + "_deployer", consensus_threshold, cluster.governance);
+    val vs_name = "container_" + name + "_deployer";
+    require(empty(voter_set @? { vs_name }), "Voter set named %s already exists".format(vs_name));
+    val vs = create_voter_set_internal(vs_name, consensus_threshold, cluster.governance);
     for (deployer_key in deployers) {
         val deployer = require_provider(deployer_key);
         create voter_set_member(vs, deployer);
