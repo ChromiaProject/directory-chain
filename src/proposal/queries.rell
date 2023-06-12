@@ -1,5 +1,5 @@
 query get_proposals_since(since: rowid) {
-    return proposal @* { .rowid >= since, .state == proposal_state.PENDING } (.rowid, .proposal_type);
+    return proposal @* { .rowid >= since, proposal_state.PENDING } (.rowid, .proposal_type);
 }
 
 query get_relevant_proposals(my_pubkey: pubkey, since: rowid) {
@@ -25,7 +25,7 @@ query get_proposal(id: rowid?): (id: rowid, timestamp: integer, type: proposal_t
 
 function require_proposal(rowid) = require(proposal @? { rowid }, "Proposal " + rowid + " not found");
 
-function get_latest_proposal(rowid?, proposal_type) = if (rowid == null) proposal @ { proposal_type, .state == proposal_state.PENDING } ( @max proposal ) else proposal @ { rowid };
+function get_latest_proposal(rowid?, proposal_type) = if (rowid == null) proposal @ { proposal_type, proposal_state.PENDING } ( @max proposal ) else proposal @ { rowid };
 
 struct proposal_voting_results {
     positive_votes: integer;
