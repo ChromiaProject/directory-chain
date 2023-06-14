@@ -1,3 +1,8 @@
-query get_provider_votes(provider_key: pubkey) {
-    return vote @* { vote.provider.pubkey == provider_key } ( .proposal, .vote );
+query get_provider_votes(from: timestamp, until: timestamp, provider_key: pubkey) {
+    return (proposal, vote) @* {
+        vote.provider.pubkey == provider_key,
+        vote.proposal == proposal,
+        proposal.timestamp >= from,
+        proposal.timestamp <= until
+    } ( .proposal, .vote );
 }
