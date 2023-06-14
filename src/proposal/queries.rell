@@ -1,17 +1,22 @@
-query get_proposals_since(since: rowid) {
-    return proposal @* { .rowid >= since, proposal_state.PENDING } (.rowid, .proposal_type);
+query get_proposals_range(from: timestamp, until: timestamp, only_pending: boolean) {
+    return proposal @* {
+        .timestamp >= from,
+        .timestamp <= until,
+        not(only_pending) or .state == proposal_state.PENDING
+    } (.rowid, .proposal_type, .state);
 }
 
-query get_relevant_proposals(my_pubkey: pubkey, since: rowid) {
+query get_relevant_proposals(from: timestamp, until: timestamp, only_pending: boolean, my_pubkey: pubkey) {
     return (proposal, voter_set_member) @* {
         voter_set_member.voter_set == proposal.voter_set,
         voter_set_member.provider.pubkey == my_pubkey,
-        proposal.rowid >= since,
-        proposal.state == proposal_state.PENDING
-    } (proposal.rowid, proposal.proposal_type);
+        proposal.timestamp >= from,
+        proposal.timestamp <= until,
+        not(only_pending) or proposal.state == proposal_state.PENDING
+    } (proposal.rowid, proposal.proposal_type, proposal.state);
 }
 
-query get_proposal(id: rowid?): (id: rowid, timestamp: integer, type: proposal_type, proposed_by: pubkey, description: text)? {
+query get_proposal(id: rowid?): (id: rowid, timestamp: integer, type: proposal_type, proposed_by: pubkey, description: text, state: proposal_state)? {
     val result = if (id == null) proposal @? {} (@sort_desc @omit .rowid, $) limit 1 else proposal @? { id };
     if (result == null) return null;
     return (
@@ -19,7 +24,8 @@ query get_proposal(id: rowid?): (id: rowid, timestamp: integer, type: proposal_t
         timestamp = result.timestamp,
         type = result.proposal_type,
         proposed_by = result.proposed_by.pubkey,
-        description = result.description
+        description = result.description,
+        state = result.state
     );
 }
 
