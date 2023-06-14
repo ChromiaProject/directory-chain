@@ -30,11 +30,10 @@ operation propose_provider_is_system(my_pubkey: pubkey, provider_pubkey: pubkey,
     require_is_system_provider(my_pubkey);
     val other_prov = require_provider(provider_pubkey);
 
-    if (empty(pending_provider_is_system @* { .provider == other_prov, .system == promote, .proposal.state == proposal_state.PENDING } limit 1)) {
-        val prop = create proposal(op_context.last_block_time, proposal_type.provider_is_system, me, system_p_voter_set(), description);
-        create pending_provider_is_system(prop, other_prov, .system = promote);
-        internal_vote(me, prop, true);
-    }
+    require(empty(pending_provider_is_system @* { .provider == other_prov, .system == promote, .proposal.state == proposal_state.PENDING } limit 1), "Already proposed");
+    val prop = create proposal(op_context.last_block_time, proposal_type.provider_is_system, me, system_p_voter_set(), description);
+    create pending_provider_is_system(prop, other_prov, .system = promote);
+    internal_vote(me, prop, true);    
 }
 
 query get_system_provider_proposal(rowid) {

@@ -42,11 +42,10 @@ operation propose_provider_state(my_pubkey: pubkey, provider_pubkey: pubkey, act
         update_provider_state(other_prov, active);
     } else {
         require_system_access(me);
-        if (empty(pending_provider_state @* { .provider == other_prov, .active == active, .proposal.state == proposal_state.PENDING } limit 1)) {
-            val prop = create proposal(op_context.last_block_time, proposal_type.provider_state, me, system_p_voter_set(), description);
-            create pending_provider_state(prop, other_prov, .active = active);
-            internal_vote(me, prop, true);
-        }
+        require(empty(pending_provider_state @* { .provider == other_prov, .active == active, .proposal.state == proposal_state.PENDING } limit 1), "Already proposed");
+        val prop = create proposal(op_context.last_block_time, proposal_type.provider_state, me, system_p_voter_set(), description);
+        create pending_provider_state(prop, other_prov, .active = active);
+        internal_vote(me, prop, true);        
     }
 }
 

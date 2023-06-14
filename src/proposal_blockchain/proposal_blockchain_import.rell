@@ -22,12 +22,10 @@ operation propose_import_blockchain(my_pubkey: pubkey, config_data: byte_array, 
     // Require container resource limits are honored
     require_container_is_not_full(container);
 
-    // If already proposed, do not add again.
-    if (empty(pending_blockchain_import @* { .blockchain_rid == blockchain_rid, .proposal.state == proposal_state.PENDING } limit 1)) {
-        val prop = create proposal(op_context.last_block_time, proposal_type.blockchain_import, me, container.deployer, description);
-        create pending_blockchain_import(prop, bc_name, blockchain_rid, config_data, container);
-        internal_vote(me, prop, true);
-    }
+    require(empty(pending_blockchain_import @* { .blockchain_rid == blockchain_rid, .proposal.state == proposal_state.PENDING } limit 1), "Already proposed");
+    val prop = create proposal(op_context.last_block_time, proposal_type.blockchain_import, me, container.deployer, description);
+    create pending_blockchain_import(prop, bc_name, blockchain_rid, config_data, container);
+    internal_vote(me, prop, true);    
 }
 
 function apply_blockchain_import(proposal) {

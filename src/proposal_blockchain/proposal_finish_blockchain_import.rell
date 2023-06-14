@@ -17,11 +17,10 @@ operation propose_finish_import_blockchain(my_pubkey: pubkey, blockchain_rid: by
 
     require(blockchain.state == blockchain_state.PAUSED, "Blockchain must be paused to finish import");
 
-    if (empty(pending_finish_blockchain_import @* { blockchain, .proposal.state == proposal_state.PENDING } limit 1)) {
-        val prop = create proposal(op_context.last_block_time, proposal_type.finish_blockchain_import, me, container.deployer, description);
-        create pending_finish_blockchain_import(prop, blockchain);
-        internal_vote(me, prop, true);
-    }
+    require(empty(pending_finish_blockchain_import @* { blockchain, .proposal.state == proposal_state.PENDING } limit 1), "Already proposed");
+    val prop = create proposal(op_context.last_block_time, proposal_type.finish_blockchain_import, me, container.deployer, description);
+    create pending_finish_blockchain_import(prop, blockchain);
+    internal_vote(me, prop, true);    
 }
 
 function apply_finish_blockchain_import(proposal) {
