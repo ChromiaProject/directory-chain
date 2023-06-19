@@ -32,12 +32,14 @@ function test_propose_blockchain() {
         create_container(alice.pubkey, container, clusters.system, 0, [alice.pubkey, bob.pubkey]),
         propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "foo_chain", container)
     ).sign(rell.test.keypairs.alice).run();
+    val tx_rid = transaction @ {} (@sort_desc @omit .rowid, .tx_rid) limit 1;
 
     // Proposal is pending
     val prop = last_proposal();
     val config_proposal = get_blockchain_proposal(prop.rowid);
     assert_not_null(config_proposal);
     assert_equals(config_proposal.container, "container");
+    assert_null(find_blockchain_rid(tx_rid));
 
     rell.test.tx().op(
         create_test_node(alice, rell.test.pubkeys.alice, cl)
@@ -49,6 +51,7 @@ function test_propose_blockchain() {
     // Asserting blockchain is running
     val bc = blockchain @ { .name == "foo_chain" };
     assert_equals(bc.state, blockchain_state.RUNNING);
+    assert_equals(find_blockchain_rid(tx_rid), bc.rid);
 
     // 2. Proposing blockchain pause
     alice_proposes_action(bc, blockchain_action.pause);
