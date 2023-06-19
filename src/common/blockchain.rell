@@ -1,19 +1,20 @@
 function allow_blockchain_dependencies() = chain_context.args.allow_blockchain_dependencies;
 
 function add_blockchain(
-    raw_configuration: byte_array,
-    signers: byte_array,
-    name: text, container,
+    base_configuration: byte_array,
+    signers: list<pubkey>,
+    name: text, 
+    container,
     system: boolean = false,
     state: blockchain_state = blockchain_state.RUNNING
-): byte_array {
-    val blockchain_rid = map<text, gtv>.from_gtv(gtv.from_bytes(raw_configuration)).hash();
+): blockchain {
+    val blockchain_rid = calculate_configuration_hash(base_configuration, signers);
     val blockchain = create blockchain(blockchain_rid, name, system, state);
-    create blockchain_configuration(blockchain, 0, raw_configuration);
-    create blockchain_configuration_signers(blockchain, 0, signers);
+    create blockchain_configuration(blockchain, 0, base_configuration);
+    create blockchain_configuration_signers(blockchain, 0, signers.to_gtv().to_bytes());
     create container_blockchain(container, blockchain);
-    add_dependencies(raw_configuration, blockchain_rid, 0);
-    return blockchain_rid;
+    add_dependencies(base_configuration, blockchain_rid, 0);
+    return blockchain;
 }
 
 function add_dependencies(raw_config: byte_array, brid: byte_array, height: integer) {
@@ -75,6 +76,12 @@ function get_signers_for_configuration(blockchain, height: integer): gtv {
 
 function isAlive(blockchain): boolean {
     return blockchain.state == blockchain_state.RUNNING or blockchain.state == blockchain_state.PAUSED;
+}
+
+function calculate_configuration_hash(base_config: byte_array, signers: list<pubkey>): byte_array {
+    val full_config = map<text, gtv>.from_gtv(gtv.from_bytes(base_config));
+    full_config["signers"] = signers.to_gtv();
+    return full_config.to_gtv().hash();    
 }
 
 @extendable function before_delete_blockchain(blockchain) {}

@@ -186,9 +186,7 @@ function update_configuration_signers_pcu(blockchain, signers: list<pubkey>, exc
 
     log("Signers update with PCU for chain %s at minimum height %d: %s".format(blockchain.rid, minimum_height, signers));
     val unique_base_config = make_config_unique(base_config);
-    val full_config = map<text, gtv>.from_gtv(gtv.from_bytes(unique_base_config));
-    full_config["signers"] = signers.to_gtv();
-    val config_hash = full_config.to_gtv().hash();
+    val config_hash = calculate_configuration_hash(unique_base_config, signers);
     create pending_blockchain_configuration(
         blockchain,
         minimum_height,
