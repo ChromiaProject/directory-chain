@@ -255,3 +255,24 @@ function test_nm_get_blockchain_configuration() {
 
     assert_true(c0_gtx_modules.contains("net.postchain.rell.module.RellPostchainModuleFactory"));
 }
+
+function test_blockchain_rid() {
+    setup_module();
+
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p)
+    ).sign(initial_provider).run();
+    val container1 = container @ { "container1" };
+
+    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    rell.test.tx().op(
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "container1")
+    ).sign(initial_provider).run();
+
+    val blockchain_info_list = nm_compute_blockchain_info_list(test_node.pubkey);
+    assert_true(blockchain_info_list.contains(blockchain_info(
+        calculate_configuration_hash(conf.to_gtv().to_bytes(), [test_node.pubkey]), 
+        false, 
+        blockchain_state.RUNNING
+    )));
+}

@@ -11,19 +11,15 @@ function set_cluster_anchoring_config(config: byte_array) {
     if (not(exists(cluster_anchoring_chain @? { cluster } (.blockchain))) and config_map.size() > 0) {
         require(empty(cluster_anchoring_chain @? { cluster }), "Anchoring chain already exists for cluster " + cluster.name);
 
+        val system_container = container @ { .name == system_container_name(cluster.name), cluster };
+        val cluster_signers = cluster_node @* { cluster } (@sort .node.pubkey);
+        val blockchain_name = blockchains.cluster_anchoring_prefix + cluster.name;
         config_map["cluster"] = cluster.name.to_gtv();
         val unique_config = config_map.to_gtv_pretty();
-        val blockchain_rid = unique_config.hash();
-        val blockchain = create blockchain(blockchain_rid, blockchains.cluster_anchoring_prefix + cluster.name, system = true, .state = blockchain_state.RUNNING);
-        create blockchain_configuration(blockchain, 0, unique_config.to_bytes());
 
-        val system_container = container @ { .name == system_container_name(cluster.name), cluster };
-
-        create container_blockchain(system_container, blockchain);
+        val blockchain = add_blockchain(unique_config.to_bytes(), cluster_signers, blockchain_name, system_container, system = true, state = blockchain_state.RUNNING);
+        
         create cluster_anchoring_chain(blockchain, cluster);
-
-        val cluster_signers = cluster_node @* { cluster } (@sort .node.pubkey).to_gtv().to_bytes();
-        create blockchain_configuration_signers(blockchain, 0, cluster_signers);
 
         if (cluster.name != clusters.system) {
             // Add replication of this chain to all system nodes

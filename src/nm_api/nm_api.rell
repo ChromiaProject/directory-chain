@@ -76,11 +76,10 @@ query nm_get_blockchain_configuration_v5(blockchain_rid: byte_array, height: int
         val signers = require(blockchain_configuration_signers @? { bc, .height <= height } (@omit @sort_desc .height, .signers) limit 1,
             "No signers configuration for blockchain %s for height %d".format(blockchain_rid, height));
         val full_config = map<text, gtv>.from_gtv(gtv.from_bytes(base_config));
-        full_config["signers"] = gtv.from_bytes(signers);
         return (
             base_config = base_config,
             signers = list<pubkey>.from_gtv(gtv.from_bytes(signers)),
-            config_hash = full_config.to_gtv().hash()
+            config_hash = calculate_configuration_hash(base_config, list<byte_array>.from_gtv(gtv.from_bytes(signers)))
         );
     } else {
         return null;
