@@ -338,6 +338,34 @@ function test_disable_provider() {
     */
 }
 
+function test_system_provider_fails_to_disable_other_system_provider() {
+    setup_module();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, system_provider.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, system_provider.pub, true)
+    ).sign(initial_provider).run();
+
+    val sp = provider @ { system_provider.pub };
+    assert_true(sp.active);
+    assert_true(sp.system);
+
+    // New provider tries to demote initial provider
+    rell.test.tx().op(
+        propose_provider_is_system(system_provider.pub, initial_provider.pub, false)
+    ).sign(system_provider).run();
+
+    // Initial provider rejects it
+    rell.test.tx().op(
+            make_vote(initial_provider.pub, last_proposal().rowid.to_integer(), false)
+    ).sign(initial_provider).run();
+
+    // Ensure initial provider is still a system provider
+    val ip = provider @ { initial_provider.pub };
+    assert_true(ip.active);
+    assert_true(ip.system);
+}
+
 function test_promote_node_provider() {
     setup_module();
 
