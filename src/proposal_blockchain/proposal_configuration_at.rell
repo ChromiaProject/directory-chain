@@ -12,25 +12,17 @@ function apply_configuration_at(proposal) {
     val pc = pending_configuration_at @? { proposal };
     if (pc == null) return;
     val last_height = get_last_height(pc.blockchain);
-    val cant_apply_message = "Proposed configuration for height %d can't be applied, current height: %d".format(pc.height, last_height);
-    if (pc.force) {
-        if (pc.height != -1) {
-            require(last_height < pc.height, cant_apply_message);
-        }
-    } else {
-        require(last_height < pc.height, cant_apply_message);
+    if (not pc.force) {
+        require(last_height < pc.height, "Proposed configuration for height %d can't be applied, current height: %d".format(pc.height, last_height));
         require(empty(blockchain_configuration @? { pc.blockchain, pc.height } limit 1), "Configuration at height %d already exists for blockchain %s".format(pc.height, pc.blockchain.rid));
     }
 
     val height = if (pc.height == -1) last_height + 1 else pc.height;
-
-    val is_chain0 = pc.blockchain.rid == chain_context.blockchain_rid;
-    val config_data = if (not is_chain0 and pcu_enabled()) make_config_unique(pc.data) else pc.data;
     if (not(exists(blockchain_configuration @? { pc.blockchain, height }))) {
-        create blockchain_configuration(pc.blockchain, height, data = config_data);
-        add_dependencies(config_data, pc.blockchain.rid, height);
+        create blockchain_configuration(pc.blockchain, height, data = pc.data);
+        add_dependencies(pc.data, pc.blockchain.rid, height);
     } else {
-        update blockchain_configuration @ { pc.blockchain, height } ( .data = config_data );
+        update blockchain_configuration @ { pc.blockchain, height } ( .data = pc.data );
     }
 }
 
@@ -57,13 +49,8 @@ operation propose_configuration_at(my_pubkey: pubkey, blockchain_rid: byte_array
     validate_blockchain_configuration(config_data, signers = not is_chain0, header_hash = false);
 
     val last_height = get_last_height(blockchain);
-    val cant_apply_message = "Height (%d) must be greater than current height (%d)".format(height, last_height);
-    if (force) {
-        if (height != -1) {
-            require(last_height < height, cant_apply_message);
-        }
-    } else {
-        require(last_height < height, cant_apply_message);
+    if (not force) {
+        require(last_height < height, "Height (%d) must be greater than current height (%d)".format(height, last_height));
         require(empty(blockchain_configuration @? { blockchain, height } limit 1), "Configuration at height %d already exists for blockchain %s".format(height, blockchain_rid));
     }
 
