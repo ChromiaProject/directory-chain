@@ -84,4 +84,27 @@ function calculate_configuration_hash(base_config: byte_array, signers: list<pub
     return full_config.to_gtv().hash();    
 }
 
+function get_blockchain_configuration(blockchain_rid: byte_array, height: integer):
+    (base_config: byte_array, signers: list<pubkey>, config_hash: byte_array)?
+{
+    val bc = require_blockchain(blockchain_rid);
+    // Find configuration height -- the latest height up to given height.
+    // If conf_h exist, so does signer_h, thus no need to check both.
+    val base_config = blockchain_configuration @? { bc, .height <= height } (@omit @sort_desc .height, .data) limit 1;
+    if (base_config != null) {
+        // Checking that signers.size() is non-zero is done when population blockchain_configuration_signers.
+        val signers = require(blockchain_configuration_signers @? { bc, .height <= height }
+            (@omit @sort_desc .height, list<pubkey>.from_gtv(gtv.from_bytes(.signers))) limit 1,
+            "No signers configuration for blockchain %s for height %d".format(blockchain_rid, height)
+        );
+        return (
+            base_config = base_config,
+            signers = signers,
+            config_hash = calculate_configuration_hash(base_config, signers)
+        );
+    } else {
+        return null;
+    }
+}
+
 @extendable function before_delete_blockchain(blockchain) {}
