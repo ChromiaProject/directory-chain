@@ -27,3 +27,21 @@ operation update_provider(my_pubkey: pubkey, name?, url: text?) {
     if (exists(name)) me.name = name;
     if (exists(url)) me.url = url;
 }
+
+operation __begin_block(height: integer) {
+    before_begin_block(height);
+
+    if (empty(blockchain @? { chain_context.blockchain_rid })) return;
+    val expected_config = get_blockchain_configuration(chain_context.blockchain_rid, height);
+    if (expected_config == null or expected_config.config_hash == chain_context.raw_config.hash()) return;
+
+    log("Chain0 config for height %d changed from %s to %s and will be stored".format(
+        height, expected_config.config_hash, chain_context.raw_config.hash()));
+    val config_map = map<text, gtv>.from_gtv(chain_context.raw_config);
+    config_map.remove_or_null("signers");
+    val base_config = config_map.to_gtv().to_bytes();
+    create blockchain_configuration(blockchain @ { chain_context.blockchain_rid }, height, base_config);
+    add_dependencies(base_config, chain_context.blockchain_rid, height);
+}
+
+@extendable function before_begin_block(height: integer) {}

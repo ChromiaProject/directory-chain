@@ -45,17 +45,10 @@ query nm_find_next_configuration_height(blockchain_rid: byte_array, height: inte
     NM API Version: 1
 */
 query nm_get_blockchain_configuration(blockchain_rid: byte_array, height: integer): byte_array? {
-    val bc = require_blockchain(blockchain_rid);
-    // Find configuration height -- the latest height up to given height.
-    // If conf_h exist, so does signer_h, thus no need to check both.
-    val base_config = blockchain_configuration @? { bc, .height <= height } (@omit @sort_desc .height, $) limit 1;
-    if (base_config != null) {
-        // Checking that signers.size() is non-zero is done when population blockchain_configuration_signers.
-        val signers = require(blockchain_configuration_signers @? { bc, .height <= height } (@omit @sort_desc .height, .signers) limit 1,
-            "No signers configuration for blockchain %s for height %d".format(blockchain_rid, height));
-
-        val full_config = map<text, gtv>.from_gtv(gtv.from_bytes(base_config.data));
-        full_config["signers"] = gtv.from_bytes(signers);
+    val config = get_blockchain_configuration(blockchain_rid, height);
+    if (config != null) {
+        val full_config = map<text, gtv>.from_gtv(gtv.from_bytes(config.base_config));
+        full_config["signers"] = config.signers.to_gtv();
         return full_config.to_gtv().to_bytes();
     } else {
         return null;
@@ -66,25 +59,8 @@ query nm_get_blockchain_configuration(blockchain_rid: byte_array, height: intege
     NM API Version: 5
 */
 query nm_get_blockchain_configuration_v5(blockchain_rid: byte_array, height: integer):
-        (base_config: byte_array, signers: list<pubkey>, config_hash: byte_array)? {
-    val bc = require_blockchain(blockchain_rid);
-    // Find configuration height -- the latest height up to given height.
-    // If conf_h exist, so does signer_h, thus no need to check both.
-    val base_config = blockchain_configuration @? { bc, .height <= height } (@omit @sort_desc .height, .data) limit 1;
-    if (base_config != null) {
-        // Checking that signers.size() is non-zero is done when population blockchain_configuration_signers.
-        val signers = require(blockchain_configuration_signers @? { bc, .height <= height } (@omit @sort_desc .height, .signers) limit 1,
-            "No signers configuration for blockchain %s for height %d".format(blockchain_rid, height));
-        val full_config = map<text, gtv>.from_gtv(gtv.from_bytes(base_config));
-        return (
-            base_config = base_config,
-            signers = list<pubkey>.from_gtv(gtv.from_bytes(signers)),
-            config_hash = calculate_configuration_hash(base_config, list<byte_array>.from_gtv(gtv.from_bytes(signers)))
-        );
-    } else {
-        return null;
-    }
-}
+    (base_config: byte_array, signers: list<pubkey>, config_hash: byte_array)?
+        = get_blockchain_configuration(blockchain_rid, height);
 
 /*
     Returns list of blockchains to be launched
