@@ -49,6 +49,7 @@ operation retract_vote(my_pubkey: pubkey, proposal_id: integer) {
     require_is_signer(my_pubkey);
     val provider = require_provider(my_pubkey);
     val prop = require_proposal(rowid(proposal_id));
+    require(prop.state == proposal_state.PENDING, "The proposal is already closed as %s".format(prop.state));
     require_voter_set_member(prop.voter_set, provider);
 
     if (exists(vote @? { prop, provider })) {
