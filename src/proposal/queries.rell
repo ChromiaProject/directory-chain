@@ -43,10 +43,22 @@ struct proposal_voting_results {
 
 query get_proposal_voting_results(rowid): proposal_voting_results {
     val proposal = require_proposal(rowid);
+    require(proposal.state == proposal_state.PENDING, "This proposal is closed as %s. For info about voting use get_proposal_voter_info query.".format(proposal.state));
     val positive_votes = positive_votes(proposal);
     val negative_votes = negative_votes(proposal);
     val max_votes = max_votes(proposal.voter_set);
     val threshold = proposal.voter_set.threshold;
     val status = _compute_voting_result(positive_votes, negative_votes, max_votes, threshold);
     return proposal_voting_results(positive_votes, negative_votes, max_votes, threshold, status);
+}
+
+struct proposal_voter {
+    provider: byte_array;
+    provider_name: text;
+    vote: boolean;
+}
+
+query get_proposal_voter_info(rowid): list<proposal_voter> {
+    val proposal = require_proposal(rowid);
+    return vote @* { .proposal.rowid == rowid } (proposal_voter(.provider.pubkey, .provider.name, .vote));
 }
