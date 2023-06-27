@@ -27,3 +27,16 @@ We use the following syntax for semver: a.b.c
 - a: major version, which is 1 for Directory 1
 - b: minor version / api version
 - c: patch version / internal changes to the source code
+
+## ICMF
+
+To include the ICMF module in your rell project, specify in your config file:
+```yaml
+libs:
+  icmf:
+    registry: https://gitlab.com/chromaway/core/directory-chain
+    path: src/messaging
+    tagOrBranch: 1.8.0
+    rid: x"AA7C302190DE25FAB64A6A4DC2131A7064B541BE85A148719CAB119FCED984BC"
+```
+Then use `chr install` to install the icmf-library.
