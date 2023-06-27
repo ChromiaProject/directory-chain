@@ -35,8 +35,8 @@ To include the ICMF module in your rell project, specify in your config file:
 libs:
   icmf:
     registry: https://gitlab.com/chromaway/core/directory-chain
-    path: src/messaging
-    tagOrBranch: 1.8.0
-    rid: x"AA7C302190DE25FAB64A6A4DC2131A7064B541BE85A148719CAB119FCED984BC"
+    path: src/messaging/icmf
+    tagOrBranch: 1.9.1
+    rid: x"80F7DF5DDB4944D5E96794E988B373149A2EBD6F3651565BD68B1E5D0C68F7F0"
 ```
 Then use `chr install` to install the icmf-library.
