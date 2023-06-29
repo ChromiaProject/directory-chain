@@ -31,6 +31,11 @@ function delete_pending_container_limits(proposal) {
 }
 
 operation propose_container_limits(my_pubkey: pubkey, container_name: text, limits: map<container_resource_limit_type, integer>, description: text = "") {
+    if (limits.contains(container_resource_limit_type.container_units)) {
+        val proposed_container_units = limits[container_resource_limit_type.container_units];
+        require(proposed_container_units > 0 or proposed_container_units == -1, "Invalid value for container units: %d, must be -1 or greater than 0".format(proposed_container_units));
+    }
+
     val limits_map = get_current_container_resource_limits(container_name);
     limits_map.put_all(limits);
 
