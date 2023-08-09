@@ -15,13 +15,3 @@ function validate_blockchain_configuration(config_data: byte_array, signers: boo
             "Configuration must contain \"config_consensus_strategy\"=\"HEADER_HASH\"");
     }
 }
-
-function add_configuration_with_signers(blockchain, height: integer, config_data: byte_array) {
-    val config_map = map<text, gtv>.from_gtv(gtv.from_bytes(config_data));
-    val signers = require(config_map.remove_or_null("signers"), "No signers in configuration");
-    val base_config = config_map.to_gtv();
-
-    create blockchain_configuration(blockchain, height, base_config.to_bytes());
-    create blockchain_configuration_signers(blockchain, height, signers.to_bytes());
-    add_dependencies(config_data, blockchain.rid, height);
-}
