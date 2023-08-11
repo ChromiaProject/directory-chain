@@ -30,26 +30,26 @@ operation propose_finish_foreign_blockchain_import(
 }
 
 function apply_finish_foreign_blockchain_import(proposal) {
-    val pffbi = pending_finish_foreign_blockchain_import @? { proposal };
-    if (pffbi == null) return;
+    val pbi = pending_finish_foreign_blockchain_import @? { proposal };
+    if (pbi == null) return;
 
-    val container = container_blockchain @ { pffbi.blockchain }.container;
+    val container = container_blockchain @ { pbi.blockchain }.container;
     val nodes = cluster_node @* { container.cluster } (@sort .node.pubkey);
     require(nodes.size() > 0, "Cluster must have at least one node");
 
-    val fbi = require(foreign_blockchain_import @? { .blockchain_rid == pffbi.blockchain.rid }, "Can't find foreign blockchain being imported: %s".format(pffbi.blockchain.rid));
-    require(pffbi.final_height != -1, "Final height (%s) already proposed for foreign blockchain import: %s".format(pffbi.final_height, pffbi.blockchain.rid));
+    val fbi = require(foreign_blockchain_import @? { .blockchain_rid == pbi.blockchain.rid }, "Can't find foreign blockchain being imported: %s".format(pbi.blockchain.rid));
+    require(pbi.final_height != -1, "Final height (%s) already proposed for foreign blockchain import: %s".format(pbi.final_height, pbi.blockchain.rid));
 
-    val last_config_height = blockchain_configuration_signers @? { pffbi.blockchain, .height >= pffbi.final_height } (@sort_desc .height) limit 1;
+    val last_config_height = blockchain_configuration_signers @? { pbi.blockchain, .height >= pbi.final_height } (@sort_desc .height) limit 1;
     require(empty(last_config_height),
         "Proposed height (%s) to finish foreign import must be greater than the height (%s) of the latest imported configuration: %s"
-            .format(pffbi.final_height, last_config_height, pffbi.blockchain.rid)
+            .format(pbi.final_height, last_config_height, pbi.blockchain.rid)
     );
 
-    create blockchain_configuration_signers(pffbi.blockchain, pffbi.final_height, nodes.to_gtv().to_bytes());
-    fbi.final_height = pffbi.final_height;
+    create blockchain_configuration_signers(pbi.blockchain, pbi.final_height, nodes.to_gtv().to_bytes());
+    fbi.final_height = pbi.final_height;
 
-    log("Foreign blockchain import finished: %s".format(pffbi.blockchain.rid));
+    log("Foreign blockchain import finished: %s".format(pbi.blockchain.rid));
 }
 
 function delete_pending_finish_foreign_blockchain_import(proposal) {
