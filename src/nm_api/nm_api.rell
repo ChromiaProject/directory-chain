@@ -160,7 +160,8 @@ function _get_container_limit_or_default(value: integer, container_units: intege
     NM API Version: 3
 */
 query nm_get_containers(pubkey): list<text> {
-    val clusters = cluster_node @* { node @ { pubkey } } .cluster;
+    val n = require(node @? { pubkey }, "Node with pubkey %s not found".format(pubkey));
+    val clusters = cluster_node @* { n } .cluster;
     val res = list<text>();
     for (cl in clusters) {
         val containers = container @* { cl } .name;
