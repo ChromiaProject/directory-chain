@@ -16,7 +16,12 @@ query nm_get_peer_list_version() = node_list.last_update;
     NM API Version: 1
     (API expects array, so we need suppress naming)
 */
-query nm_get_peer_infos() = node @* {} (_ = .host, _ = .port, _ = .pubkey, _ = .last_updated);
+query nm_get_peer_infos(): list<(text, integer, pubkey, timestamp)> {
+    val peer_infos = list<(text, integer, pubkey, timestamp)>();
+    peer_infos.add_all(node @* {} (_ = .host, _ = .port, _ = .pubkey, _ = .last_updated));
+    peer_infos.add_all(foreign_blockchain_import @* {} (_ = .host, _ = .port, _ = .pubkey, _ = 0));
+    return peer_infos;
+}
 
 /*
     Returns last built height of the blockchain
