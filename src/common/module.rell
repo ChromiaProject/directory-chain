@@ -57,23 +57,23 @@ function initialize_module(
 
     val system_container = container @ { .cluster == system_cluster, .system };
 
-    log("Adding c0 blockchain to system container");
-    val c0_config = map<text,gtv>.from_gtv(chain_context.raw_config);
-    val c0_signers = list<byte_array>.from_gtv(c0_config["signers"]);
-    add_blockchain(chain_context.raw_config.to_bytes(), c0_signers, blockchains.c0, system_container, true);
+    log("Adding directory chain to system container");
+    val directory_chain_config = map<text,gtv>.from_gtv(chain_context.raw_config);
+    val directory_chain_signers = list<byte_array>.from_gtv(directory_chain_config["signers"]);
+    add_blockchain(chain_context.raw_config.to_bytes(), directory_chain_signers, blockchains.directory_chain, system_container, true);
 
     val system_anchoring_config_map = map<text,gtv>.from_gtv(gtv.from_bytes(system_anchoring_config));
     if (system_anchoring_config_map.size() > 0) {
         log("Adding system anchoring blockchain to system container");
-        val system_anchoring_blockchain = add_blockchain(system_anchoring_config, c0_signers, blockchains.system_anchoring, system_container, true);
+        val system_anchoring_blockchain = add_blockchain(system_anchoring_config, directory_chain_signers, blockchains.system_anchoring, system_container, true);
         update system_anchoring_chain ( rid = system_anchoring_blockchain.rid );
     }
 
-    require(c0_signers.size() == 1, "C0 must have exactly one initial signer");
-    val initial_signer_node_key = c0_signers[0];
+    require(directory_chain_signers.size() == 1, "Directory chain must have exactly one initial signer");
+    val initial_signer_node_key = directory_chain_signers[0];
     require(initial_signer_node_key == genesis_node.pubkey, "Blockchain signer must match genesis node configuration");
 
-    log("Adding initial signer node of c0 to system cluster: " + initial_signer_node_key);
+    log("Adding initial signer node of directory chain to system cluster: " + initial_signer_node_key);
     val initial_node = create node(
         provider,
         initial_signer_node_key,
