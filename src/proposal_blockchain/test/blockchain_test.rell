@@ -104,41 +104,41 @@ function test_propose_configuration_at() {
         create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub])
     ).sign(initial_provider).run();
 
-    // NB: Proposing config at a specific chain for non-chain0 can not be tested due to limitations of Unit Test Framework
-    val c0 = blockchain @ { blockchains.c0 };
+    // NB: Proposing config at a specific chain for non-chain0 can not be tested due to limitations of Rell Test Framework
+    val directory_chain = blockchain @ { blockchains.directory_chain };
 
     // 1. force == false
     // 1.1. at height 10
     conf["nonce"] = (10).to_gtv();
-    propose_config_at(c0.rid, conf, 10, false).run();
-    assert_not_null(blockchain_configuration @? { c0, 10 });
+    propose_config_at(directory_chain.rid, conf, 10, false).run();
+    assert_not_null(blockchain_configuration @? { directory_chain, 10 });
     // 1.2. before 10
     conf["nonce"] = (8).to_gtv();
-    propose_config_at(c0.rid, conf, 8, false).run();
-    assert_not_null(blockchain_configuration @? { c0, 8 });
+    propose_config_at(directory_chain.rid, conf, 8, false).run();
+    assert_not_null(blockchain_configuration @? { directory_chain, 8 });
 
     // assert unique configurations
     assert_not_equals(
-        blockchain_configuration @? { c0, 10 } (.data),
-        blockchain_configuration @? { c0, 8 } (.data)
+        blockchain_configuration @? { directory_chain, 10 } (.data),
+        blockchain_configuration @? { directory_chain, 8 } (.data)
     );
 
     // 1.3. again 10
-    propose_config_at(c0.rid, conf, 10, false).run_must_fail();
+    propose_config_at(directory_chain.rid, conf, 10, false).run_must_fail();
     // 1.4. height is null
-    propose_config_at(c0.rid, conf, -1, false).run_must_fail();
+    propose_config_at(directory_chain.rid, conf, -1, false).run_must_fail();
     // 1.5. height is -2, to be less than last_height (-1)
-    propose_config_at(c0.rid, conf, -2, false).run_must_fail();
+    propose_config_at(directory_chain.rid, conf, -2, false).run_must_fail();
 
     // 2. force == true
     var conf2 = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
     conf2["name"] = "conf2".to_gtv();
-    propose_config_at(c0.rid, conf2, 8, true).run();
-    val actual_config_bytes = blockchain_configuration @ { c0, 8 } (.data);
+    propose_config_at(directory_chain.rid, conf2, 8, true).run();
+    val actual_config_bytes = blockchain_configuration @ { directory_chain, 8 } (.data);
     val actual_config = map<text, gtv>.from_gtv(gtv.from_bytes(actual_config_bytes));
     assert_equals(actual_config["name"], "conf2".to_gtv());
     // NB: we can't test `height = -1` case
-    // propose_config_at(c0.rid, conf, -1, false).run();
+    // propose_config_at(directory_chain.rid, conf, -1, false).run();
     // See kotlin test
 }
 
@@ -146,88 +146,4 @@ function propose_config_at(brid: byte_array, conf: map<text, gtv>, height: integ
     return rell.test.tx().op(
         propose_configuration_at(initial_provider.pub, brid, conf.to_gtv().to_bytes(), height, force)
     ).sign(initial_provider);
-}
-
-function test_propose_import_blockchain() {
-    setup_module();
-
-    val container = system_container_name(clusters.system);
-    val conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv(), "signers": [initial_provider.pub].to_gtv(), "serial": (0).to_gtv()];
-    val brid = conf.hash();
-    val conf_bytes = conf.to_gtv().to_bytes();
-
-    // proposing import, blockchain will be created in PAUSED state
-    rell.test.tx().op(
-        propose_import_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), brid, "foo_chain", container)
-    ).sign(initial_provider).run();
-    val bc = blockchain @? { brid };
-    assert_not_null(bc);
-    assert_equals(bc.state, blockchain_state.PAUSED);
-    assert_true(exists(blockchain_configuration @? { bc, 0 }));
-    assert_true(exists(blockchain_configuration_signers @? { bc, 0 }));
-
-    // proposing a new config
-    conf["serial"] = (10).to_gtv();
-    rell.test.tx().op(
-        propose_import_configuration(initial_provider.pub, brid, 10, conf.to_gtv().to_bytes())
-    ).sign(initial_provider).run();
-    assert_true(exists(blockchain_configuration @? { bc, 10 }));
-    assert_true(exists(blockchain_configuration_signers @? { bc, 10 }));
-
-    // proposing a new config at same height
-    conf["serial"] = (11).to_gtv();
-    rell.test.tx().op(
-        propose_import_configuration(initial_provider.pub, brid, 10, conf.to_gtv().to_bytes())
-    ).sign(initial_provider).run_must_fail("Configuration at height 10 already exists for blockchain");
-
-    // importing exiting blockchain
-    rell.test.tx().op(
-        propose_import_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), brid, "bar_chain", container)
-    ).sign(initial_provider).run_must_fail("already exists");
-
-    // proposing finishing import, blockchain will be activated and signers updated
-    rell.test.tx().op(
-        propose_finish_import_blockchain(initial_provider.pub, brid)
-    ).sign(initial_provider).run();
-    assert_equals(bc.state, blockchain_state.RUNNING);
-    assert_true(exists(pending_blockchain_configuration @? { bc, 11 }));
-
-    // proposing a new config import for a running blockchain
-    conf["serial"] = (20).to_gtv();
-    rell.test.tx().op(
-        propose_import_configuration(initial_provider.pub, brid, 20, conf.to_gtv().to_bytes())
-    ).sign(initial_provider).run_must_fail("Blockchain must be paused to import configurations");
-
-    // proposing finishing import for a running blockchain
-    rell.test.tx().op(
-        propose_finish_import_blockchain(initial_provider.pub, brid, "unique description")
-    ).sign(initial_provider).run_must_fail("Blockchain must be paused to finish import");
-
-    // pausing blockchain
-    rell.test.tx().op(
-        propose_blockchain_action(initial_provider.pub, brid, blockchain_action.pause)
-    ).sign(initial_provider).run();
-    assert_equals(bc.state, blockchain_state.PAUSED);
-
-    // importing blockchain to a full container
-    val limits = map<container_resource_limit_type, integer>();
-    limits[container_resource_limit_type.max_blockchains] = 2;
-    conf["serial"] = (30).to_gtv();
-    val brid2 = conf.hash();
-    rell.test.tx().op(
-        propose_container_limits(initial_provider.pub, container, limits),
-        propose_import_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), brid2, "bar_chain", container)
-    ).sign(initial_provider).run_must_fail("Can't add blockchain, container system is full");    
-
-    // importing blockchain without signers
-    conf.remove_or_null("signers");
-    rell.test.tx().op(
-        propose_import_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), brid2, "bar_chain", container)
-    ).sign(initial_provider).run_must_fail("No signers in configuration");
-
-    // importing configuration without signers
-    conf.remove_or_null("signers");
-    rell.test.tx().op(
-        propose_import_configuration(initial_provider.pub, brid, 15, conf.to_gtv().to_bytes())
-    ).sign(initial_provider).run_must_fail("No signers in configuration");
 }

@@ -28,6 +28,14 @@
     log("Received updated configuration from chain %s for chain %s at height %d to %s"
         .format(sender, message.blockchain_rid, message.height, message.config_hash));
 
+    // foreign blockchain
+    val foreign_blockchain = foreign_blockchain_import @? { .blockchain_rid == message.blockchain_rid, .final_height == message.height };
+    if (exists(foreign_blockchain)) {
+        log("Foreign blockchain import was finished at height %s".format(message.height));
+        delete foreign_blockchain;
+        return;
+    }
+
     val pending_configuration = pending_blockchain_configuration @?
         { bc, .config_hash == message.config_hash, .minimum_height <= message.height };
     if (pending_configuration == null) {

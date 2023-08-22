@@ -19,15 +19,17 @@ struct cm_cluster_info {
 }
 
 query cm_get_cluster_info(name): cm_cluster_info {
-    val cluster_peer = (cluster_node, cluster, cluster_anchoring_chain) @* {
-        cluster_node.cluster == cluster,
-        cluster_anchoring_chain.cluster == cluster,
+    val cluster = require_cluster(name);
+    require(cluster_anchoring_chain @? { cluster }, "Cluster anchoring chain not found for cluster " + name);
+    val cluster_peer = (cn: cluster_node, cl: cluster, cac: cluster_anchoring_chain) @* {
+        cn.cluster == cl,
+        cac.cluster == cl,
         cluster.name == name
     } (
         name = cluster.name,
-        anchoring_chain = cluster_anchoring_chain.blockchain.rid,
-        peer = cluster_node.node.pubkey,
-        peer_api_url = cluster_node.node.api_url
+        anchoring_chain = cac.blockchain.rid,
+        peer = cn.node.pubkey,
+        peer_api_url = cn.node.api_url
     ); 
     val peers = list<cm_peer_info>();
     for (cp in cluster_peer) {
@@ -51,13 +53,15 @@ query cm_get_cluster_blockchains(name): list<byte_array> {
 // Returns signers of blockchain at specific height
 // NB: doesn't take into account pending configurations
 query cm_get_peer_info(brid: byte_array, height: integer): set<pubkey> {
+    val bc = require_blockchain(brid, include_removed=true);
     return set<pubkey>.from_gtv(
-        get_signers_for_configuration(blockchain @ { brid }, height)
+        get_signers_for_configuration(bc, height)
     );
 }
 
 query cm_get_blockchain_cluster(brid: byte_array): text {
-    return get_cluster_for_blockchain(brid).name;
+    val bc = require_blockchain(brid, include_removed=true);    
+    return container_blockchain @ { bc } ( .container.cluster.name );
 }
 
 query cm_get_blockchain_api_urls(blockchain_rid: byte_array) {
