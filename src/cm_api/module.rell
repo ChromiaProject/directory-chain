@@ -20,24 +20,21 @@ struct cm_cluster_info {
 
 query cm_get_cluster_info(name): cm_cluster_info {
     val cluster = require_cluster(name);
-    require(cluster_anchoring_chain @? { cluster }, "Cluster anchoring chain not found for cluster " + name);
-    val cluster_peer = (cn: cluster_node, cl: cluster, cac: cluster_anchoring_chain) @* {
-        cn.cluster == cl,
-        cac.cluster == cl,
+    val cac = require(cluster_anchoring_chain @? { cluster }, "Cluster anchoring chain not found for cluster " + name);
+    val cluster_peer = cluster_node @* {
+        cluster_node.cluster == cluster,
         cluster.name == name
     } (
-        name = cluster.name,
-        anchoring_chain = cac.blockchain.rid,
-        peer = cn.node.pubkey,
-        peer_api_url = cn.node.api_url
+        peer = .node.pubkey,
+        peer_api_url = .node.api_url
     ); 
     val peers = list<cm_peer_info>();
     for (cp in cluster_peer) {
         peers.add(cm_peer_info(pubkey = cp.peer, api_url = cp.peer_api_url));
     }
     return cm_cluster_info(
-        name = cluster_peer[0].name,
-        anchoring_chain = cluster_peer[0].anchoring_chain,
+        name = cluster.name,
+        anchoring_chain = cac.blockchain.rid,
         peers = peers
     );
 }
