@@ -43,7 +43,7 @@ Then use `chr install` to install the icmf-library.
 
 ## ICCF
 
-To include the ICMF module in your rell project, specify in your config file:
+To include the ICCF module in your rell project, specify in your config file:
 ```yaml
 libs:
   iccf:
