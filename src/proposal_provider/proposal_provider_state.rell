@@ -55,19 +55,10 @@ function update_provider_state(provider, active: boolean, proposal: proposal? = 
         update node @* { provider } ( .active = false );
 
         // cluster nodes
-        if (pcu_enabled()) {
-            val cluster_nodes = cluster_node @* { .node.provider == provider } ( .cluster, .node );
-            delete cluster_node @* { .node.provider == provider };
-            for (cn in cluster_nodes) {
-                pcu_update_configuration_signers(cn.cluster, cn.node);
-            }
-        } else {
-            delete cluster_node @* { .node.provider == provider };
-            for (cl in cluster_provider @* { provider } (.cluster)) {
-                // Removing the last node of a cluster is not allowed:
-                require(not(empty(cluster_node @* { cl })), "Cannot deactivate the last node of a cluster: " + cl.name);
-                update_configuration_signers(cl);
-            }
+        val cluster_nodes = cluster_node @* { .node.provider == provider } ( .cluster, .node );
+        delete cluster_node @* { .node.provider == provider };
+        for (cn in cluster_nodes) {
+            update_configuration_signers(cn.cluster, cn.node);
         }
 
         val pending_proposals_with_provider_as_voter = (prop: proposal, vsm: voter_set_member) @* { prop.voter_set == vsm.voter_set, vsm.provider == provider, prop.state == proposal_state.PENDING } ( prop );

@@ -25,7 +25,7 @@ function apply_configuration_at(proposal) {
     val height = if (pc.height == -1) last_height + 1 else pc.height;
 
     val is_chain0 = pc.blockchain.rid == chain_context.blockchain_rid;
-    val config_data = if (not is_chain0 and pcu_enabled()) make_config_unique(pc.data) else pc.data;
+    val config_data = if (not is_chain0) make_config_unique(pc.data) else pc.data;
     if (not(exists(blockchain_configuration @? { pc.blockchain, height }))) {
         create blockchain_configuration(pc.blockchain, height, data = config_data);
         add_dependencies(config_data, pc.blockchain.rid, height);
@@ -51,9 +51,7 @@ operation propose_configuration_at(my_pubkey: pubkey, blockchain_rid: byte_array
     require_container_deployer(container, me);
     val is_chain0 = blockchain.rid == chain_context.blockchain_rid or
         chain_context.blockchain_rid == x"0000000000000000000000000000000000000000000000000000000000000000"; // for unit tests
-    if (pcu_enabled()) {
-        require(is_chain0, "Proposing configuration at a specific height disallowed for chain: " + blockchain_rid);
-    }
+    require(is_chain0, "Proposing configuration at a specific height disallowed for chain: " + blockchain_rid);
     validate_blockchain_configuration(config_data, signers = not is_chain0, header_hash = false);
 
     val last_height = get_last_height(blockchain);

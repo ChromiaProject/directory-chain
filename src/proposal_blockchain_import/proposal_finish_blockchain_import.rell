@@ -13,8 +13,6 @@ operation propose_finish_import_blockchain(my_pubkey: pubkey, blockchain_rid: by
     val container = container_blockchain @ { blockchain }.container;
     require_container_deployer(container, me);
 
-    require(pcu_enabled(), "Precise Configuration Update must be enabled");
-
     require(blockchain.state == blockchain_state.PAUSED, "Blockchain must be paused to finish import");
 
     require(empty(pending_finish_blockchain_import @* { blockchain, .proposal.state == proposal_state.PENDING } limit 1), "Already proposed");
@@ -31,8 +29,7 @@ function apply_finish_blockchain_import(proposal) {
     val nodes = cluster_node @* { container.cluster } (@sort .node.pubkey);
     require(nodes.size() > 0, "Cluster must have at least one node");
 
-    require(pcu_enabled(), "Precise Configuration Update must be enabled");
-    update_configuration_signers_pcu(pfbi.blockchain, nodes, null);
+    update_configuration_signers_regular(pfbi.blockchain, nodes, null);
     update blockchain @ { pfbi.blockchain.rid } (.state = blockchain_state.RUNNING);
 
     log("Blockchain import finished: %s".format(pfbi.blockchain.rid));
