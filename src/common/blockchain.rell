@@ -43,29 +43,11 @@ function require_no_dependencies_on_me(blockchain) {
     require (empty(blockchain_dependency @* { .dependent_on == blockchain}));
 }
 
-function get_last_height(blockchain): integer {
-    if (blockchain.rid == chain_context.blockchain_rid) {
-        return op_context.block_height;
-    } else {
-        return (anchored_block @? { blockchain } (@sort_desc .height) limit 1) ?: -1;
-    }
-}
-
 function get_blockchain_signer_nodes(blockchain: blockchain): list<node> {
     return (cluster_node, container_blockchain) @* {
         container_blockchain.blockchain == blockchain,
         cluster_node.cluster == container_blockchain.container.cluster
     } ( .node );
-}
-
-// Cannot use function get_last_height, since it uses an op_context.
-// Deprecated: relies on legacy anchoring which will be removed
-function deprecated_get_blockchain_last_height(blockchain_rid: byte_array): integer {
-    if (blockchain_rid == chain_context.blockchain_rid) {
-        return (block @? {} (@sort_desc .block_height) limit 1) ?: -1;
-    } else {
-        return (anchored_block @? { blockchain @ { blockchain_rid } } (@sort_desc .height) limit 1) ?: -1;
-    }
 }
 
 function get_signers_for_configuration(blockchain, height: integer): gtv {
