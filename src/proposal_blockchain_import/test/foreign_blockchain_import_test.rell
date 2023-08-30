@@ -8,16 +8,19 @@ import proposal.voting.test.ops.*;
 import proposal_blockchain.*;
 import proposal_container.*;
 import direct_container.*;
+import nm_api.*;
 
 function test_propose_import_blockchain() {
     setup_module();
     val foreign_node = rell.test.keypairs.bob;
     val foreign_chain0 = "foreign_chain0".to_gtv().hash();
-
     val container = system_container_name(clusters.system);
     val conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv(), "signers": [foreign_node.pub].to_gtv(), "serial": (0).to_gtv()];
     val brid = conf.hash();
-    val conf_bytes = conf.to_gtv().to_bytes();
+
+    // Asserting that blockchain_configuration_options through NM API is null for unknown blockchain
+    val options = nm_get_blockchain_configuration_options(brid, 0);
+    assert_true(empty(options));
 
     // Step 1: proposing foreign blockchain import, blockchain will be created in PAUSED state
     rell.test.tx().op(
@@ -34,6 +37,11 @@ function test_propose_import_blockchain() {
     assert_true(exists(blockchain_configuration_signers @? { bc, 0 }));
     assert_true(exists(blockchain_configuration_options @? { bc, 0 }));
     assert_equals(blockchain_configuration_options @ { bc, 0 } ( .suppress_special_transaction_validation ), true);
+    // NM API request
+    val options0 = nm_get_blockchain_configuration_options(bc.rid, 0);
+    assert_true(exists(options0));
+    assert_true(options0!!.suppress_special_transaction_validation);
+    // fbi object
     val fbi = foreign_blockchain_import @? { .pubkey == foreign_node.pub };
     assert_true(exists(fbi));
     val fbi0 = fbi!!;
@@ -51,6 +59,10 @@ function test_propose_import_blockchain() {
     assert_true(exists(blockchain_configuration_signers @? { bc, 10 }));
     assert_equals((blockchain_configuration_options @* { bc }) .size(), 1);
     assert_equals(blockchain_configuration_options @ { bc, 0 } ( .suppress_special_transaction_validation ), true);
+    // NM API request
+    val options10 = nm_get_blockchain_configuration_options(bc.rid, 10);
+    assert_true(exists(options10));
+    assert_true(options0!!.suppress_special_transaction_validation);
 
     // proposing a new config at same height
     conf["serial"] = (11).to_gtv();
@@ -102,6 +114,10 @@ function test_propose_import_blockchain() {
     assert_equals(fbi.final_height, 15);
     assert_equals((blockchain_configuration_options @* { bc }) .size(), 2);
     assert_equals(blockchain_configuration_options @ { bc, 15 } ( .suppress_special_transaction_validation ), false);
+    // NM API request
+    val options15 = nm_get_blockchain_configuration_options(bc.rid, 15);
+    assert_true(exists(options15));
+    assert_false(options15!!.suppress_special_transaction_validation);
 
     // The following cases can not be tested due to limitations of Rell Test Framework
     /// Imitating that ICMF configuration_update message is processed by chain0 and foreign_blockchain_import is finished
