@@ -32,6 +32,8 @@ function test_propose_import_blockchain() {
     assert_equals(bc.state, blockchain_state.PAUSED);
     assert_true(exists(blockchain_configuration @? { bc, 0 }));
     assert_true(exists(blockchain_configuration_signers @? { bc, 0 }));
+    assert_true(exists(blockchain_configuration_options @? { bc, 0 }));
+    assert_equals(blockchain_configuration_options @ { bc, 0 } ( .suppress_special_transaction_validation ), true);
     val fbi = foreign_blockchain_import @? { .pubkey == foreign_node.pub };
     assert_true(exists(fbi));
     val fbi0 = fbi!!;
@@ -47,6 +49,8 @@ function test_propose_import_blockchain() {
     ).sign(initial_provider).run();
     assert_true(exists(blockchain_configuration @? { bc, 10 }));
     assert_true(exists(blockchain_configuration_signers @? { bc, 10 }));
+    assert_equals((blockchain_configuration_options @* { bc }) .size(), 1);
+    assert_equals(blockchain_configuration_options @ { bc, 0 } ( .suppress_special_transaction_validation ), true);
 
     // proposing a new config at same height
     conf["serial"] = (11).to_gtv();
@@ -96,6 +100,8 @@ function test_propose_import_blockchain() {
     ).sign(initial_provider).run();
     assert_true(exists(blockchain_configuration_signers @? { bc, 15 }));
     assert_equals(fbi.final_height, 15);
+    assert_equals((blockchain_configuration_options @* { bc }) .size(), 2);
+    assert_equals(blockchain_configuration_options @ { bc, 15 } ( .suppress_special_transaction_validation ), false);
 
     // The following cases can not be tested due to limitations of Rell Test Framework
     /// Imitating that ICMF configuration_update message is processed by chain0 and foreign_blockchain_import is finished
