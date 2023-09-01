@@ -19,7 +19,7 @@ function test_propose_import_blockchain() {
     val brid = conf.hash();
     val conf_bytes = conf.to_gtv().to_bytes();
 
-    // Step 1: proposing foreign blockchain import, blockchain will be created in PAUSED state
+    // Step 1: proposing foreign blockchain import, blockchain will be created in IMPORTING state
     rell.test.tx().op(
         propose_foreign_blockchain_import(
             initial_provider.pub,
@@ -29,7 +29,7 @@ function test_propose_import_blockchain() {
     ).sign(initial_provider).run();
     val bc = blockchain @? { brid };
     assert_not_null(bc);
-    assert_equals(bc.state, blockchain_state.PAUSED);
+    assert_equals(bc.state, blockchain_state.IMPORTING);
     assert_true(exists(blockchain_configuration @? { bc, 0 }));
     assert_true(exists(blockchain_configuration_signers @? { bc, 0 }));
     val fbi = foreign_blockchain_import @? { .pubkey == foreign_node.pub };
@@ -80,7 +80,7 @@ function test_propose_import_blockchain() {
     conf["serial"] = (12).to_gtv();
     rell.test.tx().op(
         propose_import_configuration(initial_provider.pub, brid, 12, conf.to_gtv().to_bytes())
-    ).sign(initial_provider).run_must_fail("Blockchain must be paused to import configurations");
+    ).sign(initial_provider).run_must_fail("Blockchain must be in IMPORTING state to import configurations");
 
 
     // Step 3: proposing finishing import at a specific height, blockchain will be activated and signers updated

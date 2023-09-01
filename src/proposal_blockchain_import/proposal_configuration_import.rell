@@ -11,15 +11,14 @@ entity pending_configuration_import {
 operation propose_import_configuration(my_pubkey: pubkey, blockchain_rid: byte_array, height: integer, config_data: byte_array,
                                        description: text = "Propose import configuration") {
     val me = require_is_provider_with_rate_limit(my_pubkey);
-    val blockchain = require_blockchain(blockchain_rid);
+    val blockchain = require_blockchain_entity(blockchain_rid);
+    require(blockchain.state == blockchain_state.IMPORTING, "Blockchain must be in %s state to import configurations".format(blockchain_state.IMPORTING));
+
     val container = container_blockchain @ { blockchain }.container;
     require_container_deployer(container, me);
 
-    require(blockchain.state == blockchain_state.PAUSED, "Blockchain must be paused to import configurations");
-
     require(empty(blockchain_configuration @? { blockchain, height } limit 1), 
         "Configuration at height %d already exists for blockchain %s".format(height, blockchain.rid));
-
     require("signers" in map<text, gtv>.from_gtv(gtv.from_bytes(config_data)), "No signers in configuration");
 
     require(empty(pending_configuration_import @* { blockchain, .height == height, .proposal.state == proposal_state.PENDING } limit 1), "Already proposed");
