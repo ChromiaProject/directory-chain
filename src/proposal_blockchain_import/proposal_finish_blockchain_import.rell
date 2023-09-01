@@ -9,11 +9,11 @@ entity pending_finish_blockchain_import {
 operation propose_finish_import_blockchain(my_pubkey: pubkey, blockchain_rid: byte_array,
                                     description: text = "Propose finish import blockchain") {
     val me = require_is_provider_with_rate_limit(my_pubkey);
-    val blockchain = require_blockchain(blockchain_rid);
+    val blockchain = require_blockchain_entity(blockchain_rid);
+    require(blockchain.state == blockchain_state.IMPORTING, "Blockchain must be in %s state to finish import".format(blockchain_state.IMPORTING));
+
     val container = container_blockchain @ { blockchain }.container;
     require_container_deployer(container, me);
-
-    require(blockchain.state == blockchain_state.PAUSED, "Blockchain must be paused to finish import");
 
     require(empty(pending_finish_blockchain_import @* { blockchain, .proposal.state == proposal_state.PENDING } limit 1), "Already proposed");
     val prop = create proposal(op_context.last_block_time, proposal_type.finish_blockchain_import, me, container.deployer, description);

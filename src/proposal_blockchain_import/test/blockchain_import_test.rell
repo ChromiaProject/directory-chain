@@ -17,13 +17,13 @@ function test_propose_import_blockchain() {
     val brid = conf.hash();
     val conf_bytes = conf.to_gtv().to_bytes();
 
-    // proposing import, blockchain will be created in PAUSED state
+    // proposing import, blockchain will be created in IMPORTING state
     rell.test.tx().op(
         propose_import_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), brid, "foo_chain", container)
     ).sign(initial_provider).run();
     val bc = blockchain @? { brid };
     assert_not_null(bc);
-    assert_equals(bc.state, blockchain_state.PAUSED);
+    assert_equals(bc.state, blockchain_state.IMPORTING);
     assert_true(exists(blockchain_configuration @? { bc, 0 }));
     assert_true(exists(blockchain_configuration_signers @? { bc, 0 }));
 
@@ -41,6 +41,12 @@ function test_propose_import_blockchain() {
         propose_import_configuration(initial_provider.pub, brid, 10, conf.to_gtv().to_bytes())
     ).sign(initial_provider).run_must_fail("Configuration at height 10 already exists for blockchain");
 
+    // proposing a new config without signers
+    val conf_no_signers = ["config_consensus_strategy": "HEADER_HASH".to_gtv(), "serial": (100).to_gtv()];
+    rell.test.tx().op(
+        propose_import_configuration(initial_provider.pub, brid, 15, conf_no_signers.to_gtv().to_bytes())
+    ).sign(initial_provider).run_must_fail("No signers in configuration");
+
     // importing exiting blockchain
     rell.test.tx().op(
         propose_import_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), brid, "bar_chain", container)
@@ -57,18 +63,12 @@ function test_propose_import_blockchain() {
     conf["serial"] = (20).to_gtv();
     rell.test.tx().op(
         propose_import_configuration(initial_provider.pub, brid, 20, conf.to_gtv().to_bytes())
-    ).sign(initial_provider).run_must_fail("Blockchain must be paused to import configurations");
+    ).sign(initial_provider).run_must_fail("Blockchain must be in IMPORTING state to import configurations");
 
     // proposing finishing import for a running blockchain
     rell.test.tx().op(
         propose_finish_import_blockchain(initial_provider.pub, brid, "unique description")
-    ).sign(initial_provider).run_must_fail("Blockchain must be paused to finish import");
-
-    // pausing blockchain
-    rell.test.tx().op(
-        propose_blockchain_action(initial_provider.pub, brid, blockchain_action.pause)
-    ).sign(initial_provider).run();
-    assert_equals(bc.state, blockchain_state.PAUSED);
+    ).sign(initial_provider).run_must_fail("Blockchain must be in IMPORTING state to finish import");
 
     // importing blockchain to a full container
     val limits = map<container_resource_limit_type, integer>();
@@ -84,11 +84,5 @@ function test_propose_import_blockchain() {
     conf.remove_or_null("signers");
     rell.test.tx().op(
         propose_import_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), brid2, "bar_chain", container)
-    ).sign(initial_provider).run_must_fail("No signers in configuration");
-
-    // importing configuration without signers
-    conf.remove_or_null("signers");
-    rell.test.tx().op(
-        propose_import_configuration(initial_provider.pub, brid, 15, conf.to_gtv().to_bytes())
     ).sign(initial_provider).run_must_fail("No signers in configuration");
 }
