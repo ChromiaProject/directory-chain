@@ -36,7 +36,7 @@ function test_propose_import_blockchain() {
     assert_true(exists(fbi));
     val fbi0 = fbi!!;
     assert_equals(
-        (fbi0.pubkey, fbi0.host, fbi0.port, fbi0.api_url, fbi0.chain0_rid, fbi0.blockchain_rid, fbi0.final_height).to_gtv(),
+        (fbi0.pubkey, fbi0.host, fbi0.port, fbi0.api_url, fbi0.chain0_rid, fbi0.blockchain_rid, fbi0.up_to_height).to_gtv(),
         (foreign_node.pub, "node0.foreign", 9870, "http://node0.foreign:7740/", foreign_chain0, brid, -1).to_gtv()
     );
 
@@ -54,7 +54,7 @@ function test_propose_import_blockchain() {
         propose_import_configuration(initial_provider.pub, brid, 10, conf.to_gtv().to_bytes())
     ).sign(initial_provider).run_must_fail("Configuration at height 10 already exists for blockchain");
 
-    // importing configuration without signers
+    // proposing a new config without signers
     val conf2 = ["config_consensus_strategy": "HEADER_HASH".to_gtv(), "serial": (100).to_gtv()];
     rell.test.tx().op(
         propose_import_configuration(initial_provider.pub, brid, 11, conf2.to_gtv().to_bytes())
@@ -69,33 +69,24 @@ function test_propose_import_blockchain() {
         )
     ).sign(initial_provider).run_must_fail("already exists");
 
-
     // Step 2: proposing foreign blockchain blocks import
+    /// up_to_height < last_config_height
     rell.test.tx().op(
-        propose_foreign_blockchain_blocks_import(initial_provider.pub, brid)
+        propose_foreign_blockchain_blocks_import(initial_provider.pub, brid, 9)
+    ).sign(initial_provider).run_must_fail("Proposed up_to_height (9) must be greater or equal to the height (10) of the latest imported configuration");
+    /// up_to_height == last_config_height
+    rell.test.tx().op(
+        propose_foreign_blockchain_blocks_import(initial_provider.pub, brid, 10)
     ).sign(initial_provider).run();
     assert_equals(bc.state, blockchain_state.RUNNING);
+    assert_true(exists(blockchain_configuration_signers @? { bc, 10 }));
+    assert_equals(fbi.up_to_height, 10);
 
     // proposing a new config import for a running blockchain
     conf["serial"] = (12).to_gtv();
     rell.test.tx().op(
         propose_import_configuration(initial_provider.pub, brid, 12, conf.to_gtv().to_bytes())
     ).sign(initial_provider).run_must_fail("Blockchain must be in IMPORTING state to import configurations");
-
-
-    // Step 3: proposing finishing import at a specific height, blockchain will be activated and signers updated
-    // - final_height is not greater than the last imported config height
-    rell.test.tx().op(
-        propose_finish_foreign_blockchain_import(initial_provider.pub, brid, final_height = 10)
-    ).sign(initial_provider).run_must_fail(
-        "Proposed height (%s) to finish foreign import must be greater than the height (%s) of the latest imported configuration: %s".format(10, 10, brid)
-    );
-    // - final_height is greater than the last imported config height
-    rell.test.tx().op(
-        propose_finish_foreign_blockchain_import(initial_provider.pub, brid, final_height = 15)
-    ).sign(initial_provider).run();
-    assert_true(exists(blockchain_configuration_signers @? { bc, 15 }));
-    assert_equals(fbi.final_height, 15);
 
     // The following cases can not be tested due to limitations of Rell Test Framework
     /// Imitating that ICMF configuration_update message is processed by chain0 and foreign_blockchain_import is finished
