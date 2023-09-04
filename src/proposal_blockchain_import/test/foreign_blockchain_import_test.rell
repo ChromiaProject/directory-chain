@@ -32,6 +32,8 @@ function test_propose_import_blockchain() {
     assert_equals(bc.state, blockchain_state.IMPORTING);
     assert_true(exists(blockchain_configuration @? { bc, 0 }));
     assert_true(exists(blockchain_configuration_signers @? { bc, 0 }));
+    assert_true(exists(blockchain_configuration_options @? { bc, 0 }));
+    assert_equals(blockchain_configuration_options @ { bc, 0 } ( .suppress_special_transaction_validation ), true);
     val fbi = foreign_blockchain_import @? { .pubkey == foreign_node.pub };
     assert_true(exists(fbi));
     val fbi0 = fbi!!;
@@ -47,6 +49,8 @@ function test_propose_import_blockchain() {
     ).sign(initial_provider).run();
     assert_true(exists(blockchain_configuration @? { bc, 10 }));
     assert_true(exists(blockchain_configuration_signers @? { bc, 10 }));
+    assert_equals((blockchain_configuration_options @* { bc }) .size(), 1);
+    assert_equals(blockchain_configuration_options @ { bc, 0 } ( .suppress_special_transaction_validation ), true);
 
     // proposing a new config at same height
     conf["serial"] = (11).to_gtv();
@@ -81,6 +85,8 @@ function test_propose_import_blockchain() {
     assert_equals(bc.state, blockchain_state.RUNNING);
     assert_true(exists(blockchain_configuration_signers @? { bc, 10 }));
     assert_equals(fbi.up_to_height, 10);
+    assert_equals((blockchain_configuration_options @* { bc }) .size(), 2);
+    assert_equals(blockchain_configuration_options @ { bc, 11 } ( .suppress_special_transaction_validation ), false);
 
     // proposing a new config import for a running blockchain
     conf["serial"] = (12).to_gtv();
