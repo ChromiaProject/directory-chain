@@ -215,9 +215,10 @@ function test_replace_node() {
     rell.test.tx().op(initialize_test_module(provider.pub, test_node)).run();
     assert_not_null(node @? { initial_signer.pub });
 
-    val node2 = rell.test.keypairs.trudy;
-
-    log(node @ {}.pubkey);
+    // 1. replace test_node by non-existent node2
+    val node2 = rell.test.keypairs.bob;
+    assert_not_null(node @? { initial_signer.pub });
+    // 1.2. replace test_node by node2
     rell.test.tx().op(
         replace_node(provider.pub, initial_signer.pub, node2.pub, null, 123, null) 
     )
@@ -226,14 +227,42 @@ function test_replace_node() {
     .sign(node2)
     .run();
 
+    // 1.3. asserts
     assert_null(node @? { initial_signer.pub });
-    val new_node = node @? { node2.pub };
-    assert_not_null(new_node);
-    assert_equals(new_node.host, "localhost"); // From initialize_test_module
-    assert_equals(new_node.port, 123);
+    val new_node2 = node @? { node2.pub };
+    assert_not_null(new_node2);
+    assert_equals(new_node2.host, "localhost"); // From initialize_test_module
+    assert_equals(new_node2.port, 123);
 
     assert_true(get_signers_of_cluster_name(clusters.system).contains(node2.pub));
     assert_false(get_signers_of_cluster_name(clusters.system).contains(initial_signer.pub));
+
+    // 2. replace node2 by existent node3
+    // 2.1. register node3
+    val node3 = rell.test.keypairs.trudy;
+    rell.test.tx().op(
+        register_node(provider.pub, node3.pub, "node3", 7777, "http://node3/api_url")
+    ).sign(provider).run();
+    assert_not_null(node @? { node3.pub });
+    // 2.2. replacing
+    rell.test.tx().op(
+        replace_node(provider.pub, node2.pub, node3.pub, null, null, null)
+    )
+    .sign(provider)
+    .sign(node2)
+    .sign(node3)
+    .run();
+
+    // 2.3. asserts
+    assert_null(node @? { node2.pub });
+    val new_node3 = node @ { node3.pub };
+    // host/port/api_url didn't change
+    assert_equals(new_node3.host, "node3");
+    assert_equals(new_node3.port, 7777);
+    assert_equals(new_node3.api_url, "http://node3/api_url");
+
+    assert_true(get_signers_of_cluster_name(clusters.system).contains(node3.pub));
+    assert_false(get_signers_of_cluster_name(clusters.system).contains(node2.pub));
 }
 
 function test_update_node() {

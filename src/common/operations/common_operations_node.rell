@@ -34,10 +34,6 @@ function replace_node_with_units_impl(my_pubkey: pubkey, old_node_key: pubkey, n
     val old_cluster_units_used = get_used_cluster_units_for_node(old_node);
     require(new_cluster_units >= old_cluster_units_used, "Node must have at least %d cluster_units".format(old_cluster_units_used));
 
-    val host = new_host ?: old_node.host;
-    val port = new_port ?: old_node.port;
-    val api_url = new_api_url ?: old_node.api_url;
-
     val cluster_names = cluster_node @* { old_node }.cluster.name;
     delete cluster_node @* { old_node };
     val clusters_replicated_by_node = cluster_replica_node @* { old_node } (.cluster);
@@ -45,10 +41,15 @@ function replace_node_with_units_impl(my_pubkey: pubkey, old_node_key: pubkey, n
     val blockchains_replicated_by_node = blockchain_replica_node @* { old_node } (.blockchain);
     delete blockchain_replica_node @* { old_node };
 
+    val host_port_api = (new_host ?: old_node.host, new_port ?: old_node.port, new_api_url ?: old_node.api_url);
     delete old_node;
-    add_node_internal(me, new_node_key, host, port, api_url, cluster_names, new_cluster_units);
+    val new_node = add_node_internal(
+        me, new_node_key,
+        host_port_api[0], host_port_api[1], host_port_api[2],
+        cluster_names, new_cluster_units,
+        require_not_exists = false
+    );
 
-    val new_node = node @ { new_node_key };
     for (cl in clusters_replicated_by_node) {
         _add_replica_node_to_cluster_internal(cl, new_node);
     }
