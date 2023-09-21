@@ -10,6 +10,7 @@ struct node_data {
     last_updated: timestamp;
     api_url: text;
     cluster_units: integer?;
+    territory: text?;
 }
 
 query get_node_data(pubkey) {
@@ -22,7 +23,8 @@ query get_node_data(pubkey) {
         port = node.port,
         last_updated = node.last_updated,
         api_url = node.api_url,
-        cluster_units = node.cluster_units
+        cluster_units = node.cluster_units,
+        territory = node.territory
     );
 }
 
@@ -59,7 +61,7 @@ query get_nodes_with_provider() {
 query get_all_nodes(include_inactive: boolean) {
     val nodes = if (include_inactive) node @* {} else node @* { .active };
     return nodes @* {} (
-        info = node_info(.pubkey, host = .host, port = .port, api_url = .api_url),
+        info = node_info(.pubkey, host = .host, port = .port, api_url = .api_url, territory = .territory),
         active = .active,
         last_updated = .last_updated,
         provider = .provider.to_struct()
