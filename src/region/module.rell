@@ -1,0 +1,24 @@
+module;
+
+import ^.common.init;
+import ^.model.*;
+
+@extend(init.after_init) function init_regions() {
+    val eu = create region("EU");
+
+    val territories = ["AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE"];
+    for (territory in territories) {
+        create region_territory(eu, territory);
+    }
+}
+
+function is_cluster_in_region(cluster, region): boolean {
+    val cluster_node_territories = set(cluster_node @* { cluster } ( .node.territory ));
+    val region_territories = set(region_territory @* { region } ( .territory ));
+
+    for (cluster_node_territory in cluster_node_territories) {
+        if (not (cluster_node_territory in region_territories)) return false;
+    }
+
+    return true;
+}
