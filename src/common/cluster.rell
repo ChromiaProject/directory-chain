@@ -205,6 +205,17 @@ function remove_cluster_impl(cluster) {
     delete cluster;
 }
 
+function number_of_nodes_in_cluster(cluster): integer = cluster_node @ { cluster } ( @sum 1 );
+
+function cluster_has_capability(cluster, node_capability_type): boolean {
+    val nodes = cluster_node @* { cluster } ( .node );
+    for (node in nodes) {
+        val node_capabilities = node_capabilities @* { node } ( .type );
+        if (not node_capabilities.contains(node_capability_type)) return false;
+    }
+    return true;
+}
+
 @extendable function before_cluster_removal(cluster) {}
 
 @extendable function after_cluster_creation(provider, cluster) {}
