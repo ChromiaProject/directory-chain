@@ -1,0 +1,163 @@
+@test module;
+
+import ^^.*;
+import ^^^.direct_cluster.*;
+import ^^^.common.operations.*;
+import ^^^.common.test.setup.*;
+import ^^^.common.test.util.*;
+import ^^^.proposal_provider.*;
+import ^^^.region.test.helpers.*;
+
+function test_empty_class() {
+    setup_module();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.bob, true),
+        create_cluster(initial_provider.pub, "cluster1", voter_sets.system_p, [initial_provider.pub, rell.test.pubkeys.bob]),
+        register_node_with_territory_and_units(initial_provider.pub, rell.test.pubkeys.charlie, "host", 7777, "http://host/api_url", "SE", 1, ["cluster1"]),
+        register_node_with_territory_and_units(rell.test.pubkeys.bob, rell.test.pubkeys.grace, "host", 7777, "http://host/api_url", "GB", 1, ["cluster1"])
+    ).sign(initial_provider, rell.test.keypairs.bob).run();
+
+    val cluster = cluster @ { .name == "cluster1" };
+
+    assert_true(is_cluster_in_class(cluster, ""));
+    assert_true(is_cluster_in_class(cluster, "::"));
+}
+
+function test_cluster_size() {
+    setup_module();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.bob, true),
+        create_cluster(initial_provider.pub, "cluster1", voter_sets.system_p, [initial_provider.pub, rell.test.pubkeys.bob]),
+        register_node_with_territory_and_units(initial_provider.pub, rell.test.pubkeys.charlie, "host", 7777, "http://host/api_url", "SE", 1, ["cluster1"]),
+        register_node_with_territory_and_units(rell.test.pubkeys.bob, rell.test.pubkeys.grace, "host", 7777, "http://host/api_url", "GB", 1, ["cluster1"])
+    ).sign(initial_provider, rell.test.keypairs.bob).run();
+
+    val cluster = cluster @ { .name == "cluster1" };
+
+    assert_false(is_cluster_in_class(cluster, "3::"));
+    assert_true(is_cluster_in_class(cluster, "2::"));
+}
+
+function test_cluster_not_in_region() {
+    setup_module();
+
+    rell.test.tx().op(
+        init_region_data()
+    ).run();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.bob, true),
+        create_cluster(initial_provider.pub, "cluster1", voter_sets.system_p, [initial_provider.pub, rell.test.pubkeys.bob]),
+        register_node_with_territory_and_units(initial_provider.pub, rell.test.pubkeys.charlie, "host", 7777, "http://host/api_url", "SE", 1, ["cluster1"]),
+        register_node_with_territory_and_units(rell.test.pubkeys.bob, rell.test.pubkeys.grace, "host", 7777, "http://host/api_url", "GB", 1, ["cluster1"])
+    ).sign(initial_provider, rell.test.keypairs.bob).run();
+
+    val cluster = cluster @ { .name == "cluster1" };
+
+    assert_false(is_cluster_in_class(cluster, ":EU:"));
+}
+
+function test_cluster_in_region() {
+    setup_module();
+
+    rell.test.tx().op(
+        init_region_data()
+    ).run();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.bob, true),
+        create_cluster(initial_provider.pub, "cluster1", voter_sets.system_p, [initial_provider.pub, rell.test.pubkeys.bob]),
+        register_node_with_territory_and_units(initial_provider.pub, rell.test.pubkeys.charlie, "host", 7777, "http://host/api_url", "SE", 1, ["cluster1"]),
+        register_node_with_territory_and_units(rell.test.pubkeys.bob, rell.test.pubkeys.grace, "host", 7777, "http://host/api_url", "FI", 1, ["cluster1"])
+    ).sign(initial_provider, rell.test.keypairs.bob).run();
+
+    val cluster = cluster @ { .name == "cluster1" };
+
+    assert_true(is_cluster_in_class(cluster, ":EU:"));
+}
+
+function test_cluster_without_capability() {
+    setup_module();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.bob, true),
+        create_cluster(initial_provider.pub, "cluster1", voter_sets.system_p, [initial_provider.pub, rell.test.pubkeys.bob]),
+        register_node_with_territory_and_units(initial_provider.pub, rell.test.pubkeys.charlie, "host", 7777, "http://host/api_url", "SE", 1, ["cluster1"]),
+        register_node_with_territory_and_units(rell.test.pubkeys.bob, rell.test.pubkeys.grace, "host", 7777, "http://host/api_url", "FI", 1, ["cluster1"]),
+        update_node_capability(initial_provider.pub, rell.test.pubkeys.charlie, node_capability_type.ETHEREUM_BRIDGE, true)
+    ).sign(initial_provider, rell.test.keypairs.bob).run();
+
+    val cluster = cluster @ { .name == "cluster1" };
+
+    assert_false(is_cluster_in_class(cluster, "::ETHEREUM_BRIDGE"));
+}
+
+function test_cluster_with_capability() {
+    setup_module();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.bob, true),
+        create_cluster(initial_provider.pub, "cluster1", voter_sets.system_p, [initial_provider.pub, rell.test.pubkeys.bob]),
+        register_node_with_territory_and_units(initial_provider.pub, rell.test.pubkeys.charlie, "host", 7777, "http://host/api_url", "SE", 1, ["cluster1"]),
+        register_node_with_territory_and_units(rell.test.pubkeys.bob, rell.test.pubkeys.grace, "host", 7777, "http://host/api_url", "FI", 1, ["cluster1"]),
+        update_node_capability(initial_provider.pub, rell.test.pubkeys.charlie, node_capability_type.ETHEREUM_BRIDGE, true),
+        update_node_capability(rell.test.pubkeys.bob, rell.test.pubkeys.grace, node_capability_type.ETHEREUM_BRIDGE, true)
+    ).sign(initial_provider, rell.test.keypairs.bob).run();
+
+    val cluster = cluster @ { .name == "cluster1" };
+
+    assert_true(is_cluster_in_class(cluster, "::ETHEREUM_BRIDGE"));
+}
+
+function test_cluster_with_capabilities() {
+    setup_module();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.bob, true),
+        create_cluster(initial_provider.pub, "cluster1", voter_sets.system_p, [initial_provider.pub, rell.test.pubkeys.bob]),
+        register_node_with_territory_and_units(initial_provider.pub, rell.test.pubkeys.charlie, "host", 7777, "http://host/api_url", "SE", 1, ["cluster1"]),
+        register_node_with_territory_and_units(rell.test.pubkeys.bob, rell.test.pubkeys.grace, "host", 7777, "http://host/api_url", "FI", 1, ["cluster1"]),
+        update_node_capability(initial_provider.pub, rell.test.pubkeys.charlie, node_capability_type.ETHEREUM_BRIDGE, true),
+        update_node_capability(rell.test.pubkeys.bob, rell.test.pubkeys.grace, node_capability_type.ETHEREUM_BRIDGE, true),
+        update_node_capability(initial_provider.pub, rell.test.pubkeys.charlie, node_capability_type.BCS_BRIDGE, true),
+        update_node_capability(rell.test.pubkeys.bob, rell.test.pubkeys.grace, node_capability_type.BCS_BRIDGE, true)
+    ).sign(initial_provider, rell.test.keypairs.bob).run();
+
+    val cluster = cluster @ { .name == "cluster1" };
+
+    assert_true(is_cluster_in_class(cluster, "::ETHEREUM_BRIDGE,BCS_BRIDGE"));
+}
+
+function test_composite_class() {
+    setup_module();
+
+    rell.test.tx().op(
+        init_region_data()
+    ).run();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.bob, true),
+        create_cluster(initial_provider.pub, "cluster1", voter_sets.system_p, [initial_provider.pub, rell.test.pubkeys.bob]),
+        register_node_with_territory_and_units(initial_provider.pub, rell.test.pubkeys.charlie, "host", 7777, "http://host/api_url", "SE", 1, ["cluster1"]),
+        register_node_with_territory_and_units(rell.test.pubkeys.bob, rell.test.pubkeys.grace, "host", 7777, "http://host/api_url", "FI", 1, ["cluster1"]),
+        update_node_capability(initial_provider.pub, rell.test.pubkeys.charlie, node_capability_type.ETHEREUM_BRIDGE, true),
+        update_node_capability(rell.test.pubkeys.bob, rell.test.pubkeys.grace, node_capability_type.ETHEREUM_BRIDGE, true),
+        update_node_capability(initial_provider.pub, rell.test.pubkeys.charlie, node_capability_type.BCS_BRIDGE, true),
+        update_node_capability(rell.test.pubkeys.bob, rell.test.pubkeys.grace, node_capability_type.BCS_BRIDGE, true)
+    ).sign(initial_provider, rell.test.keypairs.bob).run();
+
+    val cluster = cluster @ { .name == "cluster1" };
+
+    assert_true(is_cluster_in_class(cluster, "2:EU:ETHEREUM_BRIDGE,BCS_BRIDGE"));
+    assert_false(is_cluster_in_class(cluster, "3:EU:ETHEREUM_BRIDGE,BCS_BRIDGE"));
+}
