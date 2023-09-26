@@ -15,9 +15,12 @@ function create_container_with_resource_limits(me: provider, name, cluster, vote
 }
 
 function remove_container_impl(container) {
+    before_remove_container(container);
     delete container_resource_limit @* { container };
     delete container;
 }
+
+@extendable function before_remove_container(container) {}
 
 @extendable function is_container_available_for_removal(container): text? {
     return when {
@@ -39,7 +42,7 @@ function require_container_available_for_removal(container) {
 
 @extendable function before_system_container_removal(cluster) {}
 
-function create_container_impl(me: provider, name, cluster, consensus_threshold: integer, deployers: list<pubkey>, container_units: integer, max_blockchains: integer) {
+function create_container_impl(me: provider, name, cluster, consensus_threshold: integer, deployers: list<pubkey>, container_units: integer, max_blockchains: integer): container {
     require(consensus_threshold >= -1 and consensus_threshold <= deployers.size(), "Invalid threshold");
 
     val vs_name = "container_" + name + "_deployer";
@@ -50,7 +53,7 @@ function create_container_impl(me: provider, name, cluster, consensus_threshold:
         create voter_set_member(vs, deployer);
     }
 
-    create_container_with_resource_limits(me, name, cluster, vs, container_units, max_blockchains);
+    return create_container_with_resource_limits(me, name, cluster, vs, container_units, max_blockchains);
 }
 
 function remove_container_and_voter_set(container) {

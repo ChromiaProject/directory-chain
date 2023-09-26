@@ -26,6 +26,12 @@ definitions:
           topics:
             - G_configuration_updated
             - G_configuration_failed
+        global:
+          topics:
+            - G_create_provider
+            - G_create_container
+            - G_stop_container
+            - G_restart_container
 
 blockchains:
   manager:
@@ -74,6 +80,21 @@ blockchains:
         modules:
           - "net.postchain.d1.anchoring.cluster.ClusterAnchoringGTXModule"
           - "net.postchain.d1.icmf.IcmfSenderGTXModule"
+  ticket_chain:
+    module: ticket_chain
+    config:
+      config_consensus_strategy: HEADER_HASH
+      revolt:
+        fast_revolt_status_timeout: 2000
+      sync_ext:
+        - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
+      gtx:
+        modules:
+          - "net.postchain.d1.icmf.IcmfReceiverGTXModule" # Receiver configuration is added by chain 0
+          - "net.postchain.d1.icmf.IcmfSenderGTXModule"
+    test:
+      modules:
+        - ticket_chain.test
 
 database: # Used for running tests
   logSqlErrors: true
@@ -100,6 +121,7 @@ test:
     - proposal_voter_set.test
     - region.test
     - roles.test
+    - ticketing.test
   moduleArgs:
     common.init: *common_init
     common:

@@ -1,15 +1,26 @@
 
 query get_container(name) = container @ { name };
 
-query get_container_data(name) {
+struct container_data {
+    name: text;
+    cluster: text;
+    deployer: text;
+    proposed_by_pubkey: byte_array;
+    proposed_by_name: text;
+    system: boolean;
+    state: container_state?;
+}
+
+query get_container_data(name): container_data {
     val container = require_container(name);
-    return (
+    return container_data(
         name = container.name,
         cluster = container.cluster.name,
         deployer = container.deployer.name,
         proposed_by_pubkey = container.proposed_by.pubkey,
         proposed_by_name = container.proposed_by.name,
-        system = container.system
+        system = container.system,
+        state = container.state
     );
 }
 
