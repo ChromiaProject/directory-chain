@@ -1,5 +1,4 @@
-image: registry.gitlab.com/chromaway/core-tools/chromia-cli/chr:0.9.2
-
+image: registry.gitlab.com/chromaway/core-tools/chromia-cli/chr:0.11.3
 
 .git_template: &git_setup |
   git remote set-url --push origin "https://oauth2:${BUILD_USER_GITLAB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
@@ -39,11 +38,15 @@ test:
     - postgres
   stage: test
   script:
-    - chr test
+    - chr test --test-report
   artifacts:
-    when: on_failure
-    paths: 
+    when: always
+    paths:
       - logs/*.log
+    reports:
+      junit:
+        - "*-tests.xml"
+    expire_in: 1 week
 
 build:
   services:
