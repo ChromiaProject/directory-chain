@@ -1,0 +1,22 @@
+import ^.common;
+import ^.messaging.icmf.*;
+import ^.messaging.ticketing.*;
+
+@extend(common.receive_icmf_message) function receive_stop_container(sender: byte_array, topic: text, body: gtv) {
+    if (topic != stop_container_topic) return;
+
+    if (sender != ticket_chain.rid) {
+        log("Sender %s is not the ticket chain, ignoring".format(sender));
+        return;
+    }
+
+    receive_stop_container_impl(body);
+}
+
+function receive_stop_container_impl(body: gtv) {
+    val message = stop_container_message.from_gtv(body);
+
+    if (not try_call(stop_container(message.container_name, *))) {
+        log("Unable to stop container %s".format(message.container_name));
+    }
+}

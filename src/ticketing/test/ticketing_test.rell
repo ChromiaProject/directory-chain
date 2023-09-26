@@ -1,0 +1,143 @@
+@test module;
+
+import ^^^.common.operations.*;
+import ^^^.common.test.setup.*;
+import ^^^.common.test.util.*;
+import ^^^.direct_cluster.*;
+import ^^.*;
+import ^.helpers.*;
+
+function test_init_ticketing() {
+    setup_module();
+
+    assert_equals(ticket_chain.rid, x"");
+
+    val conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+
+    rell.test.tx().op(
+        init_ticketing(initial_provider.pub, conf.to_gtv().to_bytes())
+    ).sign(initial_provider).run();
+    assert_not_equals(ticket_chain.rid, x"");
+    val bc = blockchain @ { .name == ticket_chain_name };
+    assert_equals(bc.state, blockchain_state.RUNNING);
+    assert_true(bc.system);
+    assert_equals(bc.rid, ticket_chain.rid);
+    assert_not_null(container_blockchain @? { bc, .container.cluster.name == clusters.system });
+
+    val ticket_chain_config = blockchain_configuration @ { bc } ( .data );
+    val ticket_chain_config_map = map<text,gtv>.from_gtv(gtv.from_bytes(ticket_chain_config));
+    val icmf_config = map<text,gtv>.from_gtv(ticket_chain_config_map["icmf"]);
+    val icmf_receiver = map<text,gtv>.from_gtv(icmf_config["receiver"]);
+    val icmf_local = list<gtv>.from_gtv(icmf_receiver["local"]);
+    val configured_chain0_brid = map<text,gtv>.from_gtv(icmf_local[0])["bc-rid"];
+    assert_equals(configured_chain0_brid, chain_context.blockchain_rid.to_gtv());
+
+    conf["nonce"] = "whatever".to_gtv();
+    rell.test.tx().op(
+        init_ticketing(initial_provider.pub, conf.to_gtv().to_bytes())
+    ).sign(initial_provider).run_must_fail("Ticket chain is already started");
+    assert_not_equals(ticket_chain.rid, x"");
+}
+
+function test_create_provider_and_container() {
+    setup_module();
+
+    val test_provider = rell.test.keypairs.bob;
+    val cluster_name = "Bob's cluster";
+
+    rell.test.tx().op(
+        create_cluster(initial_provider.pub, cluster_name, system_voter_set().name, [initial_provider.pub]),
+        register_node_with_territory_and_units(initial_provider.pub, rell.test.pubkeys.charlie, "host", 7777, "http://host/api_url", "SE", 1, ["Bob's cluster"])
+    ).sign(initial_provider).run();
+    val bob_cluster = cluster @ { cluster_name };
+
+    rell.test.tx().op(
+        create_provider_op(create_provider_message(
+        ticket_id = 1,
+        pubkey = test_provider.pub,
+        name = "Test provider",
+        url = "http://provider.com"
+        ).to_gtv())).run();
+    assert_not_null(provider @? { test_provider.pub });
+
+    assert_events(("icmf_message", (
+        topic = ticket_result_topic,
+        body = ticket_result_message(1, error_message = null, container_name = null).to_gtv(),
+        block_height = 2).to_gtv_pretty()
+    ));
+
+    rell.test.tx().op(
+        create_container_op(create_container_message(
+            ticket_id = 2,
+            pubkey = test_provider.pub,
+            container_units = 1,
+            cluster_class = ""
+        ).to_gtv())).run();
+    val container = container @ { bob_cluster, .system == false };
+
+    assert_events(("icmf_message", (
+        topic = ticket_result_topic,
+        body = ticket_result_message(2, error_message = null, container_name = container.name).to_gtv(),
+        block_height = 3).to_gtv_pretty()
+    ));
+}
+
+function test_create_duplicate_provider() {
+    setup_module();
+
+    rell.test.tx().op(
+        create_provider_op(create_provider_message(
+            ticket_id = 1,
+            pubkey = initial_provider.pub,
+            name = "Test provider",
+            url = "http://provider.com"
+        ).to_gtv())).run();
+
+    assert_events(("icmf_message", (
+        topic = ticket_result_topic,
+        body = ticket_result_message(1, error_message = "Unexpected error", container_name = null).to_gtv(),
+        block_height = 1).to_gtv_pretty()
+    ));
+}
+
+function test_create_container_fail() {
+    setup_module();
+
+    val test_provider = rell.test.keypairs.bob;
+    val cluster_name = "Bob's cluster";
+
+    rell.test.tx().op(
+        create_cluster(initial_provider.pub, cluster_name, system_voter_set().name, [initial_provider.pub]),
+        register_node_with_territory_and_units(initial_provider.pub, rell.test.pubkeys.charlie, "host", 7777, "http://host/api_url", "SE", 1, ["Bob's cluster"])
+    ).sign(initial_provider).run();
+    val bob_cluster = cluster @ { cluster_name };
+
+    rell.test.tx().op(
+        create_provider_op(create_provider_message(
+        ticket_id = 1,
+        pubkey = test_provider.pub,
+        name = "Test provider",
+        url = "http://provider.com"
+        ).to_gtv())).run();
+    assert_not_null(provider @? { test_provider.pub });
+
+    assert_events(("icmf_message", (
+        topic = ticket_result_topic,
+        body = ticket_result_message(1, error_message = null, container_name = null).to_gtv(),
+        block_height = 2).to_gtv_pretty()
+    ));
+
+    rell.test.tx().op(
+        create_container_op(create_container_message(
+            ticket_id = 2,
+            pubkey = test_provider.pub,
+            container_units = 1,
+            cluster_class = "2::"
+        ).to_gtv())).run();
+
+    assert_events(("icmf_message", (
+        topic = ticket_result_topic,
+        body = ticket_result_message(2, error_message = "Unable to find suitable cluster", container_name = "").to_gtv(),
+        block_height = 3).to_gtv_pretty()
+    ));
+}

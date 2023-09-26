@@ -1,0 +1,207 @@
+module;
+
+import messaging.ticketing.*;
+import messaging.icmf.*;
+
+val millis_per_month = 30 * 24 * 60 * 60 * 1000;
+
+enum ticket_state {
+    PENDING, SUCCESS, FAILURE
+}
+
+enum ticket_type {
+    CREATE_PROVIDER, CREATE_CONTAINER
+}
+
+entity provider {
+    key pubkey;
+    mutable container_credits: integer; // container_credit = container_unit per month
+}
+
+entity lease {
+    key provider, container_name: text;
+    container_units: integer;
+    start_time: integer;
+    mutable duration_millis: integer;
+    mutable expired: boolean = false;
+}
+
+entity ticket {
+    index transaction = op_context.transaction;
+    index type: ticket_type;
+    pubkey;
+    mutable state: ticket_state = ticket_state.PENDING;
+    mutable error_message: text = "";
+}
+
+entity create_provider_ticket {
+    key ticket;
+    container_credits: integer;
+}
+
+entity create_container_ticket {
+    key ticket;
+    container_units: integer;
+    duration_millis: integer;
+    cost: integer;
+}
+
+struct ticket_data {
+    ticket_id: integer;
+    type: ticket_type;
+    state: ticket_state;
+    error_message: text;
+}
+
+operation __begin_block(height: integer) {
+    expire_leases(op_context.last_block_time);
+}
+
+function expire_leases(current_time_millis: integer) {
+    for (lease in lease @* { current_time_millis > .start_time + .duration_millis, .expired == false }) {
+        lease.expired = true;
+        log("Lease for container %s has expired, stopping it".format(lease.container_name));
+        send_message(stop_container_topic, stop_container_message(container_name = lease.container_name).to_gtv()); // fire-and-forget
+    }
+}
+
+operation __icmf_message(sender: byte_array, topic: text, body: gtv) {
+    if (not try_call(receive_icmf_message(sender, topic, body, *))) {
+        log("Error while processing ICMF message in topic %s".format(topic));
+    }
+}
+
+function require_is_signer(pubkey) {
+    require(op_context.is_signer(pubkey), "Operation must be signed by " + pubkey);
+}
+
+operation create_provider(pubkey, name?, url: text?, container_credits: integer) {
+    require_is_signer(pubkey);
+    require(container_credits > 0, "container_credits must be positive");
+
+    require(provider @? { pubkey } == null, "Provider with pubkey %s already exists".format(pubkey));
+
+    val ticket = create ticket(type = ticket_type.CREATE_PROVIDER, pubkey);
+    create create_provider_ticket(ticket, container_credits = container_credits);
+    send_message(create_provider_topic, create_provider_message(
+        ticket_id = ticket.rowid.to_integer(),
+        pubkey,
+        name,
+        url
+    ).to_gtv());
+}
+
+operation add_container_credits(pubkey, container_credits: integer) {
+    require_is_signer(pubkey);
+    require(container_credits > 0, "container_credits must be positive");
+
+    val provider = require(provider @? { pubkey }, "Provider with pubkey %s not found".format(pubkey));
+    provider.container_credits += container_credits;
+}
+
+operation create_container(pubkey, container_units: integer, cluster_class: text, duration_months: integer) {
+    require_is_signer(pubkey);
+    require(container_units > 0, "container_units must be positive");
+    require(duration_months > 0, "duration_months must be positive");
+
+    val provider = require(provider @? { pubkey }, "Provider with pubkey %s not found".format(pubkey));
+    val cost = container_units * duration_months;
+    require(provider.container_credits >= cost, "Insufficient credits");
+    provider.container_credits -= cost;
+
+    val ticket = create ticket(type = ticket_type.CREATE_CONTAINER, pubkey);
+    create create_container_ticket(ticket,
+        container_units = container_units,
+        duration_millis = duration_months * millis_per_month,
+        cost = cost
+    );
+    send_message(create_container_topic, create_container_message(
+        ticket_id = ticket.rowid.to_integer(),
+        pubkey = pubkey,
+        container_units = container_units,
+        cluster_class = cluster_class
+    ).to_gtv());
+}
+
+operation prolong_container(pubkey, container_name: text, duration_months: integer) {
+    require_is_signer(pubkey);
+    require(duration_months > 0, "duration_months must be positive");
+
+    val provider = require(provider @? { pubkey }, "Provider with pubkey %s not found".format(pubkey));
+    val lease = require(lease @? { provider, container_name }, "No current lease for container %s".format(container_name));
+
+    val cost = lease.container_units * duration_months;
+    require(provider.container_credits >= cost, "Insufficient credits");
+    provider.container_credits -= cost;
+    lease.duration_millis += duration_months * millis_per_month;
+
+    if (lease.expired) {
+        log("Lease for container %s was expired, restarting it".format(lease.container_name));
+        send_message(restart_container_topic, restart_container_message(container_name = lease.container_name).to_gtv()); // fire-and-forget
+        // TODO what if restart fails?
+        lease.expired = false;
+    }
+}
+
+function receive_icmf_message(sender: byte_array, topic: text, body: gtv) {
+    if (topic != ticket_result_topic) {
+        log("Unexpected ICMF topic %s".format(topic));
+        return;
+    }
+
+    // No need to validate sender since we use a local ICMF receiver
+
+    val message = ticket_result_message.from_gtv(body);
+    val ticket = ticket @? { .rowid == rowid(message.ticket_id) };
+    if (ticket == null) {
+        log("ticket_id %s not found".format(message.ticket_id));
+        return;
+    }
+    ticket.state = if (message.error_message == null) ticket_state.SUCCESS else ticket_state.FAILURE;
+    ticket.error_message = message.error_message ?: "";
+
+    when (ticket.type) {
+        ticket_type.CREATE_PROVIDER -> {
+            val specific_ticket = create_provider_ticket @ { ticket };
+            when (ticket.state) {
+                ticket_state.SUCCESS -> {
+                    log("Successfully created provider for ticket %s".format(message.ticket_id));
+                    create provider(ticket.pubkey, specific_ticket.container_credits);
+                }
+                ticket_state.FAILURE -> log("Failed to create provider for ticket %s".format(message.ticket_id));
+            }
+        }
+
+        ticket_type.CREATE_CONTAINER -> {
+            val specific_ticket = create_container_ticket @ { ticket };
+            when (ticket.state) {
+                ticket_state.SUCCESS -> {
+                    log("Successfully created container for ticket %s".format(message.ticket_id));
+                    val provider = require(provider @? { ticket.pubkey }, "Provider with pubkey %s not found".format(ticket.pubkey));
+                    create lease(
+                        provider,
+                        container_name = message.container_name!!,
+                        container_units = specific_ticket.container_units,
+                        start_time = op_context.last_block_time,
+                        duration_millis = specific_ticket.duration_millis
+                    );
+                }
+                ticket_state.FAILURE -> {
+                    log("Failed to create container for ticket %s".format(message.ticket_id));
+                    val provider = provider @? { ticket.pubkey };
+                    if (provider != null) {
+                        provider.container_credits += specific_ticket.cost;
+                    } else {
+                        log("Provider not found %s".format(ticket.pubkey));
+                    }
+                }
+            }
+        }
+    }
+}
+
+query get_ticket_by_transaction(tx_rid: byte_array): ticket_data? =
+    ticket @? { .transaction.tx_rid == tx_rid } (ticket_data(.rowid.to_integer(), .type, .state, .error_message));
+
+query get_ticket_by_id(ticket_id: integer): ticket_data? =
+    ticket @? { .rowid == rowid(ticket_id) } (ticket_data(.rowid.to_integer(), .type, .state, .error_message));

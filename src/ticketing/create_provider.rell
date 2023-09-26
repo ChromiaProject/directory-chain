@@ -1,0 +1,27 @@
+import ^.common;
+import ^.messaging.ticketing.*;
+
+@extend(common.receive_icmf_message) function receive_create_provider(sender: byte_array, topic: text, body: gtv) {
+    if (topic != create_provider_topic) return;
+
+    if (sender != ticket_chain.rid) {
+        log("Sender %s is not the ticket chain, ignoring".format(sender));
+        return;
+    }
+
+    receive_create_provider_impl(body);
+}
+
+function receive_create_provider_impl(body: gtv) {
+    val message = create_provider_message.from_gtv(body);
+
+    val success = try_call(create_provider_from_ticket(message.pubkey, message.name, message.url, *));
+
+    val error_message = if (not success)
+        "Unexpected error"
+    else null;
+    send_message(ticket_result_topic, ticket_result_message(
+        ticket_id = message.ticket_id,
+        error_message = error_message
+    ).to_gtv());
+}

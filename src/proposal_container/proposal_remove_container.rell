@@ -8,9 +8,8 @@ entity pending_remove_container {
 function apply_container_remove(proposal) {
     val cont = pending_remove_container @? { proposal } .container;
     if (cont == null) return;
-    delete container_resource_limit @* { cont };
     delete pending_remove_container @ { proposal };
-    delete container @ { cont.name };
+    remove_container_impl(cont);
 }
 
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.container_remove.name: delete_pending_remove_container(*)];

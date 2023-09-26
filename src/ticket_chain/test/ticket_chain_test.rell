@@ -1,0 +1,235 @@
+@test module;
+
+import ^^.*;
+import ^.helpers.*;
+
+function test_create_provider_success() {
+    val test_provider = rell.test.keypairs.bob;
+
+    do_create_provider(test_provider, success = true);
+}
+
+function test_create_provider_failure() {
+    val test_provider = rell.test.keypairs.bob;
+
+    do_create_provider(test_provider, success = false);
+}
+
+function test_create_provider_duplicate() {
+    val test_provider = rell.test.keypairs.bob;
+
+    do_create_provider(test_provider, success = true);
+
+    rell.test.tx().op(
+        create_provider(test_provider.pub, "Test provider 2", "http://test.provider2.com", 1)
+    ).sign(test_provider).run_must_fail("already exists");
+}
+
+function test_create_container_success() {
+    val test_provider = rell.test.keypairs.bob;
+
+    do_create_provider(test_provider, success = true);
+    do_create_container(test_provider, success = true, block_height = 2, ticket_id = 4);
+}
+
+function test_create_container_failure() {
+    val test_provider = rell.test.keypairs.bob;
+
+    do_create_provider(test_provider, success = true);
+    do_create_container(test_provider, success = false, block_height = 2, ticket_id = 4);
+}
+
+function test_create_container_no_provider() {
+    val test_provider = rell.test.keypairs.bob;
+
+    rell.test.tx().op(
+        create_container(test_provider.pub, 2, "", integer.MAX_VALUE)
+    ).sign(test_provider).run_must_fail("not found");
+}
+
+function test_create_container_insufficient_credits() {
+    val test_provider = rell.test.keypairs.bob;
+
+    do_create_provider(test_provider, success = true);
+
+    rell.test.tx().op(
+        create_container(test_provider.pub, 5, "", 1)
+    ).sign(test_provider).run_must_fail("Insufficient credits");
+}
+
+function test_add_container_credits() {
+    val test_provider = rell.test.keypairs.bob;
+
+    do_create_provider(test_provider, success = true);
+
+    rell.test.tx().op(
+        add_container_credits(test_provider.pub, 2)
+    ).sign(test_provider).run();
+
+    do_create_container(test_provider, success = true, block_height = 3, ticket_id = 4, container_units = 5);
+}
+
+function test_prolong_non_expired_container() {
+    val test_provider = rell.test.keypairs.bob;
+
+    do_create_provider(test_provider, success = true);
+    val container_name = do_create_container(test_provider, success = true, block_height = 2, ticket_id = 4);
+
+    assert_equals(provider @ { test_provider.pub } (.container_credits), 2);
+    assert_equals(lease @ { .provider.pubkey == test_provider.pub, container_name } (.duration_millis), 1 * millis_per_month);
+
+    rell.test.tx().op(
+        prolong_container(test_provider.pub, container_name, 1)
+    ).sign(test_provider).run();
+    assert_equals(provider @ { test_provider.pub } (.container_credits), 0);
+    assert_equals(lease @ { .provider.pubkey == test_provider.pub, container_name } (.duration_millis), 2 * millis_per_month);
+    assert_false(lease @ { .provider.pubkey == test_provider.pub, container_name } (.expired));
+    assert_events(); // assert no ICMF messages sent
+}
+
+function test_prolong_expired_container() {
+    val test_provider = rell.test.keypairs.bob;
+
+    do_create_provider(test_provider, success = true);
+    val container_name = do_create_container(test_provider, success = true, block_height = 2, ticket_id = 4);
+
+    rell.test.tx().op(
+        expire_leases_op(millis_per_month + 1)
+    ).run();
+    assert_true(lease @ { .provider.pubkey == test_provider.pub, container_name } (.expired));
+
+    rell.test.tx().op(
+        prolong_container(test_provider.pub, container_name, 1)
+    ).sign(test_provider).run();
+    assert_equals(provider @ { test_provider.pub } (.container_credits), 0);
+    assert_equals(lease @ { .provider.pubkey == test_provider.pub, container_name } (.duration_millis), 2 * millis_per_month);
+    assert_false(lease @ { .provider.pubkey == test_provider.pub, container_name } (.expired));
+    assert_events(("icmf_message", (
+        topic = restart_container_topic,
+        body = restart_container_message(container_name).to_gtv(),
+        block_height = 5).to_gtv_pretty()
+    ));
+}
+
+function test_prolong_container_insufficient_credits() {
+    val test_provider = rell.test.keypairs.bob;
+
+    do_create_provider(test_provider, success = true);
+    val container_name = do_create_container(test_provider, success = true, block_height = 2, ticket_id = 4, container_units = 4);
+
+    rell.test.tx().op(
+        prolong_container(test_provider.pub, container_name, 1)
+    ).sign(test_provider).run_must_fail("Insufficient credits");
+}
+
+function test_expire_lease() {
+    val test_provider = rell.test.keypairs.bob;
+
+    do_create_provider(test_provider, success = true);
+    val container_name = do_create_container(test_provider, success = true, block_height = 2, ticket_id = 4);
+
+    assert_false(lease @ { .provider.pubkey == test_provider.pub, container_name } (.expired));
+    rell.test.tx().op(
+        expire_leases_op(millis_per_month + 1)
+    ).run();
+    assert_true(lease @ { .provider.pubkey == test_provider.pub, container_name } (.expired));
+    assert_events(("icmf_message", (
+        topic = stop_container_topic,
+        body = stop_container_message(container_name).to_gtv(),
+        block_height = 4).to_gtv_pretty()
+    ));
+}
+
+function test_not_expire_lease() {
+    val test_provider = rell.test.keypairs.bob;
+
+    do_create_provider(test_provider, success = true);
+    val container_name = do_create_container(test_provider, success = true, block_height = 2, ticket_id = 4);
+
+    assert_false(lease @ { .provider.pubkey == test_provider.pub, container_name } (.expired));
+    rell.test.tx().op(
+        expire_leases_op(millis_per_month - 60000)
+    ).run();
+    assert_false(lease @ { .provider.pubkey == test_provider.pub, container_name } (.expired));
+    assert_events(); // assert no ICMF messages sent
+}
+
+function do_create_provider(keypair: rell.test.keypair, success: boolean) {
+    rell.test.tx().op(
+        create_provider(keypair.pub, "Test provider", "http://test.provider.com", 4)
+    ).sign(keypair).run();
+    val tx_rid = transaction @ {} (@sort_desc @omit .rowid, .tx_rid) limit 1;
+
+    assert_events(("icmf_message", (
+        topic = create_provider_topic,
+        body = create_provider_message(ticket_id = 1, keypair.pub, name = "Test provider", url = "http://test.provider.com").to_gtv(),
+        block_height = 0).to_gtv_pretty()
+    ));
+
+    val pending_ticket = ticket_data(1, ticket_type.CREATE_PROVIDER, ticket_state.PENDING, "");
+    assert_equals(require(get_ticket_by_id(1)), pending_ticket);
+    assert_equals(require(get_ticket_by_transaction(tx_rid)), pending_ticket);
+
+    assert_null(provider @? { keypair.pub });
+
+    rell.test.tx().op(
+        icmf_message(x"", ticket_result_topic, ticket_result_message(ticket_id = 1, error_message = if (success) null else "error").to_gtv())
+    ).run();
+    val done_ticket = ticket_data(
+        ticket_id = 1,
+        type = ticket_type.CREATE_PROVIDER,
+        state = if (success) ticket_state.SUCCESS else ticket_state.FAILURE,
+        error_message = if (success) "" else "error"
+    );
+    assert_equals(require(get_ticket_by_id(1)), done_ticket);
+    assert_equals(require(get_ticket_by_transaction(tx_rid)), done_ticket);
+
+    if (success) {
+        assert_equals(provider @ { keypair.pub } (.container_credits), 4);
+    } else {
+        assert_null(provider @? { keypair.pub });
+    }
+}
+
+function do_create_container(keypair: rell.test.keypair, success: boolean, block_height: integer, ticket_id: integer, container_units: integer = 2): text {
+    val container_name = "container name";
+
+    val initial_credits = provider @ { keypair.pub } (.container_credits);
+
+    rell.test.tx().op(
+        create_container(keypair.pub, container_units, "", 1)
+    ).sign(keypair).run();
+    val tx_rid = transaction @ {} (@sort_desc @omit .rowid, .tx_rid) limit 1;
+
+    assert_events(("icmf_message", (
+        topic = create_container_topic,
+        body = create_container_message(ticket_id = ticket_id, keypair.pub, container_units = container_units, cluster_class = "").to_gtv(),
+        block_height = block_height).to_gtv_pretty()
+    ));
+
+    val pending_ticket = ticket_data(ticket_id, ticket_type.CREATE_CONTAINER, ticket_state.PENDING, "");
+    assert_equals(require(get_ticket_by_id(ticket_id)), pending_ticket);
+    assert_equals(require(get_ticket_by_transaction(tx_rid)), pending_ticket);
+
+    assert_equals(provider @ { keypair.pub } (.container_credits), initial_credits - container_units);
+
+    rell.test.tx().op(
+        icmf_message(x"", ticket_result_topic, ticket_result_message(ticket_id = ticket_id, error_message = if (success) null else "error", container_name).to_gtv())
+    ).run();
+    val done_ticket = ticket_data(
+        ticket_id = ticket_id,
+        type = ticket_type.CREATE_CONTAINER,
+        state = if (success) ticket_state.SUCCESS else ticket_state.FAILURE,
+        error_message = if (success) "" else "error"
+    );
+    assert_equals(require(get_ticket_by_id(ticket_id)), done_ticket);
+    assert_equals(require(get_ticket_by_transaction(tx_rid)), done_ticket);
+
+    if (success) {
+        assert_equals(provider @ { keypair.pub } (.container_credits), initial_credits - container_units);
+    } else {
+        assert_equals(provider @ { keypair.pub } (.container_credits), initial_credits);
+    }
+
+    return container_name;
+}
