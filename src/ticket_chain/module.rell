@@ -53,6 +53,18 @@ struct ticket_data {
     error_message: text;
 }
 
+struct lease_data {
+    container_name: text;
+    container_units: integer;
+    expire_time_millis: integer;
+    expired: boolean;
+}
+
+struct provider_data {
+    pubkey;
+    container_credits: integer;
+}
+
 operation __begin_block(height: integer) {
     expire_leases(op_context.last_block_time);
 }
@@ -205,3 +217,9 @@ query get_ticket_by_transaction(tx_rid: byte_array): ticket_data? =
 
 query get_ticket_by_id(ticket_id: integer): ticket_data? =
     ticket @? { .rowid == rowid(ticket_id) } (ticket_data(.rowid.to_integer(), .type, .state, .error_message));
+
+query get_leases_by_provider(pubkey): list<lease_data> =
+    lease @* { .provider.pubkey == pubkey } (lease_data(.container_name, container_units = .container_units, expire_time_millis = .start_time + .duration_millis, .expired));
+
+query get_provider(pubkey): provider_data? =
+    provider @? { pubkey } (provider_data(.pubkey, .container_credits));
