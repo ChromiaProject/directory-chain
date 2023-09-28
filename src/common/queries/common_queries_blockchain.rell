@@ -37,8 +37,34 @@ function get_blockchains_with_container(include_inactive: boolean) {
     }
 }
 
+struct blockchain_info {
+    rid: byte_array;
+    name: text;
+    state: blockchain_state;
+    container: name?;
+    cluster: name?;
+    system: boolean?;
+}
+
+query get_blockchain_info(rid: byte_array): blockchain_info? {
+    val blockchain = blockchain @? { rid };
+    if (blockchain != null) {
+        val container = container_blockchain @? { blockchain } (.container);
+        return blockchain_info(
+            rid = blockchain.rid,
+            name = blockchain.name,
+            state = blockchain.state,
+            container = container?.name,
+            cluster = container?.cluster?.name,
+            system = blockchain.system
+        );
+    } else {
+        return null;
+    }
+}
+
 // Will return RUNNING, PAUSED and REMOVED if include_inactive == true
-query get_blockchain_info_list(include_inactive: boolean): list<(rid: byte_array, name: text, state: blockchain_state, container: name?, cluster: name?)> {
+query get_blockchain_info_list(include_inactive: boolean): list<blockchain_info> {
     var bc_infos = list<(blockchain: blockchain, container: container?)>();
     if (include_inactive) {
         val connected_blockchains = container_blockchain @* {} (.blockchain, .container);
@@ -50,15 +76,16 @@ query get_blockchain_info_list(include_inactive: boolean): list<(rid: byte_array
     } else {
         bc_infos.add_all((b: blockchain, c: container_blockchain) @* { c.blockchain == b and b.state == blockchain_state.RUNNING } (blockchain = b, c.container));
     }
-    
-    val result = list<(rid: byte_array, name: text, state: blockchain_state, container: name?, cluster: name?)>();
+
+    val result = list<blockchain_info>();
     for (bc in bc_infos) {
-        result.add((
+        result.add(blockchain_info(
             rid = bc.blockchain.rid,
             name = bc.blockchain.name,
             state = bc.blockchain.state,
             container = bc.container?.name,
-            cluster = bc.container?.cluster?.name
+            cluster = bc.container?.cluster?.name,
+            system = bc.blockchain.system
         ));
     }
     return result;
@@ -67,4 +94,3 @@ query get_blockchain_info_list(include_inactive: boolean): list<(rid: byte_array
 query get_blockchain_cluster(blockchain_rid: byte_array) = cm_get_blockchain_cluster(blockchain_rid);
 
 query get_blockchain_api_urls(blockchain_rid: byte_array) = cm_get_blockchain_api_urls(blockchain_rid);
-
