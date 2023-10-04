@@ -3,7 +3,7 @@ function get_cluster_node_blockchains(node): set<blockchain_info> {
         (cluster_node, container_blockchain) @* {
             cluster_node.node == node,
             cluster_node.cluster == container_blockchain.container.cluster,
-            container_blockchain.blockchain.state in [blockchain_state.RUNNING, blockchain_state.PAUSED],
+            container_blockchain.blockchain.state in [blockchain_state.RUNNING, blockchain_state.PAUSED, blockchain_state.IMPORTING],
             container_blockchain.container.state == container_state.RUNNING
         } ( blockchain_info(container_blockchain.blockchain.rid, container_blockchain.blockchain.system, container_blockchain.blockchain.state) )
     );
@@ -20,14 +20,14 @@ function get_cluster_replica_node_blockchains(node) = set(
     (cluster_replica_node, container_blockchain) @* {
         cluster_replica_node.node == node,
         cluster_replica_node.cluster == container_blockchain.container.cluster,
-        container_blockchain.blockchain.state in [blockchain_state.RUNNING, blockchain_state.PAUSED],
+        container_blockchain.blockchain.state in [blockchain_state.RUNNING, blockchain_state.PAUSED, blockchain_state.IMPORTING],
         container_blockchain.container.state == container_state.RUNNING
     } ( blockchain_info(container_blockchain.blockchain.rid, container_blockchain.blockchain.system, container_blockchain.blockchain.state) )
 );
 
 function get_blockchains_replicated_by_node(node) = set(
     blockchain_replica_node @* { 
-        node, .blockchain.state in [blockchain_state.RUNNING, blockchain_state.PAUSED] 
+        node, .blockchain.state in [blockchain_state.RUNNING, blockchain_state.PAUSED, blockchain_state.IMPORTING]
     } (blockchain_info(.blockchain.rid, .blockchain.system, .blockchain.state))
 );
 
