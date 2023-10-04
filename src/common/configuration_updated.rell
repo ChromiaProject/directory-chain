@@ -28,6 +28,8 @@
     log("Received updated configuration from chain %s for chain %s at height %d to %s"
         .format(sender, message.blockchain_rid, message.height, message.config_hash));
 
+    on_configuration_updated(message);
+
     // foreign blockchain
     val foreign_blockchain = foreign_blockchain_import @? { .blockchain_rid == message.blockchain_rid, .up_to_height == message.height - 1 };
     if (exists(foreign_blockchain)) {
@@ -65,3 +67,5 @@
 
     add_dependencies(pending_base_config, bc.rid, message.height);
 }
+
+@extendable function on_configuration_updated(message: configuration_updated) {}

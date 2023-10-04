@@ -1,0 +1,50 @@
+entity pending_blockchain_move {
+    key proposal;
+    blockchain;
+    destination: container;
+}
+
+operation propose_blockchain_move(my_pubkey: pubkey, blockchain_rid: byte_array, destination_container: text, description: text = "") {
+    val me = require_is_provider_with_rate_limit(my_pubkey);
+    val blockchain = require_blockchain(blockchain_rid);
+    // src container
+    val src_container = container_blockchain @ { blockchain } .container;
+    require_container_deployer(src_container, me);
+    // dst container
+    val dst_container = require_container(destination_container);
+    require_container_deployer(dst_container, me);
+    require_container_is_not_full(dst_container);
+    // TODO: POS-961: add requirements for relation between `src_container.deployer` and `dst_container.deployer` ses
+
+    val prop = create proposal(op_context.last_block_time, proposal_type.blockchain_move, me, dst_container.deployer, description); // TODO: POS-961: src + dst?
+    create pending_blockchain_move(prop, blockchain, dst_container);
+    internal_vote(me, prop, true);
+}
+
+query get_blockchain_move_proposal(rowid?):
+(blockchain_rid: byte_array, blockchain_name: text, container: text, cluster: text)? {
+    val proposal = get_latest_proposal(rowid, proposal_type.blockchain_import);
+    if (proposal == null) return null;
+    return pending_blockchain_move @ { proposal } (
+        blockchain_rid = .blockchain.rid,
+        blockchain_name = .blockchain.name,
+        container = .destination.name,
+        cluster = .destination.cluster.name
+    );
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.blockchain_move.name: apply_blockchain_move(*)];
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.blockchain_move.name: delete_pending_blockchain_move(*)];
+
+function apply_blockchain_move(proposal) {
+    val pbm = pending_blockchain_move @ { proposal };
+    val dst_nodes = cluster_node @* { pbm.destination.cluster } (.node);
+    for (node in dst_nodes) {
+        create blockchain_replica_node(pbm.blockchain, node);
+    }
+    create blockchain_move_state(pbm.blockchain, pbm.destination);
+}
+
+function delete_pending_blockchain_move(proposal) {
+    delete pending_blockchain_move @? { proposal };
+}
