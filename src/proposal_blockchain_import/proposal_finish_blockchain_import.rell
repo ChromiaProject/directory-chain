@@ -1,12 +1,13 @@
 entity pending_finish_blockchain_import {
     key proposal;
     blockchain: blockchain;
+    finish_at_height: integer;
 }
 
 @extend(apply_voting_result_handlers) function() = [proposal_type.finish_blockchain_import.name: apply_finish_blockchain_import(*)];
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.finish_blockchain_import.name: delete_pending_finish_blockchain_import(*)];
 
-operation propose_finish_import_blockchain(my_pubkey: pubkey, blockchain_rid: byte_array, description: text = "Propose finish import blockchain") {
+operation propose_finish_import_blockchain(my_pubkey: pubkey, blockchain_rid: byte_array, finish_at_height: integer, description: text = "Propose finish import blockchain") {
     val me = require_is_provider_with_rate_limit(my_pubkey);
     val blockchain = require_blockchain_entity(blockchain_rid);
     require(blockchain.state == blockchain_state.IMPORTING, "Blockchain must be in %s state to finish import".format(blockchain_state.IMPORTING));
@@ -16,7 +17,7 @@ operation propose_finish_import_blockchain(my_pubkey: pubkey, blockchain_rid: by
 
     require(empty(pending_finish_blockchain_import @* { blockchain, .proposal.state == proposal_state.PENDING } limit 1), "Already proposed");
     val prop = create proposal(op_context.last_block_time, proposal_type.finish_blockchain_import, me, container.deployer, description);
-    create pending_finish_blockchain_import(prop, blockchain);
+    create pending_finish_blockchain_import(prop, blockchain, finish_at_height);
     internal_vote(me, prop, true);
 }
 
@@ -28,8 +29,14 @@ function apply_finish_blockchain_import(proposal) {
     val nodes = cluster_node @* { container.cluster } (@sort .node.pubkey);
     require(nodes.size() > 0, "Cluster must have at least one node");
 
-    update_configuration_signers_regular(pfbi.blockchain, nodes, null);
     update blockchain @ { pfbi.blockchain.rid } (.state = blockchain_state.RUNNING);
+    /*
+        FYI: PCU based solution can't be used here at the moment,
+        since PCU doesn't support replacing all signers per one config update:
+
+        update_configuration_signers_regular(pfbi.blockchain, nodes, null);
+    */
+    create blockchain_configuration_signers(pfbi.blockchain, pfbi.finish_at_height, nodes.to_gtv().to_bytes());
 
     log("Blockchain import finished: %s".format(pfbi.blockchain.rid));
 }
@@ -39,11 +46,12 @@ function delete_pending_finish_blockchain_import(proposal) {
 }
 
 query get_finish_blockchain_import_proposal(rowid?):
-    (blockchain_rid: byte_array)?
+    (blockchain_rid: byte_array, finish_at_height: integer)?
 {
     val proposal = get_latest_proposal(rowid, proposal_type.finish_blockchain_import);
     if (proposal == null) return null;
     return pending_finish_blockchain_import @ { proposal } (
-        blockchain_rid = .blockchain.rid
+        blockchain_rid = .blockchain.rid,
+        finish_at_height = .finish_at_height
     );
 }

@@ -2,7 +2,7 @@
     Returns NM API Version
     NM API Version: 1
 */
-query nm_api_version() = 8;
+query nm_api_version() = 9;
 
 /*
     Returns version of peerlist
@@ -72,8 +72,9 @@ query nm_compute_blockchain_list(node_id: pubkey): list<byte_array> {
 }
 
 /*
-    Returns list of blockchains to be launched
+    Returns a list of blockchains to be launched or to be initialized on a node (RUNNING, PAUSED, IMPORTING)
     NM API Version: 4
+    (Returns RUNNING or PAUSED blockchains for NM API Version 4-8.)
 */
 query nm_compute_blockchain_info_list(node_id: pubkey): list<blockchain_info> {
     return compute_blockchain_info_list(node_id);
@@ -248,3 +249,13 @@ query nm_get_management_chain() = blockchain @ { blockchains.directory_chain } (
 query nm_get_blockchain_configuration_options(blockchain_rid: byte_array, height: integer)
     = blockchain_configuration_options @? { .blockchain.rid == blockchain_rid, .height <= height }
         (@omit @sort_desc .height, $.to_struct()) limit 1;
+
+/*
+    Returns the blockchain signers from the latest configuration
+    NM API Version 9
+*/
+query nm_get_blockchain_signers_in_latest_configuration(blockchain_rid: byte_array): list<byte_array> {
+    val bc = require_blockchain(blockchain_rid, false, true);
+    val signers_bytes = blockchain_configuration_signers @ { bc } (@omit @sort_desc .height, .signers) limit 1;
+    return list<byte_array>.from_gtv(gtv.from_bytes(signers_bytes));
+}
