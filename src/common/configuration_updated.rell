@@ -30,15 +30,6 @@
 
     on_configuration_updated(message);
 
-    // foreign blockchain
-    val foreign_blockchain = foreign_blockchain_import @? { .blockchain_rid == message.blockchain_rid, .up_to_height == message.height - 1 };
-    if (exists(foreign_blockchain)) {
-        log("Foreign blockchain import was finished at height %s".format(message.height - 1));
-        delete foreign_blockchain;
-        delete blockchain_configuration_options @* { .blockchain.rid == message.blockchain_rid };
-        return;
-    }
-
     val pending_configuration = pending_blockchain_configuration @?
         { bc, .config_hash == message.config_hash, .minimum_height <= message.height };
     if (pending_configuration == null) {

@@ -16,7 +16,7 @@ operation propose_blockchain_move(my_pubkey: pubkey, blockchain_rid: byte_array,
     require_container_is_not_full(dst_container);
     // TODO: POS-961: add requirements for relation between `src_container.deployer` and `dst_container.deployer` ses
 
-    val prop = create proposal(op_context.last_block_time, proposal_type.blockchain_move, me, dst_container.deployer, description); // TODO: POS-961: src + dst?
+    val prop = create proposal(op_context.last_block_time, proposal_type.blockchain_move_start, me, dst_container.deployer, description); // TODO: POS-961: src + dst?
     create pending_blockchain_move(prop, blockchain, dst_container);
     internal_vote(me, prop, true);
 }
@@ -33,8 +33,8 @@ query get_blockchain_move_proposal(rowid?):
     );
 }
 
-@extend(apply_voting_result_handlers) function() = [proposal_type.blockchain_move.name: apply_blockchain_move(*)];
-@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.blockchain_move.name: delete_pending_blockchain_move(*)];
+@extend(apply_voting_result_handlers) function() = [proposal_type.blockchain_move_start.name: apply_blockchain_move(*)];
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.blockchain_move_start.name: delete_pending_blockchain_move(*)];
 
 function apply_blockchain_move(proposal) {
     val pbm = pending_blockchain_move @ { proposal };
