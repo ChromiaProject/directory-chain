@@ -11,6 +11,33 @@ import proposal_container.*;
 import direct_container.*;
 import direct_cluster.*;
 
+function test_blockchain_moving_between_containers_withing_one_node_is_not_allowed() {
+    // setup
+    setup_module(provider_quota_max_containers = 2);
+    val ip = provider @ { initial_provider.pub };
+    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+
+    rell.test.tx().op(
+        // s1 / c1
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1a", "s1", 0, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1b", "s1", 0, [initial_provider.pub]),
+        update_node_with_units(initial_provider.pub, test_node.pubkey, cluster_units = 3),
+        add_node_to_cluster(initial_provider.pub, test_node.pubkey, "s1"),
+        // proposing blockchain to the c1a
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1a")
+    ).sign(initial_provider).run();
+    val foo_chain = blockchain @ { "foo_chain" };
+
+    // asserting that bc moving from c1a to c1b is not allowed
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c1b")
+    ).sign(initial_provider).run_must_fail(
+        "Moving blockchains between containers running on the same node is not allowed. Nodes belongs to clusters s1 and s1 are: [%s]"
+        .format(test_node.pubkey)
+    );
+}
+
 function test_blockchain_moving_between_containers_running_on_different_nodes() {
     // setup
     setup_module(provider_quota_max_containers = 2);
