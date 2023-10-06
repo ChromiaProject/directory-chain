@@ -1,6 +1,7 @@
 @test module;
 
 import ^^.*;
+import common.operations.*;
 import common.test.ops.*;
 import common.test.setup.*;
 import common.test.util.*;
@@ -8,7 +9,60 @@ import proposal.voting.test.ops.*;
 import proposal_blockchain.*;
 import proposal_container.*;
 import direct_container.*;
+import direct_cluster.*;
 
-function test_propose_blockchain_move() {
+function test_blockchain_moving_between_containers_running_on_different_nodes() {
+    // setup
+    setup_module(provider_quota_max_containers = 2);
+    val ip = provider @ { initial_provider.pub };
+    val node0 = node @ { test_node.pubkey };
+    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
 
+    rell.test.tx().op(
+        // s1 / c1
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1", "s1", 0, [initial_provider.pub]),
+        update_node_with_units(initial_provider.pub, node0.pubkey, cluster_units = 2),
+        add_node_to_cluster(initial_provider.pub, node0.pubkey, "s1"),
+        // s2 / c2
+        create_cluster(initial_provider.pub, "s2", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c2", "s2", 0, [initial_provider.pub]),
+        // proposing blockchain to the c1
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
+    ).sign(initial_provider).run();
+    val foo_chain = blockchain @ { "foo_chain" };
+
+    rell.test.tx().op(
+        create_test_node(ip, rell.test.pubkeys.trudy, cluster @ { "s2" })
+    ).sign(initial_provider).run();
+    val node1 = node @ { rell.test.pubkeys.trudy };
+
+    // 1. start blockchain moving
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c2")
+    ).sign(initial_provider).run();
+    val bc_move_state = blockchain_move_state @? { foo_chain, .destination.name == "c2", .finish_at_height == -1, .remove_on_nodes == x"" };
+    assert_not_null(bc_move_state);
+    // asserting that s2/c2 nodes are blockchain replicas
+    assert_equals(blockchain_replica_node @* { foo_chain } ( .node ), [node1]);
+    // asserting that blockchain still belongs to c1
+    assert_equals(container_blockchain @ { foo_chain } ( .container.name ), "c1");
+
+    // 2. finish blockchain moving
+    rell.test.tx().op(
+        propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 123)
+    ).sign(initial_provider).run();
+    // asserting that src nodes are blockchain replicas and dst nodes are not
+    assert_equals(blockchain_replica_node @* { foo_chain } ( .node ), [node0]);
+    // asserting that blockchain belongs to c2
+    assert_equals(container_blockchain @ { foo_chain } ( .container.name ), "c2");
+    // asserting that a new signers config is present at the proposed height
+    val bcs = blockchain_configuration_signers @? { foo_chain, 123 };
+    assert_not_null(bcs);
+    assert_equals(bcs.signers, [node1.pubkey].to_gtv().to_bytes());
+    // asserting that bc_move_state has relevant .finish_at_height and .remove_on_nodes
+    assert_equals(bc_move_state.finish_at_height, 123);
+    assert_equals(bc_move_state.remove_on_nodes, [node0.pubkey].to_gtv().to_bytes());
+
+    // Further code flow (i.e. ICMF messaging) and results currently can't be tested due to limitations of Rell Test Framework
 }
