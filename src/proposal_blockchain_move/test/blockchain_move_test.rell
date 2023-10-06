@@ -75,6 +75,11 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
     // asserting that blockchain still belongs to c1
     assert_equals(container_blockchain @ { foo_chain } ( .container.name ), "c1");
 
+    // Trying to move blockchain that is already being moved
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c1") // c2 -> c1
+    ).sign(initial_provider).run_must_fail("Blockchain 0x5c2e022c482853fdf9db276dd37e6235a7d81a679362a2446f468c83387cfef6 is being moved");
+
     // 2. finish blockchain moving
     rell.test.tx().op(
         propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 123)
