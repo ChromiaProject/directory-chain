@@ -40,7 +40,7 @@ function test_blockchain_moving_between_containers_withing_one_node_is_not_allow
 
 function test_blockchain_moving_between_containers_running_on_different_nodes() {
     // setup
-    setup_module(provider_quota_max_containers = 2);
+    setup_module(provider_quota_max_containers = 3);
     val ip = provider @ { initial_provider.pub };
     val node0 = node @ { test_node.pubkey };
     var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
@@ -51,20 +51,29 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
         create_container(initial_provider.pub, "c1", "s1", 0, [initial_provider.pub]),
         update_node_with_units(initial_provider.pub, node0.pubkey, cluster_units = 2),
         add_node_to_cluster(initial_provider.pub, node0.pubkey, "s1"),
-        // s2 / c2
+        // s2 / c2, c3
         create_cluster(initial_provider.pub, "s2", voter_sets.system_p, [initial_provider.pub]),
         create_container(initial_provider.pub, "c2", "s2", 0, [initial_provider.pub]),
-        // proposing blockchain to the c1
+        create_container_with_units_and_max_blockchains(initial_provider.pub, "c3", "s2", 0, [initial_provider.pub], container_units = 1, max_blockchains = 1),
+        // proposing the blockchain to the c1
         propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
     ).sign(initial_provider).run();
     val foo_chain = blockchain @ { "foo_chain" };
 
     rell.test.tx().op(
-        create_test_node(ip, rell.test.pubkeys.trudy, cluster @ { "s2" })
+        create_test_node(ip, rell.test.pubkeys.trudy, cluster @ { "s2" }),
+        // proposing the blockchain to the c3 to make it full
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c3")
     ).sign(initial_provider).run();
     val node1 = node @ { rell.test.pubkeys.trudy };
 
     // 1. start blockchain moving
+    // Trying to move the blockchain to a full container c3 -- must fail
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c3")
+    ).sign(initial_provider).run_must_fail("Can't add blockchain, container c3 is full");
+
+    // Moving to a proper container c2
     rell.test.tx().op(
         propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c2")
     ).sign(initial_provider).run();
@@ -75,7 +84,7 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
     // asserting that blockchain still belongs to c1
     assert_equals(container_blockchain @ { foo_chain } ( .container.name ), "c1");
 
-    // Trying to move blockchain that is already being moved
+    // Trying to move blockchain that is already being moved -- must fail
     rell.test.tx().op(
         propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c1") // c2 -> c1
     ).sign(initial_provider).run_must_fail("Blockchain 0x5c2e022c482853fdf9db276dd37e6235a7d81a679362a2446f468c83387cfef6 is being moved");
