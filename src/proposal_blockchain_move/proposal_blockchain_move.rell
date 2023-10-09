@@ -61,11 +61,15 @@ query get_blockchain_move_proposal(rowid?):
 
 function apply_blockchain_move(proposal) {
     val pbm = pending_blockchain_move @ { proposal };
-    val dst_nodes = cluster_node @* { pbm.destination.cluster } (.node);
+    blockchain_move_start(pbm.blockchain, pbm.destination);
+}
+
+function blockchain_move_start(blockchain, destination: container) {
+    val dst_nodes = cluster_node @* { destination.cluster } (.node);
     for (node in dst_nodes) {
-        create blockchain_replica_node(pbm.blockchain, node);
+        create blockchain_replica_node(blockchain, node);
     }
-    create blockchain_move_state(pbm.blockchain, pbm.destination);
+    create blockchain_move_state(blockchain, destination);
 }
 
 function delete_pending_blockchain_move(proposal) {
