@@ -15,6 +15,10 @@ operation propose_blockchain_move(my_pubkey: pubkey, blockchain_rid: byte_array,
     // require blockchain is not being moved right now
     require(empty(blockchain_move_state @? { blockchain }), "Blockchain %s is being moved".format(blockchain.rid));
 
+    // require there no pending blockchain actions (pause, resume, remove)
+    val pba = pending_blockchain_action @? { blockchain };
+    require(empty(pba), "Blockchain %s cannot be moved due to a pending proposal %s related to it".format(blockchain.rid, pba?.proposal));
+
     // src container
     val src_container = container_blockchain @ { blockchain } .container;
     require_container_deployer(src_container, me);
@@ -23,7 +27,6 @@ operation propose_blockchain_move(my_pubkey: pubkey, blockchain_rid: byte_array,
     val dst_container = require_container(destination_container);
     require_container_deployer(dst_container, me);
     require_container_is_not_full(dst_container);
-    // TODO: POS-961: add requirements for relation between `src_container.deployer` and `dst_container.deployer`
 
     // Moving blockchains between containers running on the same node is not allowed
     val intersection = (cn1: cluster_node, cn2: cluster_node) @* {

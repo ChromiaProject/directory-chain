@@ -7,7 +7,9 @@ import common.test.setup.*;
 import common.test.util.*;
 import proposal.voting.test.ops.*;
 import proposal_blockchain.*;
+import proposal_blockchain.test.utils.*;
 import proposal_container.*;
+import proposal_provider.*;
 import direct_container.*;
 import direct_cluster.*;
 
@@ -129,4 +131,39 @@ function test_removed_blockchain_moving_is_not_allowed() {
     rell.test.tx().op(
         propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c2")
     ).sign(initial_provider).run_must_fail("Only blockchains in RUNNING | PAUSED states can be moved; current state of blockchain 0x5c2e022c482853fdf9db276dd37e6235a7d81a679362a2446f468c83387cfef6 is: REMOVED");
+}
+
+function test_blockchain_moving_is_not_allowed_due_to_pending_blockchain_action_proposal() {
+    // setup
+    setup_module();
+    // adding system provider bob
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, rell.test.pubkeys.bob, true)
+    ).sign(initial_provider).run();
+    // propose blockchain
+    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    rell.test.tx().op(
+        create_container(initial_provider.pub, "c1", clusters.system, 0, [initial_provider.pub, rell.test.pubkeys.bob]),
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
+    ).sign(initial_provider).run();
+    bob_votes();
+    val foo_chain = blockchain @ { "foo_chain" };
+
+    // proposing blockchain action
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, foo_chain.rid, blockchain_action.pause)
+    ).sign(initial_provider).run();
+    // asserting that there is a pending proposal for the blockchain
+    val pba = pending_blockchain_action @? { foo_chain };
+    assert_not_null(pba);
+    assert_equals(pba.proposal.state, proposal_state.PENDING);
+
+    // asserting that blockchain_moving is not allowed due to the pending blockchain action proposal
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c2")
+    ).sign(initial_provider).run_must_fail(
+        "Blockchain %s cannot be moved due to a pending proposal %s related to it"
+        .format(foo_chain.rid, pba.proposal)
+    );
 }
