@@ -125,3 +125,16 @@ function test_propose_providers_duplication() {
     ).sign(system_provider).run();
     assert_true(exists(provider @? { keys3[0].pubkey, .system == true, .active == false }));
 }
+
+function test_propose_providers_with_invalid_pubkey() {
+    setup_module();
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, system_provider.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, system_provider.pub, true)
+    ).sign(initial_provider).run();
+
+    val keys = [provider_info(x"03"), provider_info(provider1.pub)];
+    rell.test.tx().op(
+        propose_providers(initial_provider.pub, keys, provider_tier.NODE_PROVIDER, true, false)
+    ).sign(initial_provider).run_must_fail();
+}
