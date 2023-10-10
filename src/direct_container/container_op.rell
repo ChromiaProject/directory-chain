@@ -1,29 +1,31 @@
 // consensus_threshold: majority (-1), super majority (0) or custom (1, ...)
 operation create_container(me: pubkey, name, cluster_name: text, consensus_threshold: integer, deployers: list<pubkey>) {
-    create_container_with_units_impl(me, name, cluster_name, consensus_threshold, deployers, standard_container_defaults.container_units, standard_container_defaults.max_blockchains);
+    create_container_with_units_impl(me, name, cluster_name, consensus_threshold, deployers, empty_container_resource_limits());
 }
 
 // consensus_threshold: majority (-1), super majority (0) or custom (1, ...)
+// @Deprecated, use create_container_with_container_units()
 operation create_container_with_units(me: pubkey, name, cluster_name: text, consensus_threshold: integer, deployers: list<pubkey>, container_units: integer) {
-    create_container_with_units_impl(me, name, cluster_name, consensus_threshold, deployers, container_units, standard_container_defaults.max_blockchains);
+    create_container_with_units_impl(me, name, cluster_name, consensus_threshold, deployers, [container_resource_limit_type.container_units : container_units]);
 }
 
-operation create_container_with_units_and_max_blockchains(me: pubkey, name, cluster_name: text, consensus_threshold: integer, deployers: list<pubkey>, container_units: integer, max_blockchains: integer) {
-    create_container_with_units_impl(me, name, cluster_name, consensus_threshold, deployers, container_units, max_blockchains);
+operation create_container_with_container_units(me: pubkey, name, cluster_name: text, consensus_threshold: integer, deployers: list<pubkey>, resource_limits: map<container_resource_limit_type, integer>) {
+    create_container_with_units_impl(me, name, cluster_name, consensus_threshold, deployers, resource_limits);
 }
 
 // consensus_threshold: majority (-1), super majority (0) or custom (1, ...)
 operation create_container_from(me: pubkey, name, cluster_name: text, consensus_threshold: integer, voter_set_name: text) {
-    create_container_from_with_units_impl(me, name, cluster_name, consensus_threshold, voter_set_name, standard_container_defaults.container_units, standard_container_defaults.max_blockchains);
+    create_container_from_with_units_impl(me, name, cluster_name, consensus_threshold, voter_set_name, empty_container_resource_limits());
 }
 
 // consensus_threshold: majority (-1), super majority (0) or custom (1, ...)
+// @Deprecated, use create_container_from_with_container_units()
 operation create_container_from_with_units(me: pubkey, name, cluster_name: text, consensus_threshold: integer, voter_set_name: text, container_units: integer) {
-    create_container_from_with_units_impl(me, name, cluster_name, consensus_threshold, voter_set_name, container_units, standard_container_defaults.max_blockchains);
+    create_container_from_with_units_impl(me, name, cluster_name, consensus_threshold, voter_set_name, [container_resource_limit_type.container_units : container_units]);
 }
 
-operation create_container_from_with_units_and_max_blockchains(me: pubkey, name, cluster_name: text, consensus_threshold: integer, voter_set_name: text, container_units: integer, max_blockchains: integer) {
-    create_container_from_with_units_impl(me, name, cluster_name, consensus_threshold, voter_set_name, container_units, max_blockchains);
+operation create_container_from_with_container_units(me: pubkey, name, cluster_name: text, consensus_threshold: integer, voter_set_name: text, resource_limits: map<container_resource_limit_type, integer>) {
+    create_container_from_with_units_impl(me, name, cluster_name, consensus_threshold, voter_set_name, resource_limits);
 }
 
 operation add_container_deployer(me: pubkey, container_name: text, deployer_pubkey: pubkey) {
@@ -42,22 +44,29 @@ operation remove_container_deployer(me: pubkey, container_name: text, deployer_p
     delete voter_set_member @? { container.deployer, deployer };
 }
 
-function create_container_with_units_impl(me: pubkey, name, cluster_name: text, consensus_threshold: integer, deployers: list<pubkey>, container_units: integer, max_blockchains: integer) {
+function create_container_with_units_impl(me: pubkey, name, cluster_name: text, consensus_threshold: integer, deployers: list<pubkey>, resource_limits: map<container_resource_limit_type, integer>) {
     val provider = require_is_provider_with_rate_limit(me);
     val cluster = require_cluster(cluster_name);
     require_cluster_governor(cluster, provider);
     require_provider_quota(provider, provider_quota_type.max_containers);
+    val (container_units, max_blockchains) = get_resource_limits_or_defaults(resource_limits);
     require_cluster_quotas(cluster, container_units);
     create_container_impl(provider, name, cluster, consensus_threshold, deployers, container_units, max_blockchains);
 }
 
-function create_container_from_with_units_impl(me: pubkey, name, cluster_name: text, consensus_threshold: integer, voter_set_name: text, container_units: integer, max_blockchains: integer) {
+function create_container_from_with_units_impl(me: pubkey, name, cluster_name: text, consensus_threshold: integer, voter_set_name: text, resource_limits: map<container_resource_limit_type, integer>) {
     val provider = require_is_provider_with_rate_limit(me);
     val cluster = require_cluster(cluster_name);
     require_cluster_governor(cluster, provider);
     require_provider_quota(provider, provider_quota_type.max_containers);
+    val (container_units, max_blockchains) = get_resource_limits_or_defaults(resource_limits);
     require_cluster_quotas(cluster, container_units);
     val vs = require_voter_set(voter_set_name);
     val deployers = voter_set_member @* { vs } (.provider.pubkey);
     create_container_impl(provider, name, cluster, consensus_threshold, deployers, container_units, max_blockchains);
 }
+
+function get_resource_limits_or_defaults(resource_limits: map<container_resource_limit_type, integer>) = (
+    resource_limits.get_or_default(container_resource_limit_type.container_units, standard_container_defaults.container_units),
+    resource_limits.get_or_default(container_resource_limit_type.max_blockchains, standard_container_defaults.max_blockchains)
+);
