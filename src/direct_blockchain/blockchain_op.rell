@@ -1,0 +1,40 @@
+// Blockchain Moving
+
+function blockchain_move_start(blockchain, destination: container) {
+    val dst_nodes = cluster_node @* { destination.cluster } (.node);
+    for (node in dst_nodes) {
+        create blockchain_replica_node(blockchain, node);
+    }
+    create blockchain_move_state(blockchain, destination);
+}
+
+function blockchain_move_finish(blockchain, destination: container, finish_at_height: integer) {
+    val bc_move_state = require(blockchain_move_state @? { blockchain }, "Blockchain %s is not being moved".format(blockchain.rid));
+
+    // keep src cluster/container nodes as replicas
+    val src_cluster_nodes = (cb: container_blockchain, cn: cluster_node) @* {
+        cb.blockchain == blockchain,
+        cb.container.cluster == cn.cluster
+    } (cn.node);
+    for (node in src_cluster_nodes) {
+        create blockchain_replica_node(blockchain, node);
+    }
+    // remove bc from container
+    delete container_blockchain @* { blockchain };
+
+    // add bc to the dst container
+    create container_blockchain(destination, blockchain);
+    // remove dst cluster/container nodes from bc replicas
+    val dst_nodes = cluster_node @* { destination.cluster } (@omit @sort .node.pubkey, .node);
+    for (node in dst_nodes) {
+        delete blockchain_replica_node @* { blockchain, node };
+    }
+    // add dst nodes as signers
+    // FYI: PCU-based update (i.e. update_configuration_signers_regular()) can't not be used here.
+    val encoded_dst_nodes = (dst_nodes @* {} ( .pubkey )).to_gtv().to_bytes();
+    create blockchain_configuration_signers(blockchain, finish_at_height, encoded_dst_nodes);
+
+    bc_move_state.finish_at_height = finish_at_height;
+    bc_move_state.remove_on_nodes = (src_cluster_nodes @* {} (.pubkey)).to_gtv().to_bytes();
+}
+
