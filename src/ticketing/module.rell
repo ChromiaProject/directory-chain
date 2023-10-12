@@ -20,20 +20,8 @@ operation init_ticketing(my_pubkey: pubkey, ticket_chain_config: byte_array) {
     // do not write new configuration when size is 0 since it's impossible to recover from that
     require(nodes.size() > 0, "System cluster must have at least one node");
 
-    val ticket_chain_config_map = map<text,gtv>.from_gtv(gtv.from_bytes(ticket_chain_config));
-    ticket_chain_config_map["icmf"] = [
-        "receiver": [
-            "local": [
-                [
-                    "bc-rid": chain_context.blockchain_rid.to_gtv(),
-                    "topic": "L_ticket_result".to_gtv()
-                ].to_gtv()
-            ].to_gtv()
-        ].to_gtv()
-    ].to_gtv();
-
     log("Adding ticket chain to system container");
-    val ticket_blockchain = add_blockchain(ticket_chain_config_map.to_gtv().to_bytes(), nodes, ticket_chain_name, system_container(), true);
+    val ticket_blockchain = add_blockchain(ticket_chain_config, nodes, ticket_chain_name, system_container(), true);
     update ticket_chain(rid = ticket_blockchain.rid);
 }
 

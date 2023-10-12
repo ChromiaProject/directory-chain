@@ -24,14 +24,6 @@ function test_init_ticketing() {
     assert_equals(bc.rid, ticket_chain.rid);
     assert_not_null(container_blockchain @? { bc, .container.cluster.name == clusters.system });
 
-    val ticket_chain_config = blockchain_configuration @ { bc } ( .data );
-    val ticket_chain_config_map = map<text,gtv>.from_gtv(gtv.from_bytes(ticket_chain_config));
-    val icmf_config = map<text,gtv>.from_gtv(ticket_chain_config_map["icmf"]);
-    val icmf_receiver = map<text,gtv>.from_gtv(icmf_config["receiver"]);
-    val icmf_local = list<gtv>.from_gtv(icmf_receiver["local"]);
-    val configured_chain0_brid = map<text,gtv>.from_gtv(icmf_local[0])["bc-rid"];
-    assert_equals(configured_chain0_brid, chain_context.blockchain_rid.to_gtv());
-
     conf["nonce"] = "whatever".to_gtv();
     rell.test.tx().op(
         init_ticketing(initial_provider.pub, conf.to_gtv().to_bytes())
