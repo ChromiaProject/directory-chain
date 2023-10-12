@@ -1,0 +1,25 @@
+module;
+
+import common.*;
+import proposal.*;
+import proposal_blockchain.*;
+import model.*;
+
+entity remove_moved_blockchain_on_original_node {
+    key blockchain, node;
+}
+
+@extend(on_configuration_updated)
+function try_to_finalize_blockchain_move(message: configuration_updated) {
+    val bc_move_state = blockchain_move_state @? { .blockchain.rid == message.blockchain_rid, .finish_at_height == message.height };
+    if (exists(bc_move_state)) {
+        val src_nodes = list<pubkey>.from_gtv(gtv.from_bytes(bc_move_state.remove_on_nodes));
+        for (pk in src_nodes) {
+            val node = require_node(pk);
+            log("blockchain_replica_node removed: %s".format(pk));
+            delete blockchain_replica_node @? { bc_move_state.blockchain, node };
+            create remove_moved_blockchain_on_original_node(bc_move_state.blockchain, node);
+        }
+        log("Blockchain moving was finished at height %s".format(message.height));
+    }
+}

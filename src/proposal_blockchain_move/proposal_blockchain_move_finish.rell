@@ -1,0 +1,71 @@
+entity pending_blockchain_move_finish {
+    key proposal;
+    blockchain;
+    destination: container;
+    finish_at_height: integer;
+}
+
+operation propose_blockchain_move_finish(my_pubkey: pubkey, blockchain_rid: byte_array, finish_at_height: integer, description: text = "") {
+    val me = require_is_provider_with_rate_limit(my_pubkey);
+    val blockchain = require_blockchain(blockchain_rid);
+    val bc_move_state = require(blockchain_move_state @? { blockchain }, "Blockchain %s is not being moved".format(blockchain.rid));
+
+    val prop = create proposal(op_context.last_block_time, proposal_type.blockchain_move_finish, me, bc_move_state.destination.deployer, description); // TODO: POS-961: src + dst?
+    create pending_blockchain_move_finish(prop, blockchain, bc_move_state.destination, finish_at_height);
+    internal_vote(me, prop, true);
+}
+
+query get_blockchain_move_finish_proposal(rowid?):
+(blockchain_rid: byte_array, blockchain_name: text, cluster: text, container: text, finish_at_height: integer)? {
+    val proposal = get_latest_proposal(rowid, proposal_type.blockchain_import);
+    if (proposal == null) return null;
+    return pending_blockchain_move_finish @ { proposal } (
+        blockchain_rid = .blockchain.rid,
+        blockchain_name = .blockchain.name,
+        cluster = .destination.cluster.name,
+        container = .destination.name,
+        finish_at_height = .finish_at_height
+    );
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.blockchain_move_finish.name: apply_blockchain_move_finish(*)];
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.blockchain_move_finish.name: delete_pending_blockchain_move_finish(*)];
+
+function apply_blockchain_move_finish(proposal) {
+    val pbmf = pending_blockchain_move_finish @ { proposal };
+    blockchain_move_finish(pbmf.blockchain, pbmf.destination, pbmf.finish_at_height);
+}
+
+function blockchain_move_finish(blockchain, destination: container, finish_at_height: integer) {
+    val bc_move_state = require(blockchain_move_state @? { blockchain }, "Blockchain %s is not being moved".format(blockchain.rid));
+
+    // keep src cluster/container nodes as replicas
+    val src_cluster_nodes = (cb: container_blockchain, cn: cluster_node) @* {
+        cb.blockchain == blockchain,
+        cb.container.cluster == cn.cluster
+    } (cn.node);
+    for (node in src_cluster_nodes) {
+        create blockchain_replica_node(blockchain, node);
+    }
+    // remove bc from container
+    delete container_blockchain @* { blockchain };
+
+    // add bc to the dst container
+    create container_blockchain(destination, blockchain);
+    // remove dst cluster/container nodes from bc replicas
+    val dst_nodes = cluster_node @* { destination.cluster } (@omit @sort .node.pubkey, .node);
+    for (node in dst_nodes) {
+        delete blockchain_replica_node @* { blockchain, node };
+    }
+    // add dst nodes as signers
+    // FYI: PCU-based update (i.e. update_configuration_signers_regular()) can't not be used here.
+    val encoded_dst_nodes = (dst_nodes @* {} ( .pubkey )).to_gtv().to_bytes();
+    create blockchain_configuration_signers(blockchain, finish_at_height, encoded_dst_nodes);
+
+    bc_move_state.finish_at_height = finish_at_height;
+    bc_move_state.remove_on_nodes = (src_cluster_nodes @* {} (.pubkey)).to_gtv().to_bytes();
+}
+
+function delete_pending_blockchain_move_finish(proposal) {
+    delete pending_blockchain_move_finish @? { proposal };
+}

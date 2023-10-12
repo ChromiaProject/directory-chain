@@ -1,0 +1,77 @@
+entity pending_blockchain_move {
+    key proposal;
+    blockchain;
+    destination: container;
+}
+
+operation propose_blockchain_move(my_pubkey: pubkey, blockchain_rid: byte_array, destination_container: text, description: text = "") {
+    val me = require_is_provider_with_rate_limit(my_pubkey);
+    val blockchain = require(blockchain @? { blockchain_rid }, "Unknown blockchain " + blockchain_rid);
+    // require blockchain state
+    require(blockchain.state in [blockchain_state.RUNNING, blockchain_state.PAUSED],
+        "Only blockchains in RUNNING | PAUSED states can be moved; current state of blockchain %s is: %s".format(blockchain.rid, blockchain.state)
+    );
+
+    // require blockchain is not being moved right now
+    require(empty(blockchain_move_state @? { blockchain }), "Blockchain %s is being moved".format(blockchain.rid));
+
+    // require there no pending blockchain actions (pause, resume, remove)
+    val pba = pending_blockchain_action @? { blockchain };
+    require(empty(pba), "Blockchain %s cannot be moved due to a pending proposal %s related to it".format(blockchain.rid, pba?.proposal));
+
+    // src container
+    val src_container = container_blockchain @ { blockchain } .container;
+    require_container_deployer(src_container, me);
+
+    // dst container
+    val dst_container = require_container(destination_container);
+    require_container_deployer(dst_container, me);
+    require_container_is_not_full(dst_container);
+
+    // Moving blockchains between containers running on the same node is not allowed
+    val intersection = (cn1: cluster_node, cn2: cluster_node) @* {
+        cn1.node == cn2.node,
+        cn1.cluster == src_container.cluster,
+        cn2.cluster == dst_container.cluster
+    } (cn1.node.pubkey);
+    require(empty(intersection),
+        "Moving blockchains between containers running on the same node is not allowed. Nodes belongs to clusters %s and %s are: %s"
+        .format(src_container.cluster.name, dst_container.cluster.name, intersection)
+    );
+
+    val prop = create proposal(op_context.last_block_time, proposal_type.blockchain_move_start, me, dst_container.deployer, description); // TODO: POS-961: src + dst?
+    create pending_blockchain_move(prop, blockchain, dst_container);
+    internal_vote(me, prop, true);
+}
+
+query get_blockchain_move_proposal(rowid?):
+(blockchain_rid: byte_array, blockchain_name: text, container: text, cluster: text)? {
+    val proposal = get_latest_proposal(rowid, proposal_type.blockchain_import);
+    if (proposal == null) return null;
+    return pending_blockchain_move @ { proposal } (
+        blockchain_rid = .blockchain.rid,
+        blockchain_name = .blockchain.name,
+        container = .destination.name,
+        cluster = .destination.cluster.name
+    );
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.blockchain_move_start.name: apply_blockchain_move(*)];
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.blockchain_move_start.name: delete_pending_blockchain_move(*)];
+
+function apply_blockchain_move(proposal) {
+    val pbm = pending_blockchain_move @ { proposal };
+    blockchain_move_start(pbm.blockchain, pbm.destination);
+}
+
+function blockchain_move_start(blockchain, destination: container) {
+    val dst_nodes = cluster_node @* { destination.cluster } (.node);
+    for (node in dst_nodes) {
+        create blockchain_replica_node(blockchain, node);
+    }
+    create blockchain_move_state(blockchain, destination);
+}
+
+function delete_pending_blockchain_move(proposal) {
+    delete pending_blockchain_move @? { proposal };
+}
