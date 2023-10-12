@@ -2,7 +2,7 @@
     Returns NM API Version
     NM API Version: 1
 */
-query nm_api_version() = 9;
+query nm_api_version() = 10;
 
 /*
     Returns version of peerlist
@@ -258,4 +258,15 @@ query nm_get_blockchain_signers_in_latest_configuration(blockchain_rid: byte_arr
     val bc = require_blockchain(blockchain_rid, false, true);
     val signers_bytes = blockchain_configuration_signers @ { bc } (@omit @sort_desc .height, .signers) limit 1;
     return list<byte_array>.from_gtv(gtv.from_bytes(signers_bytes));
+}
+
+/*
+    Finds the next height blockchains were removed at and returns found blockchain RIDs and heights,
+    or returns an empty list if there are no blockchains removed after `height`
+    NM API Version 10
+*/
+query nm_find_next_removed_blockchains(height: integer): list<removed_blockchain_info> {
+    val next_height = removed_blockchain @? { .height > height } ( .height );
+    return if (empty(next_height)) []
+    else removed_blockchain @* { next_height } ( removed_blockchain_info(.blockchain.rid, .height) );
 }
