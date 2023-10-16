@@ -49,11 +49,13 @@
 
     create blockchain_configuration(bc, message.height, pending_base_config);
 
-    val bc_signers = blockchain_configuration_signers @? { bc, message.height };
-    if (bc_signers == null) {
-        create blockchain_configuration_signers(bc, message.height, pending_signers);
-    } else {
-        bc_signers.signers = pending_signers;
+    val current_signer_config = blockchain_configuration_signers @ { bc } (@omit @sort_desc .height, $) limit 1;
+    if (current_signer_config.signers != pending_signers) {
+        if (current_signer_config.height != message.height) {
+            create blockchain_configuration_signers(bc, message.height, pending_signers);
+        } else {
+            current_signer_config.signers = pending_signers;
+        }
     }
 
     add_dependencies(pending_base_config, bc.rid, message.height);
