@@ -59,6 +59,8 @@ function test_precise_configuration_update_config_happy() {
     );
     assert_true(nm_get_pending_blockchain_configuration(bc_rid, 5).empty());
     assert_true(is_pending_blockchain_configuration_applied(bc_rid, 5, pending_config1_hash));
+    // Assert no redundant signer config entity is created
+    assert_null(blockchain_configuration_signers @? { .height == 5 });
 }
 
 function test_precise_configuration_update_config_happy_unique_config() {
@@ -133,6 +135,8 @@ function test_precise_configuration_update_signers_happy() {
     );
     assert_true(nm_get_pending_blockchain_configuration(bc_rid, 5).empty());
     assert_true(is_pending_blockchain_configuration_applied(bc_rid, 5, pending_config1_hash));
+    // Assert signer config entity is created
+    assert_equals(blockchain_configuration_signers @ { .height == 5 }.signers, full_config1["signers"].to_bytes());
 }
 
 function test_precise_configuration_update_config_multiple_pending() {

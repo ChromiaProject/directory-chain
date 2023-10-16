@@ -94,3 +94,14 @@ query get_blockchain_info_list(include_inactive: boolean): list<blockchain_info>
 query get_blockchain_cluster(blockchain_rid: byte_array) = cm_get_blockchain_cluster(blockchain_rid);
 
 query get_blockchain_api_urls(blockchain_rid: byte_array) = cm_get_blockchain_api_urls(blockchain_rid);
+
+struct blockchain_signers_info {
+    height: integer;
+    signers: list<pubkey>;
+}
+
+query get_blockchain_signer_updates(blockchain_rid: byte_array, from_height: integer): list<blockchain_signers_info> {
+    val blockchain = require_blockchain(blockchain_rid, false, true);
+    return blockchain_configuration_signers @* { blockchain, .height >= from_height }
+        (@omit @sort .height, blockchain_signers_info(.height, list<pubkey>.from_gtv(gtv.from_bytes(.signers))));
+}
