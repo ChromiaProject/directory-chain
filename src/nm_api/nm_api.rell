@@ -196,7 +196,7 @@ query nm_get_blockchain_dependencies(blockchain, height: integer): list<(byte_ar
 */
 query nm_get_pending_blockchain_configuration(blockchain_rid: byte_array, height: integer):
         list<(base_config: byte_array, signers: list<pubkey>, minimum_height: integer)> {
-    val bc = require_blockchain(blockchain_rid);
+    val bc = require_blockchain(blockchain_rid, include_removed = true);
     return pending_blockchain_configuration @* { bc, .minimum_height <= height } (
         base_config = .base_config,
         signers = list<pubkey>.from_gtv(gtv.from_bytes(.signers)),
@@ -223,7 +223,7 @@ query nm_get_pending_blockchain_configuration_by_hash(blockchain_rid: byte_array
     NM API Version: 5
 */
 query nm_get_faulty_blockchain_configuration(blockchain_rid: byte_array, height: integer): byte_array? {
-    val bc = require_blockchain(blockchain_rid);
+    val bc = require_blockchain(blockchain_rid, include_removed = true);
     return faulty_blockchain_configuration @? { bc, .reported_at_height == height }.config_hash;
 }
 
