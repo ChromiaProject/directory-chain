@@ -370,10 +370,10 @@ function test_nm_find_next_removed_blockchains() {
     ).sign(initial_provider).run();
 
     // Asserts 0
-    val removed0 = removed_blockchain @* {} (removed_blockchain_info(.blockchain.rid, .height));
-    assert_equals(removed0, [removed_blockchain_info(foo, 2)]); // 2nd block
-    assert_equals(nm_find_next_removed_blockchains(0), [removed_blockchain_info(foo, 2)]);
-    assert_true(nm_find_next_removed_blockchains(2).empty());
+    val removed0 = inactive_blockchain @* {} (inactive_blockchain_info(.blockchain.rid, .blockchain.state, .height));
+    assert_equals(removed0, [inactive_blockchain_info(foo, blockchain_state.REMOVED, 2)]); // 2nd block
+    assert_equals(nm_find_next_inactive_blockchains(0), [inactive_blockchain_info(foo, blockchain_state.REMOVED, 2)]);
+    assert_true(nm_find_next_inactive_blockchains(2).empty());
 
     // Action 1: removing `bar` and `foo_bar` chains
     rell.test.tx().op(
@@ -382,9 +382,13 @@ function test_nm_find_next_removed_blockchains() {
     ).sign(initial_provider).run();
 
     // Asserts 1
-    val removed1 = removed_blockchain @* {} (removed_blockchain_info(.blockchain.rid, .height));
-    assert_equals(removed1, [removed_blockchain_info(foo, 2), removed_blockchain_info(bar, 3), removed_blockchain_info(foo_bar, 3)]);
-    assert_equals(nm_find_next_removed_blockchains(0), [removed_blockchain_info(foo, 2)]);
-    assert_equals(nm_find_next_removed_blockchains(2), [removed_blockchain_info(bar, 3), removed_blockchain_info(foo_bar, 3)]);
-    assert_true(nm_find_next_removed_blockchains(3).empty());
+    val removed1 = inactive_blockchain @* {} (inactive_blockchain_info(.blockchain.rid, .blockchain.state, .height));
+    assert_equals(removed1, [
+        inactive_blockchain_info(foo, blockchain_state.REMOVED, 2),
+        inactive_blockchain_info(bar, blockchain_state.REMOVED, 3),
+        inactive_blockchain_info(foo_bar, blockchain_state.REMOVED, 3)
+    ]);
+    assert_equals(nm_find_next_inactive_blockchains(0), [inactive_blockchain_info(foo, blockchain_state.REMOVED, 2)]);
+    assert_equals(nm_find_next_inactive_blockchains(2), [inactive_blockchain_info(bar, blockchain_state.REMOVED, 3), inactive_blockchain_info(foo_bar, blockchain_state.REMOVED, 3)]);
+    assert_true(nm_find_next_inactive_blockchains(3).empty());
 }

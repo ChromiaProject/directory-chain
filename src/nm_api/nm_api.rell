@@ -2,7 +2,7 @@
     Returns NM API Version
     NM API Version: 1
 */
-query nm_api_version() = 10;
+query nm_api_version() = 11;
 
 /*
     Returns version of peerlist
@@ -262,12 +262,24 @@ query nm_get_blockchain_signers_in_latest_configuration(blockchain_rid: byte_arr
 }
 
 /*
-    Finds the next height blockchains were removed at and returns found blockchain RIDs and heights,
-    or returns an empty list if there are no blockchains removed after `height`
+    Finds the next height blockchains were removed at and returns found blockchain RIDs and heights.
+    Returns an empty list if there are no blockchains removed after `height`.
     NM API Version 10
+    @Deprecated in NM API Version 11
 */
 query nm_find_next_removed_blockchains(height: integer): list<removed_blockchain_info> {
     val next_height = removed_blockchain @? { .height > height } (@sort .height) limit 1;
     return if (empty(next_height)) []
     else removed_blockchain @* { next_height } ( removed_blockchain_info(.blockchain.rid, .height) );
+}
+
+/*
+    Finds the next height blockchains were deactivated (removed, archived) at and returns found blockchain RIDs and heights.
+    Returns an empty list if there are no blockchains deactivated after `height`.
+    NM API Version 11
+*/
+query nm_find_next_inactive_blockchains(height: integer): list<inactive_blockchain_info> {
+    val next_height = inactive_blockchain @? { .height > height } (@sort .height) limit 1;
+    return if (empty(next_height)) []
+    else inactive_blockchain @* { next_height } ( inactive_blockchain_info(.blockchain.rid, .blockchain.state, .height) );
 }
