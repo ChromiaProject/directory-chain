@@ -2,6 +2,7 @@ entity pending_cluster_limits {
     key proposal;
     key cluster;
     cluster_units: integer;
+    extra_storage: integer;
 }
 
 @extend(apply_voting_result_handlers) function() = [proposal_type.cluster_limits.name: apply_cluster_limits(*)];
@@ -10,6 +11,7 @@ function apply_cluster_limits(proposal) {
     val pps = pending_cluster_limits @? { proposal };
     if (pps == null) return;
     pps.cluster.cluster_units = pps.cluster_units;
+    pps.cluster.extra_storage = pps.extra_storage;
 }
 
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.cluster_limits.name: delete_pending_cluster_limits(*)];
@@ -19,7 +21,7 @@ function delete_pending_cluster_limits(proposal) {
 }
 
 // The operation is mostly needed to make rell-maven-plugin generate code for enum `cluster_resource_limit_type`
-operation propose_cluster_limits(my_pubkey: pubkey, cluster_name: text, cluster_units: integer? = null, description: text = "") {
+operation propose_cluster_limits(my_pubkey: pubkey, cluster_name: text, cluster_units: integer? = null, extra_storage: integer? = null, description: text = "") {
     val me = require_provider(my_pubkey);
     // check that provider authority and that it is a cluster governor
     require_provider_auth_with_rate_limit(me);
@@ -27,11 +29,14 @@ operation propose_cluster_limits(my_pubkey: pubkey, cluster_name: text, cluster_
     require_cluster_governor(cluster, me);
     val new_cluster_units = if (cluster_units != null) cluster_units else cluster.cluster_units;
     _require_cluster_units(cluster, new_cluster_units);
+    val new_extra_storage = if (extra_storage != null) extra_storage else cluster.extra_storage;
+    _require_extra_storage(cluster, new_extra_storage);
     val prop = create proposal(op_context.last_block_time, proposal_type.cluster_limits, me, cluster.governance, description);
     create pending_cluster_limits(
         prop,
         cluster,
-        cluster_units = new_cluster_units
+        cluster_units = new_cluster_units,
+        extra_storage = new_extra_storage
     );
     internal_vote(me, prop, true);
 }
@@ -42,7 +47,8 @@ query get_cluster_limits_proposal(rowid) {
     val pcl = pending_cluster_limits @ { proposal };
     return (
         cluster = pcl.cluster.name,
-        cluster_units = pcl.cluster_units
+        cluster_units = pcl.cluster_units,
+        extra_storage = pcl.extra_storage
     );
 }
 
@@ -66,5 +72,28 @@ function _require_new_cluster_units_for_current_nodes(cluster, new_cluster_units
         }
         require(empty(too_small_nodes),
             "Can't propose cluster limits since nodes %s does not have room for another %d cluster_units".format(too_small_nodes.to_text(), needed_cluster_units));
+    }
+}
+
+function _require_extra_storage(cluster, new_extra_storage: integer) {
+    require(new_extra_storage >= 0, "Extra storage must not be negative");
+    val minimum_extra_storage = get_used_extra_storage_for_cluster(cluster);
+    require(new_extra_storage >= minimum_extra_storage,
+        "Can't propose extra storage since extra_storage is too low for current usage of containers. Minimum extra_storage is %d".format(minimum_extra_storage));
+    _require_new_extra_storage_for_current_nodes(cluster, new_extra_storage);
+}
+
+function _require_new_extra_storage_for_current_nodes(cluster, new_extra_storage: integer) {
+    val needed_extra_storage = new_extra_storage - cluster.extra_storage;
+    if (needed_extra_storage > 0) {
+        val nodes = set<node>();
+        nodes.add_all(cluster_node @* { cluster }.node);
+        nodes.add_all(cluster_replica_node @* { cluster }.node);
+        val too_small_nodes = set<pubkey>();
+        for (node in nodes) {
+            if (get_available_extra_storage_for_node(node) < needed_extra_storage) too_small_nodes.add(node.pubkey);
+        }
+        require(empty(too_small_nodes),
+            "Can't propose extra storage since nodes %s does not have room for another %d MiB".format(too_small_nodes.to_text(), needed_extra_storage));
     }
 }

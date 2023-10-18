@@ -1,10 +1,8 @@
-function create_cluster_impl(
-        me: provider, name, governor: voter_set, providers: list<pubkey>,
-        cluster_units: integer = standard_cluster_defaults.cluster_units
-    ) {
+function create_cluster_impl(me: provider, name, governor: voter_set, providers: list<pubkey>, cluster_quota_data) {
     require(empty(cluster @* { name }), "Cluster with name %s already exists".format(name));
-    require(cluster_units > 0, "Cluster must have at least 1 cluster unit");
-    val c = create cluster(name, governor, false, cluster_units);
+    require(cluster_quota_data.cluster_units > 0, "Cluster must have at least 1 cluster unit");
+    require(cluster_quota_data.extra_storage >= 0, "Extra storage must not be negative");
+    val c = create cluster(name, governor, false, cluster_units = cluster_quota_data.cluster_units, extra_storage = cluster_quota_data.extra_storage);
 
     for (p_key in providers) {
         val provider = require_provider(p_key);
@@ -23,11 +21,29 @@ function create_cluster_impl(
     return c;
 }
 
-function require_cluster_quotas(cluster, wanted_container_units: integer) {
-    if (wanted_container_units < 1) return;
-    val available_container_units = get_available_container_units(cluster);
-    require(wanted_container_units <= available_container_units,
-        "Can not propose container, cluster %s has %d available container units but wanted %d".format(cluster.name, available_container_units, wanted_container_units));
+function require_cluster_quotas(cluster, wanted_container_units: integer, wanted_extra_storage: integer) {
+    require_cluster_container_units(cluster, wanted_container_units);
+    require_cluster_extra_storage(cluster, wanted_extra_storage);
+}
+
+function require_cluster_container_units(cluster, wanted_container_units: integer) {
+    if (wanted_container_units > 0) {
+        val available_container_units = get_available_container_units(cluster);
+        require(wanted_container_units <= available_container_units,
+            "Cluster %s has %d available container units but wanted %d".format(cluster.name, available_container_units, wanted_container_units));
+    }
+}
+
+function require_cluster_extra_storage(cluster, wanted_extra_storage: integer) {
+    if (wanted_extra_storage > 0) {
+        val available_extra_storage = get_available_extra_storage(cluster);
+        require(wanted_extra_storage <= available_extra_storage,
+            "Cluster %s has %d MiB available extra storage but wanted %d MiB".format(cluster.name, available_extra_storage, wanted_extra_storage));
+    }
+}
+
+function get_available_extra_storage(cluster): integer {
+    return cluster.extra_storage - get_used_extra_storage_for_cluster(cluster);
 }
 
 function get_available_container_units(cluster): integer {
@@ -52,8 +68,20 @@ function get_minimum_cluster_units_for_current_container_units(cluster): integer
     return currently_used_container_units / standard_cluster_unit.container_units + 1;
 }
 
+function get_minimum_extra_storage_for_clusters(clusters: list<cluster>): integer {
+    return clusters @ {} (@sum .extra_storage);
+}
+
+function get_used_extra_storage_for_cluster(cluster): integer {
+    return container_resource_limit @ {
+        .container.cluster == cluster,
+        container_resource_limit_type.extra_storage
+    } (@sum .value);
+}
+
 function _add_replica_node_to_cluster_internal(cluster, node) {
     require_cluster_units_for_node(cluster, node);
+    require_extra_storage_for_node(cluster, node);
     create cluster_replica_node(cluster, node);
 }
 
@@ -90,6 +118,7 @@ function add_node_to_cluster_internal(provider, node, cluster) {
         require(empty(provider_cluster_nodes), "A provider can only provide one node to each cluster");
         _remove_replica_node_from_cluster_internal(node);
         require_cluster_units_for_node(cluster, node);
+        require_extra_storage_for_node(cluster, node);
         create cluster_node(cluster, node);
         update_configuration_signers(cluster, null);
         // check if cluster now is operational, if so update the flag:

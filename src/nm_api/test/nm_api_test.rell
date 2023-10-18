@@ -240,13 +240,16 @@ function toBrids(bc_info_list: set<blockchain_info>): set<byte_array> = set(bc_i
 function test_nm_get_container_limits() {
     setup_module();
 
+    val cluster1_name = "cluster1";
     val container1_name = "container1";
 
     rell.test.tx().op(
-        propose_container(initial_provider.pub, clusters.system, container1_name, voter_sets.system_p)
+        create_cluster_with_cluster_quota_data(initial_provider.pub, cluster1_name, voter_sets.system_p, [], cluster_quota_data(extra_storage = 2)),
+        propose_container(initial_provider.pub, cluster1_name, container1_name, voter_sets.system_p)
     ).sign(initial_provider).run();
 
     val limits = nm_get_container_limits(container1_name);
+    assert_equals(limits["container_units"], 1);
     assert_equals(limits["max_blockchains"], 10);
     assert_equals(limits["storage"], 16384);
     assert_equals(limits["cpu"], 50);
@@ -257,13 +260,15 @@ function test_nm_get_container_limits() {
     val proposed_limits = map<container_resource_limit_type, integer>();
     proposed_limits[container_resource_limit_type.container_units] = 2;
     proposed_limits[container_resource_limit_type.max_blockchains] = 2;
+    proposed_limits[container_resource_limit_type.extra_storage] = 2;
     rell.test.tx().op(
         propose_container_limits(initial_provider.pub, container1_name, proposed_limits)
     ).sign(rell.test.keypairs.alice).run();
 
     val limits_after = nm_get_container_limits(container1_name);
+    assert_equals(limits_after["container_units"], 2);
     assert_equals(limits_after["max_blockchains"], 2);
-    assert_equals(limits_after["storage"], 32768);
+    assert_equals(limits_after["storage"], 32768 + 2);
     assert_equals(limits_after["cpu"], 100);
     assert_equals(limits_after["ram"], 4096);
     assert_equals(limits_after["io_read"], 50);

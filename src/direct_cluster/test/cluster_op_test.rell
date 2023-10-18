@@ -118,22 +118,22 @@ function test_request_cluster() {
     ).sign(initial_provider).run();
 
     rell.test.tx().op(
-        register_node(rell.test.pubkeys.bob, rell.test.pubkeys.eve, "localhost", 1, "http:")
+        register_node_with_node_data(rell.test.pubkeys.bob, register_node_data(rell.test.pubkeys.eve, host = "host", port = 1, api_url = "http:", cluster_units = 10, extra_storage = 9))
     ).sign(rell.test.keypairs.bob).run();
     rell.test.tx().op(
-        register_node(rell.test.pubkeys.trudy, rell.test.pubkeys.frank, "localhost", 2, "http:")
+        register_node_with_node_data(rell.test.pubkeys.trudy, register_node_data(rell.test.pubkeys.frank, host = "host", port = 2, api_url = "http:", cluster_units = 9, extra_storage = 10))
     ).sign(rell.test.keypairs.trudy).run();
     rell.test.tx().op(
-        register_node(rell.test.pubkeys.charlie, rell.test.pubkeys.grace, "localhost", 3, "http:")
+        register_node_with_node_data(rell.test.pubkeys.charlie, register_node_data(rell.test.pubkeys.grace, host = "host", port = 3, api_url = "http:", cluster_units = 9, extra_storage = 11))
     ).sign(rell.test.keypairs.charlie).run();
     rell.test.tx().op(
-        register_node(rell.test.pubkeys.dave, rell.test.pubkeys.heidi, "localhost", 4, "http:")
+        register_node_with_node_data(rell.test.pubkeys.dave, register_node_data(rell.test.pubkeys.heidi, host = "host", port = 4, api_url = "http:", cluster_units = 11, extra_storage = 9))
     ).sign(rell.test.keypairs.dave).run();
 
     assert_equals((node @* {}).size(), 5);
     rell.test.tx().op(
-        request_cluster(initial_provider.pub, "new_cluster", 4, true)
-    ).sign(initial_provider).run_must_fail();
+        request_cluster_with_cluster_quota_data(initial_provider.pub, "new_cluster", 4, true, cluster_quota_data(cluster_units = 5, extra_storage = 5))
+    ).sign(initial_provider).run_must_fail("Clusters can only be created when at least four nodes are available");
 
     make_node_system_managed(rell.test.keypairs.bob, rell.test.pubkeys.eve);
     make_node_system_managed(rell.test.keypairs.trudy, rell.test.pubkeys.frank);
@@ -141,14 +141,24 @@ function test_request_cluster() {
     make_node_system_managed(rell.test.keypairs.dave, rell.test.pubkeys.heidi);
     
     rell.test.tx().op(
-        request_cluster(initial_provider.pub, "new_cluster", 4, true)
+        request_cluster_with_cluster_quota_data(initial_provider.pub, "new_cluster", 4, true, cluster_quota_data(cluster_units = 5, extra_storage = 5))
     ).sign(initial_provider).run();
-
     assert_not_null(cluster @? { "new_cluster"});    
     
     rell.test.tx().op(
-        request_cluster(initial_provider.pub, "2nd_cluster", 4, true)
+        request_cluster_with_cluster_quota_data(initial_provider.pub, "2nd_cluster", 4, true, cluster_quota_data(cluster_units = 3, extra_storage = 3))
+    ).sign(initial_provider).run();
+    assert_not_null(cluster @? { "2nd_cluster"});    
+
+    rell.test.tx().op(
+        request_cluster_with_cluster_quota_data(initial_provider.pub, "too_many_units_cluster", 4, true, cluster_quota_data(cluster_units = 50, extra_storage = 1))
     ).sign(initial_provider).run_must_fail();
+    assert_null(cluster @? { "too_many_units_cluster"});    
+
+    rell.test.tx().op(
+        request_cluster_with_cluster_quota_data(initial_provider.pub, "too_much_storage_cluster", 4, true, cluster_quota_data(cluster_units = 1, extra_storage = 50))
+    ).sign(initial_provider).run_must_fail();
+    assert_null(cluster @? { "too_much_storage_cluster"});    
 }
 
 function make_node_system_managed(keypair: rell.test.keypair, node: pubkey) {

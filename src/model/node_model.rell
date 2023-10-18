@@ -1,4 +1,3 @@
-
 entity node {
     index provider;
     key pubkey;
@@ -9,6 +8,7 @@ entity node {
     mutable last_updated: timestamp;
     mutable cluster_units: integer = 1;
     mutable territory: text = ""; // ISO 3166-1 alpha-2 code or empty string for undefined
+    mutable extra_storage: integer = 0;
 }
 
 enum node_capability_type {
@@ -42,9 +42,41 @@ struct node_info {
     territory: text;
 }
 
+struct register_node_data {
+    pubkey;
+    host: text;
+    port: integer;
+    api_url: text;
+    clusters: list<text> = list<text>();
+    cluster_units: integer = 1;
+    territory: text = "";
+    extra_storage: integer = 0;
+}
+
+struct replace_node_data {
+    old_node_key: pubkey;
+    new_node_key: pubkey;
+    new_host: text? = null;
+    new_port: integer? = null;
+    new_api_url: text? = null;
+    new_cluster_units: integer?  = null;
+    new_territory: text? = null;
+    new_extra_storage: integer? = null;
+}
+
+struct update_node_data {
+    pubkey;
+    host: text? = null;
+    port: integer? = null;
+    api_url: text? = null;
+    cluster_units: integer? = null;
+    territory: text? = null;
+    extra_storage: integer? = null;
+}
+
 /**
-    Deprecated: is not relevant for multi-cluster environment
-*/
+ *     Deprecated: is not relevant for multi-cluster environment
+ */
 object node_list {
     mutable last_update: timestamp = 0;
 }

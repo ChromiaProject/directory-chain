@@ -5,6 +5,7 @@ entity pending_container {
     deployer: voter_set;
     container_units: integer;
     max_blockchains: integer;
+    extra_storage: integer;
     proposed_by: provider;
 }
 
@@ -13,13 +14,14 @@ entity pending_container {
 function apply_container(proposal) {
     val pps = pending_container @? { proposal };
     if (pps == null) return;
-    create_container_with_resource_limits(
+    create_container_with_limits(
         pps.proposed_by,
         pps.name,
         pps.cluster,
         pps.deployer,
         pps.container_units,
-        pps.max_blockchains
+        pps.max_blockchains,
+        pps.extra_storage
     );
 }
 
@@ -41,12 +43,13 @@ operation propose_container(my_pubkey: pubkey, cluster_name: text, name, deploye
 
     val container_units = standard_container_defaults.container_units;
     val max_blockchains = standard_container_defaults.max_blockchains;
+    val extra_storage = standard_container_defaults.extra_storage;
 
-    require_cluster_quotas(cluster, container_units);
+    require_cluster_quotas(cluster, container_units, extra_storage);
 
     val prop = create proposal(op_context.last_block_time, proposal_type.container, me, cluster.governance, description);
     create pending_container(
-        prop, name, cluster, deployer, container_units, max_blockchains, me
+        prop, name, cluster, deployer, container_units, max_blockchains, extra_storage, me
     );
     internal_vote(me, prop, true);
 }
@@ -58,7 +61,8 @@ query get_container_proposal(rowid) {
     return (
         container = pcwl.name,
         container_units = pcwl.container_units,
-        max_blockchains = pcwl.max_blockchains
+        max_blockchains = pcwl.max_blockchains,
+        extra_storage = pcwl.extra_storage
     );
 }
 
