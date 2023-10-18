@@ -1,0 +1,91 @@
+@test module;
+
+import ^^.operations.*;
+import ^^.test.setup.*;
+import direct_cluster.*;
+import direct_container.*;
+import proposal_provider.*;
+
+val clusterA_name = "clusterA";
+val clusterB_name = "clusterB";
+val containerA1_name = "containerA1";
+val containerA2_name = "containerA2";
+val containerB_name = "containerB";
+
+val nodeA_key = rell.test.keypairs.eve;
+val nodeB_key = rell.test.keypairs.frank;
+
+val alice = rell.test.keypairs.alice;
+val bob = rell.test.keypairs.bob;
+val trudy = rell.test.keypairs.trudy;
+
+function test_extra_storage_for_node() {
+    
+    setup_module(provider_quota_max_containers = 2);
+
+    rell.test.tx().op(
+        register_provider(alice.pub, bob.pub, provider_tier.NODE_PROVIDER),
+        register_provider(alice.pub, trudy.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(alice.pub, bob.pub, true),
+        propose_provider_is_system(alice.pub, trudy.pub, true)
+    ).sign(alice).run();
+
+    val aliceP = provider @ { rell.test.pubkeys.alice };
+    val bobP = provider @ { rell.test.pubkeys.bob };
+    val trudyP = provider @ { rell.test.pubkeys.trudy };
+
+    // Add clusters
+    rell.test.tx().op(
+        create_cluster_with_cluster_quota_data(aliceP.pubkey, clusterA_name, voter_sets.system_p, [aliceP.pubkey, bobP.pubkey], cluster_quota_data(cluster_units = 10, extra_storage = 10)),
+        create_cluster_with_cluster_quota_data(aliceP.pubkey, clusterB_name, voter_sets.system_p, [aliceP.pubkey, bobP.pubkey], cluster_quota_data(cluster_units = 10, extra_storage = 15))
+    ).sign(alice).run();
+    val clusterA = cluster @? { clusterA_name };
+    assert_not_null(clusterA);
+    val clusterB = cluster @? { clusterB_name };
+    assert_not_null(clusterB);
+
+    // Try to add container with too much extra storage should fail
+    assert_equals(get_available_extra_storage(clusterA), 10);
+    rell.test.tx().op(
+        create_container_from_with_resource_limits(aliceP.pubkey, containerA1_name, clusterA_name, 1, voter_sets.system_p, 
+            [container_resource_limit_type.container_units : 1, container_resource_limit_type.extra_storage : 50])
+    ).sign(alice).run_must_fail("Cluster clusterA has 10 MiB available extra storage but wanted 50 MiB");
+
+    // Add container A
+    rell.test.tx().op(
+        create_container_from_with_resource_limits(aliceP.pubkey, containerA1_name, clusterA_name, 1, voter_sets.system_p, 
+            [container_resource_limit_type.container_units : 1, container_resource_limit_type.extra_storage : 5])
+    ).sign(alice).run();
+
+    // Try to another add container with too much extra storage should fail
+    assert_equals(get_available_extra_storage(clusterA), 5);
+    rell.test.tx().op(
+        create_container_from_with_resource_limits(aliceP.pubkey, containerA2_name, clusterA_name, 1, voter_sets.system_p, 
+            [container_resource_limit_type.container_units : 1, container_resource_limit_type.extra_storage : 10])
+    ).sign(alice).run_must_fail("Cluster clusterA has 5 MiB available extra storage but wanted 10 MiB");
+
+    // Try to add node with too little extra storage should fail
+    rell.test.tx().op(
+        register_node_with_node_data(aliceP.pubkey, register_node_data(nodeA_key.pub, host = "host", port = 7777, api_url = "http://host/api_url", clusters = [clusterA_name], extra_storage = 5))
+    ).sign(alice).run_must_fail("Node needs a minimum of 10 MiB extra storage to fulfill cluster(s) extra storage requirements");
+
+    // Add node A
+    rell.test.tx().op(
+        register_node_with_node_data(aliceP.pubkey, register_node_data(nodeA_key.pub, host = "host", port = 7777, api_url = "http://host/api_url", clusters = [clusterA_name], cluster_units = 20, extra_storage = 20))
+    ).sign(alice).run();
+
+    // Update node A with too little extra storage should fail
+    rell.test.tx().op(
+        update_node_with_node_data(aliceP.pubkey, update_node_data(nodeA_key.pub, extra_storage = 5))
+    ).sign(alice).run_must_fail("Can not update extra storage to 5 MiB since the node needs at least 10 MiB to support current clusters");
+
+    // Replace node with too little extra storage should fail
+    rell.test.tx().op(
+        replace_node_with_node_data(aliceP.pubkey, replace_node_data(old_node_key = nodeA_key.pub, new_node_key = nodeB_key.pub, new_extra_storage = 5))
+    ).sign(alice).sign(nodeA_key).sign(nodeB_key).run_must_fail("Node must have at least 10 MiB extra storage");
+
+    // Replace node with minimum extra storage
+    rell.test.tx().op(
+        replace_node_with_node_data(aliceP.pubkey, replace_node_data(old_node_key = nodeA_key.pub, new_node_key = nodeB_key.pub, new_extra_storage = 10))
+    ).sign(alice).sign(nodeA_key).sign(nodeB_key).run();
+}

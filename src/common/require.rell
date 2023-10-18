@@ -4,6 +4,18 @@ function require_is_signer(pubkey) {
 
 function require_provider(pubkey) = require(provider @? { pubkey }, "Unknown provider " + pubkey);
 function require_cluster(name) = require(cluster @? { name }, "Cluster %s not found".format(name));
+function require_clusters(names: list<text>): list<cluster> {
+    val clusters = cluster @* { .name in names };
+    if (clusters.size() != names.size()) {
+        val missing_clusters = list<text>();
+        for (name in names) {
+            val cl = clusters @? { name };
+            if (cl == null) missing_clusters.add(name);
+        }    
+        require(missing_clusters.empty(), "Clusters %s not found".format(missing_clusters.to_text()));
+    }
+    return clusters;
+}
 function require_node(pubkey) = require(node @? { pubkey }, "Node not found: " + pubkey);
 function require_container(name) = require(container @? { name }, "Container %s not found".format(name));
 function require_voter_set(name) = require(voter_set @? { name }, "Voter set %s does not exist".format(name));

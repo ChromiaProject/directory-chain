@@ -2,15 +2,17 @@ function create_system_container(me: provider, name, cluster, voter_set): contai
     val c = create container(name, cluster, voter_set, me, system = true);
     create container_resource_limit(c, container_resource_limit_type.container_units, system_container_defaults.container_units);
     create container_resource_limit(c, container_resource_limit_type.max_blockchains, system_container_defaults.max_blockchains);
+    create container_resource_limit(c, container_resource_limit_type.extra_storage, system_container_defaults.extra_storage);
     return c;
 }
 
-function create_container_with_resource_limits(me: provider, name, cluster, voter_set, container_units: integer, max_blockchains: integer): container {
+function create_container_with_limits(me: provider, name, cluster, voter_set, container_units: integer, max_blockchains: integer, extra_storage: integer): container {
     require(container_units > 0, "Container must have at least 1 container unit");
-    require_cluster_quotas(cluster, container_units);
+    require_cluster_quotas(cluster, container_units, extra_storage);
     val c = create container(name, cluster, voter_set, me);
     create container_resource_limit(c, container_resource_limit_type.container_units, container_units);
     create container_resource_limit(c, container_resource_limit_type.max_blockchains, max_blockchains);
+    create container_resource_limit(c, container_resource_limit_type.extra_storage, extra_storage);
     return c;
 }
 
@@ -42,7 +44,7 @@ function require_container_available_for_removal(container) {
 
 @extendable function before_system_container_removal(cluster) {}
 
-function create_container_impl(me: provider, name, cluster, consensus_threshold: integer, deployers: list<pubkey>, container_units: integer, max_blockchains: integer): container {
+function create_container_impl(me: provider, name, cluster, consensus_threshold: integer, deployers: list<pubkey>, container_units: integer, max_blockchains: integer, extra_storage: integer): container {
     require(consensus_threshold >= -1 and consensus_threshold <= deployers.size(), "Invalid threshold");
 
     val vs_name = "container_" + name + "_deployer";
@@ -53,7 +55,7 @@ function create_container_impl(me: provider, name, cluster, consensus_threshold:
         create voter_set_member(vs, deployer);
     }
 
-    return create_container_with_resource_limits(me, name, cluster, vs, container_units, max_blockchains);
+    return create_container_with_limits(me, name, cluster, vs, container_units, max_blockchains, extra_storage);
 }
 
 function remove_container_and_voter_set(container) {
@@ -82,4 +84,8 @@ function require_container_is_not_full(container) {
         val container_dapps_count = container_blockchain @* { container } (@sum 1)[0];
         require(container_dapps_count < max_blockchains, "Can't add blockchain, container %s is full".format(container.name));
     }
+}
+
+function get_container_blockchain_count(container) {
+    return container_blockchain @* { container } (@sum 1)[0];
 }

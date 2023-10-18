@@ -40,7 +40,7 @@ operation remove_container_deployer(me: pubkey, container_name: text, deployer_p
     val provider = require_is_provider_with_rate_limit(me);
     val container = require_container(container_name);
     require_cluster_governor(container.cluster, provider);
-    val deployer = require_provider(deployer_pubkey); 
+    val deployer = require_provider(deployer_pubkey);
     delete voter_set_member @? { container.deployer, deployer };
 }
 
@@ -49,9 +49,9 @@ function create_container_with_resource_limits_impl(me: pubkey, name, cluster_na
     val cluster = require_cluster(cluster_name);
     require_cluster_governor(cluster, provider);
     require_provider_quota(provider, provider_quota_type.max_containers);
-    val (container_units, max_blockchains) = get_resource_limits_or_defaults(resource_limits);
-    require_cluster_quotas(cluster, container_units);
-    create_container_impl(provider, name, cluster, consensus_threshold, deployers, container_units, max_blockchains);
+    val (container_units, max_blockchains, extra_storage) = get_resource_limits_or_defaults(resource_limits);
+    require_cluster_quotas(cluster, container_units, extra_storage);
+    create_container_impl(provider, name, cluster, consensus_threshold, deployers, container_units, max_blockchains, extra_storage);
 }
 
 function create_container_from_with_resource_limits_impl(me: pubkey, name, cluster_name: text, consensus_threshold: integer, voter_set_name: text, resource_limits: map<container_resource_limit_type, integer>) {
@@ -59,14 +59,15 @@ function create_container_from_with_resource_limits_impl(me: pubkey, name, clust
     val cluster = require_cluster(cluster_name);
     require_cluster_governor(cluster, provider);
     require_provider_quota(provider, provider_quota_type.max_containers);
-    val (container_units, max_blockchains) = get_resource_limits_or_defaults(resource_limits);
-    require_cluster_quotas(cluster, container_units);
+    val (container_units, max_blockchains, extra_storage) = get_resource_limits_or_defaults(resource_limits);
+    require_cluster_quotas(cluster, container_units, extra_storage);
     val vs = require_voter_set(voter_set_name);
     val deployers = voter_set_member @* { vs } (.provider.pubkey);
-    create_container_impl(provider, name, cluster, consensus_threshold, deployers, container_units, max_blockchains);
+    create_container_impl(provider, name, cluster, consensus_threshold, deployers, container_units, max_blockchains, extra_storage);
 }
 
 function get_resource_limits_or_defaults(resource_limits: map<container_resource_limit_type, integer>) = (
     resource_limits.get_or_default(container_resource_limit_type.container_units, standard_container_defaults.container_units),
-    resource_limits.get_or_default(container_resource_limit_type.max_blockchains, standard_container_defaults.max_blockchains)
+    resource_limits.get_or_default(container_resource_limit_type.max_blockchains, standard_container_defaults.max_blockchains),
+    resource_limits.get_or_default(container_resource_limit_type.extra_storage, standard_container_defaults.extra_storage)
 );

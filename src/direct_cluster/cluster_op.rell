@@ -8,10 +8,19 @@ operation create_cluster_with_units(my_pubkey: pubkey, name, governor_voter_set:
 }
 
 function create_cluster_with_units_impl(my_pubkey: pubkey, name, governor_voter_set: text, provider_pubkeys: list<pubkey>, cluster_units: integer) {
+    val cluster_data = cluster_quota_data(cluster_units = cluster_units, extra_storage = standard_cluster_defaults.extra_storage);
+    create_cluster_with_cluster_quota_data_impl(my_pubkey, name, governor_voter_set, provider_pubkeys, cluster_data);
+}
+
+operation create_cluster_with_cluster_quota_data(my_pubkey: pubkey, name, governor_voter_set: text, provider_pubkeys: list<pubkey>, cluster_quota_data) {
+    create_cluster_with_cluster_quota_data_impl(my_pubkey, name, governor_voter_set, provider_pubkeys, cluster_quota_data);
+}
+
+function create_cluster_with_cluster_quota_data_impl(my_pubkey: pubkey, name, governor_voter_set: text, provider_pubkeys: list<pubkey>, cluster_quota_data) {
     val me = require_is_provider_with_rate_limit(my_pubkey);
     require_system_access(me);
     val governor = require_voter_set(governor_voter_set);
-    create_cluster_impl(me, name, governor, provider_pubkeys, cluster_units);
+    create_cluster_impl(me, name, governor, provider_pubkeys, cluster_quota_data);
 }
 
 // Creates a cluster provided by the members of an existing voter set
@@ -24,11 +33,20 @@ operation create_cluster_from_with_units(my_pubkey: pubkey, name, governor_voter
 }
 
 function create_cluster_from_with_units_impl(my_pubkey: pubkey, name, governor_voter_set: text, provider_voter_set: text, cluster_units: integer) {
+    val cluster_data = cluster_quota_data(cluster_units);
+    create_cluster_from_with_cluster_quota_data_impl(my_pubkey, name, governor_voter_set, provider_voter_set, cluster_data);
+}
+
+operation create_cluster_from_with_cluster_quota_data_data(my_pubkey: pubkey, name, governor_voter_set: text, provider_voter_set: text, cluster_quota_data) {
+    create_cluster_from_with_cluster_quota_data_impl(my_pubkey, name, governor_voter_set, provider_voter_set, cluster_quota_data);
+}
+
+function create_cluster_from_with_cluster_quota_data_impl(my_pubkey: pubkey, name, governor_voter_set: text, provider_voter_set: text, cluster_quota_data) {
     val me = require_is_provider_with_rate_limit(my_pubkey);
     require_system_access(me);
     val governor = require_voter_set(governor_voter_set);
     val node_provider_set = require_voter_set(provider_voter_set);
-    create_cluster_impl(me, name, governor, voter_set_member @* { node_provider_set }.provider.pubkey, cluster_units);
+    create_cluster_impl(me, name, governor, voter_set_member @* { node_provider_set }.provider.pubkey, cluster_quota_data);
 }
 
 operation request_cluster(my_pubkey: pubkey, name, size: integer, require_full: boolean) {
@@ -40,29 +58,67 @@ operation request_cluster_with_units(my_pubkey: pubkey, name, size: integer, req
 }
 
 function request_cluster_with_units_impl(my_pubkey: pubkey, name, size: integer, require_full: boolean, cluster_units: integer) {
+    val cluster_data = cluster_quota_data(cluster_units = cluster_units, extra_storage = standard_cluster_defaults.extra_storage);
+    request_cluster_with_cluster_quota_data_impl(my_pubkey, name, size, require_full, cluster_data);
+}
+
+operation request_cluster_with_cluster_quota_data(my_pubkey: pubkey, name, size: integer, require_full: boolean, cluster_quota_data) {
+    request_cluster_with_cluster_quota_data_impl(my_pubkey, name, size, require_full, cluster_quota_data);
+}
+
+function request_cluster_with_cluster_quota_data_impl(my_pubkey: pubkey, name, size: integer, require_full: boolean, cluster_quota_data) {
     require(size >= 4, "At least 4 nodes should be requested to be able to reach bft majority");
     val me = require_is_provider_with_rate_limit(my_pubkey);
     require_system_access(me);
+    val chosen_nodes = _get_chosen_nodes(cluster_quota_data, size);
+    require(chosen_nodes.size() >= 4, "Clusters can only be created when at least four nodes are available");
+    require(chosen_nodes.size() == size or not(require_full), "Not enough providers have available nodes, found %d, requested %d".format(chosen_nodes.size(), size));
 
+    log("Creating cluster " + name + " with providers " + chosen_nodes @* {} .provider.pubkey);
+    val cluster = create_cluster_impl(me, name, system_voter_set(), chosen_nodes @* {} .provider.pubkey, cluster_quota_data);
+    for (node in chosen_nodes) {
+        add_node_to_cluster_internal(node.provider, node, cluster);
+    }
+}
+
+function _get_chosen_nodes(cluster_quota_data, size: integer): list<node> {
+    val available_nodes = _get_available_nodes(cluster_quota_data);
+    val ordered_nodes = _get_ordered_nodes(available_nodes);
+
+    val chosen_nodes = map<provider, node>();
+    if (ordered_nodes.empty()) return chosen_nodes.values();
+    
+    for (node in ordered_nodes) {
+        if (chosen_nodes.contains(node.provider)) continue;
+        chosen_nodes[node.provider] = node;
+        if (chosen_nodes.size() >= size) break;
+    }
+    return chosen_nodes.values();
+}
+
+function _get_available_nodes(cluster_quota_data): list<node> {
     val possible_nodes = (node, node_capabilities) @* { 
         node_capabilities.node == node,
-        node_capabilities.type == node_capability_type.SYSTEM_MANAGED,
-        not(.pubkey in cluster_node @* {} (.node.pubkey)) 
-        }.node;
+        node_capabilities.type == node_capability_type.SYSTEM_MANAGED
+    }.node;
+
     val available_nodes: list<node> = list<node>();
     for (pnode in possible_nodes) {
-        if (get_available_cluster_units_for_node(pnode) >= cluster_units) available_nodes.add(pnode);
+        val has_cluster_units = get_available_cluster_units_for_node(pnode) >= cluster_quota_data.cluster_units;
+        val has_extra_storage = get_available_extra_storage_for_node(pnode) >= cluster_quota_data.extra_storage;
+        if (has_cluster_units and has_extra_storage) available_nodes.add(pnode);
     }
-    val unique_providers = set<provider>();
-    unique_providers.add_all(available_nodes @* {}.provider);
-    val chosen_providers = unique_providers @* {} limit size;
-    require(chosen_providers.size() >= 4, "Clusters can only be created when at least four nodes are available");
-    require(chosen_providers.size() == size or not(require_full), "Not enough providers have available nodes, found %d, requested %d".format(chosen_providers.size(), size));
+    return available_nodes;
+}
 
-    log("Creating cluster " + name + " with providers " + chosen_providers @*{}.pubkey);
-    val cluster = create_cluster_impl(me, name, system_voter_set(), chosen_providers @* {}.pubkey, cluster_units);
-    for (p in chosen_providers) {
-        val node = available_nodes @ { .provider == p } limit 1;
-        add_node_to_cluster_internal(p, node, cluster);
-    }
+// Order nodes by:
+// 1. number of clusters (fewer is better)
+// 2. available cluster_units (more is better)
+// 3. available extra_storage (more is better)
+function _get_ordered_nodes(available_nodes: list<node>): list<node>{
+    return available_nodes @* {} (
+        @omit @sort get_cluster_count_for_node($), 
+        @omit @sort_desc get_available_cluster_units_for_node($), 
+        @omit @sort_desc get_available_extra_storage_for_node($), 
+        $);
 }

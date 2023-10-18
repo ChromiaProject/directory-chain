@@ -28,7 +28,7 @@ function test_propose_and_remove_cluster() {
     val alice = provider @ { rell.test.pubkeys.alice };
     val node = node @ { .provider == alice };
     rell.test.tx().op(
-        update_node_with_units(rell.test.pubkeys.alice, node.pubkey, cluster_units = 5),
+        update_node_with_node_data(rell.test.pubkeys.alice, update_node_data(node.pubkey, cluster_units = 5, extra_storage = 5)),
         propose_cluster_provider(alice.pubkey, cluster1.name, alice.pubkey, true),
         add_node_to_cluster(rell.test.pubkeys.alice, node.pubkey, cluster1_name)
     ).sign(rell.test.keypairs.alice).run();
@@ -47,6 +47,26 @@ function test_propose_and_remove_cluster() {
     rell.test.tx().op(
         propose_cluster_limits(initial_provider.pub, cluster1_name, 2)
     ).sign(initial_provider).run();
+
+    // Propose -1 extra storage must fail
+    rell.test.tx().op(
+        propose_cluster_limits(initial_provider.pub, cluster1_name, extra_storage = -1)
+    ).sign(initial_provider).run_must_fail();
+
+    // Propose too much extra storage must fail
+    rell.test.tx().op(
+        propose_cluster_limits(initial_provider.pub, cluster1_name, extra_storage = 10)
+    ).sign(initial_provider).run_must_fail();
+
+    // Propose extra storage
+    rell.test.tx().op(
+        propose_cluster_limits(initial_provider.pub, cluster1_name, extra_storage = 2)
+    ).sign(initial_provider).run();
+
+    // Propose extra storage too high for node
+    rell.test.tx().op(
+        propose_cluster_limits(initial_provider.pub, cluster1_name, extra_storage = 7)
+    ).sign(initial_provider).run_must_fail();
 
     // Adding container that forces more then 1 cluster_unit on cluster
      rell.test.tx().op(
