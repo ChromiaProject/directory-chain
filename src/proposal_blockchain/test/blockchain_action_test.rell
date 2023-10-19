@@ -1,0 +1,75 @@
+@test module;
+
+import ^^.*;
+import common.test.ops.*;
+import common.test.setup.*;
+import common.test.util.*;
+import proposal.voting.test.ops.*;
+import proposal_container.*;
+import direct_container.*;
+import ^.utils.*;
+
+function setup() {
+    setup_module();
+    rell.test.tx().op(create_test_provider("bob", rell.test.pubkeys.bob)).run();
+}
+
+function test_propose_blockchain_action() {
+    setup();
+
+    val cl = system_cluster();
+    val container = "container";
+    val alice = provider @ { rell.test.pubkeys.alice };
+    val bob = provider @ { rell.test.pubkeys.bob };
+    rell.test.tx().op(add_test_member(system_p_voter_set(), bob)).run();
+
+    var conf_foo = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    var conf_bar = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    rell.test.tx().op(
+        create_container(alice.pubkey, container, clusters.system, 0, [alice.pubkey, bob.pubkey]),
+        propose_blockchain(alice.pubkey, conf_foo.to_gtv().to_bytes(), "foo_chain", container),
+        propose_blockchain(alice.pubkey, conf_bar.to_gtv().to_bytes(), "bar_chain", container)
+    ).sign(rell.test.keypairs.alice).run();
+    bob_votes();
+    bob_votes();
+    val foo_chain = blockchain @ { "foo_chain" };
+    val bar_chain = blockchain @ { "bar_chain" };
+
+    // Asserting blockchain is running
+    assert_equals(foo_chain.state, blockchain_state.RUNNING);
+
+    // 2. Proposing blockchain pause
+    alice_proposes_action(foo_chain, blockchain_action.pause);
+    assert_action_proposed(blockchain_action.pause);
+    bob_votes();
+    assert_equals(foo_chain.state, blockchain_state.PAUSED);
+
+    // 3. Proposing blockchain resume
+    alice_proposes_action(foo_chain, blockchain_action.resume);
+    assert_action_proposed(blockchain_action.resume);
+    bob_votes();
+    assert_equals(foo_chain.state, blockchain_state.RUNNING);
+
+    // 4. Proposing blockchain remove
+    val brid = foo_chain.rid;
+    alice_proposes_action(foo_chain, blockchain_action.remove);
+    assert_action_proposed(blockchain_action.remove);
+    bob_votes();
+    assert_not_null( blockchain @? { .rid == brid } );
+    assert_equals(foo_chain.state, blockchain_state.REMOVED);
+    assert_false(empty(blockchain_configuration @* { foo_chain }));
+    assert_false(empty(blockchain_configuration_signers @* { foo_chain }));
+}
+
+function alice_proposes_action(bc: blockchain, action: blockchain_action) {
+    rell.test.tx().op(
+        propose_blockchain_action(rell.test.pubkeys.alice, bc.rid, action)
+    ).sign(rell.test.keypairs.alice).run();
+}
+
+function assert_action_proposed(action: blockchain_action) {
+    assert_equals(
+        pending_blockchain_action @ { last_proposal() } .action,
+        action
+    );
+}
