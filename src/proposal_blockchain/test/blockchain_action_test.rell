@@ -23,8 +23,8 @@ function test_propose_blockchain_action() {
     val bob = provider @ { rell.test.pubkeys.bob };
     rell.test.tx().op(add_test_member(system_p_voter_set(), bob)).run();
 
-    var conf_foo = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
-    var conf_bar = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    var conf_foo = ["config_consensus_strategy": "HEADER_HASH".to_gtv(), "name" : "foo".to_gtv()];
+    var conf_bar = ["config_consensus_strategy": "HEADER_HASH".to_gtv(), "name" : "bar".to_gtv()];
     rell.test.tx().op(
         create_container(alice.pubkey, container, clusters.system, 0, [alice.pubkey, bob.pubkey]),
         propose_blockchain(alice.pubkey, conf_foo.to_gtv().to_bytes(), "foo_chain", container),
@@ -41,6 +41,9 @@ function test_propose_blockchain_action() {
     // 2. Proposing blockchain pause
     alice_proposes_action(foo_chain, blockchain_action.pause);
     assert_action_proposed(blockchain_action.pause);
+    // Trying to propose
+    bob_proposes_failing_action(foo_chain, blockchain_action.pause, "Blockchain action already proposed");
+    // Continuing with the initial proposal
     bob_votes();
     assert_equals(foo_chain.state, blockchain_state.PAUSED);
 
@@ -59,12 +62,42 @@ function test_propose_blockchain_action() {
     assert_equals(foo_chain.state, blockchain_state.REMOVED);
     assert_false(empty(blockchain_configuration @* { foo_chain }));
     assert_false(empty(blockchain_configuration_signers @* { foo_chain }));
+
+    // 5. Can't pause/resume/archive/remove already removed blockchain
+    bob_proposes_failing_action(foo_chain, blockchain_action.pause, "Removed blockchain can't be paused");
+    bob_proposes_failing_action(foo_chain, blockchain_action.resume, "Removed blockchain can't be resumed");
+    bob_proposes_failing_action(foo_chain, blockchain_action.archive, "Removed blockchain can't be archived");
+    bob_proposes_failing_action(foo_chain, blockchain_action.remove, "Removed blockchain can't be removed");
+
+    // 6. Can't pause/resume/archive already archived blockchain
+    alice_proposes_action(bar_chain, blockchain_action.archive);
+    bob_votes();
+    assert_equals(bar_chain.state, blockchain_state.ARCHIVED);
+    bob_proposes_failing_action(bar_chain, blockchain_action.pause, "Archived blockchain can't be paused");
+    bob_proposes_failing_action(bar_chain, blockchain_action.resume, "Archived blockchain can't be resumed");
+    bob_proposes_failing_action(bar_chain, blockchain_action.archive, "Blockchain is already archived");
+
+    // 7. Proposing archived blockchain remove
+    alice_proposes_action(bar_chain, blockchain_action.remove);
+    bob_votes();
+    assert_not_null( blockchain @? { bar_chain.rid } );
+    assert_equals(bar_chain.state, blockchain_state.REMOVED);
+    assert_false(empty(blockchain_configuration @* { bar_chain }));
+    assert_false(empty(blockchain_configuration_signers @* { bar_chain }));
+
+    // 8. See blockchain_action against MOVING blockchain state in proposal_blockchain.test.blockchain_action_test module
 }
 
 function alice_proposes_action(bc: blockchain, action: blockchain_action) {
     rell.test.tx().op(
         propose_blockchain_action(rell.test.pubkeys.alice, bc.rid, action)
     ).sign(rell.test.keypairs.alice).run();
+}
+
+function bob_proposes_failing_action(bc: blockchain, action: blockchain_action, error: text) {
+    rell.test.tx().op(
+        propose_blockchain_action(rell.test.pubkeys.bob, bc.rid, action)
+    ).sign(rell.test.keypairs.bob).run_must_fail(error);
 }
 
 function assert_action_proposed(action: blockchain_action) {

@@ -48,18 +48,21 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
     var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
 
     rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, rell.test.pubkeys.bob, true),
         // s1 / c1
         create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
-        create_container(initial_provider.pub, "c1", "s1", 0, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1", "s1", 0, [initial_provider.pub, rell.test.pubkeys.bob]),
         update_node_with_units(initial_provider.pub, node0.pubkey, cluster_units = 2),
         add_node_to_cluster(initial_provider.pub, node0.pubkey, "s1"),
         // s2 / c2, c3
         create_cluster(initial_provider.pub, "s2", voter_sets.system_p, [initial_provider.pub]),
-        create_container(initial_provider.pub, "c2", "s2", 0, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c2", "s2", 0, [initial_provider.pub, rell.test.pubkeys.bob]),
         create_container_with_resource_limits(initial_provider.pub, "c3", "s2", 0, [initial_provider.pub], [container_resource_limit_type.container_units : 1, container_resource_limit_type.max_blockchains : 1]),
         // proposing the blockchain to the c1
         propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
     ).sign(initial_provider).run();
+    bob_votes();
     val foo_chain = blockchain @ { "foo_chain" };
 
     rell.test.tx().op(
@@ -79,12 +82,23 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
     rell.test.tx().op(
         propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c2")
     ).sign(initial_provider).run();
+    assert_not_null(pending_blockchain_move @? { foo_chain });
+    // Trying to propose an blockchain_action, must fail due to non-null pending_blockchain_move
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, foo_chain.rid, blockchain_action.pause)
+    ).sign(initial_provider).run_must_fail("Moving blockchain can't be paused");
+    // Continuing with pending_blockchain_move
+    bob_votes();
     val bc_move_state = blockchain_move_state @? { foo_chain, .destination.name == "c2", .finish_at_height == -1, .remove_on_nodes == x"" };
     assert_not_null(bc_move_state);
     // asserting that s2/c2 nodes are blockchain replicas
     assert_equals(blockchain_replica_node @* { foo_chain } ( .node ), [node1]);
     // asserting that blockchain still belongs to c1
     assert_equals(container_blockchain @ { foo_chain } ( .container.name ), "c1");
+    // Trying again to propose an blockchain_action, must fail due to non-null blockchain_move_state
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, foo_chain.rid, blockchain_action.pause)
+    ).sign(initial_provider).run_must_fail("Moving blockchain can't be paused");
 
     // Trying to move blockchain that is already being moved -- must fail
     rell.test.tx().op(
@@ -95,6 +109,7 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
     rell.test.tx().op(
         propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 123)
     ).sign(initial_provider).run();
+    bob_votes();
     // asserting that src nodes are blockchain replicas and dst nodes are not
     assert_equals(blockchain_replica_node @* { foo_chain } ( .node ), [node0]);
     // asserting that blockchain belongs to c2
