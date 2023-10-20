@@ -31,7 +31,7 @@ function test_init_ticketing() {
     assert_not_equals(ticket_chain.rid, x"");
 }
 
-function test_create_provider_and_container() {
+function test_create_container_with_auto_create_provider() {
     setup_module();
 
     val test_provider = rell.test.keypairs.bob;
@@ -43,53 +43,39 @@ function test_create_provider_and_container() {
     ).sign(initial_provider).run();
     val bob_cluster = cluster @ { cluster_name };
 
-    rell.test.tx().op(
-        create_provider_op(create_provider_message(
-        ticket_id = 1,
-        pubkey = test_provider.pub,
-        name = "Test provider",
-        url = "http://provider.com"
-        ).to_gtv())).run();
-    assert_not_null(provider @? { test_provider.pub });
+    assert_null(provider @? { test_provider.pub });
 
+    rell.test.tx().op(
+        create_container_op(create_container_message(
+            ticket_id = 1,
+            pubkey = test_provider.pub,
+            container_units = 1,
+            cluster_class = ""
+        ).to_gtv())).run();
+    val container1 = container @ { bob_cluster, .system == false };
     assert_events(("icmf_message", (
         topic = ticket_result_topic,
-        body = ticket_result_message(1, error_message = null, container_name = null).to_gtv(),
+        body = ticket_result_message(1, error_message = null, container_name = container1.name).to_gtv(),
         block_height = 2).to_gtv_pretty()
     ));
+
+    assert_not_null(provider @? { test_provider.pub });
 
     rell.test.tx().op(
         create_container_op(create_container_message(
             ticket_id = 2,
             pubkey = test_provider.pub,
-            container_units = 1,
+            container_units = 2,
             cluster_class = ""
         ).to_gtv())).run();
-    val container = container @ { bob_cluster, .system == false };
-
+    val container2 = container @ { bob_cluster, .system == false, .name != container1.name };
     assert_events(("icmf_message", (
         topic = ticket_result_topic,
-        body = ticket_result_message(2, error_message = null, container_name = container.name).to_gtv(),
+        body = ticket_result_message(2, error_message = null, container_name = container2.name).to_gtv(),
         block_height = 3).to_gtv_pretty()
     ));
-}
 
-function test_create_duplicate_provider() {
-    setup_module();
-
-    rell.test.tx().op(
-        create_provider_op(create_provider_message(
-            ticket_id = 1,
-            pubkey = initial_provider.pub,
-            name = "Test provider",
-            url = "http://provider.com"
-        ).to_gtv())).run();
-
-    assert_events(("icmf_message", (
-        topic = ticket_result_topic,
-        body = ticket_result_message(1, error_message = "Unexpected error", container_name = null).to_gtv(),
-        block_height = 1).to_gtv_pretty()
-    ));
+    assert_not_null(provider @? { test_provider.pub });
 }
 
 function test_create_container_fail() {
@@ -105,23 +91,8 @@ function test_create_container_fail() {
     val bob_cluster = cluster @ { cluster_name };
 
     rell.test.tx().op(
-        create_provider_op(create_provider_message(
-        ticket_id = 1,
-        pubkey = test_provider.pub,
-        name = "Test provider",
-        url = "http://provider.com"
-        ).to_gtv())).run();
-    assert_not_null(provider @? { test_provider.pub });
-
-    assert_events(("icmf_message", (
-        topic = ticket_result_topic,
-        body = ticket_result_message(1, error_message = null, container_name = null).to_gtv(),
-        block_height = 2).to_gtv_pretty()
-    ));
-
-    rell.test.tx().op(
         create_container_op(create_container_message(
-            ticket_id = 2,
+            ticket_id = 1,
             pubkey = test_provider.pub,
             container_units = 1,
             cluster_class = "2::"
@@ -129,7 +100,9 @@ function test_create_container_fail() {
 
     assert_events(("icmf_message", (
         topic = ticket_result_topic,
-        body = ticket_result_message(2, error_message = "Unable to find suitable cluster", container_name = "").to_gtv(),
-        block_height = 3).to_gtv_pretty()
+        body = ticket_result_message(1, error_message = "Unable to find suitable cluster", container_name = "").to_gtv(),
+        block_height = 2).to_gtv_pretty()
     ));
+
+    assert_not_null(provider @? { test_provider.pub });
 }

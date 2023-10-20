@@ -3,136 +3,111 @@
 import ^^.*;
 import ^.helpers.*;
 
-function test_create_provider_success() {
-    val test_provider = rell.test.keypairs.bob;
+namespace ft4 {
+    import acc: lib.ft4.accounts;
+    import acc_ext: lib.ft4.accounts.external;
+    import lib.ft4.assets;
+    import lib.ft4.auth;
+    import lib.ft4.version;
+    import test_utils: lib.ft4.test.utils;
+}
+import lib.auth;
 
-    do_create_provider(test_provider, success = true);
+struct module_args {
+    auth_privkey: byte_array;
 }
 
-function test_create_provider_failure() {
-    val test_provider = rell.test.keypairs.bob;
-
-    do_create_provider(test_provider, success = false);
-}
-
-function test_create_provider_duplicate() {
-    val test_provider = rell.test.keypairs.bob;
-
-    do_create_provider(test_provider, success = true);
+function test_init() {
+    rell.test.tx().op(
+        add_test_chr()
+    ).run_must_fail("Ticket chain is not initialized");
 
     rell.test.tx().op(
-        create_provider(test_provider.pub, "Test provider 2", "http://test.provider2.com", 1)
-    ).sign(test_provider).run_must_fail("already exists");
+        init()
+    ).run();
+
+    get_asset();
+    get_pool_account();
+
+    rell.test.tx().op(
+        init()
+    ).nop().run_must_fail("Ticket chain is already initialized");
+}
+
+function test_create_accounts() {
+    rell.test.tx().op(init()).run();
+
+    val alice = require(do_create_account(rell.test.keypairs.alice));
+    assert_gt(get_balance(alice), 0);
+
+    val bob = require(do_create_account(rell.test.keypairs.bob));
+    assert_gt(get_balance(bob), 0);
+
+    assert_not_equals(alice.id, bob.id);
+}
+
+function test_create_account_requires_init() {
+    do_create_account(rell.test.keypairs.alice, "Ticket chain is not initialized");
+}
+
+function test_create_account_duplicate() {
+    rell.test.tx().op(init()).run();
+    do_create_account(rell.test.keypairs.alice);
+    do_create_account(rell.test.keypairs.alice, "duplicate key value violates unique constraint");
+}
+
+function test_add_test_chr() {
+    rell.test.tx().op(init()).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val initial_balance = get_balance(alice);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "add_test_chr", [])
+    ).op(
+        add_test_chr()
+    ).run();
+    assert_gt(get_balance(alice), initial_balance);
 }
 
 function test_create_container_success() {
-    val test_provider = rell.test.keypairs.bob;
-
-    do_create_provider(test_provider, success = true);
-    do_create_container(test_provider, success = true, block_height = 2, ticket_id = 4);
+    rell.test.tx().op(init()).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice));
+    do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 15);
 }
 
 function test_create_container_failure() {
-    val test_provider = rell.test.keypairs.bob;
-
-    do_create_provider(test_provider, success = true);
-    do_create_container(test_provider, success = false, block_height = 2, ticket_id = 4);
+    rell.test.tx().op(init()).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice));
+    do_create_container(alice, rell.test.keypairs.alice, success = false, block_height = 2, ticket_id = 15);
 }
 
-function test_create_container_no_provider() {
-    val test_provider = rell.test.keypairs.bob;
-
+function test_create_container_no_auth() {
+    rell.test.tx().op(init()).run();
     rell.test.tx().op(
-        create_container(test_provider.pub, 2, "", integer.MAX_VALUE)
-    ).sign(test_provider).run_must_fail("not found");
+        create_container(rell.test.pubkeys.alice, 2, "", integer.MAX_VALUE)
+    ).run_must_fail("make sure that you included auth operation");
 }
 
-function test_create_container_insufficient_credits() {
-    val test_provider = rell.test.keypairs.bob;
-
-    do_create_provider(test_provider, success = true);
-
+function test_create_container_insufficient_funds() {
+    rell.test.tx().op(init()).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice));
     rell.test.tx().op(
-        create_container(test_provider.pub, 5, "", 1)
-    ).sign(test_provider).run_must_fail("Insufficient credits");
-}
-
-function test_add_container_credits() {
-    val test_provider = rell.test.keypairs.bob;
-
-    do_create_provider(test_provider, success = true);
-
-    rell.test.tx().op(
-        add_container_credits(test_provider.pub, 2)
-    ).sign(test_provider).run();
-
-    do_create_container(test_provider, success = true, block_height = 3, ticket_id = 4, container_units = 5);
-}
-
-function test_prolong_non_expired_container() {
-    val test_provider = rell.test.keypairs.bob;
-
-    do_create_provider(test_provider, success = true);
-    val container_name = do_create_container(test_provider, success = true, block_height = 2, ticket_id = 4);
-
-    assert_equals(provider @ { test_provider.pub } (.container_credits), 2);
-    assert_equals(lease @ { .provider.pubkey == test_provider.pub, container_name } (.duration_millis), 1 * millis_per_month);
-
-    rell.test.tx().op(
-        prolong_container(test_provider.pub, container_name, 1)
-    ).sign(test_provider).run();
-    assert_equals(provider @ { test_provider.pub } (.container_credits), 0);
-    assert_equals(lease @ { .provider.pubkey == test_provider.pub, container_name } (.duration_millis), 2 * millis_per_month);
-    assert_false(lease @ { .provider.pubkey == test_provider.pub, container_name } (.expired));
-    assert_events(); // assert no ICMF messages sent
-}
-
-function test_prolong_expired_container() {
-    val test_provider = rell.test.keypairs.bob;
-
-    do_create_provider(test_provider, success = true);
-    val container_name = do_create_container(test_provider, success = true, block_height = 2, ticket_id = 4);
-
-    rell.test.tx().op(
-        expire_leases_op(millis_per_month + 1)
-    ).run();
-    assert_true(lease @ { .provider.pubkey == test_provider.pub, container_name } (.expired));
-
-    rell.test.tx().op(
-        prolong_container(test_provider.pub, container_name, 1)
-    ).sign(test_provider).run();
-    assert_equals(provider @ { test_provider.pub } (.container_credits), 0);
-    assert_equals(lease @ { .provider.pubkey == test_provider.pub, container_name } (.duration_millis), 2 * millis_per_month);
-    assert_false(lease @ { .provider.pubkey == test_provider.pub, container_name } (.expired));
-    assert_events(("icmf_message", (
-        topic = restart_container_topic,
-        body = restart_container_message(container_name).to_gtv(),
-        block_height = 5).to_gtv_pretty()
-    ));
-}
-
-function test_prolong_container_insufficient_credits() {
-    val test_provider = rell.test.keypairs.bob;
-
-    do_create_provider(test_provider, success = true);
-    val container_name = do_create_container(test_provider, success = true, block_height = 2, ticket_id = 4, container_units = 4);
-
-    rell.test.tx().op(
-        prolong_container(test_provider.pub, container_name, 1)
-    ).sign(test_provider).run_must_fail("Insufficient credits");
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "create_container",
+            [rell.test.pubkeys.alice.to_gtv(), (100).to_gtv(), "".to_gtv(), (100).to_gtv()])
+    ).op(
+        create_container(rell.test.pubkeys.alice, 100, "", 100)
+    ).run_must_fail("Balance is too low");
 }
 
 function test_expire_lease() {
-    val test_provider = rell.test.keypairs.bob;
+    rell.test.tx().op(init()).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 15);
 
-    do_create_provider(test_provider, success = true);
-    val container_name = do_create_container(test_provider, success = true, block_height = 2, ticket_id = 4);
-
-    assert_false(lease @ { .provider.pubkey == test_provider.pub, container_name } (.expired));
+    assert_false(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
     rell.test.tx().op(
         expire_leases_op(millis_per_month + 1)
     ).run();
-    assert_true(lease @ { .provider.pubkey == test_provider.pub, container_name } (.expired));
+    assert_true(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
     assert_events(("icmf_message", (
         topic = stop_container_topic,
         body = stop_container_message(container_name).to_gtv(),
@@ -141,64 +116,113 @@ function test_expire_lease() {
 }
 
 function test_not_expire_lease() {
-    val test_provider = rell.test.keypairs.bob;
+    rell.test.tx().op(init()).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 15);
 
-    do_create_provider(test_provider, success = true);
-    val container_name = do_create_container(test_provider, success = true, block_height = 2, ticket_id = 4);
-
-    assert_false(lease @ { .provider.pubkey == test_provider.pub, container_name } (.expired));
+    assert_false(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
     rell.test.tx().op(
         expire_leases_op(millis_per_month - 60000)
     ).run();
-    assert_false(lease @ { .provider.pubkey == test_provider.pub, container_name } (.expired));
+    assert_false(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
     assert_events(); // assert no ICMF messages sent
 }
 
-function do_create_provider(keypair: rell.test.keypair, success: boolean) {
+function test_prolong_non_expired_container() {
+    rell.test.tx().op(init()).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 15);
+
+    val alice_balance = get_balance(alice);
+    val pool_balance = get_balance(get_pool_account());
+
+    assert_equals(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.duration_millis), 1 * millis_per_month);
     rell.test.tx().op(
-        create_provider(keypair.pub, "Test provider", "http://test.provider.com", 4)
-    ).sign(keypair).run();
-    val tx_rid = transaction @ {} (@sort_desc @omit .rowid, .tx_rid) limit 1;
-
-    assert_events(("icmf_message", (
-        topic = create_provider_topic,
-        body = create_provider_message(ticket_id = 1, keypair.pub, name = "Test provider", url = "http://test.provider.com").to_gtv(),
-        block_height = 0).to_gtv_pretty()
-    ));
-
-    val pending_ticket = ticket_data(1, ticket_type.CREATE_PROVIDER, ticket_state.PENDING, "");
-    assert_equals(require(get_ticket_by_id(1)), pending_ticket);
-    assert_equals(require(get_ticket_by_transaction(tx_rid)), pending_ticket);
-
-    assert_null(provider @? { keypair.pub });
-
-    rell.test.tx().op(
-        icmf_message(x"", ticket_result_topic, ticket_result_message(ticket_id = 1, error_message = if (success) null else "error").to_gtv())
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "prolong_container",
+            [rell.test.pubkeys.alice.to_gtv(), container_name.to_gtv(), (1).to_gtv()])
+    ).op(
+        prolong_container(rell.test.pubkeys.alice, container_name, 1)
     ).run();
-    val done_ticket = ticket_data(
-        ticket_id = 1,
-        type = ticket_type.CREATE_PROVIDER,
-        state = if (success) ticket_state.SUCCESS else ticket_state.FAILURE,
-        error_message = if (success) "" else "error"
-    );
-    assert_equals(require(get_ticket_by_id(1)), done_ticket);
-    assert_equals(require(get_ticket_by_transaction(tx_rid)), done_ticket);
+    assert_lt(get_balance(alice), alice_balance);
+    assert_gt(get_balance(get_pool_account()), pool_balance);
+    assert_equals(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.duration_millis), 2 * millis_per_month);
+    assert_false(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
+    assert_events(); // assert no ICMF messages sent
+}
 
-    if (success) {
-        assert_equals(provider @ { keypair.pub } (.container_credits), 4);
+function test_prolong_expired_container() {
+    rell.test.tx().op(init()).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 15);
+
+    val alice_balance = get_balance(alice);
+    val pool_balance = get_balance(get_pool_account());
+
+    rell.test.tx().op(
+        expire_leases_op(millis_per_month + 1)
+    ).run();
+    assert_true(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "prolong_container",
+            [rell.test.pubkeys.alice.to_gtv(), container_name.to_gtv(), (1).to_gtv()])
+    ).op(
+        prolong_container(rell.test.pubkeys.alice, container_name, 1)
+    ).run();
+    assert_lt(get_balance(alice), alice_balance);
+    assert_gt(get_balance(get_pool_account()), pool_balance);
+    assert_equals(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.duration_millis), 2 * millis_per_month);
+    assert_false(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
+    assert_events(("icmf_message", (
+        topic = restart_container_topic,
+        body = restart_container_message(container_name).to_gtv(),
+        block_height = 5).to_gtv_pretty()
+    ));
+}
+
+function test_prolong_container_insufficient_funds() {
+    rell.test.tx().op(init()).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 15);
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "prolong_container",
+            [rell.test.pubkeys.alice.to_gtv(), container_name.to_gtv(), (10000).to_gtv()])
+    ).op(
+        prolong_container(rell.test.pubkeys.alice, container_name, 10000)
+    ).run_must_fail("Balance is too low");
+}
+
+function do_create_account(keypair: rell.test.keypair, failure: text? = null): ft4.acc.account? {
+    val eth_address = ft4.test_utils.evm_address_from_privkey(keypair.priv);
+    log("eth_address=%s".format(eth_address));
+    val auth_descriptor = ft4.acc.single_sig_auth_descriptor(eth_address, set(["T"]));
+    val signature = ft4.test_utils.evm_sign(auth.get_message_to_sign(), keypair.priv);
+
+    val tx = rell.test.tx().op(
+        auth.register_account(auth_descriptor, signature)
+    ).nop().sign(chain_context.args.auth_privkey);
+
+    if (failure != null) {
+        tx.run_must_fail(failure);
+        return null;
     } else {
-        assert_null(provider @? { keypair.pub });
+        tx.run();
+        return ft4.acc.account_by_id(auth_descriptor.hash());
     }
 }
 
-function do_create_container(keypair: rell.test.keypair, success: boolean, block_height: integer, ticket_id: integer, container_units: integer = 2): text {
+function do_create_container(ft4.acc.account, keypair: rell.test.keypair, success: boolean, block_height: integer, ticket_id: integer, container_units: integer = 2): text {
     val container_name = "container name";
 
-    val initial_credits = provider @ { keypair.pub } (.container_credits);
+    val initial_balance = get_balance(account);
+    val initial_pool_balance = get_balance(get_pool_account());
 
     rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(keypair.priv, "create_container", [keypair.pub.to_gtv(), container_units.to_gtv(), "".to_gtv(), (1).to_gtv()])
+    ).op(
         create_container(keypair.pub, container_units, "", 1)
-    ).sign(keypair).run();
+    ).run();
     val tx_rid = transaction @ {} (@sort_desc @omit .rowid, .tx_rid) limit 1;
 
     assert_events(("icmf_message", (
@@ -211,10 +235,11 @@ function do_create_container(keypair: rell.test.keypair, success: boolean, block
     assert_equals(require(get_ticket_by_id(ticket_id)), pending_ticket);
     assert_equals(require(get_ticket_by_transaction(tx_rid)), pending_ticket);
 
-    assert_equals(provider @ { keypair.pub } (.container_credits), initial_credits - container_units);
+    assert_equals(get_balance(account), initial_balance - container_units);
+    assert_equals(get_balance(get_pool_account()), initial_pool_balance + container_units);
 
     rell.test.tx().op(
-        icmf_message(x"", ticket_result_topic, ticket_result_message(ticket_id = ticket_id, error_message = if (success) null else "error", container_name).to_gtv())
+        icmf_message_op(x"", ticket_result_topic, ticket_result_message(ticket_id = ticket_id, error_message = if (success) null else "error", container_name).to_gtv())
     ).run();
     val done_ticket = ticket_data(
         ticket_id = ticket_id,
@@ -226,10 +251,15 @@ function do_create_container(keypair: rell.test.keypair, success: boolean, block
     assert_equals(require(get_ticket_by_transaction(tx_rid)), done_ticket);
 
     if (success) {
-        assert_equals(provider @ { keypair.pub } (.container_credits), initial_credits - container_units);
+        assert_equals(get_balance(account), initial_balance - container_units);
+        assert_equals(get_balance(get_pool_account()), initial_pool_balance + container_units);
     } else {
-        assert_equals(provider @ { keypair.pub } (.container_credits), initial_credits);
+        assert_equals(get_balance(account), initial_balance);
+        assert_equals(get_balance(get_pool_account()), initial_pool_balance);
     }
 
     return container_name;
 }
+
+function get_balance(ft4.acc.account): big_integer =
+    (ft4.assets.get_asset_balances(account.id) @? { .asset.id == get_asset().id } .amount) ?: 0L;

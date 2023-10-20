@@ -27,12 +27,6 @@ operation init_ticketing(my_pubkey: pubkey, ticket_chain_config: byte_array) {
 
 query get_ticket_chain_rid(): byte_array? = if (ticket_chain.rid == x"") null else ticket_chain.rid;
 
-function create_provider_from_ticket(pubkey, name?, url: text?) {
-    require_pubkey(pubkey);
-    require(not(exists(provider @? { pubkey })), "Provider with pubkey %s already exists".format(pubkey));
-    register_and_enable_provider(provider_info(pubkey, name = name ?: "", url = url ?: ""), provider_tier.COMMUNITY_NODE_PROVIDER, null, null, true);
-}
-
 function create_provider_if_not_exist(pubkey): provider {
     var provider = provider @? { pubkey };
     if (provider == null) {
@@ -49,7 +43,8 @@ function create_provider_if_not_exist(pubkey): provider {
 }
 
 function create_container_from_ticket(pubkey, container_units: integer, cluster_class: text): text {
-    val provider = require_provider(pubkey);
+    require_pubkey(pubkey);
+    val provider = create_provider_if_not_exist(pubkey);
 
     val clusters = cluster @* { cluster.name != clusters.system, .operational };
     for (cluster in clusters) {
