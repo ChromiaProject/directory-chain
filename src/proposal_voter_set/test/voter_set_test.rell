@@ -10,18 +10,18 @@ function test_add_low_tier_provider() {
     setup_module();
     val p1 = provider @ { rell.test.pubkeys.alice };
 
-    // Create a provider with tier 0, a dapp provider without voting right.
+    // Create a provider with tier 0, a dapp provider
     rell.test.tx().op(create_test_provider("bob", rell.test.pubkeys.bob, provider_tier.COMMUNITY_NODE_PROVIDER)).run();
     val dapp_provider = provider @ { rell.test.pubkeys.bob };
 
-    // Should not be possible to add this provider to a voting set.
+    // Should be possible to add this provider to a voting set.
     val add_providers = list<pubkey>();
     add_providers.add(dapp_provider.pubkey);
     rell.test.tx()
         .op(create_voter_set(p1.pubkey, test_set, 0, null, voter_sets.system_p))
         .op(propose_update_voter_set(p1.pubkey, test_set, null, null, add_providers, list<pubkey>()))
         .sign(rell.test.keypairs.alice)
-        .run_must_fail();
+        .run();
 }
 
 function test_add_high_tier_provider() {
