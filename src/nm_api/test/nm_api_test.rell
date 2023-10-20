@@ -347,7 +347,7 @@ function test_nm_get_blockchain_configuration_options() {
     // This empty stub is potentially for a code coverage tool.
 }
 
-function test_nm_find_next_removed_blockchains() {
+function test_nm_find_next_inactive_blockchains() {
     setup_module();
 
     // Adding 3 blockchains
@@ -371,14 +371,14 @@ function test_nm_find_next_removed_blockchains() {
 
     // Asserts 0
     val removed0 = inactive_blockchain @* {} (inactive_blockchain_info(.blockchain.rid, .blockchain.state, .height));
-    assert_equals(removed0, [inactive_blockchain_info(foo, blockchain_state.REMOVED, 2)]); // 2nd block
+    assert_equals(removed0, [inactive_blockchain_info(foo, blockchain_state.REMOVED, 2)]); // block 2
     assert_equals(nm_find_next_inactive_blockchains(0), [inactive_blockchain_info(foo, blockchain_state.REMOVED, 2)]);
     assert_true(nm_find_next_inactive_blockchains(2).empty());
 
-    // Action 1: removing `bar` and `foo_bar` chains
+    // Action 1: removing `bar` and archiving `foo_bar`
     rell.test.tx().op(
         propose_blockchain_action(initial_provider.pub, bar, blockchain_action.remove),
-        propose_blockchain_action(initial_provider.pub, foo_bar, blockchain_action.remove)
+        propose_blockchain_action(initial_provider.pub, foo_bar, blockchain_action.archive)
     ).sign(initial_provider).run();
 
     // Asserts 1
@@ -386,9 +386,16 @@ function test_nm_find_next_removed_blockchains() {
     assert_equals(removed1, [
         inactive_blockchain_info(foo, blockchain_state.REMOVED, 2),
         inactive_blockchain_info(bar, blockchain_state.REMOVED, 3),
-        inactive_blockchain_info(foo_bar, blockchain_state.REMOVED, 3)
+        inactive_blockchain_info(foo_bar, blockchain_state.ARCHIVED, 3)
     ]);
     assert_equals(nm_find_next_inactive_blockchains(0), [inactive_blockchain_info(foo, blockchain_state.REMOVED, 2)]);
-    assert_equals(nm_find_next_inactive_blockchains(2), [inactive_blockchain_info(bar, blockchain_state.REMOVED, 3), inactive_blockchain_info(foo_bar, blockchain_state.REMOVED, 3)]);
+    assert_equals(nm_find_next_inactive_blockchains(2), [inactive_blockchain_info(bar, blockchain_state.REMOVED, 3), inactive_blockchain_info(foo_bar, blockchain_state.ARCHIVED, 3)]);
     assert_true(nm_find_next_inactive_blockchains(3).empty());
+
+    // Action 2: removing already archived `foo_chain`
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, foo_bar, blockchain_action.remove)
+    ).sign(initial_provider).run();
+    assert_equals(nm_find_next_inactive_blockchains(3), [inactive_blockchain_info(foo_bar, blockchain_state.REMOVED, 4)]);
+    assert_true(nm_find_next_inactive_blockchains(4).empty());
 }
