@@ -64,7 +64,6 @@ blockchains:
               - G_configuration_failed
           global:
             topics:
-              - G_create_provider
               - G_create_container
               - G_stop_container
               - G_restart_container
@@ -115,9 +114,33 @@ blockchains:
           directory-chain:
             topics:
               - L_ticket_result
+    moduleArgs:
+      lib.ft4.accounts:
+        rate_limit_active: 1
+        rate_limit_max_points: 20
+        rate_limit_recovery_time: 5000
+        rate_limit_points_at_account_creation: 1
+      lib.auth:
+        auth_pubkey: x"02B6F2967CF9AFC4D289EF475A2C2DDEC9EAB79AC60C1C99683E3134074619E635" # TODO set proper pubkey for Auth server
+      ticket_chain:
+        asset_name: "Chromia Test"
+        asset_symbol: "tCHR"
+        asset_decimals: 6
+        asset_icon: "https://s3.eu-central-1.amazonaws.com/www.chromiadev.net/assets/tCHR.png"
+        amount_to_mint: 1000
+        # TODO set proper pool account pubkey,
+        # corresponding private key for this test key is FD8F9D4F1327DA6622B969DDD835CB41C982FAA805E614D7F4F4F0ADBCAD135F
+        pool_account_pubkey: x"032FF500E33BC4DF87C7F40C167ADA6DBE52955066DD3F689189ED221B913BFD8F"
     test:
       modules:
         - ticket_chain.test
+      moduleArgs:
+        lib.ft4.accounts:
+          rate_limit_active: 0
+        lib.auth:
+          auth_pubkey: x"03284C73391D6FFA90FA95D95BC4F29015C0111A655A9EE6DD7DEC089F32F04B5F" # Only for tests
+        ticket_chain.test.ticket_chain_test:
+          auth_privkey: x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6"  # Only for tests
 
 database: # Used for running tests
   logSqlErrors: true
@@ -150,3 +173,17 @@ test:
     common.init: *common_init
     common:
       allow_blockchain_dependencies: true
+
+libs:
+  ft4:
+    registry: https://bitbucket.org/chromawallet/ft3-lib/src/
+    tagOrBranch: v0.1.4r
+    path: rell/src/lib/ft4
+    rid: x"D30FECE914DA5CF56A2BD377836A2EFF30AA5EECE940A2EB756DA13F3AE1572E"
+    insecure: false
+  auth:
+    registry: https://bitbucket.org/chromawallet/auth-server-ft4.git
+    path: rell/src/auth
+    tagOrBranch: v1.0.0r
+    rid: x"8CEABFA2B1479B1088DB3FCC39F7D785FA2B5365EF7C1D1236FDFE06898FE347"
+    insecure: false
