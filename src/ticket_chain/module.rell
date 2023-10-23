@@ -13,6 +13,10 @@ namespace ft4 {
     import lib.ft4.version;
 }
 
+// TODO: Revise when we have real pricing
+val SCU_COST = 1;
+val EXTRA_STORAGE_COST = 1;
+
 struct module_args {
     asset_name: text;
     asset_symbol: text;
@@ -39,6 +43,7 @@ object state {
 entity lease {
     key pubkey, container_name: text;
     container_units: integer;
+    extra_storage_gib: integer;
     start_time: integer;
     mutable duration_millis: integer;
     mutable expired: boolean = false;
@@ -56,6 +61,7 @@ entity ticket {
 entity create_container_ticket {
     key ticket;
     container_units: integer;
+    extra_storage_gib: integer;
     duration_millis: integer;
     cost: integer;
 }
@@ -70,6 +76,7 @@ struct ticket_data {
 struct lease_data {
     container_name: text;
     container_units: integer;
+    extra_storage_gib: integer;
     expire_time_millis: integer;
     expired: boolean;
 }
@@ -124,20 +131,22 @@ operation add_test_chr() {
     ft4.assets.Unsafe.mint(account, get_asset(), chain_context.args.amount_to_mint);
 }
 
-operation create_container(pubkey, container_units: integer, cluster_class: text, duration_months: integer) {
+operation create_container(pubkey, container_units: integer, cluster_class: text, duration_months: integer, extra_storage_gib: integer) {
     require_initialized();
     require_pubkey(pubkey);
     require(container_units > 0, "container_units must be positive");
     require(duration_months > 0, "duration_months must be positive");
+    require(extra_storage_gib > -1, "extra_storage_gib must not be negative");
 
     val account = ft4.auth.authenticate(is_strict = false);
 
-    val cost = container_units * duration_months;
+    val cost = calculate_container_cost(duration_months, container_units, extra_storage_gib);
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), cost);
 
     val ticket = create ticket(type = ticket_type.CREATE_CONTAINER, account, pubkey);
     create create_container_ticket(ticket,
         container_units = container_units,
+        extra_storage_gib = extra_storage_gib,
         duration_millis = duration_months * millis_per_month,
         cost = cost
     );
@@ -145,7 +154,8 @@ operation create_container(pubkey, container_units: integer, cluster_class: text
         ticket_id = ticket.rowid.to_integer(),
         pubkey = pubkey,
         container_units = container_units,
-        cluster_class = cluster_class
+        cluster_class = cluster_class,
+        extra_storage = 1024 * extra_storage_gib
     ).to_gtv());
 }
 
@@ -158,7 +168,7 @@ operation prolong_container(pubkey, container_name: text, duration_months: integ
 
     val lease = require(lease @? { pubkey, container_name }, "No current lease for container %s".format(container_name));
 
-    val cost = lease.container_units * duration_months;
+    val cost = calculate_container_cost(duration_months, lease.container_units, lease.extra_storage_gib);
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), cost);
     lease.duration_millis += duration_months * millis_per_month;
 
@@ -169,6 +179,9 @@ operation prolong_container(pubkey, container_name: text, duration_months: integ
         lease.expired = false;
     }
 }
+
+function calculate_container_cost(duration_months: integer, container_units: integer, extra_storage_gib: integer): integer =
+    container_units * duration_months * SCU_COST + extra_storage_gib * duration_months * EXTRA_STORAGE_COST;
 
 operation __icmf_message(sender: byte_array, topic: text, body: gtv) {
     require_initialized();
@@ -205,6 +218,7 @@ function receive_icmf_message(sender: byte_array, topic: text, body: gtv) {
                         pubkey = ticket.pubkey,
                         container_name = message.container_name!!,
                         container_units = specific_ticket.container_units,
+                        extra_storage_gib = specific_ticket.extra_storage_gib,
                         start_time = op_context.last_block_time,
                         duration_millis = specific_ticket.duration_millis
                     );
@@ -226,7 +240,7 @@ query get_ticket_by_id(ticket_id: integer): ticket_data? =
     ticket @? { .rowid == rowid(ticket_id) } (ticket_data(.rowid.to_integer(), .type, .state, .error_message));
 
 query get_leases_by_pubkey(pubkey): list<lease_data> =
-    lease @* { pubkey } (lease_data(.container_name, container_units = .container_units, expire_time_millis = .start_time + .duration_millis, .expired));
+    lease @* { pubkey } (lease_data(.container_name, container_units = .container_units, extra_storage_gib = .extra_storage_gib, expire_time_millis = .start_time + .duration_millis, .expired));
 
 function require_initialized() {
     require(state.initialized == true, "Ticket chain is not initialized");
