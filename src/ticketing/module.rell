@@ -42,28 +42,32 @@ function create_provider_if_not_exist(pubkey): provider {
     return provider;
 }
 
-function create_container_from_ticket(pubkey, container_units: integer, cluster_class: text): text {
+function create_container_from_ticket(pubkey, container_units: integer, cluster_class: text, extra_storage: integer): text {
     require_pubkey(pubkey);
     val provider = create_provider_if_not_exist(pubkey);
 
     val clusters = cluster @* { cluster.name != clusters.system, .operational };
     for (cluster in clusters) {
         val available_container_units = get_available_container_units(cluster);
-        if (is_cluster_in_class(cluster, cluster_class) and available_container_units >= container_units) {
-            val container = create_container_in_cluster(provider, cluster);
+        val available_extra_storage = get_available_extra_storage(cluster);
+        if (is_cluster_in_class(cluster, cluster_class)
+            and available_container_units >= container_units
+            and available_extra_storage >= extra_storage
+        ) {
+            val container = create_container_in_cluster(provider, cluster, container_units, extra_storage);
             return container.name;
         }
     }
     return "";
 }
 
-function create_container_in_cluster(provider, cluster): container {
+function create_container_in_cluster(provider, cluster, container_units: integer, extra_storage: integer): container {
     val name = [cluster.to_gtv(), provider.pubkey.to_gtv(), op_context.transaction.tx_rid.to_gtv()].hash().to_hex();
     return create_container_impl(
         provider, name, cluster, 1, [provider.pubkey],
-        standard_container_defaults.container_units,
+        container_units,
         standard_container_defaults.max_blockchains,
-        standard_container_defaults.extra_storage
+        extra_storage
     );
 }
 
