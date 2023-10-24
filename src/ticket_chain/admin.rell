@@ -1,1 +1,16 @@
-import lib.ft4.admin;
+function require_admin() {
+    require(
+        op_context.is_signer(chain_context.args.admin_pubkey),
+        "Expected admin signature"
+    );
+}
+
+operation register_account(pubkey) {
+    require_admin();
+
+    val auth_descriptor = ft4.acc.single_sig_auth_descriptor(pubkey, set(["T"]));
+
+    before_account_registration(auth_descriptor);
+    ft4.acc.Unsafe.create_account_with_auth(auth_descriptor);
+    after_account_registration(auth_descriptor);
+}

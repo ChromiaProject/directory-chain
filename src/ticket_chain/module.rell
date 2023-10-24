@@ -24,6 +24,7 @@ struct module_args {
     asset_decimals: integer;
     amount_to_mint: big_integer;
     pool_account_pubkey: pubkey;
+    admin_pubkey: pubkey;
 }
 
 val millis_per_month = 30 * 24 * 60 * 60 * 1000;
@@ -112,10 +113,18 @@ function () = ft4.auth.add_auth_handler(
 );
 
 @extend(auth.before_account_registration) function(ft4.acc.auth_descriptor, ft4.auth.signature) {
+    before_account_registration(auth_descriptor);
+}
+
+function before_account_registration(ft4.acc.auth_descriptor) {
     require_initialized();
 }
 
 @extend(auth.after_account_registration) function(ft4.acc.auth_descriptor, ft4.auth.signature) {
+    after_account_registration(auth_descriptor);
+}
+
+function after_account_registration(ft4.acc.auth_descriptor) {
     val account_id = auth_descriptor.hash();
     val account = ft4.acc.account_by_id(account_id);
     log("Account created: %s".format(account.id));
