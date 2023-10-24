@@ -62,3 +62,14 @@ query get_proposal_voter_info(rowid): list<proposal_voter> {
     val proposal = require_proposal(rowid);
     return vote @* { .proposal.rowid == rowid } (proposal_voter(.provider.pubkey, .provider.name, .vote));
 }
+
+struct blockchain_configuration_attempt_data {
+    state: blockchain_configuration_update_state;
+    applied_at_height: integer;
+}
+
+query get_blockchain_configuration_update_attempt_state_by_tx_rid(tx_rid: byte_array): blockchain_configuration_attempt_data? =
+    blockchain_configuration_update_attempt @? { .proposal.transaction.tx_rid == tx_rid } (blockchain_configuration_attempt_data(.state, .applied_at_height));
+
+query get_blockchain_configuration_update_attempt_state_by_proposal(rowid): blockchain_configuration_attempt_data? =
+    blockchain_configuration_update_attempt @? { .proposal.rowid == rowid } (blockchain_configuration_attempt_data(.state, .applied_at_height));

@@ -36,6 +36,8 @@ function test_precise_configuration_update_config_happy() {
         [c.test_node.pubkey]
     );
     assert_false(is_pending_blockchain_configuration_applied(bc_rid, 1, pending_config1_hash));
+    val update_attempt = blockchain_configuration_update_attempt @ { .config_hash == pending_config1_hash };
+    assert_equals(update_attempt.state, blockchain_configuration_update_state.PENDING);
 
     rell.test.tx().op(
         receive_configuration_updated_op(
@@ -59,6 +61,7 @@ function test_precise_configuration_update_config_happy() {
     );
     assert_true(nm_get_pending_blockchain_configuration(bc_rid, 5).empty());
     assert_true(is_pending_blockchain_configuration_applied(bc_rid, 5, pending_config1_hash));
+    assert_equals(update_attempt.state, blockchain_configuration_update_state.SUCCESSFUL);
     // Assert no redundant signer config entity is created
     assert_null(blockchain_configuration_signers @? { .height == 5 });
 }
@@ -492,6 +495,8 @@ function test_precise_configuration_update_config_failed() {
         [c.test_node.pubkey]
     );
     assert_false(is_pending_blockchain_configuration_applied(bc_rid, 1, pending_config1_hash));
+    val update_attempt = blockchain_configuration_update_attempt @ { .config_hash == pending_config1_hash };
+    assert_equals(update_attempt.state, blockchain_configuration_update_state.PENDING);
 
     rell.test.tx().op(
         receive_configuration_failed_op(
@@ -515,6 +520,7 @@ function test_precise_configuration_update_config_failed() {
     );
     assert_equals(nm_get_faulty_blockchain_configuration(bc_rid, 5), pending_config1_hash);
     assert_true(nm_get_pending_blockchain_configuration(bc_rid, 5).empty());
+    assert_equals(update_attempt.state, blockchain_configuration_update_state.FAILED);
 }
 
 function setup(): (anchor_chain: blockchain, bc_rid: byte_array) {
