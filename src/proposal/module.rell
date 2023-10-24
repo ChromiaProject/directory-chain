@@ -46,6 +46,16 @@ entity proposal {
     mutable state: proposal_state = proposal_state.PENDING;
 }
 
+enum blockchain_configuration_update_state {
+    PENDING, SUCCESSFUL, FAILED
+}
+
+entity blockchain_configuration_update_attempt {
+    key proposal, config_hash: byte_array;
+    mutable applied_at_height: integer = -1;
+    mutable state: blockchain_configuration_update_state = blockchain_configuration_update_state.PENDING;
+}
+
 operation revoke_proposal(my_pubkey: pubkey, proposal_rowid: rowid) {
     val me = require_is_provider_with_rate_limit(my_pubkey);
     require_provider_auth_with_rate_limit(me);

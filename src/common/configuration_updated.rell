@@ -44,6 +44,8 @@
         return;
     }
 
+    update blockchain_configuration_update_attempt @? { .config_hash == message.config_hash }
+        (state = blockchain_configuration_update_state.SUCCESSFUL, applied_at_height = message.height);
     delete signer_excluded_from_pending_configuration @* { bc, .config_hash == pending_configuration.config_hash };
     delete pending_configuration;
 

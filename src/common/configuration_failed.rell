@@ -34,6 +34,8 @@
 
     log("Deleting failed pending configuration with hash %s for chain %s".format(message.config_hash, message.blockchain_rid));
 
+    update blockchain_configuration_update_attempt @? { .config_hash == message.config_hash }
+        (state = blockchain_configuration_update_state.FAILED, applied_at_height = message.height);
     create faulty_blockchain_configuration(
         blockchain = bc,
         config_hash = message.config_hash,
