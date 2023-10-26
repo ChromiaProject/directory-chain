@@ -107,11 +107,6 @@ function expire_leases(current_time_millis: integer) {
     }
 }
 
-@extend(ft4.auth.auth_handler)
-function () = ft4.auth.add_auth_handler(
-  flags = ["T"]
-);
-
 @extend(auth.before_account_registration) function(ft4.acc.auth_descriptor, ft4.auth.signature) {
     before_account_registration(auth_descriptor);
 }
@@ -132,12 +127,41 @@ function after_account_registration(ft4.acc.auth_descriptor) {
     ft4.assets.Unsafe.mint(account, get_asset(), chain_context.args.amount_to_mint);
 }
 
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "add_test_chr",
+    flags = ["T"],
+    message = add_test_chr_auth_message(*)
+);
+
+function add_test_chr_auth_message(gtv) =
+    "Please sign the message\nto receive %s %s on account {account_id}\n\nNonce: {nonce}".format(
+        chain_context.args.amount_to_mint,
+        chain_context.args.asset_symbol);
+
 operation add_test_chr() {
     require_initialized();
 
-    val account = ft4.auth.authenticate(is_strict = false);
+    val account = ft4.auth.authenticate();
 
     ft4.assets.Unsafe.mint(account, get_asset(), chain_context.args.amount_to_mint);
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "create_container",
+    flags = ["T"],
+    message = create_container_auth_message(*)
+);
+
+function create_container_auth_message(gtv): text {
+    val args = struct<create_container>.from_gtv(gtv);
+    val cluster_class_message = if (args.cluster_class.empty()) "" else " of class %s".format(args.cluster_class);
+    return "Please sign the message\nto lease container %s\nwith %s SCUs and %s GiB extra storage\nfor %s weeks\non account {account_id}\n\nNonce: {nonce}".format(
+        cluster_class_message,
+        args.container_units,
+        args.extra_storage_gib,
+        args.duration_weeks);
 }
 
 operation create_container(pubkey, container_units: integer, cluster_class: text, duration_weeks: integer, extra_storage_gib: integer) {
@@ -147,7 +171,7 @@ operation create_container(pubkey, container_units: integer, cluster_class: text
     require(duration_weeks > 0, "duration_weeks must be positive");
     require(extra_storage_gib > -1, "extra_storage_gib must not be negative");
 
-    val account = ft4.auth.authenticate(is_strict = false);
+    val account = ft4.auth.authenticate();
 
     val cost = calculate_container_cost(duration_weeks, container_units, extra_storage_gib);
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), cost);
@@ -168,12 +192,26 @@ operation create_container(pubkey, container_units: integer, cluster_class: text
     ).to_gtv());
 }
 
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "prolong_container",
+    flags = ["T"],
+    message = prolong_container_auth_message(*)
+);
+
+function prolong_container_auth_message(gtv): text {
+    val args = struct<prolong_container>.from_gtv(gtv);
+    return "Please sign the message\nto prolong lease of container %s\nfor %s weeks\non account {account_id}\n\nNonce: {nonce}".format(
+        args.container_name,
+        args.duration_weeks);
+}
+
 operation prolong_container(pubkey, container_name: text, duration_weeks: integer) {
     require_initialized();
     require_pubkey(pubkey);
     require(duration_weeks > 0, "duration_weeks must be positive");
 
-    val account = ft4.auth.authenticate(is_strict = false);
+    val account = ft4.auth.authenticate();
 
     val lease = require(lease @? { pubkey, container_name }, "No current lease for container %s".format(container_name));
 
