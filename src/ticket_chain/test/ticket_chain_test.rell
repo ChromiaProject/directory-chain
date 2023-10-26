@@ -105,7 +105,7 @@ function test_expire_lease() {
 
     assert_false(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
     rell.test.tx().op(
-        expire_leases_op(millis_per_month + 1)
+        expire_leases_op(millis_per_week + 1)
     ).run();
     assert_true(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
     assert_events(("icmf_message", (
@@ -122,7 +122,7 @@ function test_not_expire_lease() {
 
     assert_false(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
     rell.test.tx().op(
-        expire_leases_op(millis_per_month - 60000)
+        expire_leases_op(millis_per_week - 60000)
     ).run();
     assert_false(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
     assert_events(); // assert no ICMF messages sent
@@ -136,7 +136,7 @@ function test_prolong_non_expired_container() {
     val alice_balance = get_balance(alice);
     val pool_balance = get_balance(get_pool_account());
 
-    assert_equals(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.duration_millis), 1 * millis_per_month);
+    assert_equals(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.duration_millis), 1 * millis_per_week);
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "prolong_container",
             [rell.test.pubkeys.alice.to_gtv(), container_name.to_gtv(), (1).to_gtv()])
@@ -145,7 +145,7 @@ function test_prolong_non_expired_container() {
     ).run();
     assert_lt(get_balance(alice), alice_balance);
     assert_gt(get_balance(get_pool_account()), pool_balance);
-    assert_equals(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.duration_millis), 2 * millis_per_month);
+    assert_equals(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.duration_millis), 2 * millis_per_week);
     assert_false(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
     assert_events(); // assert no ICMF messages sent
 }
@@ -159,7 +159,7 @@ function test_prolong_expired_container() {
     val pool_balance = get_balance(get_pool_account());
 
     rell.test.tx().op(
-        expire_leases_op(millis_per_month + 1)
+        expire_leases_op(millis_per_week + 1)
     ).run();
     assert_true(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
 
@@ -171,7 +171,7 @@ function test_prolong_expired_container() {
     ).run();
     assert_lt(get_balance(alice), alice_balance);
     assert_gt(get_balance(get_pool_account()), pool_balance);
-    assert_equals(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.duration_millis), 2 * millis_per_month);
+    assert_equals(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.duration_millis), 2 * millis_per_week);
     assert_false(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
     assert_events(("icmf_message", (
         topic = restart_container_topic,
@@ -215,6 +215,8 @@ function do_create_account(keypair: rell.test.keypair, failure: text? = null): f
 function do_create_container(ft4.acc.account, keypair: rell.test.keypair, success: boolean, block_height: integer, ticket_id: integer, container_units: integer = 2): text {
     val container_name = "container name";
 
+    val cost = calculate_container_cost(1, container_units, 0);
+
     val initial_balance = get_balance(account);
     val initial_pool_balance = get_balance(get_pool_account());
 
@@ -235,8 +237,8 @@ function do_create_container(ft4.acc.account, keypair: rell.test.keypair, succes
     assert_equals(require(get_ticket_by_id(ticket_id)), pending_ticket);
     assert_equals(require(get_ticket_by_transaction(tx_rid)), pending_ticket);
 
-    assert_equals(get_balance(account), initial_balance - container_units);
-    assert_equals(get_balance(get_pool_account()), initial_pool_balance + container_units);
+    assert_equals(get_balance(account), initial_balance - cost);
+    assert_equals(get_balance(get_pool_account()), initial_pool_balance + cost);
 
     rell.test.tx().op(
         icmf_message_op(x"", ticket_result_topic, ticket_result_message(ticket_id = ticket_id, error_message = if (success) null else "error", container_name).to_gtv())
@@ -251,8 +253,8 @@ function do_create_container(ft4.acc.account, keypair: rell.test.keypair, succes
     assert_equals(require(get_ticket_by_transaction(tx_rid)), done_ticket);
 
     if (success) {
-        assert_equals(get_balance(account), initial_balance - container_units);
-        assert_equals(get_balance(get_pool_account()), initial_pool_balance + container_units);
+        assert_equals(get_balance(account), initial_balance - cost);
+        assert_equals(get_balance(get_pool_account()), initial_pool_balance + cost);
     } else {
         assert_equals(get_balance(account), initial_balance);
         assert_equals(get_balance(get_pool_account()), initial_pool_balance);
