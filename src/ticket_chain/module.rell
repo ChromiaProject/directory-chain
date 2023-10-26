@@ -27,7 +27,7 @@ struct module_args {
     admin_pubkey: pubkey;
 }
 
-val millis_per_month = 30 * 24 * 60 * 60 * 1000;
+val millis_per_week = 7 * 24 * 60 * 60 * 1000;
 
 enum ticket_state {
     PENDING, SUCCESS, FAILURE
@@ -140,23 +140,23 @@ operation add_test_chr() {
     ft4.assets.Unsafe.mint(account, get_asset(), chain_context.args.amount_to_mint);
 }
 
-operation create_container(pubkey, container_units: integer, cluster_class: text, duration_months: integer, extra_storage_gib: integer) {
+operation create_container(pubkey, container_units: integer, cluster_class: text, duration_weeks: integer, extra_storage_gib: integer) {
     require_initialized();
     require_pubkey(pubkey);
     require(container_units > 0, "container_units must be positive");
-    require(duration_months > 0, "duration_months must be positive");
+    require(duration_weeks > 0, "duration_weeks must be positive");
     require(extra_storage_gib > -1, "extra_storage_gib must not be negative");
 
     val account = ft4.auth.authenticate(is_strict = false);
 
-    val cost = calculate_container_cost(duration_months, container_units, extra_storage_gib);
+    val cost = calculate_container_cost(duration_weeks, container_units, extra_storage_gib);
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), cost);
 
     val ticket = create ticket(type = ticket_type.CREATE_CONTAINER, account, pubkey);
     create create_container_ticket(ticket,
         container_units = container_units,
         extra_storage_gib = extra_storage_gib,
-        duration_millis = duration_months * millis_per_month,
+        duration_millis = duration_weeks * millis_per_week,
         cost = cost
     );
     send_message(create_container_topic, create_container_message(
@@ -168,18 +168,18 @@ operation create_container(pubkey, container_units: integer, cluster_class: text
     ).to_gtv());
 }
 
-operation prolong_container(pubkey, container_name: text, duration_months: integer) {
+operation prolong_container(pubkey, container_name: text, duration_weeks: integer) {
     require_initialized();
     require_pubkey(pubkey);
-    require(duration_months > 0, "duration_months must be positive");
+    require(duration_weeks > 0, "duration_weeks must be positive");
 
     val account = ft4.auth.authenticate(is_strict = false);
 
     val lease = require(lease @? { pubkey, container_name }, "No current lease for container %s".format(container_name));
 
-    val cost = calculate_container_cost(duration_months, lease.container_units, lease.extra_storage_gib);
+    val cost = calculate_container_cost(duration_weeks, lease.container_units, lease.extra_storage_gib);
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), cost);
-    lease.duration_millis += duration_months * millis_per_month;
+    lease.duration_millis += duration_weeks * millis_per_week;
 
     if (lease.expired) {
         log("Lease for container %s was expired, restarting it".format(lease.container_name));
@@ -189,8 +189,8 @@ operation prolong_container(pubkey, container_name: text, duration_months: integ
     }
 }
 
-function calculate_container_cost(duration_months: integer, container_units: integer, extra_storage_gib: integer): integer =
-    container_units * duration_months * SCU_COST + extra_storage_gib * duration_months * EXTRA_STORAGE_COST;
+function calculate_container_cost(duration_weeks: integer, container_units: integer, extra_storage_gib: integer): integer =
+    (container_units * SCU_COST + extra_storage_gib * EXTRA_STORAGE_COST) * duration_weeks * 4;
 
 operation __icmf_message(sender: byte_array, topic: text, body: gtv) {
     require_initialized();
