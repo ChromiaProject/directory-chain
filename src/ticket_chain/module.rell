@@ -65,13 +65,15 @@ entity create_container_ticket {
     extra_storage_gib: integer;
     duration_millis: integer;
     cost: integer;
+    mutable container_name: text = "";
 }
 
-struct ticket_data {
+struct create_container_ticket_data {
     ticket_id: integer;
     type: ticket_type;
     state: ticket_state;
     error_message: text;
+    container_name: text;
 }
 
 struct lease_data {
@@ -258,10 +260,12 @@ function receive_icmf_message(sender: byte_array, topic: text, body: gtv) {
             val specific_ticket = create_container_ticket @ { ticket };
             when (ticket.state) {
                 ticket_state.SUCCESS -> {
-                    log("Successfully created container for ticket %s".format(message.ticket_id));
+                    val container_name = message.container_name!!;
+                    log("Successfully created container %s for ticket %s".format(container_name, message.ticket_id));
+                    specific_ticket.container_name = container_name;
                     create lease(
                         pubkey = ticket.pubkey,
-                        container_name = message.container_name!!,
+                        container_name = container_name,
                         container_units = specific_ticket.container_units,
                         extra_storage_gib = specific_ticket.extra_storage_gib,
                         start_time = op_context.last_block_time,
@@ -278,11 +282,13 @@ function receive_icmf_message(sender: byte_array, topic: text, body: gtv) {
     }
 }
 
-query get_ticket_by_transaction(tx_rid: byte_array): ticket_data? =
-    ticket @? { .transaction.tx_rid == tx_rid } (ticket_data(.rowid.to_integer(), .type, .state, .error_message));
+query get_create_container_ticket_by_transaction(tx_rid: byte_array): create_container_ticket_data? =
+    create_container_ticket @? { .ticket.transaction.tx_rid == tx_rid }
+        (create_container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
 
-query get_ticket_by_id(ticket_id: integer): ticket_data? =
-    ticket @? { .rowid == rowid(ticket_id) } (ticket_data(.rowid.to_integer(), .type, .state, .error_message));
+query get_create_container_ticket_by_id(ticket_id: integer): create_container_ticket_data? =
+    create_container_ticket @? { .ticket.rowid == rowid(ticket_id) }
+        (create_container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
 
 query get_leases_by_pubkey(pubkey): list<lease_data> =
     lease @* { pubkey } (lease_data(.container_name, container_units = .container_units, extra_storage_gib = .extra_storage_gib, expire_time_millis = .start_time + .duration_millis, .expired));

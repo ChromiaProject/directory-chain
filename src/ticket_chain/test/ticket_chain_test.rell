@@ -233,9 +233,9 @@ function do_create_container(ft4.acc.account, keypair: rell.test.keypair, succes
         block_height = block_height).to_gtv_pretty()
     ));
 
-    val pending_ticket = ticket_data(ticket_id, ticket_type.CREATE_CONTAINER, ticket_state.PENDING, "");
-    assert_equals(require(get_ticket_by_id(ticket_id)), pending_ticket);
-    assert_equals(require(get_ticket_by_transaction(tx_rid)), pending_ticket);
+    val pending_ticket = create_container_ticket_data(ticket_id, ticket_type.CREATE_CONTAINER, ticket_state.PENDING, error_message = "", container_name = "");
+    assert_equals(require(get_create_container_ticket_by_id(ticket_id)), pending_ticket);
+    assert_equals(require(get_create_container_ticket_by_transaction(tx_rid)), pending_ticket);
 
     assert_equals(get_balance(account), initial_balance - cost);
     assert_equals(get_balance(get_pool_account()), initial_pool_balance + cost);
@@ -243,14 +243,15 @@ function do_create_container(ft4.acc.account, keypair: rell.test.keypair, succes
     rell.test.tx().op(
         icmf_message_op(x"", ticket_result_topic, ticket_result_message(ticket_id = ticket_id, error_message = if (success) null else "error", container_name).to_gtv())
     ).run();
-    val done_ticket = ticket_data(
+    val done_ticket = create_container_ticket_data(
         ticket_id = ticket_id,
         type = ticket_type.CREATE_CONTAINER,
         state = if (success) ticket_state.SUCCESS else ticket_state.FAILURE,
-        error_message = if (success) "" else "error"
+        error_message = if (success) "" else "error",
+        container_name = if (success) container_name else ""
     );
-    assert_equals(require(get_ticket_by_id(ticket_id)), done_ticket);
-    assert_equals(require(get_ticket_by_transaction(tx_rid)), done_ticket);
+    assert_equals(require(get_create_container_ticket_by_id(ticket_id)), done_ticket);
+    assert_equals(require(get_create_container_ticket_by_transaction(tx_rid)), done_ticket);
 
     if (success) {
         assert_equals(get_balance(account), initial_balance - cost);
