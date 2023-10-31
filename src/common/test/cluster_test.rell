@@ -152,3 +152,33 @@ function test_cluster_units() {
         update_node_with_units(rell.test.pubkeys.alice, node.pubkey, cluster_units = 1)
     ).sign(initial_provider).run_must_fail();
 }
+
+function test_add_disabled_node_to_cluster_fails() {
+    setup_module();
+
+    // Create a new node
+    rell.test.tx().op(
+        register_node_with_node_data(rell.test.pubkeys.alice, register_node_data(rell.test.pubkeys.bob, host = "host", port = 7777, api_url = "http://host/api_url"))
+    ).sign(rell.test.keypairs.alice).run();
+    val node = node @ { .pubkey == rell.test.pubkeys.bob };
+
+    // Adding a new cluster
+    rell.test.tx().op(
+        create_cluster(rell.test.pubkeys.alice, "cluster1", voter_sets.system_p, [rell.test.pubkeys.alice])
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Disable node
+    rell.test.tx().op(
+        disable_node(rell.test.pubkeys.alice, node.pubkey)
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Adding a disabled node into cluster1 should fail
+    rell.test.tx().op(
+        add_node_to_cluster(rell.test.pubkeys.alice, node.pubkey, "cluster1")
+    ).sign(rell.test.keypairs.alice).run_must_fail("Node not found or disabled");
+
+    // Adding a disabled replica node into cluster1 should fail
+    rell.test.tx().op(
+        add_replica_node_to_cluster(rell.test.pubkeys.alice, node.pubkey, "cluster1")
+    ).sign(rell.test.keypairs.alice).run_must_fail("Node not found or disabled");
+}
