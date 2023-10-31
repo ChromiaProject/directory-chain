@@ -59,6 +59,16 @@ function test_add_and_remove_blockchain_replica() {
         add_blockchain_replica(initial_provider.pub, foo_chain.rid, np1_node_key),
         remove_blockchain_replica(initial_provider.pub, foo_chain.rid, np1_node_key)
     ).sign(initial_provider).run_must_fail();
+
+    // Test that disabled node can't be added as bc replica
+    rell.test.tx().op(
+        disable_node(node_provider1.pub, np1_node_key)
+    ).sign(node_provider1).run();
+
+    rell.test.tx().op(
+        rell.test.nop(),
+        add_blockchain_replica(node_provider1.pub, foo_chain.rid, np1_node_key)
+    ).sign(node_provider1).run_must_fail("Node not found or disabled");
 }
 
 function test_blockchain_dependencies() {

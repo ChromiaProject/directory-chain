@@ -16,7 +16,8 @@ function require_clusters(names: list<text>): list<cluster> {
     }
     return clusters;
 }
-function require_node(pubkey) = require(node @? { pubkey }, "Node not found: " + pubkey);
+function require_node(pubkey, include_disabled: boolean = true) = require(node @? { pubkey, include_disabled or .active },
+    "Node not found" + (if(include_disabled) "" else " or disabled") + ": " + pubkey);
 function require_container(name) = require(container @? { name }, "Container %s not found".format(name));
 function require_voter_set(name) = require(voter_set @? { name }, "Voter set %s does not exist".format(name));
 function require_blockchain_entity(blockchain_rid: byte_array) = require(blockchain @? { blockchain_rid }, "Unknown blockchain " + blockchain_rid);
