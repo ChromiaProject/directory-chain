@@ -46,6 +46,7 @@ object state {
 
 entity lease {
     key pubkey, container_name: text;
+    index ft4.acc.account;
     container_units: integer;
     extra_storage_gib: integer;
     start_time: integer;
@@ -273,6 +274,7 @@ function receive_icmf_message(sender: byte_array, topic: text, body: gtv) {
                     create lease(
                         pubkey = ticket.pubkey,
                         container_name = container_name,
+                        account = ticket.account,
                         container_units = specific_ticket.container_units,
                         extra_storage_gib = specific_ticket.extra_storage_gib,
                         start_time = op_context.last_block_time,
@@ -308,6 +310,9 @@ query get_create_container_ticket_by_id(ticket_id: integer): create_container_ti
 
 query get_leases_by_pubkey(pubkey): list<lease_data> =
     lease @* { pubkey } (lease_data(.container_name, container_units = .container_units, extra_storage_gib = .extra_storage_gib, expire_time_millis = .start_time + .duration_millis, .expired));
+
+query get_leases_by_account(account_id: byte_array): list<lease_data> =
+    lease @* { .account.id == account_id } (lease_data(.container_name, container_units = .container_units, extra_storage_gib = .extra_storage_gib, expire_time_millis = .start_time + .duration_millis, .expired));
 
 function require_initialized() {
     require(state.initialized == true, "Ticket chain is not initialized");
