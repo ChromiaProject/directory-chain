@@ -75,7 +75,23 @@ function test_add_test_chr() {
 function test_create_container_success() {
     rell.test.tx().op(init()).run();
     val alice = require(do_create_account(rell.test.keypairs.alice));
-    do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 15);
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 15, container_units = 2);
+
+    val expected_lease = lease_data(
+        container_name = container_name,
+        container_units = 2,
+        extra_storage_gib = 0,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*2 + millis_per_week,
+        expired = false
+    );
+
+    val leases1 = get_leases_by_pubkey(rell.test.pubkeys.alice);
+    assert_equals(leases1.size(), 1);
+    assert_equals(leases1[0], expected_lease);
+
+    val leases2 = get_leases_by_account(alice.id);
+    assert_equals(leases2.size(), 1);
+    assert_equals(leases2[0], expected_lease);
 }
 
 function test_create_container_failure() {
