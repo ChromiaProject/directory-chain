@@ -282,6 +282,13 @@ function receive_icmf_message(sender: byte_array, topic: text, body: gtv) {
     }
 }
 
+query get_balance(account_id: byte_array): big_integer {
+    val account = require(ft4.acc.account @? { account_id }, "Account %s not found".format(account_id));
+    return get_account_balance(account);
+}
+
+query get_pool_balance(): big_integer = get_account_balance(get_pool_account());
+
 query get_create_container_ticket_by_transaction(tx_rid: byte_array): create_container_ticket_data? =
     create_container_ticket @? { .ticket.transaction.tx_rid == tx_rid }
         (create_container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
@@ -310,6 +317,9 @@ function register_assets() {
             chain_context.args.asset_icon
         );
 }
+
+function get_account_balance(ft4.acc.account): big_integer =
+    (ft4.assets.balance @? { account, get_asset() }.amount) ?: 0L;
 
 function get_asset(): ft4.assets.asset {
     val asset_id = (chain_context.args.asset_name, chain_context.blockchain_rid).hash();
