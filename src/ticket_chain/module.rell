@@ -27,6 +27,9 @@ struct module_args {
     admin_pubkey: pubkey;
 }
 
+// Rell does not have a power function/operator
+val units_per_asset = integer("1" + "0".repeat(chain_context.args.asset_decimals));
+
 val millis_per_week = 7 * 24 * 60 * 60 * 1000;
 
 enum ticket_state {
@@ -136,7 +139,7 @@ function () = ft4.auth.add_auth_handler(
 
 function add_test_chr_auth_message(gtv) =
     "Please sign the message\nto receive %s %s on account {account_id}".format(
-        chain_context.args.amount_to_mint,
+        ft4.assets.format_amount_with_decimals(chain_context.args.amount_to_mint, chain_context.args.asset_decimals),
         chain_context.args.asset_symbol);
 
 operation add_test_chr() {
@@ -157,11 +160,14 @@ function () = ft4.auth.add_auth_handler(
 function create_container_auth_message(gtv): text {
     val args = struct<create_container>.from_gtv(gtv);
     val cluster_class_message = if (args.cluster_class.empty()) "" else " of class %s".format(args.cluster_class);
-    return "Please sign the message\nto lease container %s\nwith %s SCUs and %s GiB extra storage\nfor %s weeks\non account {account_id}".format(
+    val cost = calculate_container_cost(args.duration_weeks, args.container_units, args.extra_storage_gib);
+    return "Please sign the message\nto lease container %s\nwith %s SCUs and %s GiB extra storage\nfor %s weeks\ncosting %s %s\non account {account_id}".format(
         cluster_class_message,
         args.container_units,
         args.extra_storage_gib,
-        args.duration_weeks);
+        args.duration_weeks,
+        ft4.assets.format_amount_with_decimals(cost, chain_context.args.asset_decimals),
+        chain_context.args.asset_symbol);
 }
 
 operation create_container(pubkey, container_units: integer, cluster_class: text, duration_weeks: integer, extra_storage_gib: integer) {
@@ -201,7 +207,8 @@ function () = ft4.auth.add_auth_handler(
 
 function prolong_container_auth_message(gtv): text {
     val args = struct<prolong_container>.from_gtv(gtv);
-    return "Please sign the message\nto prolong lease of container %s\nfor %s weeks\non account {account_id".format(
+    // TODO indicate cost for prolong_container
+    return "Please sign the message\nto prolong lease of container %s\nfor %s weeks\non account {account_id}".format(
         args.container_name,
         args.duration_weeks);
 }
@@ -228,7 +235,7 @@ operation prolong_container(pubkey, container_name: text, duration_weeks: intege
 }
 
 function calculate_container_cost(duration_weeks: integer, container_units: integer, extra_storage_gib: integer): integer =
-    (container_units * SCU_COST + extra_storage_gib * EXTRA_STORAGE_COST) * duration_weeks * 4;
+    (container_units * SCU_COST + extra_storage_gib * EXTRA_STORAGE_COST) * duration_weeks * 4 * units_per_asset;
 
 operation __icmf_message(sender: byte_array, topic: text, body: gtv) {
     require_initialized();
@@ -281,6 +288,8 @@ function receive_icmf_message(sender: byte_array, topic: text, body: gtv) {
         }
     }
 }
+
+query get_chr_asset() = ft4.assets.map_asset(get_asset());
 
 query get_balance(account_id: byte_array): big_integer {
     val account = require(ft4.acc.account @? { account_id }, "Account %s not found".format(account_id));
