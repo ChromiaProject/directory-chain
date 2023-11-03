@@ -44,6 +44,11 @@ object state {
     mutable initialized: boolean = false;
 }
 
+entity user {
+    key ft4.acc.account;
+    mutable last_refill_millis: integer;
+}
+
 entity lease {
     key container_name: text;
     index ft4.acc.account;
@@ -128,26 +133,33 @@ function after_account_registration(ft4.acc.account, ft4.acc.auth_descriptor) {
     log("Account created: %s".format(account.id));
 
     ft4.assets.Unsafe.mint(account, get_asset(), chain_context.args.amount_to_mint);
+
+    create user(account = account, last_refill_millis = op_context.last_block_time);
 }
 
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
-    scope = "add_test_chr",
+    scope = "claim_test_chr",
     flags = ["T"],
-    message = add_test_chr_auth_message(*)
+    message = claim_test_chr_auth_message(*)
 );
 
-function add_test_chr_auth_message(gtv) =
+function claim_test_chr_auth_message(gtv) =
     "Please sign the message\nto receive %s %s on account {account_id}".format(
         ft4.assets.format_amount_with_decimals(chain_context.args.amount_to_mint, chain_context.args.asset_decimals),
         chain_context.args.asset_symbol);
 
-operation add_test_chr() {
+operation claim_test_chr() {
     require_initialized();
 
     val account = ft4.auth.authenticate();
+    val user = require(user @? { account }, "No user for account %s".format(account.id));
+
+    require(user.last_refill_millis + millis_per_week < op_context.last_block_time,
+        "You have already claimed %s within the last 7 days, come back later".format(chain_context.args.asset_name));
 
     ft4.assets.Unsafe.mint(account, get_asset(), chain_context.args.amount_to_mint);
+    user.last_refill_millis = op_context.last_block_time;
 }
 
 @extend(ft4.auth.auth_handler)
@@ -178,6 +190,7 @@ operation create_container(provider_pubkey: pubkey, container_units: integer, cl
     require(extra_storage_gib > -1, "extra_storage_gib must not be negative");
 
     val account = ft4.auth.authenticate();
+    require(user @? { account }, "No user for account %s".format(account.id));
 
     val cost = calculate_container_cost(duration_weeks, container_units, extra_storage_gib);
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), cost);
@@ -223,6 +236,7 @@ operation prolong_container(container_name: text, duration_weeks: integer) {
     require(duration_weeks > 0, "duration_weeks must be positive");
 
     val account = ft4.auth.authenticate();
+    require(user @? { account }, "No user for account %s".format(account.id));
 
     val lease = require(lease @? { container_name }, "No current lease for container %s".format(container_name));
 
