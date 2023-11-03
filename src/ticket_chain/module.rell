@@ -45,7 +45,8 @@ object state {
 }
 
 entity lease {
-    key pubkey, container_name: text;
+    key container_name: text;
+    index pubkey;
     index ft4.acc.account;
     container_units: integer;
     extra_storage_gib: integer;
@@ -214,14 +215,13 @@ function prolong_container_auth_message(gtv): text {
         args.duration_weeks);
 }
 
-operation prolong_container(pubkey, container_name: text, duration_weeks: integer) {
+operation prolong_container(container_name: text, duration_weeks: integer) {
     require_initialized();
-    require_pubkey(pubkey);
     require(duration_weeks > 0, "duration_weeks must be positive");
 
     val account = ft4.auth.authenticate();
 
-    val lease = require(lease @? { pubkey, container_name }, "No current lease for container %s".format(container_name));
+    val lease = require(lease @? { container_name }, "No current lease for container %s".format(container_name));
 
     val cost = calculate_container_cost(duration_weeks, lease.container_units, lease.extra_storage_gib);
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), cost);
@@ -272,8 +272,8 @@ function receive_icmf_message(sender: byte_array, topic: text, body: gtv) {
                     log("Successfully created container %s for ticket %s".format(container_name, message.ticket_id));
                     specific_ticket.container_name = container_name;
                     create lease(
-                        pubkey = ticket.pubkey,
                         container_name = container_name,
+                        pubkey = ticket.pubkey,
                         account = ticket.account,
                         container_units = specific_ticket.container_units,
                         extra_storage_gib = specific_ticket.extra_storage_gib,
