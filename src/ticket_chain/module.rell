@@ -46,7 +46,6 @@ object state {
 
 entity lease {
     key container_name: text;
-    index pubkey;
     index ft4.acc.account;
     container_units: integer;
     extra_storage_gib: integer;
@@ -59,7 +58,6 @@ entity ticket {
     index transaction = op_context.transaction;
     index type: ticket_type;
     account: ft4.acc.account;
-    pubkey;
     mutable state: ticket_state = ticket_state.PENDING;
     mutable error_message: text = "";
 }
@@ -172,9 +170,9 @@ function create_container_auth_message(gtv): text {
         chain_context.args.asset_symbol);
 }
 
-operation create_container(pubkey, container_units: integer, cluster_class: text, duration_weeks: integer, extra_storage_gib: integer) {
+operation create_container(provider_pubkey: pubkey, container_units: integer, cluster_class: text, duration_weeks: integer, extra_storage_gib: integer) {
     require_initialized();
-    require_pubkey(pubkey);
+    require_pubkey(provider_pubkey);
     require(container_units > 0, "container_units must be positive");
     require(duration_weeks > 0, "duration_weeks must be positive");
     require(extra_storage_gib > -1, "extra_storage_gib must not be negative");
@@ -184,7 +182,7 @@ operation create_container(pubkey, container_units: integer, cluster_class: text
     val cost = calculate_container_cost(duration_weeks, container_units, extra_storage_gib);
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), cost);
 
-    val ticket = create ticket(type = ticket_type.CREATE_CONTAINER, account, pubkey);
+    val ticket = create ticket(type = ticket_type.CREATE_CONTAINER, account);
     create create_container_ticket(ticket,
         container_units = container_units,
         extra_storage_gib = extra_storage_gib,
@@ -193,7 +191,7 @@ operation create_container(pubkey, container_units: integer, cluster_class: text
     );
     send_message(create_container_topic, create_container_message(
         ticket_id = ticket.rowid.to_integer(),
-        pubkey = pubkey,
+        provider_pubkey = provider_pubkey,
         container_units = container_units,
         cluster_class = cluster_class,
         extra_storage = 1024 * extra_storage_gib
@@ -273,7 +271,6 @@ function receive_icmf_message(sender: byte_array, topic: text, body: gtv) {
                     specific_ticket.container_name = container_name;
                     create lease(
                         container_name = container_name,
-                        pubkey = ticket.pubkey,
                         account = ticket.account,
                         container_units = specific_ticket.container_units,
                         extra_storage_gib = specific_ticket.extra_storage_gib,
@@ -307,9 +304,6 @@ query get_create_container_ticket_by_transaction(tx_rid: byte_array): create_con
 query get_create_container_ticket_by_id(ticket_id: integer): create_container_ticket_data? =
     create_container_ticket @? { .ticket.rowid == rowid(ticket_id) }
         (create_container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
-
-query get_leases_by_pubkey(pubkey): list<lease_data> =
-    lease @* { pubkey } (lease_data(.container_name, container_units = .container_units, extra_storage_gib = .extra_storage_gib, expire_time_millis = .start_time + .duration_millis, .expired));
 
 query get_leases_by_account(account_id: byte_array): list<lease_data> =
     lease @* { .account.id == account_id } (lease_data(.container_name, container_units = .container_units, extra_storage_gib = .extra_storage_gib, expire_time_millis = .start_time + .duration_millis, .expired));

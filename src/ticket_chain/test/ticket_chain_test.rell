@@ -85,10 +85,6 @@ function test_create_container_success() {
         expired = false
     );
 
-    val leases1 = get_leases_by_pubkey(rell.test.pubkeys.alice);
-    assert_equals(leases1.size(), 1);
-    assert_equals(leases1[0], expected_lease);
-
     val leases2 = get_leases_by_account(alice.id);
     assert_equals(leases2.size(), 1);
     assert_equals(leases2[0], expected_lease);
@@ -123,11 +119,11 @@ function test_expire_lease() {
     val alice = require(do_create_account(rell.test.keypairs.alice));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 15);
 
-    assert_false(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
+    assert_false(lease @ { container_name } (.expired));
     rell.test.tx().op(
         expire_leases_op(millis_per_week + 1)
     ).run();
-    assert_true(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
+    assert_true(lease @ { container_name } (.expired));
     assert_events(("icmf_message", (
         topic = stop_container_topic,
         body = stop_container_message(container_name).to_gtv(),
@@ -140,11 +136,11 @@ function test_not_expire_lease() {
     val alice = require(do_create_account(rell.test.keypairs.alice));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 15);
 
-    assert_false(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
+    assert_false(lease @ { container_name } (.expired));
     rell.test.tx().op(
         expire_leases_op(millis_per_week - 60000)
     ).run();
-    assert_false(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
+    assert_false(lease @ { container_name } (.expired));
     assert_events(); // assert no ICMF messages sent
 }
 
@@ -156,7 +152,7 @@ function test_prolong_non_expired_container() {
     val alice_balance = get_account_balance(alice);
     val pool_balance = get_pool_balance();
 
-    assert_equals(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.duration_millis), 1 * millis_per_week);
+    assert_equals(lease @ { container_name } (.duration_millis), 1 * millis_per_week);
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "prolong_container",
             [container_name.to_gtv(), (1).to_gtv()])
@@ -165,8 +161,8 @@ function test_prolong_non_expired_container() {
     ).run();
     assert_lt(get_account_balance(alice), alice_balance);
     assert_gt(get_pool_balance(), pool_balance);
-    assert_equals(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.duration_millis), 2 * millis_per_week);
-    assert_false(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
+    assert_equals(lease @ { container_name } (.duration_millis), 2 * millis_per_week);
+    assert_false(lease @ { container_name } (.expired));
     assert_events(); // assert no ICMF messages sent
 }
 
@@ -181,7 +177,7 @@ function test_prolong_expired_container() {
     rell.test.tx().op(
         expire_leases_op(millis_per_week + 1)
     ).run();
-    assert_true(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
+    assert_true(lease @ { container_name } (.expired));
 
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "prolong_container",
@@ -191,8 +187,8 @@ function test_prolong_expired_container() {
     ).run();
     assert_lt(get_account_balance(alice), alice_balance);
     assert_gt(get_pool_balance(), pool_balance);
-    assert_equals(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.duration_millis), 2 * millis_per_week);
-    assert_false(lease @ { .pubkey == rell.test.pubkeys.alice, container_name } (.expired));
+    assert_equals(lease @ { container_name } (.duration_millis), 2 * millis_per_week);
+    assert_false(lease @ { container_name } (.expired));
     assert_events(("icmf_message", (
         topic = restart_container_topic,
         body = restart_container_message(container_name).to_gtv(),
