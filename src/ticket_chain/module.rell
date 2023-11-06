@@ -327,6 +327,9 @@ query get_create_container_ticket_by_id(ticket_id: integer): create_container_ti
 query get_leases_by_account(account_id: byte_array): list<lease_data> =
     lease @* { .account.id == account_id } (lease_data(.container_name, container_units = .container_units, extra_storage_gib = .extra_storage_gib, expire_time_millis = .start_time + .duration_millis, .expired));
 
+query get_lease_by_container_name(container_name: text): lease_data? =
+    lease @? { container_name } (lease_data(.container_name, container_units = .container_units, extra_storage_gib = .extra_storage_gib, expire_time_millis = .start_time + .duration_millis, .expired));
+
 function require_initialized() {
     require(state.initialized == true, "Ticket chain is not initialized");
 }
