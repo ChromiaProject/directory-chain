@@ -15,6 +15,7 @@ import lib.auth;
 
 struct module_args {
     auth_privkey: byte_array;
+    admin_privkey: byte_array;
 }
 
 function test_init() {
@@ -46,6 +47,19 @@ function test_create_accounts() {
     assert_gt(get_account_balance(bob), 0);
 
     assert_not_equals(alice.id, bob.id);
+}
+
+function test_admin_register_account() {
+    rell.test.tx().op(init()).run();
+
+    rell.test.tx().op(
+        register_account(rell.test.pubkeys.alice)
+    ).sign(chain_context.args.admin_privkey).run();
+
+    val account_ids = ft4.acc.external.get_accounts_by_participant_id(rell.test.pubkeys.alice);
+    assert_equals(account_ids.size(), 1);
+
+    assert_not_null(user @? { .account.id == account_ids[0] });
 }
 
 function test_create_account_requires_init() {
