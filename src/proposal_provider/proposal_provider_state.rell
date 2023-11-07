@@ -59,6 +59,7 @@ function update_provider_state(provider, active: boolean, proposal: proposal? = 
         delete cluster_node @* { .node.provider == provider };
         for (cn in cluster_nodes) {
             update_configuration_signers(cn.cluster, cn.node);
+            after_node_removed_from_cluster(cn.cluster, cn.node);
         }
 
         val pending_proposals_with_provider_as_voter = (prop: proposal, vsm: voter_set_member) @* { prop.voter_set == vsm.voter_set, vsm.provider == provider, prop.state == proposal_state.PENDING } ( prop );

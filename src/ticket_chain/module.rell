@@ -78,6 +78,13 @@ entity create_container_ticket {
     mutable container_name: text = "";
 }
 
+entity cluster {
+    key name;
+    mutable cluster_units: integer; // how many container_units does the cluster support
+    mutable extra_storage: integer; // how much extra storage is allocated to the cluster
+    mutable number_of_nodes: integer;
+}
+
 struct create_container_ticket_data {
     ticket_id: integer;
     type: ticket_type;
@@ -365,13 +372,15 @@ operation __icmf_message(sender: byte_array, topic: text, body: gtv) {
 }
 
 function receive_icmf_message(sender: byte_array, topic: text, body: gtv) {
-    if (topic != ticket_result_topic) {
-        log("Unexpected ICMF topic %s".format(topic));
-        return;
-    }
-
     // No need to validate sender since we use a local ICMF receiver
+    when (topic) {
+        ticket_result_topic -> receive_ticket_result_message(body);
+        cluster_update_topic -> receive_cluster_update_message(body);
+        else -> log("Unexpected ICMF topic %s".format(topic));
+    }
+}
 
+function receive_ticket_result_message(body: gtv) {
     val message = ticket_result_message.from_gtv(body);
     val ticket = ticket @? { .rowid == rowid(message.ticket_id) };
     if (ticket == null) {
@@ -405,6 +414,36 @@ function receive_icmf_message(sender: byte_array, topic: text, body: gtv) {
                     ft4.assets.Unsafe.transfer(get_pool_account(), ticket.account, get_asset(), specific_ticket.cost);
                 }
             }
+        }
+    }
+}
+
+function receive_cluster_update_message(body: gtv) {
+    val message = cluster_update_message.from_gtv(body);
+
+    val cluster = cluster @? { message.name };
+    if (message.deleted) {
+        if (cluster != null) {
+            log("Deleting cluster %s".format(message.name));
+            delete cluster;
+        } else {
+            log("Did not have deleted cluster %s".format(message.name));
+        }
+    } else {
+        if (cluster != null) {
+            log("Updating cluster %s".format(message.name));
+            update cluster @ { message.name } (
+                cluster_units = message.cluster_units,
+                extra_storage = message.extra_storage,
+                number_of_nodes = message.number_of_nodes
+            );
+        } else {
+            log("Creating cluster %s".format(message.name));
+            create cluster(name = message.name,
+                cluster_units = message.cluster_units,
+                extra_storage = message.extra_storage,
+                number_of_nodes = message.number_of_nodes
+            );
         }
     }
 }

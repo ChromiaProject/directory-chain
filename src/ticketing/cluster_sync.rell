@@ -1,0 +1,40 @@
+
+@extend(after_cluster_operational) function(cluster) {
+    update_cluster(cluster);
+}
+
+@extend(after_cluster_updated) function(cluster) {
+    update_cluster(cluster);
+}
+
+@extend(after_node_added_to_cluster) function(cluster, node) {
+    update_cluster(cluster);
+}
+
+@extend(after_node_removed_from_cluster) function(cluster, node) {
+    update_cluster(cluster);
+}
+
+function update_cluster(cluster) {
+    if (cluster.name != clusters.system and cluster.operational) {
+        send_message(cluster_update_topic, cluster_update_message(
+            name = cluster.name,
+            deleted = false,
+            cluster_units = cluster.cluster_units,
+            extra_storage = cluster.extra_storage,
+            number_of_nodes = cluster_node @* { cluster } (@sum 1)[0]
+        ).to_gtv());
+    }
+}
+
+@extend(before_cluster_removal) function(cluster) {
+    if (cluster.name != clusters.system) {
+        send_message(cluster_update_topic, cluster_update_message(
+            name = cluster.name,
+            deleted = true,
+            cluster_units = cluster.cluster_units,
+            extra_storage = cluster.extra_storage,
+            number_of_nodes = 0
+        ).to_gtv());
+    }
+}
