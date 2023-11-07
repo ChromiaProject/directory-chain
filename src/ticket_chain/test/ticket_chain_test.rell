@@ -105,12 +105,39 @@ function test_create_container_success() {
     val alice = require(do_create_account(rell.test.keypairs.alice));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16, container_units = 2);
 
+    assert_false(lease @ { container_name } (.auto_renew));
+
     val expected_lease = lease_data(
         container_name = container_name,
         container_units = 2,
         extra_storage_gib = 0,
         expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*2 + millis_per_week,
-        expired = false
+        expired = false,
+        auto_renew = false
+    );
+
+    val leases2 = get_leases_by_account(alice.id);
+    assert_equals(leases2.size(), 1);
+    assert_equals(leases2[0], expected_lease);
+
+    val lease_data = require(get_lease_by_container_name(container_name));
+    assert_equals(lease_data, expected_lease);
+}
+
+function test_create_container_with_auto_renew() {
+    rell.test.tx().op(init()).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16, container_units = 2, auto_renew = true);
+
+    assert_true(lease @ { container_name } (.auto_renew));
+
+    val expected_lease = lease_data(
+        container_name = container_name,
+        container_units = 2,
+        extra_storage_gib = 0,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*2 + millis_per_week,
+        expired = false,
+        auto_renew = true
     );
 
     val leases2 = get_leases_by_account(alice.id);
@@ -130,7 +157,7 @@ function test_create_container_failure() {
 function test_create_container_no_auth() {
     rell.test.tx().op(init()).run();
     rell.test.tx().op(
-        create_container(rell.test.pubkeys.alice, 2, "", integer.MAX_VALUE, 0)
+        create_container(rell.test.pubkeys.alice, 2, "", integer.MAX_VALUE, 0, false)
     ).run_must_fail("make sure that you included auth operation");
 }
 
@@ -139,9 +166,9 @@ function test_create_container_insufficient_funds() {
     val alice = require(do_create_account(rell.test.keypairs.alice));
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "create_container",
-            [rell.test.pubkeys.alice.to_gtv(), (100).to_gtv(), "".to_gtv(), (100).to_gtv(), (0).to_gtv()])
+            [rell.test.pubkeys.alice.to_gtv(), (100).to_gtv(), "".to_gtv(), (100).to_gtv(), (0).to_gtv(), false.to_gtv()])
     ).op(
-        create_container(rell.test.pubkeys.alice, 100, "", 100, 0)
+        create_container(rell.test.pubkeys.alice, 100, "", 100, 0, false)
     ).run_must_fail("Balance is too low");
 }
 
@@ -175,7 +202,78 @@ function test_not_expire_lease() {
     assert_events(); // assert no ICMF messages sent
 }
 
-function test_prolong_non_expired_container() {
+function test_auto_renew_and_cancel_renew_lease() {
+    rell.test.tx().op(init()).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16);
+
+    assert_false(lease @ { container_name } (.auto_renew));
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "auto_renew_container",
+            [container_name.to_gtv()])
+    ).op(
+        auto_renew_container(container_name)
+    ).run();
+    assert_true(lease @ { container_name } (.auto_renew));
+
+    assert_false(lease @ { container_name } (.expired));
+    rell.test.set_next_block_time_delta(millis_per_week + 1);
+    rell.test.block().run();
+    rell.test.block().run();
+    assert_false(lease @ { container_name } (.expired));
+    assert_events(); // assert no ICMF messages sent
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "cancel_renew_container",
+            [container_name.to_gtv()])
+    ).op(
+        cancel_renew_container(container_name)
+    ).run();
+    assert_false(lease @ { container_name } (.auto_renew));
+
+    assert_false(lease @ { container_name } (.expired));
+    rell.test.set_next_block_time_delta(millis_per_week + 1);
+    rell.test.block().run();
+    rell.test.block().run();
+    assert_true(lease @ { container_name } (.expired));
+    assert_events(("icmf_message", (
+        topic = stop_container_topic,
+        body = stop_container_message(container_name).to_gtv(),
+        block_height = 9).to_gtv_pretty()
+    ));
+}
+
+function test_auto_renew_lease_insufficient_funds() {
+    rell.test.tx().op(init()).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16);
+
+    assert_false(lease @ { container_name } (.auto_renew));
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "auto_renew_container",
+            [container_name.to_gtv()])
+    ).op(
+        auto_renew_container(container_name)
+    ).run();
+    assert_true(lease @ { container_name } (.auto_renew));
+
+    rell.test.tx().op(
+        empty_account_op(alice)
+    ).run();
+
+    assert_false(lease @ { container_name } (.expired));
+    rell.test.set_next_block_time_delta(millis_per_week + 1);
+    rell.test.block().run();
+    rell.test.block().run();
+    assert_true(lease @ { container_name } (.expired));
+    assert_events(("icmf_message", (
+        topic = stop_container_topic,
+        body = stop_container_message(container_name).to_gtv(),
+        block_height = 7).to_gtv_pretty()
+    ));
+}
+
+function test_renew_non_expired_container() {
     rell.test.tx().op(init()).run();
     val alice = require(do_create_account(rell.test.keypairs.alice));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16);
@@ -185,10 +283,10 @@ function test_prolong_non_expired_container() {
 
     assert_equals(lease @ { container_name } (.duration_millis), 1 * millis_per_week);
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "prolong_container",
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "renew_container",
             [container_name.to_gtv(), (1).to_gtv()])
     ).op(
-        prolong_container(container_name, 1)
+        renew_container(container_name, 1)
     ).run();
     assert_lt(get_account_balance(alice), alice_balance);
     assert_gt(get_pool_balance(), pool_balance);
@@ -197,7 +295,7 @@ function test_prolong_non_expired_container() {
     assert_events(); // assert no ICMF messages sent
 }
 
-function test_prolong_expired_container() {
+function test_renew_expired_container() {
     rell.test.tx().op(init()).run();
     val alice = require(do_create_account(rell.test.keypairs.alice));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16);
@@ -211,10 +309,10 @@ function test_prolong_expired_container() {
     assert_true(lease @ { container_name } (.expired));
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "prolong_container",
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "renew_container",
             [container_name.to_gtv(), (1).to_gtv()])
     ).op(
-        prolong_container(container_name, 1)
+        renew_container(container_name, 1)
     ).run();
     assert_lt(get_account_balance(alice), alice_balance);
     assert_gt(get_pool_balance(), pool_balance);
@@ -227,16 +325,45 @@ function test_prolong_expired_container() {
     ));
 }
 
-function test_prolong_container_insufficient_funds() {
+function test_auto_renew_expired_container() {
+    rell.test.tx().op(init()).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16);
+
+    val alice_balance = get_account_balance(alice);
+    val pool_balance = get_pool_balance();
+
+    rell.test.set_next_block_time_delta(millis_per_week + 1);
+    rell.test.block().run();
+    rell.test.block().run();
+    assert_true(lease @ { container_name } (.expired));
+
+    assert_false(lease @ { container_name } (.auto_renew));
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "auto_renew_container",
+            [container_name.to_gtv()])
+    ).op(
+        auto_renew_container(container_name)
+    ).run();
+    assert_true(lease @ { container_name } (.auto_renew));
+    assert_false(lease @ { container_name } (.expired));
+    assert_events(("icmf_message", (
+        topic = restart_container_topic,
+        body = restart_container_message(container_name).to_gtv(),
+        block_height = 6).to_gtv_pretty()
+    ));
+}
+
+function test_renew_container_insufficient_funds() {
     rell.test.tx().op(init()).run();
     val alice = require(do_create_account(rell.test.keypairs.alice));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16);
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "prolong_container",
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "renew_container",
             [container_name.to_gtv(), (10000).to_gtv()])
     ).op(
-        prolong_container(container_name, 10000)
+        renew_container(container_name, 10000)
     ).run_must_fail("Balance is too low");
 }
 
@@ -259,7 +386,14 @@ function do_create_account(keypair: rell.test.keypair, failure: text? = null): f
     }
 }
 
-function do_create_container(ft4.acc.account, keypair: rell.test.keypair, success: boolean, block_height: integer, ticket_id: integer, container_units: integer = 2): text {
+function do_create_container(
+        ft4.acc.account,
+        keypair: rell.test.keypair,
+        success: boolean,
+        block_height: integer,
+        ticket_id: integer,
+        container_units: integer = 2,
+        auto_renew: boolean = false): text {
     val container_name = "container name";
 
     val cost = calculate_container_cost(1, container_units, 0);
@@ -268,9 +402,10 @@ function do_create_container(ft4.acc.account, keypair: rell.test.keypair, succes
     val initial_pool_balance = get_pool_balance();
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(keypair.priv, "create_container", [keypair.pub.to_gtv(), container_units.to_gtv(), "".to_gtv(), (1).to_gtv(), (0).to_gtv()])
+        ft4.test_utils.evm_auth_operation_for(keypair.priv, "create_container", [keypair.pub.to_gtv(), container_units.to_gtv(),
+            "".to_gtv(), (1).to_gtv(), (0).to_gtv(), auto_renew.to_gtv()])
     ).op(
-        create_container(keypair.pub, container_units, "", 1, 0)
+        create_container(keypair.pub, container_units, "", 1, 0, auto_renew)
     ).run();
     val tx_rid = transaction @ {} (@sort_desc @omit .rowid, .tx_rid) limit 1;
 
