@@ -57,6 +57,7 @@ entity lease {
     start_time: integer;
     mutable duration_millis: integer;
     mutable expired: boolean = false;
+    mutable auto_renew: boolean = false;
 }
 
 entity ticket {
@@ -73,6 +74,7 @@ entity create_container_ticket {
     extra_storage_gib: integer;
     duration_millis: integer;
     cost: integer;
+    auto_renew: boolean = false;
     mutable container_name: text = "";
 }
 
@@ -90,6 +92,7 @@ struct lease_data {
     extra_storage_gib: integer;
     expire_time_millis: integer;
     expired: boolean;
+    auto_renew: boolean;
 }
 
 operation init() {
@@ -111,10 +114,27 @@ operation __begin_block(height: integer) {
 
 function expire_leases(current_time_millis: integer) {
     for (lease in lease @* { current_time_millis > .start_time + .duration_millis, .expired == false }) {
-        lease.expired = true;
-        log("Lease for container %s has expired, stopping it".format(lease.container_name));
-        send_message(stop_container_topic, stop_container_message(container_name = lease.container_name).to_gtv()); // fire-and-forget
+        maybe_expire_lease(lease);
     }
+}
+
+function maybe_expire_lease(lease) {
+    if (lease.auto_renew) {
+        log("Auto-renewing lease for container %s".format(lease.container_name));
+        val success = try_call(renew_container_lease(lease.account, lease, 1, *));
+        if (not success) {
+            log("Unable to auto-renew lease for container %s".format(lease.container_name));
+            expire_lease(lease);
+        }
+    } else {
+        expire_lease(lease);
+    }
+}
+
+function expire_lease(lease) {
+    lease.expired = true;
+    log("Lease for container %s has expired, stopping it".format(lease.container_name));
+    send_message(stop_container_topic, stop_container_message(container_name = lease.container_name).to_gtv()); // fire-and-forget
 }
 
 @extend(auth.before_account_registration) function(ft4.acc.auth_descriptor, ft4.auth.signature) {
@@ -173,16 +193,23 @@ function create_container_auth_message(gtv): text {
     val args = struct<create_container>.from_gtv(gtv);
     val cluster_class_message = if (args.cluster_class.empty()) "" else " of class %s".format(args.cluster_class);
     val cost = calculate_container_cost(args.duration_weeks, args.container_units, args.extra_storage_gib);
-    return "Please sign the message\nto lease container %s\nwith %s SCUs and %s GiB extra storage\nfor %s weeks\ncosting %s %s\non account {account_id}".format(
+    return "Please sign the message\nto lease container %s\nwith %s SCUs and %s GiB extra storage\nfor %s weeks\ncosting %s %s\n%son account {account_id}".format(
         cluster_class_message,
         args.container_units,
         args.extra_storage_gib,
         args.duration_weeks,
         ft4.assets.format_amount_with_decimals(cost, chain_context.args.asset_decimals),
-        chain_context.args.asset_symbol);
+        chain_context.args.asset_symbol,
+        if (args.auto_renew) "with auto-renewal\n" else "");
 }
 
-operation create_container(provider_pubkey: pubkey, container_units: integer, cluster_class: text, duration_weeks: integer, extra_storage_gib: integer) {
+operation create_container(
+        provider_pubkey: pubkey,
+        container_units: integer,
+        cluster_class: text,
+        duration_weeks: integer,
+        extra_storage_gib: integer,
+        auto_renew: boolean) {
     require_initialized();
     require_pubkey(provider_pubkey);
     require(container_units > 0, "container_units must be positive");
@@ -200,7 +227,8 @@ operation create_container(provider_pubkey: pubkey, container_units: integer, cl
         container_units = container_units,
         extra_storage_gib = extra_storage_gib,
         duration_millis = duration_weeks * millis_per_week,
-        cost = cost
+        cost = cost,
+        auto_renew = auto_renew
     );
     send_message(create_container_topic, create_container_message(
         ticket_id = ticket.rowid.to_integer(),
@@ -213,25 +241,25 @@ operation create_container(provider_pubkey: pubkey, container_units: integer, cl
 
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
-    scope = "prolong_container",
+    scope = "renew_container",
     flags = ["T"],
-    message = prolong_container_auth_message(*)
+    message = renew_container_auth_message(*)
 );
 
-function prolong_container_auth_message(gtv): text {
-    val args = struct<prolong_container>.from_gtv(gtv);
+function renew_container_auth_message(gtv): text {
+    val args = struct<renew_container>.from_gtv(gtv);
 
     val lease = require(lease @? { args.container_name }, "No current lease for container %s".format(args.container_name));
     val cost = calculate_container_cost(args.duration_weeks, lease.container_units, lease.extra_storage_gib);
 
-    return "Please sign the message\nto prolong lease of container %s\nfor %s weeks\ncosting %s %s\non account {account_id}".format(
+    return "Please sign the message\nto renew lease of container %s\nfor %s weeks\ncosting %s %s\non account {account_id}".format(
         args.container_name,
         args.duration_weeks,
         ft4.assets.format_amount_with_decimals(cost, chain_context.args.asset_decimals),
         chain_context.args.asset_symbol);
 }
 
-operation prolong_container(container_name: text, duration_weeks: integer) {
+operation renew_container(container_name: text, duration_weeks: integer) {
     require_initialized();
     require(duration_weeks > 0, "duration_weeks must be positive");
 
@@ -240,16 +268,89 @@ operation prolong_container(container_name: text, duration_weeks: integer) {
 
     val lease = require(lease @? { container_name }, "No current lease for container %s".format(container_name));
 
+    renew_container_lease(account, lease, duration_weeks);
+    if (lease.expired) {
+        restart_container(lease);
+    }
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "auto_renew_container",
+    flags = ["T"],
+    message = auto_renew_container_auth_message(*)
+);
+
+function auto_renew_container_auth_message(gtv): text {
+    val args = struct<auto_renew_container>.from_gtv(gtv);
+
+    val lease = require(lease @? { args.container_name }, "No current lease for container %s".format(args.container_name));
+    val weekly_cost = calculate_container_cost(1, lease.container_units, lease.extra_storage_gib);
+
+    return "Please sign the message\nto enable auto-renewal of container %s\ncosting %s %s per week\non account {account_id}".format(
+        args.container_name,
+        ft4.assets.format_amount_with_decimals(weekly_cost, chain_context.args.asset_decimals),
+        chain_context.args.asset_symbol);
+}
+
+operation auto_renew_container(container_name: text) {
+    require_initialized();
+
+    val account = ft4.auth.authenticate();
+    require(user @? { account }, "No user for account %s".format(account.id));
+
+    val lease = require(lease @? { container_name }, "No current lease for container %s".format(container_name));
+    require(lease.account == account, "Lease for container %s was not created by you".format(container_name));
+    require(lease.auto_renew == false, "Container %s is already auto-renewing".format(container_name));
+
+    lease.auto_renew = true;
+
+    if (lease.expired) {
+        renew_container_lease(account, lease, 1);
+        restart_container(lease);
+    }
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "cancel_renew_container",
+    flags = ["T"],
+    message = cancel_renew_container_auth_message(*)
+);
+
+function cancel_renew_container_auth_message(gtv): text {
+    val args = struct<cancel_renew_container>.from_gtv(gtv);
+
+    val lease = require(lease @? { args.container_name }, "No current lease for container %s".format(args.container_name));
+
+    return "Please sign the message\nto cancel auto-renewal of container %s\non account {account_id}".format(
+        args.container_name);
+}
+
+operation cancel_renew_container(container_name: text) {
+    require_initialized();
+
+    val account = ft4.auth.authenticate();
+    require(user @? { account }, "No user for account %s".format(account.id));
+
+    val lease = require(lease @? { container_name }, "No current lease for container %s".format(container_name));
+    require(lease.account == account, "Lease for container %s was not created by you".format(container_name));
+    require(lease.auto_renew == true, "Container %s is not auto-renewing".format(container_name));
+
+    lease.auto_renew = false;
+}
+
+function renew_container_lease(ft4.acc.account, lease, duration_weeks: integer) {
     val cost = calculate_container_cost(duration_weeks, lease.container_units, lease.extra_storage_gib);
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), cost);
     lease.duration_millis += duration_weeks * millis_per_week;
+}
 
-    if (lease.expired) {
-        log("Lease for container %s was expired, restarting it".format(lease.container_name));
-        send_message(restart_container_topic, restart_container_message(container_name = lease.container_name).to_gtv()); // fire-and-forget
-        // TODO what if restart fails?
-        lease.expired = false;
-    }
+function restart_container(lease) {
+    log("Lease for container %s was expired, restarting it".format(lease.container_name));
+    send_message(restart_container_topic, restart_container_message(container_name = lease.container_name).to_gtv()); // fire-and-forget
+    // TODO what if restart fails?
+    lease.expired = false;
 }
 
 function calculate_container_cost(duration_weeks: integer, container_units: integer, extra_storage_gib: integer): integer =
@@ -294,7 +395,8 @@ function receive_icmf_message(sender: byte_array, topic: text, body: gtv) {
                         container_units = specific_ticket.container_units,
                         extra_storage_gib = specific_ticket.extra_storage_gib,
                         start_time = op_context.last_block_time,
-                        duration_millis = specific_ticket.duration_millis
+                        duration_millis = specific_ticket.duration_millis,
+                        auto_renew = specific_ticket.auto_renew
                     );
                 }
                 ticket_state.FAILURE -> {
@@ -325,10 +427,10 @@ query get_create_container_ticket_by_id(ticket_id: integer): create_container_ti
         (create_container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
 
 query get_leases_by_account(account_id: byte_array): list<lease_data> =
-    lease @* { .account.id == account_id } (lease_data(.container_name, container_units = .container_units, extra_storage_gib = .extra_storage_gib, expire_time_millis = .start_time + .duration_millis, .expired));
+    lease @* { .account.id == account_id } (lease_data(.container_name, container_units = .container_units, extra_storage_gib = .extra_storage_gib, expire_time_millis = .start_time + .duration_millis, .expired, .auto_renew));
 
 query get_lease_by_container_name(container_name: text): lease_data? =
-    lease @? { container_name } (lease_data(.container_name, container_units = .container_units, extra_storage_gib = .extra_storage_gib, expire_time_millis = .start_time + .duration_millis, .expired));
+    lease @? { container_name } (lease_data(.container_name, container_units = .container_units, extra_storage_gib = .extra_storage_gib, expire_time_millis = .start_time + .duration_millis, .expired, .auto_renew));
 
 function require_initialized() {
     require(state.initialized == true, "Ticket chain is not initialized");
