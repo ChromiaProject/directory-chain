@@ -155,7 +155,7 @@ function test_create_container_failure() {
 function test_create_container_no_auth() {
     rell.test.tx().op(init()).run();
     rell.test.tx().op(
-        create_container(rell.test.pubkeys.alice, 2, "", integer.MAX_VALUE, 0, false)
+        create_container(rell.test.pubkeys.alice, 2, "", integer.MAX_VALUE, 0, "", false)
     ).run_must_fail("make sure that you included auth operation");
 }
 
@@ -164,9 +164,9 @@ function test_create_container_insufficient_funds() {
     val alice = require(do_create_account(rell.test.keypairs.alice));
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "create_container",
-            [rell.test.pubkeys.alice.to_gtv(), (100).to_gtv(), "".to_gtv(), (100).to_gtv(), (0).to_gtv(), false.to_gtv()])
+            [rell.test.pubkeys.alice.to_gtv(), (100).to_gtv(), "".to_gtv(), (100).to_gtv(), (0).to_gtv(), "".to_gtv(), false.to_gtv()])
     ).op(
-        create_container(rell.test.pubkeys.alice, 100, "", 100, 0, false)
+        create_container(rell.test.pubkeys.alice, 100, "", 100, 0, "", false)
     ).run_must_fail("Balance is too low");
 }
 
@@ -401,15 +401,15 @@ function do_create_container(
 
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(keypair.priv, "create_container", [keypair.pub.to_gtv(), container_units.to_gtv(),
-            "".to_gtv(), (1).to_gtv(), (0).to_gtv(), auto_renew.to_gtv()])
+            "".to_gtv(), (1).to_gtv(), (0).to_gtv(), "the_cluster".to_gtv(), auto_renew.to_gtv()])
     ).op(
-        create_container(keypair.pub, container_units, "", 1, 0, auto_renew)
+        create_container(keypair.pub, container_units, "", 1, 0, "the_cluster", auto_renew)
     ).run();
     val tx_rid = transaction @ {} (@sort_desc @omit .rowid, .tx_rid) limit 1;
 
     assert_events(("icmf_message", (
         topic = create_container_topic,
-        body = create_container_message(ticket_id = ticket_id, keypair.pub, container_units = container_units, cluster_class = "", extra_storage = 0).to_gtv(),
+        body = create_container_message(ticket_id = ticket_id, keypair.pub, container_units = container_units, cluster_class = "", extra_storage = 0, cluster_name = "the_cluster").to_gtv(),
         block_height = block_height).to_gtv_pretty()
     ));
 
