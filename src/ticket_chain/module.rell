@@ -192,10 +192,11 @@ function create_container_auth_message(gtv): text {
     val args = struct<create_container>.from_gtv(gtv);
     val cluster_class_message = if (args.cluster_class.empty()) "" else " of class %s".format(args.cluster_class);
     val cost = calculate_container_cost(args.duration_weeks, args.container_units, args.extra_storage_gib);
-    return "Please sign the message\nto lease container %s\nwith %s SCUs and %s GiB extra storage\nfor %s weeks\ncosting %s %s\n%son account {account_id}".format(
+    return "Please sign the message\nto lease container %s\nwith %s SCUs and %s GiB extra storage\nin cluster %s\nfor %s weeks\ncosting %s %s\n%son account {account_id}".format(
         cluster_class_message,
         args.container_units,
         args.extra_storage_gib,
+        args.cluster_name,
         args.duration_weeks,
         ft4.assets.format_amount_with_decimals(cost, chain_context.args.asset_decimals),
         chain_context.args.asset_symbol,
@@ -208,6 +209,7 @@ operation create_container(
         cluster_class: text,
         duration_weeks: integer,
         extra_storage_gib: integer,
+        cluster_name: text,
         auto_renew: boolean) {
     require_initialized();
     require_pubkey(provider_pubkey);
@@ -234,7 +236,8 @@ operation create_container(
         provider_pubkey = provider_pubkey,
         container_units = container_units,
         cluster_class = cluster_class,
-        extra_storage = 1024 * extra_storage_gib
+        extra_storage = 1024 * extra_storage_gib,
+        cluster_name = cluster_name
     ).to_gtv());
 }
 
