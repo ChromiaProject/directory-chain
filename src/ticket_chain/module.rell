@@ -6,8 +6,7 @@ import messaging.icmf.*;
 import lib.auth;
 
 namespace ft4 {
-    import acc: lib.ft4.accounts;
-    import acc_ext: lib.ft4.accounts.external;
+    import lib.ft4.accounts;
     import lib.ft4.assets;
     import lib.ft4.auth;
     import lib.ft4.version;
@@ -45,13 +44,13 @@ object state {
 }
 
 entity user {
-    key ft4.acc.account;
+    key ft4.accounts.account;
     mutable last_refill_millis: integer;
 }
 
 entity lease {
     key container_name: text;
-    index ft4.acc.account;
+    index ft4.accounts.account;
     container_units: integer;
     extra_storage_gib: integer;
     start_time: integer;
@@ -63,7 +62,7 @@ entity lease {
 entity ticket {
     index transaction = op_context.transaction;
     index type: ticket_type;
-    account: ft4.acc.account;
+    account: ft4.accounts.account;
     mutable state: ticket_state = ticket_state.PENDING;
     mutable error_message: text = "";
 }
@@ -137,19 +136,19 @@ function expire_lease(lease) {
     send_message(stop_container_topic, stop_container_message(container_name = lease.container_name).to_gtv()); // fire-and-forget
 }
 
-@extend(auth.before_account_registration) function(ft4.acc.auth_descriptor, ft4.auth.signature) {
+@extend(auth.before_account_registration) function(ft4.accounts.auth_descriptor, ft4.auth.signature) {
     before_account_registration(auth_descriptor);
 }
 
-function before_account_registration(ft4.acc.auth_descriptor) {
+function before_account_registration(ft4.accounts.auth_descriptor) {
     require_initialized();
 }
 
-@extend(auth.after_account_registration) function(ft4.acc.account, ft4.acc.auth_descriptor, ft4.auth.signature) {
+@extend(auth.after_account_registration) function(ft4.accounts.account, ft4.accounts.auth_descriptor, ft4.auth.signature) {
     after_account_registration(account, auth_descriptor);
 }
 
-function after_account_registration(ft4.acc.account, ft4.acc.auth_descriptor) {
+function after_account_registration(ft4.accounts.account, ft4.accounts.auth_descriptor) {
     log("Account created: %s".format(account.id));
 
     ft4.assets.Unsafe.mint(account, get_asset(), chain_context.args.amount_to_mint);
@@ -340,7 +339,7 @@ operation cancel_renew_container(container_name: text) {
     lease.auto_renew = false;
 }
 
-function renew_container_lease(ft4.acc.account, lease, duration_weeks: integer) {
+function renew_container_lease(ft4.accounts.account, lease, duration_weeks: integer) {
     val cost = calculate_container_cost(duration_weeks, lease.container_units, lease.extra_storage_gib);
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), cost);
     lease.duration_millis += duration_weeks * millis_per_week;
@@ -412,7 +411,7 @@ function receive_icmf_message(sender: byte_array, topic: text, body: gtv) {
 query get_chr_asset() = ft4.assets.map_asset(get_asset());
 
 query get_balance(account_id: byte_array): big_integer {
-    val account = require(ft4.acc.account @? { account_id }, "Account %s not found".format(account_id));
+    val account = require(ft4.accounts.account @? { account_id }, "Account %s not found".format(account_id));
     return get_account_balance(account);
 }
 
@@ -450,7 +449,7 @@ function register_assets() {
         );
 }
 
-function get_account_balance(ft4.acc.account): big_integer =
+function get_account_balance(ft4.accounts.account): big_integer =
     (ft4.assets.balance @? { account, get_asset() }.amount) ?: 0L;
 
 function get_asset(): ft4.assets.asset {
@@ -458,10 +457,10 @@ function get_asset(): ft4.assets.asset {
     return ft4.assets.asset @ { .id == asset_id };
 }
 
-function create_pool_account(): ft4.acc.account {
-    return ft4.acc.account_by_id(ft4.acc.Unsafe.create_account_with_auth(get_pool_account_auth_descriptor()));
+function create_pool_account(): ft4.accounts.account {
+    return ft4.accounts.account_by_id(ft4.accounts.Unsafe.create_account_with_auth(get_pool_account_auth_descriptor()));
 }
 
-function get_pool_account() = ft4.acc.account_by_id(get_pool_account_auth_descriptor().hash());
+function get_pool_account() = ft4.accounts.account_by_id(get_pool_account_auth_descriptor().hash());
 
-function get_pool_account_auth_descriptor() = ft4.acc.single_sig_auth_descriptor(chain_context.args.pool_account_pubkey, set(["A", "T"]));
+function get_pool_account_auth_descriptor() = ft4.accounts.single_sig_auth_descriptor(chain_context.args.pool_account_pubkey, set(["A", "T"]));

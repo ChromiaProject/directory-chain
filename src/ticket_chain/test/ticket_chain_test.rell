@@ -4,11 +4,9 @@ import ^^.*;
 import ^.helpers.*;
 
 namespace ft4 {
-    import acc: lib.ft4.accounts;
-    import acc_ext: lib.ft4.accounts.external;
+    import lib.ft4.accounts;
     import lib.ft4.assets;
     import lib.ft4.auth;
-    import lib.ft4.version;
     import test_utils: lib.ft4.test.utils;
 }
 import lib.auth;
@@ -56,7 +54,7 @@ function test_admin_register_account() {
         register_account(rell.test.pubkeys.alice)
     ).sign(chain_context.args.admin_privkey).run();
 
-    val account_ids = ft4.acc.external.get_accounts_by_participant_id(rell.test.pubkeys.alice);
+    val account_ids = ft4.accounts.external.get_accounts_by_participant_id(rell.test.pubkeys.alice);
     assert_equals(account_ids.size(), 1);
 
     assert_not_null(user @? { .account.id == account_ids[0] });
@@ -367,10 +365,10 @@ function test_renew_container_insufficient_funds() {
     ).run_must_fail("Balance is too low");
 }
 
-function do_create_account(keypair: rell.test.keypair, failure: text? = null): ft4.acc.account? {
+function do_create_account(keypair: rell.test.keypair, failure: text? = null): ft4.accounts.account? {
     val eth_address = ft4.test_utils.evm_address_from_privkey(keypair.priv);
     log("eth_address=%s".format(eth_address));
-    val auth_descriptor = ft4.acc.single_sig_auth_descriptor(eth_address, set(["T"]));
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(eth_address, set(["T"]));
     val signature = ft4.test_utils.evm_sign(auth.get_message_to_sign(), keypair.priv);
 
     val tx = rell.test.tx().op(
@@ -382,12 +380,12 @@ function do_create_account(keypair: rell.test.keypair, failure: text? = null): f
         return null;
     } else {
         tx.run();
-        return ft4.acc.account_by_id(auth_descriptor.hash());
+        return ft4.accounts.account_by_id(auth_descriptor.hash());
     }
 }
 
 function do_create_container(
-        ft4.acc.account,
+        ft4.accounts.account,
         keypair: rell.test.keypair,
         success: boolean,
         block_height: integer,
