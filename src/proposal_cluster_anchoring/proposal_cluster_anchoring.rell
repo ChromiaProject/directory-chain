@@ -35,10 +35,10 @@ operation propose_cluster_anchoring_configuration(my_pubkey: pubkey, config_data
 query get_cluster_anchoring_configuration_proposal(rowid?) {
     val proposal = get_latest_proposal(rowid, proposal_type.cluster_anchoring_configuration);
     if (proposal == null) return null;
-    val pcac = pending_cluster_anchoring_configuration @ { proposal };
-    val current_conf = cluster_anchoring_config.raw_config;
+    val pcac = decompress_configuration(pending_cluster_anchoring_configuration @ { proposal }.data);
+    val current_conf = decompress_configuration(cluster_anchoring_config.raw_config);
     return (
         current_conf = current_conf,
-        proposed_conf = pcac.data
+        proposed_conf = pcac
     );
 }

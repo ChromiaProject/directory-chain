@@ -3,6 +3,11 @@ module;
 import model.*;
 import common.*;
 
+struct module_args {
+    max_config_path_depth: integer;
+    max_config_size: integer;
+}
+
 function validate_blockchain_configuration(config_data: byte_array, signers: boolean, header_hash: boolean) {
     val config_map = map<text, gtv>.from_gtv(gtv.from_bytes(config_data));
     if (signers) {
@@ -14,4 +19,69 @@ function validate_blockchain_configuration(config_data: byte_array, signers: boo
         require(config_map["config_consensus_strategy"] == "HEADER_HASH".to_gtv(),
             "Configuration must contain \"config_consensus_strategy\"=\"HEADER_HASH\"");
     }
+    validate_compression(config_data);
+}
+
+function validate_compression(config_data: byte_array) {
+    val config_map = map<text, gtv>.from_gtv(gtv.from_bytes(config_data));
+    var total_config_size = 0;
+
+    if (config_map.contains(COMPRESSED_ROOTS_CONFIG_KEY)) {
+        val compressed_roots = list<compressed_root>.from_gtv_pretty(config_map[COMPRESSED_ROOTS_CONFIG_KEY]);
+        for (root in compressed_roots) {
+            val path_depth = root.path.size();
+            require(path_depth > 0, "Compression at configuration root level is not allowed");
+            require(
+                path_depth <= chain_context.args.max_config_path_depth,
+                "Compression path depth %d exceeds maximum allowed depth %d".format(path_depth, chain_context.args.max_config_path_depth)
+            );
+
+            val config_path = extract_config_path(config_map, root.path);
+            val hashes_to_decompress = set<byte_array>();
+            for (compressed_key in root.compressed_keys) {
+                if (config_path != null and config_path.contains(compressed_key.content_key)) {
+                    require(
+                        compressed_key.content_hash == config_path[compressed_key.content_key].hash(),
+                        "Ambiguous compression detected for path %s, key '%s' is defined with different values in compression root and actual configuration".format(
+                            root.path, compressed_key.content_key
+                        )
+                    );
+                }
+                hashes_to_decompress.add(compressed_key.content_hash);
+            }
+
+            val compressed_content_sizes = map<byte_array, integer>();
+            for ((hash, size) in compressed_blockchain_configuration_part @* { .hash in hashes_to_decompress } (.hash, .data.size())) {
+                compressed_content_sizes.put(hash, size);
+            }
+            for (compressed_key in root.compressed_keys) {
+                total_config_size += compressed_content_sizes[compressed_key.content_hash];
+            }
+
+            // Check if we can break early
+            require(
+                total_config_size <= chain_context.args.max_config_size,
+                "Configuration exceeds maximum allowed size %d".format(chain_context.args.max_config_size)
+            );
+        }
+        config_map.remove(COMPRESSED_ROOTS_CONFIG_KEY);
+    }
+
+    total_config_size += config_map.to_gtv().to_bytes().size();
+    require(
+        total_config_size <= chain_context.args.max_config_size,
+        "Configuration exceeds maximum allowed size %d".format(chain_context.args.max_config_size)
+    );
+}
+
+function extract_config_path(config_map: map<text, gtv>, path: list<text>): map<text, gtv>? {
+    var config_path = config_map;
+    for (p in path) {
+        if (config_path.contains(p)) {
+            config_path = map<text, gtv>.from_gtv(config_path[p]);
+        } else {
+            return null;
+        }
+    }
+    return config_path;
 }

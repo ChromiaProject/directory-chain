@@ -177,14 +177,14 @@ function update_configuration_signers_regular(blockchain, signers: list<pubkey>,
         return;
     }
 
-    val last_pending_config = pending_blockchain_configuration @? { blockchain } (@sort_desc @omit .minimum_height, $) limit 1;
+    val last_pending_config = get_latest_pending_blockchain_configuration_data(blockchain);
     val (minimum_height, base_config, last_signers) = if (last_pending_config != null) (
         last_signers_config.height.max(last_pending_config.minimum_height) + 1,
         last_pending_config.base_config,
         last_pending_config.signers
     ) else (
         last_signers_config.height + 1,
-        blockchain_configuration @ { blockchain } (@omit @sort_desc .height, .data) limit 1,
+        get_latest_blockchain_configuration_data(blockchain).config,
         last_signers_config.signers
     );
 
