@@ -29,7 +29,7 @@ function apply_configuration_chain0(pc: pending_configuration) {
     log("Base configuration update chain0 at height %d".format(apply_at_height));
     require(empty(blockchain_configuration @? { pc.blockchain, apply_at_height }), "Configuration at height %d already exists".format(apply_at_height));
     val unique_base_config = make_config_unique(pc.data);
-    create blockchain_configuration(pc.blockchain, apply_at_height, unique_base_config);
+    compress_and_store_configuration(pc.blockchain, apply_at_height, unique_base_config);
     add_dependencies(unique_base_config, pc.blockchain.rid, apply_at_height);
 }
 
@@ -72,20 +72,32 @@ operation propose_configuration(my_pubkey: pubkey, blockchain_rid: byte_array, c
     internal_vote(me, prop, true);
 }
 
+struct blockchain_configuration_data {
+    height: integer;
+    blockchain;
+    data: byte_array;
+}
+
+struct pending_blockchain_configuration_data {
+    proposal;
+    blockchain;
+    data: byte_array;
+}
+
 query get_configuration_proposal(rowid?): (
-    current_conf:struct<blockchain_configuration>,
-    proposed_conf:struct<pending_configuration>
+    current_conf:blockchain_configuration_data,
+    proposed_conf:pending_blockchain_configuration_data
 )? {
     val proposal = get_latest_proposal(rowid, proposal_type.configuration);
     if (proposal == null) return null;
-    val config = pending_configuration @? { require_proposal(proposal.rowid) };
+    val config = pending_configuration @? { require_proposal(proposal.rowid) }
+        (pending_blockchain_configuration_data(.proposal, .blockchain, decompress_configuration(.data)));
     if (config == null) return null;
 
-    val current = (blockchain_configuration @ { config.blockchain }
-     (@omit @sort_desc .height, $) limit 1);
+    val current = get_latest_blockchain_configuration_data(config.blockchain);
 
     return (
-        current_conf = current.to_struct(),
-        proposed_conf = config.to_struct()
+        current_conf = blockchain_configuration_data(current.height, config.blockchain, current.config),
+        proposed_conf = config
     );
 }
