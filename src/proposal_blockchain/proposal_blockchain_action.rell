@@ -91,6 +91,7 @@ function _apply_unarchive_blockchain(action: pending_blockchain_action, proposal
 
     // add bc to the dst container
     val dst_container = require_container(args.destination_container);
+    require_container_is_not_full(dst_container);
     create container_blockchain(dst_container, action.blockchain);
     // remove dst cluster/container nodes from bc replicas
     val dst_nodes = cluster_node @* { dst_container.cluster } (@omit @sort .node.pubkey, .node);
@@ -164,6 +165,7 @@ function propose_blockchain_action_impl(my_pubkey: pubkey, blockchain_rid: byte_
         // unarchiving from a container to another container running on the same node is not allowed
         val args0 = unarchive_args.from_bytes(args);
         val dst_container = require_container(args0.destination_container);
+        require_container_deployer(dst_container, me);
         require_container_is_not_full(dst_container);
         val intersection = (cn1: cluster_node, cn2: cluster_node) @* {
             cn1.node == cn2.node,
