@@ -37,6 +37,8 @@ function test_propose_blockchain_action() {
 
     // Asserting blockchain is running
     assert_equals(foo_chain.state, blockchain_state.RUNNING);
+    // Can't unarchive RUNNING blockchain
+    bob_proposes_failing_action(foo_chain, blockchain_action.unarchive, "Running blockchain can't be unarchived");
 
     // 2. Proposing blockchain pause
     alice_proposes_action(foo_chain, blockchain_action.pause);
@@ -46,6 +48,8 @@ function test_propose_blockchain_action() {
     // Continuing with the initial proposal
     bob_votes();
     assert_equals(foo_chain.state, blockchain_state.PAUSED);
+    // Can't unarchive PAUSED blockchain
+    bob_proposes_failing_action(foo_chain, blockchain_action.unarchive, "Paused blockchain can't be unarchived");
 
     // 3. Proposing blockchain resume
     alice_proposes_action(foo_chain, blockchain_action.resume);
@@ -63,10 +67,11 @@ function test_propose_blockchain_action() {
     assert_false(empty(blockchain_configuration @* { foo_chain }));
     assert_false(empty(blockchain_configuration_signers @* { foo_chain }));
 
-    // 5. Can't pause/resume/archive/remove already removed blockchain
+    // 5. Can't pause/resume/archive/unarchive/remove already removed blockchain
     bob_proposes_failing_action(foo_chain, blockchain_action.pause, "Removed blockchain can't be paused");
     bob_proposes_failing_action(foo_chain, blockchain_action.resume, "Removed blockchain can't be resumed");
     bob_proposes_failing_action(foo_chain, blockchain_action.archive, "Removed blockchain can't be archived");
+    bob_proposes_failing_action(foo_chain, blockchain_action.unarchive, "Removed blockchain can't be unarchived");
     bob_proposes_failing_action(foo_chain, blockchain_action.remove, "Removed blockchain can't be removed");
 
     // 6. Can't pause/resume/archive already archived blockchain
@@ -85,7 +90,8 @@ function test_propose_blockchain_action() {
     assert_false(empty(blockchain_configuration @* { bar_chain }));
     assert_false(empty(blockchain_configuration_signers @* { bar_chain }));
 
-    // 8. See blockchain_action against MOVING blockchain state in proposal_blockchain.test.blockchain_action_test module
+    // 8. See blockchain_action against MOVING blockchain state in proposal_blockchain_move.test.blockchain_move_test.rell
+    // 9. See blockchain_action against UNARCHIVING blockchain state in .blockchain_archive_unarchive_action_test.rell
 }
 
 function alice_proposes_action(bc: blockchain, action: blockchain_action) {
@@ -96,7 +102,10 @@ function alice_proposes_action(bc: blockchain, action: blockchain_action) {
 
 function bob_proposes_failing_action(bc: blockchain, action: blockchain_action, error: text) {
     rell.test.tx().op(
-        propose_blockchain_action(rell.test.pubkeys.bob, bc.rid, action)
+        if (action == blockchain_action.unarchive)
+            propose_blockchain_unarchive_action(rell.test.pubkeys.bob, bc.rid, "container", 0)
+        else
+            propose_blockchain_action(rell.test.pubkeys.bob, bc.rid, action)
     ).sign(rell.test.keypairs.bob).run_must_fail(error);
 }
 

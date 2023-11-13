@@ -2,7 +2,7 @@
     Returns NM API Version
     NM API Version: 1
 */
-query nm_api_version() = 11;
+query nm_api_version() = 12;
 
 /*
     Returns version of peerlist
@@ -72,9 +72,12 @@ query nm_compute_blockchain_list(node_id: pubkey): list<byte_array> {
 }
 
 /*
-    Returns a list of blockchains to be launched or to be initialized on a node (RUNNING, PAUSED, IMPORTING)
+    Returns a list of blockchains to be launched or to be initialized on a node (RUNNING, PAUSED, IMPORTING, UNARCHIVING)
     NM API Version: 4
-    (Returns RUNNING or PAUSED blockchains for NM API Version 4-8.)
+
+    Compatibility:
+    * NM API Version 4-8: Returns RUNNING or PAUSED blockchains
+    * NM API Version 9-11: Returns RUNNING or PAUSED or IMPORTING blockchains
 */
 query nm_compute_blockchain_info_list(node_id: pubkey): list<blockchain_info> {
     return compute_blockchain_info_list(node_id);
@@ -144,7 +147,7 @@ function _get_container_limit_or_default(value: integer, container_units: intege
     NM API Version: 3
 */
 query nm_get_containers(pubkey): list<text> {
-    val n = require(node @? { pubkey }, "Node with pubkey %s not found".format(pubkey));
+    val n = require_node(pubkey);
     val clusters = cluster_node @* { n } .cluster;
     val res = list<text>();
     for (cl in clusters) {
@@ -168,12 +171,39 @@ query nm_get_blockchains_for_container(container_name: text): list<byte_array> {
 }
 
 /*
+    Returns container blockchain is running in.
     NM API Version: 3
 */
 query nm_get_container_for_blockchain(blockchain_rid: byte_array): text {
     val bc = require_blockchain_entity(blockchain_rid);
     require(bc.state != blockchain_state.REMOVED, "Blockchain is removed: " + bc.rid);
     return container_blockchain @ { bc } .container.name;
+}
+
+/*
+    Returns a destination container for node for moving/unarchiving blockchains.
+    Otherwise, returns nm_get_container_for_blockchain() result.
+    NM API Version: 12
+*/
+query nm_get_container_for_blockchain_on_node(pubkey, blockchain_rid: byte_array): text {
+    val node = require_node(pubkey);
+    val bc = require_blockchain_entity(blockchain_rid);
+
+    val moving_to = (bms: blockchain_move_state, cn: cluster_node) @? {
+        bms.blockchain == bc,
+        cn.cluster == bms.destination.cluster,
+        cn.node == node
+    } ( bms.destination.name );
+    if (exists(moving_to)) return moving_to;
+
+    val unarchiving_from = (ub: unarchiving_blockchain, cn: cluster_node) @? {
+        ub.blockchain == bc,
+        cn.cluster == ub.source.cluster,
+        cn.node == node
+    } ( ub.source.name );
+    if (exists(unarchiving_from)) return unarchiving_from;
+
+    return nm_get_container_for_blockchain(blockchain_rid);
 }
 
 /*

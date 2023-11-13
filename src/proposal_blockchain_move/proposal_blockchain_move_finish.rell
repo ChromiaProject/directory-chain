@@ -54,6 +54,7 @@ function blockchain_move_finish(blockchain, destination: container, finish_at_he
     create container_blockchain(destination, blockchain);
     // remove dst cluster/container nodes from bc replicas
     val dst_nodes = cluster_node @* { destination.cluster } (@omit @sort .node.pubkey, .node);
+    require(dst_nodes.size() > 0, "Cluster %s must have at least one node".format(destination.cluster.name));
     for (node in dst_nodes) {
         delete blockchain_replica_node @* { blockchain, node };
     }

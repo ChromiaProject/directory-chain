@@ -5,3 +5,25 @@ import proposal.*;
 import proposal_blockchain_move.*;
 import model.*;
 import .util.*;
+
+@extend(on_configuration_updated)
+function try_to_finalize_blockchain_unarchiving(message: configuration_updated) {
+    val ubc = unarchiving_blockchain @? { .blockchain.rid == message.blockchain_rid, .up_to_height == message.height - 1 };
+    if (exists(ubc)) {
+        val src_nodes = cluster_node @* { ubc.source.cluster } ( .node );
+        for (node in src_nodes) {
+            delete blockchain_replica_node @? { ubc.blockchain, node };
+        }
+        if (not src_nodes.empty()) {
+            log("blockchain_replica_node removed: %s".format(src_nodes @* {} ( .pubkey )));
+        }
+
+        ubc.blockchain.state = blockchain_state.RUNNING;
+
+        log("Blockchain %s unarchiving from container %s to container %s was finished at height %s".format(
+            ubc.blockchain.rid, ubc.source.name, ubc.destination.name, message.height - 1)
+        );
+
+        delete ubc;
+    }
+}

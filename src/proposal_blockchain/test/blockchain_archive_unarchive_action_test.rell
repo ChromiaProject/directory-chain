@@ -1,0 +1,145 @@
+@test module;
+
+import ^^.*;
+import common.operations.*;
+import common.test.ops.*;
+import common.test.config_test_helpers.*;
+import common.test.setup.*;
+import common.test.util.*;
+import proposal.voting.test.ops.*;
+import proposal_container.*;
+import proposal_provider.*;
+import direct_container.*;
+import direct_cluster.*;
+import ^.utils.*;
+
+function _test_blockchain_unarchiving_to_container_on_the_same_node_is_not_allowed() {
+    // setup
+    setup_module(provider_quota_max_containers = 2);
+    val ip = provider @ { initial_provider.pub };
+    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+
+    rell.test.tx().op(
+        // s1 / c1
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1a", "s1", 0, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1b", "s1", 0, [initial_provider.pub]),
+        update_node_with_units(initial_provider.pub, test_node.pubkey, cluster_units = 3),
+        add_node_to_cluster(initial_provider.pub, test_node.pubkey, "s1"),
+        // proposing blockchain to the c1a
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1a")
+    ).sign(initial_provider).run();
+    val foo_chain = blockchain @ { "foo_chain" };
+
+    // asserting that bc unarchiving from c1a to c1b is not allowed
+    rell.test.tx().op(
+        propose_blockchain_unarchive_action(initial_provider.pub, foo_chain.rid, "c1b", 100)
+    ).sign(initial_provider).run_must_fail(
+        "Unarchiving blockchains from a container to another container running on the same node is not allowed. Nodes belongs to clusters s1 and s1 are: [%s]"
+        .format(test_node.pubkey)
+    );
+}
+
+function test_blockchain_archiving_and_unarchiving_to_container_running_on_another_node() {
+    // setup
+    setup_module(provider_quota_max_containers = 3, cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val ip = provider @ { initial_provider.pub };
+    val node0 = node @ { test_node.pubkey };
+    val node1_pk = rell.test.pubkeys.trudy;
+    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, rell.test.pubkeys.bob, true),
+        // s1 / c1
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1", "s1", 0, [initial_provider.pub, rell.test.pubkeys.bob]),
+        update_node_with_units(initial_provider.pub, node0.pubkey, cluster_units = 2),
+        add_node_to_cluster(initial_provider.pub, node0.pubkey, "s1"),
+        // s2 / c2, c3
+        create_cluster(initial_provider.pub, "s2", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c2", "s2", 0, [initial_provider.pub, rell.test.pubkeys.bob]),
+        create_container_with_resource_limits(initial_provider.pub, "c3", "s2", 0, [initial_provider.pub], [container_resource_limit_type.container_units : 1, container_resource_limit_type.max_blockchains : 1]),
+        // proposing the blockchain to the c1
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
+    ).sign(initial_provider).run();
+    bob_votes();
+    val foo_chain = blockchain @ { "foo_chain" };
+
+    rell.test.tx().op(
+        create_test_node(ip, node1_pk, cluster @ { "s2" }),
+        // proposing the blockchain to the c3 to make it full
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c3")
+    ).sign(initial_provider).run();
+    val node1 = node @ { node1_pk };
+
+    // 1. Archive blockchain
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, foo_chain.rid, blockchain_action.archive)
+    ).sign(initial_provider).run();
+    bob_votes();
+    assert_equals(foo_chain.state, blockchain_state.ARCHIVED);
+
+    // 2. Trying to unarchive to unknown container
+    rell.test.tx().op(
+        propose_blockchain_unarchive_action(initial_provider.pub, foo_chain.rid, "unknown_container", 100)
+    ).sign(initial_provider).run_must_fail("Container unknown_container not found");
+
+    // 3. Trying to unarchive to a full container c3 -- must fail
+    rell.test.tx().op(
+        propose_blockchain_unarchive_action(initial_provider.pub, foo_chain.rid, "c3", 100)
+    ).sign(initial_provider).run_must_fail("Can't add blockchain, container c3 is full");
+
+    // 4. Unarchiving to a proper container
+    rell.test.tx().op(
+        propose_blockchain_unarchive_action(initial_provider.pub, foo_chain.rid, "c2", 100)
+    ).sign(initial_provider).run();
+
+    // asserting get_blockchain_unarchive_action_proposal() query result
+    val proposal_info = get_blockchain_unarchive_action_proposal(last_proposal().rowid);
+    assert_equals(
+        proposal_info,
+        (
+            blockchain = foo_chain.rid,
+            blockchain_name = "foo_chain",
+            action = blockchain_action.unarchive,
+            source_container = "c1",
+            destination_container = "c2",
+            up_to_height = 100
+        )
+    );
+    bob_votes();
+
+    // asserting unarchiving state
+    assert_equals(foo_chain.state, blockchain_state.UNARCHIVING);
+    val ub = unarchiving_blockchain @? { foo_chain };
+    assert_true(exists(ub));
+    assert_equals(ub!!.source.name, "c1");
+    assert_equals(ub.destination.name, "c2");
+    assert_equals(ub.up_to_height, 100);
+    // new signers config
+    val new_signers = blockchain_configuration_signers @? { foo_chain, 100 + 1 } .signers;
+    assert_true(exists(new_signers));
+    assert_equals(list<pubkey>.from_gtv(gtv.from_bytes(new_signers!!)), [node1_pk]);
+    // old signers are replicas
+    assert_equals(blockchain_replica_node @* { foo_chain } ( .node.pubkey ), [node0.pubkey]);
+
+    // imitation of ICMF message receiving
+    rell.test.tx().op(
+        receive_configuration_updated_op(
+            cluster_anchoring_chain @ { .cluster.name == "s2" } ( .blockchain.rid ),
+            configuration_updated_topic,
+            configuration_updated(
+                blockchain_rid = foo_chain.rid,
+                height = 101,
+                config_hash = x"" // x"" is enough for this test
+            ).to_gtv()
+        )
+    ).run();
+    // no replicas for foo_chain
+    assert_true(empty(blockchain_replica_node @* { foo_chain }));
+    // no unarchiving state for foo_chain
+    assert_true(empty(unarchiving_blockchain @? { foo_chain }));
+    // bs state changed from UNARCHIVING to RUNNING
+    assert_equals(foo_chain.state, blockchain_state.RUNNING);
+}
