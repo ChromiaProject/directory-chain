@@ -1,3 +1,5 @@
+val COMPRESSED_ROOTS_CONFIG_KEY = "compressed_roots";
+
 function allow_blockchain_dependencies() = chain_context.args.allow_blockchain_dependencies;
 
 function add_blockchain(
@@ -10,7 +12,7 @@ function add_blockchain(
 ): blockchain {
     val blockchain_rid = calculate_configuration_hash(base_configuration, signers);
     val blockchain = create blockchain(blockchain_rid, name, system, state);
-    create blockchain_configuration(blockchain, 0, base_configuration);
+    compress_and_store_configuration(blockchain, 0, base_configuration);
     create blockchain_configuration_signers(blockchain, 0, signers.to_gtv().to_bytes());
     create container_blockchain(container, blockchain);
     add_dependencies(base_configuration, blockchain_rid, 0);
@@ -23,6 +25,8 @@ function add_dependencies(raw_config: byte_array, brid: byte_array, height: inte
         require(allow_blockchain_dependencies(), "Blockchain dependencies are not allowed");
         val dependencies = list<(text, byte_array)>.from_gtv(config_map["dependencies"]);   // Returns e.g.  [brid0, brid22, ..]
         val blockchain = blockchain @ { brid };
+        // In case this is a configuration override, delete any deps from overridden config
+        delete blockchain_dependency @* { .me == blockchain, .height == height };
         val container = container_blockchain @ { blockchain }.container;
         for ((_, dependency_brid) in dependencies) {
             val dependency_blockchain = blockchain @? { dependency_brid };
@@ -57,7 +61,9 @@ function isAlive(blockchain): boolean {
 }
 
 function calculate_configuration_hash(base_config: byte_array, signers: list<pubkey>): byte_array {
-    val full_config = map<text, gtv>.from_gtv(gtv.from_bytes(base_config));
+    // Hash calculated on decompressed config
+    val decompressed_config = decompress_configuration(base_config);
+    val full_config = map<text, gtv>.from_gtv(gtv.from_bytes(decompressed_config));
     full_config["signers"] = signers.to_gtv();
     return full_config.to_gtv().hash();    
 }
@@ -66,9 +72,8 @@ function get_blockchain_configuration(blockchain_rid: byte_array, height: intege
     (base_config: byte_array, signers: list<pubkey>, config_hash: byte_array)?
 {
     val bc = require_blockchain(blockchain_rid, include_removed = true);
-    // Find configuration height -- the latest height up to given height.
-    // If conf_h exist, so does signer_h, thus no need to check both.
-    val base_config = blockchain_configuration @? { bc, .height <= height } (@omit @sort_desc .height, .data) limit 1;
+
+    val base_config = get_blockchain_configuration_data(bc, height);
     if (base_config != null) {
         // Checking that signers.size() is non-zero is done when population blockchain_configuration_signers.
         val signers = require(blockchain_configuration_signers @? { bc, .height <= height }
@@ -82,6 +87,130 @@ function get_blockchain_configuration(blockchain_rid: byte_array, height: intege
         );
     } else {
         return null;
+    }
+}
+
+function get_blockchain_configuration_data(blockchain, height: integer): byte_array? {
+    // Find configuration height -- the latest height up to given height.
+    // If conf_h exist, so does signer_h, thus no need to check both.
+    val compressed_config = blockchain_configuration @? { blockchain, .height <= height } (@omit @sort_desc .height, .data) limit 1;
+    return if (compressed_config != null) decompress_configuration(compressed_config) else null;
+}
+
+function get_latest_blockchain_configuration_data(blockchain): (height: integer, config: byte_array) {
+    val compressed_config = blockchain_configuration @ { blockchain } (@sort_desc .height, .data) limit 1;
+    val decompressed_config = decompress_configuration(compressed_config.data);
+    return (height = compressed_config.height, config = decompressed_config);
+}
+
+function get_pending_blockchain_configuration(blockchain, height: integer):
+    list<(base_config: byte_array, signers: list<pubkey>, minimum_height: integer)> = pending_blockchain_configuration @* { blockchain, .minimum_height <= height } (
+        base_config = decompress_configuration(.base_config),
+        signers = list<pubkey>.from_gtv(gtv.from_bytes(.signers)),
+        @sort minimum_height = .minimum_height
+    );
+
+function get_pending_blockchain_configuration_by_hash(blockchain, config_hash: byte_array):
+    (base_config: byte_array, signers: list<pubkey>, minimum_height: integer)? = pending_blockchain_configuration @? { blockchain, config_hash } (
+        base_config = decompress_configuration(.base_config),
+        signers = list<pubkey>.from_gtv(gtv.from_bytes(.signers)),
+        @sort minimum_height = .minimum_height
+    );
+
+function get_latest_pending_blockchain_configuration_data(blockchain):
+    (minimum_height: integer, base_config: byte_array, signers: byte_array)? = pending_blockchain_configuration @? { blockchain } (
+        @sort_desc .minimum_height,
+        base_config = decompress_configuration(.base_config),
+        signers = .signers
+    ) limit 1;
+
+
+struct compressed_root {
+    path: list<text>;
+    compressed_keys: list<compressed_key>;
+}
+
+struct compressed_key {
+    content_key: text;
+    content_hash: byte_array;
+}
+
+function decompress_root(root: map<text, gtv>, path: list<text>, compressed_keys: list<compressed_key>): map<text, gtv> {
+    if (path.empty()) {
+        val hashes_to_decompress = set<byte_array>();
+        for (hash in compressed_keys @* {}.content_hash) {
+            hashes_to_decompress.add(hash);
+        }
+
+        val resolved_parts = map<byte_array, byte_array>();
+        for (compressed_part in compressed_blockchain_configuration_part @* { .hash in hashes_to_decompress }) {
+            resolved_parts.put(compressed_part.hash, compressed_part.data);
+        }
+        for (compressed_key in compressed_keys) {
+            root.put(compressed_key.content_key, gtv.from_bytes(resolved_parts[compressed_key.content_hash]));
+        }
+    } else {
+        val nextLevel = path[0];
+        val nextRoot = if (root.contains(nextLevel)) map<text, gtv>.from_gtv(root[nextLevel]) else map<text, gtv>();
+        root[nextLevel] = decompress_root(nextRoot, path.sub(1), compressed_keys).to_gtv();
+    }
+    return root;
+}
+
+function decompress_configuration(configuration: byte_array): byte_array {
+    val config_map = map<text, gtv>.from_gtv(gtv.from_bytes(configuration));
+    if (not config_map.contains(COMPRESSED_ROOTS_CONFIG_KEY)) return configuration;
+
+    val compressed_roots = list<compressed_root>.from_gtv_pretty(config_map[COMPRESSED_ROOTS_CONFIG_KEY]);
+    for (root in compressed_roots) {
+        decompress_root(config_map, root.path, root.compressed_keys);
+    }
+
+    config_map.remove(COMPRESSED_ROOTS_CONFIG_KEY);
+    return config_map.to_gtv().to_bytes();
+}
+
+function compress_root(root: map<text, gtv>, path: list<text>, compressed_keys: list<compressed_key>): map<text, gtv> {
+    if (path.empty()) {
+        for (key_to_compress in root.keys()) {
+            val content = root[key_to_compress];
+            val hash = content.hash();
+            if (not exists(compressed_blockchain_configuration_part @? { .hash == hash })) {
+                create compressed_blockchain_configuration_part(hash = hash, data = content.to_bytes());
+            }
+            compressed_keys.add(compressed_key(key_to_compress, hash));
+            root.remove(key_to_compress);
+        }
+    } else {
+        val nextLevel = path[0];
+        val nextRoot = if (root.contains(nextLevel)) map<text, gtv>.from_gtv(root[nextLevel]) else map<text, gtv>();
+        root[nextLevel] = compress_root(nextRoot, path.sub(1), compressed_keys).to_gtv();
+    }
+    return root;
+}
+
+function compress_and_store_configuration(blockchain, height: integer, configuration: byte_array, overwrite: boolean = false) {
+    val config_map = map<text, gtv>.from_gtv(gtv.from_bytes(configuration));
+    if (not config_map.contains(COMPRESSED_ROOTS_CONFIG_KEY)) {
+        store_configuration(blockchain, height, configuration, overwrite);
+    } else {
+        val compressed_roots = list<compressed_root>.from_gtv_pretty(config_map[COMPRESSED_ROOTS_CONFIG_KEY]);
+        for (root in compressed_roots) {
+            val new_compressed_keys = list<compressed_key>();
+            compress_root(config_map, root.path, new_compressed_keys);
+            root.compressed_keys.add_all(new_compressed_keys);
+        }
+
+        config_map[COMPRESSED_ROOTS_CONFIG_KEY] = compressed_roots.to_gtv();
+        store_configuration(blockchain, height, config_map.to_gtv().to_bytes(), overwrite);
+    }
+}
+
+function store_configuration(blockchain, height: integer, configuration: byte_array, overwrite: boolean = false) {
+    if (overwrite and exists(blockchain_configuration @? { blockchain, height })) {
+        update blockchain_configuration @ { blockchain, height } ( .data = configuration );
+    } else {
+        create blockchain_configuration(blockchain, height, configuration);
     }
 }
 

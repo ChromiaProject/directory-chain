@@ -26,6 +26,9 @@ definitions:
           topics:
             - G_configuration_updated
             - G_configuration_failed
+  proposal_blockchain.util: &proposal_blockchain_util
+    max_config_path_depth: 10
+    max_config_size: 2097152 # 2 MiB
 
 blockchains:
   manager:
@@ -35,6 +38,7 @@ blockchains:
       common.init: *common_init
       common:
         allow_blockchain_dependencies: false
+      proposal_blockchain.util: *proposal_blockchain_util
   devnet:
     module: management_chain_testnet
     config: *common_config
@@ -48,6 +52,7 @@ blockchains:
       housekeeping:
         # 48h
         max_empty_container_time: 172800000
+      proposal_blockchain.util: *proposal_blockchain_util
   mainnet:
     module: management_chain_mainnet
     config:
@@ -71,6 +76,7 @@ blockchains:
       common.init: *common_init
       common:
         allow_blockchain_dependencies: false
+      proposal_blockchain.util: *proposal_blockchain_util
   system_anchoring:
     module: anchoring_chain_system
     config:
@@ -142,8 +148,11 @@ blockchains:
           rate_limit_active: 0
         lib.auth:
           auth_pubkey: x"03284C73391D6FFA90FA95D95BC4F29015C0111A655A9EE6DD7DEC089F32F04B5F" # Only for tests
+        ticket_chain:
+          admin_pubkey: x"02BECC5AA3AC14320BD9DAB1F558F637CFFE39508DEE9F7C2161EDF13A14BACE44" # Only for tests
         ticket_chain.test.ticket_chain_test:
           auth_privkey: x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6"  # Only for tests
+          admin_privkey: x"D223C1BEF057A86FCB4603BF8CCBF7FFBFAF1F1928ADBD52A8FCCD08E3C487C3"  # Only for tests
 
 database: # Used for running tests
   logSqlErrors: true
@@ -156,6 +165,7 @@ test:
     - anchoring_chain_system.test
     - cluster_class.test
     - common.test
+    - common.queries.test
     - direct_cluster.test
     - direct_container.test
     - nm_api.test
@@ -176,6 +186,9 @@ test:
     common.init: *common_init
     common:
       allow_blockchain_dependencies: true
+    proposal_blockchain.util:
+      max_config_path_depth: 10
+      max_config_size: 10240 # 10 KiB, low so we can test limits easier
 
 libs:
   ft4:

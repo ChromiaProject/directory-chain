@@ -53,10 +53,11 @@ function test_create_container_with_auto_create_provider() {
     rell.test.tx().op(
         create_container_op(create_container_message(
             ticket_id = 1,
-            pubkey = test_provider.pub,
+            provider_pubkey = test_provider.pub,
             container_units = 1,
             cluster_class = "",
-            extra_storage = 0
+            extra_storage = 0,
+            cluster_name = "Bob's cluster"
         ).to_gtv())).run();
     val container1 = container @ { bob_cluster, .system == false };
     assert_events(("icmf_message", (
@@ -70,10 +71,11 @@ function test_create_container_with_auto_create_provider() {
     rell.test.tx().op(
         create_container_op(create_container_message(
             ticket_id = 2,
-            pubkey = test_provider.pub,
+            provider_pubkey = test_provider.pub,
             container_units = 2,
             cluster_class = "",
-            extra_storage = 1024
+            extra_storage = 1024,
+            cluster_name = null
         ).to_gtv())).run();
     val container2 = container @ { bob_cluster, .system == false, .name != container1.name };
     assert_events(("icmf_message", (
@@ -106,10 +108,11 @@ function test_create_container_fail() {
     rell.test.tx().op(
         create_container_op(create_container_message(
             ticket_id = 1,
-            pubkey = test_provider.pub,
+            provider_pubkey = test_provider.pub,
             container_units = 1,
-            cluster_class = "2::",
-            extra_storage = 0
+            cluster_class = "",
+            extra_storage = 0,
+            cluster_name = "bogus cluster"
         ).to_gtv())).run();
 
     assert_events(("icmf_message", (
