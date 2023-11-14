@@ -13,7 +13,7 @@ import direct_container.*;
 import direct_cluster.*;
 import ^.utils.*;
 
-function _test_blockchain_unarchiving_to_container_on_the_same_node_is_not_allowed() {
+function test_blockchain_unarchiving_to_container_on_the_same_node_is_not_allowed() {
     // setup
     setup_module(provider_quota_max_containers = 2);
     val ip = provider @ { initial_provider.pub };
@@ -31,7 +31,13 @@ function _test_blockchain_unarchiving_to_container_on_the_same_node_is_not_allow
     ).sign(initial_provider).run();
     val foo_chain = blockchain @ { "foo_chain" };
 
-    // asserting that bc unarchiving from c1a to c1b is not allowed
+    // 1. Archive blockchain
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, foo_chain.rid, blockchain_action.archive)
+    ).sign(initial_provider).run();
+    assert_equals(foo_chain.state, blockchain_state.ARCHIVED);
+
+    // 2. Asserting that bc unarchiving from c1a to c1b is not allowed
     rell.test.tx().op(
         propose_blockchain_unarchive_action(initial_provider.pub, foo_chain.rid, "c1b", 100)
     ).sign(initial_provider).run_must_fail(
@@ -79,6 +85,8 @@ function test_blockchain_archiving_and_unarchiving_to_container_running_on_anoth
     ).sign(initial_provider).run();
     bob_votes();
     assert_equals(foo_chain.state, blockchain_state.ARCHIVED);
+    // asserting foo_chain is in inactive_blockchain table
+    assert_true(exists(inactive_blockchain @? { foo_chain }));
 
     // 2. Trying to unarchive to unknown container
     rell.test.tx().op(
@@ -117,6 +125,8 @@ function test_blockchain_archiving_and_unarchiving_to_container_running_on_anoth
     assert_equals(ub!!.source.name, "c1");
     assert_equals(ub.destination.name, "c2");
     assert_equals(ub.up_to_height, 100);
+    // asserting foo_chain is not in inactive_blockchain table
+    assert_true(empty(inactive_blockchain @? { foo_chain }));
     // new signers config
     val new_signers = blockchain_configuration_signers @? { foo_chain, 100 + 1 } .signers;
     assert_true(exists(new_signers));

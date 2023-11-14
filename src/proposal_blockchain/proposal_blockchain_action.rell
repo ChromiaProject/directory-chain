@@ -106,6 +106,7 @@ function _apply_unarchive_blockchain(action: pending_blockchain_action, proposal
     val encoded_dst_nodes = (dst_nodes @* {} ( .pubkey )).to_gtv().to_bytes();
     create blockchain_configuration_signers(action.blockchain, args.up_to_height + 1, encoded_dst_nodes);
     create unarchiving_blockchain(action.blockchain, source = src_container, destination = dst_container, args.up_to_height);
+    delete inactive_blockchain @? { action.blockchain };
 }
 
 operation propose_blockchain_action(my_pubkey: pubkey, blockchain_rid: byte_array, action: blockchain_action, description: text = "") {
