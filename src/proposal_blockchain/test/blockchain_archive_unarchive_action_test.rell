@@ -31,7 +31,13 @@ function test_blockchain_unarchiving_to_container_on_the_same_node_is_not_allowe
     ).sign(initial_provider).run();
     val foo_chain = blockchain @ { "foo_chain" };
 
-    // asserting that bc unarchiving from c1a to c1b is not allowed
+    // 1. Archive blockchain
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, foo_chain.rid, blockchain_action.archive)
+    ).sign(initial_provider).run();
+    assert_equals(foo_chain.state, blockchain_state.ARCHIVED);
+
+    // 2. Asserting that bc unarchiving from c1a to c1b is not allowed
     rell.test.tx().op(
         propose_blockchain_unarchive_action(initial_provider.pub, foo_chain.rid, "c1b", 100)
     ).sign(initial_provider).run_must_fail(
