@@ -12,6 +12,7 @@ import proposal_provider.*;
 import direct_container.*;
 import direct_cluster.*;
 import ^.utils.*;
+import nm_api.*;
 
 function test_blockchain_unarchiving_to_container_on_the_same_node_is_not_allowed() {
     // setup
@@ -125,6 +126,11 @@ function test_blockchain_archiving_and_unarchiving_to_container_running_on_anoth
     assert_equals(ub!!.source.name, "c1");
     assert_equals(ub.destination.name, "c2");
     assert_equals(ub.up_to_height, 100);
+    // asserting unarchiving_blockchain_info though NM API
+    val ubi = nm_get_blockchain_start_args(foo_chain.rid);
+    val expected = unarchiving_blockchain_info(
+        rid = foo_chain.rid, source_container = "c1", destination_container = "c2", up_to_height = 100);
+    assert_equals(ubi, expected.to_gtv());
     // asserting foo_chain is not in inactive_blockchain table
     assert_true(empty(inactive_blockchain @? { foo_chain }));
     // new signers config
@@ -150,6 +156,8 @@ function test_blockchain_archiving_and_unarchiving_to_container_running_on_anoth
     assert_true(empty(blockchain_replica_node @* { foo_chain }));
     // no unarchiving state for foo_chain
     assert_true(empty(unarchiving_blockchain @? { foo_chain }));
+    // asserting unarchiving_blockchain_info though NM API
+    assert_null(nm_get_blockchain_start_args(foo_chain.rid));
     // bs state changed from UNARCHIVING to RUNNING
     assert_equals(foo_chain.state, blockchain_state.RUNNING);
 }
