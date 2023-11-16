@@ -2,7 +2,7 @@
     Returns NM API Version
     NM API Version: 1
 */
-query nm_api_version() = 12;
+query nm_api_version() = 13;
 
 /*
     Returns version of peerlist
@@ -305,4 +305,20 @@ query nm_find_next_inactive_blockchains(height: integer): list<inactive_blockcha
     val next_height = inactive_blockchain @? { .height > height } (@sort .height) limit 1;
     return if (empty(next_height)) []
     else inactive_blockchain @* { next_height } ( inactive_blockchain_info(.blockchain.rid, .blockchain.state, .height) );
+}
+
+/*
+    Returns unarchiving blockchain info.
+    NM API Version 13
+*/
+query nm_get_unarchiving_blockchain_info(blockchain_rid: byte_array): unarchiving_blockchain_info? {
+    val bc = require_blockchain_entity(blockchain_rid);
+    return when (bc.state) {
+        blockchain_state.UNARCHIVING -> unarchiving_blockchain @? { bc } (
+            unarchiving_blockchain_info(
+                rid = bc.rid, source_container = .source.name, destination_container = .destination.name, .up_to_height
+            )
+        );
+        else -> null;
+    };
 }
