@@ -308,16 +308,16 @@ query nm_find_next_inactive_blockchains(height: integer): list<inactive_blockcha
 }
 
 /*
-    Returns blockchain startup args. Currently, only UNARCHIVING blockchains are supported.
+    Returns unarchiving blockchain info.
     NM API Version 13
 */
-query nm_get_blockchain_start_args(blockchain_rid: byte_array): gtv? {
+query nm_get_unarchiving_blockchain_info(blockchain_rid: byte_array): unarchiving_blockchain_info? {
     val bc = require_blockchain_entity(blockchain_rid);
     return when (bc.state) {
         blockchain_state.UNARCHIVING -> unarchiving_blockchain @? { bc } (
             unarchiving_blockchain_info(
                 rid = bc.rid, source_container = .source.name, destination_container = .destination.name, .up_to_height
-            ).to_gtv()
+            )
         );
         else -> null;
     };
