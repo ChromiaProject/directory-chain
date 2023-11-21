@@ -17,7 +17,7 @@ operation propose_foreign_blockchain_blocks_import(
     val container = container_blockchain @ { blockchain }.container;
     require_container_deployer(container, me);
 
-    require(exists(foreign_blockchain_import @* { blockchain_rid }), "Can't find foreign blockchain being imported: %s".format(blockchain_rid));
+    require(exists(importing_foreign_blockchain @* { blockchain_rid }), "Can't find foreign blockchain being imported: %s".format(blockchain_rid));
     require(empty(pending_foreign_blockchain_blocks_import @* { blockchain, .proposal.state == proposal_state.PENDING } limit 1), "Already proposed");
     require_up_to_height_is_less_or_equals_last_config_height(blockchain, up_to_height);
 
@@ -33,10 +33,10 @@ function apply_foreign_blockchain_blocks_import(proposal) {
     val container = container_blockchain @ { pfbbi.blockchain }.container;
     val nodes = cluster_node @* { container.cluster } (@sort .node.pubkey);
     require(nodes.size() > 0, "Cluster must have at least one node");
-    require(exists(foreign_blockchain_import @* { .blockchain_rid == pfbbi.blockchain.rid }),
+    require(exists(importing_foreign_blockchain @* { .blockchain_rid == pfbbi.blockchain.rid }),
         "Can't find foreign blockchain being imported: %s".format(pfbbi.blockchain.rid));
     require_up_to_height_is_less_or_equals_last_config_height(pfbbi.blockchain, pfbbi.up_to_height);
-    val fbi = require(foreign_blockchain_import @? { .blockchain_rid == pfbbi.blockchain.rid },
+    val fbi = require(importing_foreign_blockchain @? { .blockchain_rid == pfbbi.blockchain.rid },
         "Can't find foreign blockchain being imported: %s".format(pfbbi.blockchain.rid)
     );
     require(pfbbi.up_to_height != -1,

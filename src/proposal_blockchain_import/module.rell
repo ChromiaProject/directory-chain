@@ -7,9 +7,9 @@ import .util.*;
 
 @extend(on_configuration_updated)
 function try_to_finalize_foreign_blockchain_import(message: configuration_updated) {
-    val foreign_blockchain = foreign_blockchain_import @? { .blockchain_rid == message.blockchain_rid, .up_to_height == message.height - 1 };
-    if (exists(foreign_blockchain)) {
-        delete foreign_blockchain;
+    val ifb = importing_foreign_blockchain @? { .blockchain_rid == message.blockchain_rid, .up_to_height == message.height - 1 };
+    if (exists(ifb)) {
+        delete ifb;
         delete blockchain_configuration_options @* { .blockchain.rid == message.blockchain_rid };
         log("Foreign blockchain import was finished at height %s".format(message.height - 1));
     }
