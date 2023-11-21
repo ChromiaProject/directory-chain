@@ -272,7 +272,7 @@ query nm_get_management_chain() = blockchain @ { blockchains.directory_chain } (
 */
 query nm_get_blockchain_configuration_options(blockchain_rid: byte_array, height: integer)
     = blockchain_configuration_options @? { .blockchain.rid == blockchain_rid, .height <= height }
-        (@omit @sort_desc .height, $.to_struct()) limit 1;
+    (@omit @sort_desc .height, $.to_struct()) limit 1;
 
 /*
     Returns the blockchain signers from the latest configuration
@@ -311,14 +311,19 @@ query nm_find_next_inactive_blockchains(height: integer): list<inactive_blockcha
     Returns unarchiving blockchain info.
     NM API Version 13
 */
-query nm_get_unarchiving_blockchain_info(blockchain_rid: byte_array): unarchiving_blockchain_info? {
+query nm_get_unarchiving_blockchain_node_info(pubkey, blockchain_rid: byte_array): unarchiving_blockchain_node_info? {
+    val node = require_node(pubkey);
     val bc = require_blockchain_entity(blockchain_rid);
-    return when (bc.state) {
-        blockchain_state.UNARCHIVING -> unarchiving_blockchain @? { bc } (
-            unarchiving_blockchain_info(
-                rid = bc.rid, source_container = .source.name, destination_container = .destination.name, .up_to_height
-            )
-        );
-        else -> null;
-    };
+    if (bc.state != blockchain_state.UNARCHIVING) return null;
+
+    val ubc = unarchiving_blockchain @? { bc } ( $.to_struct() );
+    if (empty(ubc)) return null;
+
+    return unarchiving_blockchain_node_info(
+        rid = bc.rid,
+        source_container = ubc.source.name,
+        destination_container = ubc.destination.name,
+        up_to_height = ubc.up_to_height,
+        is_source_node = exists(cluster_node @? { ubc.source.cluster, node })
+    );
 }
