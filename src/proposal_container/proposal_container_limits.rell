@@ -21,9 +21,7 @@ else null;
 function apply_container_limits(proposal) {
     val pps = pending_container_limits @? { proposal };
     if (pps == null) return;
-    update container_resource_limit @ { pps.container, container_resource_limit_type.container_units } ( pps.container_units );
-    update container_resource_limit @ { pps.container, container_resource_limit_type.max_blockchains } ( pps.max_blockchains );
-    update container_resource_limit @ { pps.container, container_resource_limit_type.extra_storage } ( pps.extra_storage );
+    upgrade_container(pps.container, pps.container_units, pps.extra_storage, pps.max_blockchains);
 }
 
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.container_limits.name: delete_pending_container_limits(*)];
@@ -50,9 +48,9 @@ operation propose_container_limits(my_pubkey: pubkey, container_name: text, limi
     require_provider_auth_with_rate_limit(me);
     val container = require_container(container_name);
     require_cluster_governor(container.cluster, me);
-    _require_container_units(container, limits_map[container_resource_limit_type.container_units]);
-    _require_max_blockchains(container, limits_map[container_resource_limit_type.max_blockchains]);
-    _require_extra_storage(container, limits_map[container_resource_limit_type.extra_storage]);
+    require_container_units(container, limits_map[container_resource_limit_type.container_units]);
+    require_max_blockchains(container, limits_map[container_resource_limit_type.max_blockchains]);
+    require_extra_storage(container, limits_map[container_resource_limit_type.extra_storage]);
     val prop = create proposal(op_context.last_block_time, proposal_type.container_limits, me, container.cluster.governance, description);
     create pending_container_limits(
         prop,
@@ -62,34 +60,6 @@ operation propose_container_limits(my_pubkey: pubkey, container_name: text, limi
         extra_storage = limits_map[container_resource_limit_type.extra_storage]
     );
     internal_vote(me, prop, true);
-}
-
-function _require_container_units(container, new_container_units: integer) {
-    val current_container_units = get_container_limit_or_default(container, container_resource_limit_type.container_units, standard_container_defaults.container_units);
-    val available_container_units = get_available_container_units(container.cluster);
-    val required_container_units = new_container_units - current_container_units;
-    require(
-        required_container_units <= 0 or required_container_units <= available_container_units,
-        "Can not propose container limits since container_units is too high for current cluster. Available container_units in cluster are %d but needed is %d".format(available_container_units, required_container_units)
-    );
-}
-
-function _require_max_blockchains(container, new_max_blockchains: integer) {
-    val current_blockchain_count = get_container_blockchain_count(container);
-    require(
-        current_blockchain_count <= new_max_blockchains,
-        "Can not propose container limits since max_blockchains is too low. Current number of blockchains is %d".format(current_blockchain_count)
-    );
-}
-
-function _require_extra_storage(container, new_extra_storage: integer) {
-    val current_extra_storage = get_container_limit_or_default(container, container_resource_limit_type.extra_storage, standard_container_defaults.extra_storage);
-    val available_extra_storage = get_available_extra_storage(container.cluster);
-    val required_extra_storage = new_extra_storage - current_extra_storage;
-    require(
-        required_extra_storage <= available_extra_storage,
-        "Can not propose container limits since extra_storage is too high. Available extra_storage is %d MiB but needed is %d MiB".format(available_extra_storage, required_extra_storage)
-    );
 }
 
 query get_container_limits_proposal(rowid) {

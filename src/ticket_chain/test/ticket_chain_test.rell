@@ -365,6 +365,82 @@ function test_renew_container_insufficient_funds() {
     ).run_must_fail("Balance is too low");
 }
 
+function test_upgrade_container_success() {
+    rell.test.tx().op(init()).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16, container_units = 2);
+
+    val created_lease = lease @ { container_name };
+    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 4, ticket_id = 21, current_lease = created_lease, container_units = 3);
+
+    val expected_lease = lease_data(
+        container_name = container_name,
+        container_units = 3, // Should be 3 now
+        extra_storage_gib = 0,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL * 4 + millis_per_week,
+        expired = false,
+        auto_renew = false
+    );
+
+    val leases2 = get_leases_by_account(alice.id);
+    assert_equals(leases2.size(), 1);
+    assert_equals(leases2[0], expected_lease);
+
+    val lease_data = require(get_lease_by_container_name(container_name));
+    assert_equals(lease_data, expected_lease);
+}
+
+function test_upgrade_container_insufficient_funds() {
+    rell.test.tx().op(init()).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16, container_units = 2);
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "upgrade_container",
+            [container_name.to_gtv(), (100).to_gtv(), "".to_gtv(), (0).to_gtv(), "".to_gtv()])
+    ).op(
+        upgrade_container(container_name, 10000, "", 0, "")
+    ).run_must_fail("Balance is too low");
+}
+
+function test_remaining_lease_value_is_correct() {
+    rell.test.tx().op(init()).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16, container_units = 2);
+
+    val lease = lease @ { container_name };
+    val lease_value = calculate_container_cost(1, 2, 0);
+
+    val quarter_week_passed_remaining_value = calculate_remaining_lease_value(lease, lease.start_time + millis_per_week / 4);
+    assert_equals(3 * lease_value / 4, quarter_week_passed_remaining_value);
+
+    val half_week_passed_remaining_value = calculate_remaining_lease_value(lease, lease.start_time + millis_per_week / 2);
+    assert_equals(lease_value / 2, half_week_passed_remaining_value);
+
+    val expired_lease_remaining_value = calculate_remaining_lease_value(lease, lease.start_time + millis_per_week);
+    assert_equals(expired_lease_remaining_value, 0);
+}
+
+function test_expire_lease_not_done_when_upgrade_is_pending() {
+    rell.test.tx().op(init()).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16);
+
+    // Make a pending upgrade
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, "upgrade_container", [container_name.to_gtv(), (3).to_gtv(),
+            "".to_gtv(), (0).to_gtv(), "the_cluster".to_gtv()])
+    ).op(
+        upgrade_container(container_name, 3, "", 0, "the_cluster")
+    ).run();
+
+    assert_false(lease @ { container_name } (.expired));
+    rell.test.set_next_block_time_delta(millis_per_week + 1);
+    rell.test.block().run();
+    rell.test.block().run();
+    assert_false(lease @ { container_name } (.expired));
+}
+
 function do_create_account(keypair: rell.test.keypair, failure: text? = null): ft4.accounts.account? {
     val eth_address = ft4.test_utils.evm_address_from_privkey(keypair.priv);
     log("eth_address=%s".format(eth_address));
@@ -413,7 +489,7 @@ function do_create_container(
         block_height = block_height).to_gtv_pretty()
     ));
 
-    val pending_ticket = create_container_ticket_data(ticket_id, ticket_type.CREATE_CONTAINER, ticket_state.PENDING, error_message = "", container_name = "");
+    val pending_ticket = container_ticket_data(ticket_id, ticket_type.CREATE_CONTAINER, ticket_state.PENDING, error_message = "", container_name = "");
     assert_equals(require(get_create_container_ticket_by_id(ticket_id)), pending_ticket);
     assert_equals(require(get_create_container_ticket_by_transaction(tx_rid)), pending_ticket);
 
@@ -423,7 +499,7 @@ function do_create_container(
     rell.test.tx().op(
         icmf_message_op(x"", ticket_result_topic, ticket_result_message(ticket_id = ticket_id, error_message = if (success) null else "error", container_name).to_gtv())
     ).run();
-    val done_ticket = create_container_ticket_data(
+    val done_ticket = container_ticket_data(
         ticket_id = ticket_id,
         type = ticket_type.CREATE_CONTAINER,
         state = if (success) ticket_state.SUCCESS else ticket_state.FAILURE,
@@ -442,6 +518,65 @@ function do_create_container(
     }
 
     return container_name;
+}
+
+function do_upgrade_container(
+        ft4.accounts.account,
+        keypair: rell.test.keypair,
+        success: boolean,
+        block_height: integer,
+        ticket_id: integer,
+        current_lease: lease,
+        container_units: integer = 2,
+        auto_renew: boolean = false) {
+    val container_name = current_lease.container_name;
+
+    val cost = calculate_container_cost(1, container_units, 0) - calculate_remaining_lease_value(current_lease, rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL * (block_height - 1));
+
+    val initial_balance = get_account_balance(account);
+    val initial_pool_balance = get_pool_balance();
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(keypair.priv, "upgrade_container", [container_name.to_gtv(), container_units.to_gtv(),
+            "".to_gtv(), (0).to_gtv(), "the_cluster".to_gtv()])
+    ).op(
+        upgrade_container(container_name, container_units, "", 0, "the_cluster")
+    ).run();
+    val tx_rid = transaction @ {} (@sort_desc @omit .rowid, .tx_rid) limit 1;
+
+    assert_events(("icmf_message", (
+        topic = upgrade_container_topic,
+        body = upgrade_container_message(ticket_id = ticket_id, container_name = container_name, container_units = container_units, cluster_class = "", extra_storage = 0, cluster_name = "the_cluster").to_gtv(),
+        block_height = block_height).to_gtv_pretty()
+    ));
+
+    val pending_ticket = container_ticket_data(ticket_id, ticket_type.UPGRADE_CONTAINER, ticket_state.PENDING, error_message = "", container_name = container_name);
+    assert_equals(require(get_upgrade_container_ticket_by_id(ticket_id)), pending_ticket);
+    assert_equals(require(get_upgrade_container_ticket_by_transaction(tx_rid)), pending_ticket);
+
+    assert_equals(get_account_balance(account), initial_balance - cost);
+    assert_equals(get_pool_balance(), initial_pool_balance + cost);
+
+    rell.test.tx().op(
+        icmf_message_op(x"", ticket_result_topic, ticket_result_message(ticket_id = ticket_id, error_message = if (success) null else "error", container_name).to_gtv())
+    ).run();
+    val done_ticket = container_ticket_data(
+        ticket_id = ticket_id,
+        type = ticket_type.UPGRADE_CONTAINER,
+        state = if (success) ticket_state.SUCCESS else ticket_state.FAILURE,
+        error_message = if (success) "" else "error",
+        container_name = if (success) container_name else ""
+    );
+    assert_equals(require(get_upgrade_container_ticket_by_id(ticket_id)), done_ticket);
+    assert_equals(require(get_upgrade_container_ticket_by_transaction(tx_rid)), done_ticket);
+
+    if (success) {
+        assert_equals(get_account_balance(account), initial_balance - cost);
+        assert_equals(get_pool_balance(), initial_pool_balance + cost);
+    } else {
+        assert_equals(get_account_balance(account), initial_balance);
+        assert_equals(get_pool_balance(), initial_pool_balance);
+    }
 }
 
 function test_asset_units() {

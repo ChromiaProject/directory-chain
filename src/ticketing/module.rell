@@ -63,6 +63,20 @@ function create_container_from_ticket(provider_pubkey: pubkey, container_units: 
     return "";
 }
 
+function upgrade_container_from_ticket(container_name: text, container_units: integer, cluster_class: text, extra_storage: integer, cluster_name: text) {
+    val container = container @ { .name == container_name };
+    val current_cluster = container.cluster;
+    if (current_cluster.name == cluster_name) {
+        require(is_cluster_in_class(current_cluster, cluster_class), "Requested cluster for upgraded container does not match cluster class");
+        upgrade_container(container, container_units, extra_storage, standard_container_defaults.max_blockchains);
+    } else {
+        // TODO: Move chains
+        require(false, "Moving to new cluster is not supported");
+        val destination_cluster = cluster @ { .name == cluster_name };
+        require(is_cluster_in_class(destination_cluster, cluster_class), "Requested cluster for upgraded container does not match cluster class");
+    }
+}
+
 function create_container_in_cluster(provider, cluster, container_units: integer, extra_storage: integer): container {
     val name = [cluster.to_gtv(), provider.pubkey.to_gtv(), op_context.transaction.tx_rid.to_gtv()].hash().to_hex();
     return create_container_impl(
