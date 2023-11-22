@@ -1,0 +1,41 @@
+import ^.common;
+import ^.messaging.icmf.*;
+import ^.messaging.ticketing.*;
+
+@extend(common.receive_icmf_message) function receive_upgrade_container(sender: byte_array, topic: text, body: gtv) {
+    if (topic != upgrade_container_topic) return;
+
+    if (sender != ticket_chain.rid) {
+        log("Sender %s is not the ticket chain, ignoring".format(sender));
+        return;
+    }
+
+    receive_upgrade_container_impl(body);
+}
+
+function receive_upgrade_container_impl(body: gtv) {
+    val message = upgrade_container_message.from_gtv(body);
+
+    val upgrade_success = try_call(upgrade_container_from_ticket(
+        container_name = message.container_name,
+        container_units = message.container_units,
+        cluster_class = message.cluster_class,
+        extra_storage = message.extra_storage,
+        cluster_name = message.cluster_name,
+        *
+    ));
+
+    // In case container was stopped
+    val restart_success = try_call(restart_container(message.container_name, *));
+
+    val error_message = if (not upgrade_success)
+            "Unable to upgrade container %s".format(message.container_name)
+        else if (not restart_success)
+            "Unable to restart container %s".format(message.container_name)
+        else null;
+    send_message(ticket_result_topic, ticket_result_message(
+        ticket_id = message.ticket_id,
+        error_message = error_message,
+        container_name = message.container_name
+    ).to_gtv());
+}
