@@ -89,13 +89,13 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
     ).sign(initial_provider).run_must_fail("Moving blockchain can't be paused");
     // Continuing with pending_blockchain_move
     bob_votes();
-    val bc_move_state = blockchain_move_state @? { foo_chain, .destination.name == "c2", .finish_at_height == -1, .remove_on_nodes == x"" };
+    val bc_move_state = moving_blockchain @? { foo_chain, .destination.name == "c2", .finish_at_height == -1, .remove_on_nodes == x"" };
     assert_not_null(bc_move_state);
     // asserting that s2/c2 nodes are blockchain replicas
     assert_equals(blockchain_replica_node @* { foo_chain } ( .node ), [node1]);
     // asserting that blockchain still belongs to c1
     assert_equals(container_blockchain @ { foo_chain } ( .container.name ), "c1");
-    // Trying again to propose an blockchain_action, must fail due to non-null blockchain_move_state
+    // Trying again to propose an blockchain_action, must fail due to non-null moving_blockchain
     rell.test.tx().op(
         propose_blockchain_action(initial_provider.pub, foo_chain.rid, blockchain_action.pause)
     ).sign(initial_provider).run_must_fail("Moving blockchain can't be paused");

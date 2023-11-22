@@ -13,7 +13,7 @@ operation propose_blockchain_move(my_pubkey: pubkey, blockchain_rid: byte_array,
     );
 
     // require blockchain is not being moved right now
-    require(empty(blockchain_move_state @? { blockchain }), "Blockchain %s is being moved".format(blockchain.rid));
+    require(empty(moving_blockchain @? { blockchain }), "Blockchain %s is being moved".format(blockchain.rid));
 
     // require there no pending blockchain actions (pause, resume, remove)
     val pba = pending_blockchain_action @? { blockchain };
@@ -69,7 +69,7 @@ function blockchain_move_start(blockchain, destination: container) {
     for (node in dst_nodes) {
         create blockchain_replica_node(blockchain, node);
     }
-    create blockchain_move_state(blockchain, destination);
+    create moving_blockchain(blockchain, destination);
 }
 
 function delete_pending_blockchain_move(proposal) {
