@@ -36,7 +36,7 @@ operation propose_blockchain_move(my_pubkey: pubkey, blockchain_rid: byte_array,
     } (cn1.node.pubkey);
     require(empty(intersection),
         "Moving blockchains between containers running on the same node is not allowed. Nodes belongs to clusters %s and %s are: %s"
-        .format(src_container.cluster.name, dst_container.cluster.name, intersection)
+            .format(src_container.cluster.name, dst_container.cluster.name, intersection)
     );
 
     val prop = create proposal(op_context.last_block_time, proposal_type.blockchain_move_start, me, dst_container.deployer, description); // TODO: POS-961: src + dst?
@@ -45,7 +45,7 @@ operation propose_blockchain_move(my_pubkey: pubkey, blockchain_rid: byte_array,
 }
 
 query get_blockchain_move_proposal(rowid?):
-(blockchain_rid: byte_array, blockchain_name: text, container: text, cluster: text)? {
+        (blockchain_rid: byte_array, blockchain_name: text, container: text, cluster: text)? {
     val proposal = get_latest_proposal(rowid, proposal_type.blockchain_import);
     if (proposal == null) return null;
     return pending_blockchain_move @ { proposal } (
@@ -60,16 +60,28 @@ query get_blockchain_move_proposal(rowid?):
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.blockchain_move_start.name: delete_pending_blockchain_move(*)];
 
 function apply_blockchain_move(proposal) {
-    val pbm = pending_blockchain_move @ { proposal };
-    blockchain_move_start(pbm.blockchain, pbm.destination);
-}
+    val pbm = pending_blockchain_move @ { proposal } ($.to_struct());
 
-function blockchain_move_start(blockchain, destination: container) {
-    val dst_nodes = cluster_node @* { destination.cluster } (.node);
-    for (node in dst_nodes) {
-        create blockchain_replica_node(blockchain, node);
+    // keep src cluster/container nodes as replicas
+    val src_container = container_blockchain @ { pbm.blockchain } ( .container );
+    val src_cluster_nodes = cluster_node @* { src_container.cluster } ( .node );
+    for (node in src_cluster_nodes) {
+        create blockchain_replica_node(pbm.blockchain, node);
     }
-    create moving_blockchain(blockchain, destination);
+    // remove bc from container
+    delete container_blockchain @* { pbm.blockchain };
+
+    // add bc to the dst container
+    require_container_is_not_full(pbm.destination);
+    create container_blockchain(pbm.destination, pbm.blockchain);
+    // remove dst cluster/container nodes from bc replicas
+    val dst_nodes = cluster_node @* { pbm.destination.cluster } (@omit @sort .node.pubkey, .node);
+    require(dst_nodes.size() > 0, "Cluster %s must have at least one node".format(pbm.destination.cluster.name));
+    for (node in dst_nodes) {
+        delete blockchain_replica_node @* { pbm.blockchain, node };
+    }
+
+    create moving_blockchain(pbm.blockchain, source = src_container, destination = pbm.destination);
 }
 
 function delete_pending_blockchain_move(proposal) {
