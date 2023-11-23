@@ -12,6 +12,7 @@ import proposal_container.*;
 import proposal_provider.*;
 import direct_container.*;
 import direct_cluster.*;
+import nm_api.*;
 
 function test_blockchain_moving_between_containers_within_one_node_is_not_allowed() {
     // setup
@@ -89,12 +90,18 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
     ).sign(initial_provider).run_must_fail("Moving blockchain can't be paused");
     // Continuing with pending_blockchain_move
     bob_votes();
-    val bc_move_state = moving_blockchain @? { foo_chain, .destination.name == "c2", .finish_at_height == -1, .remove_on_nodes == x"" };
+    val bc_move_state = moving_blockchain @? { foo_chain,
+        .source.name == "c1", .destination.name == "c2",
+        .finish_at_height == -1, .remove_on_nodes == x""
+    };
     assert_not_null(bc_move_state);
-    // asserting that s2/c2 nodes are blockchain replicas
-    assert_equals(blockchain_replica_node @* { foo_chain } ( .node ), [node1]);
-    // asserting that blockchain still belongs to c1
-    assert_equals(container_blockchain @ { foo_chain } ( .container.name ), "c1");
+    // asserting that s1/c1 nodes are blockchain replicas
+    assert_equals(blockchain_replica_node @* { foo_chain } ( .node ), [node0]);
+    // asserting that blockchain belongs to c2
+    assert_equals(container_blockchain @ { foo_chain } ( .container.name ), "c2");
+    // asserting that nm_get_container_for_blockchain_on_node returns proper values for node0 and node1
+    assert_equals(nm_get_container_for_blockchain_on_node(node0.pubkey, foo_chain.rid), "c1");
+    assert_equals(nm_get_container_for_blockchain_on_node(node1.pubkey, foo_chain.rid), "c2");
     // Trying again to propose an blockchain_action, must fail due to non-null moving_blockchain
     rell.test.tx().op(
         propose_blockchain_action(initial_provider.pub, foo_chain.rid, blockchain_action.pause)
