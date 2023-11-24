@@ -23,6 +23,7 @@ function add_node_internal(provider, node_data: register_node_data, require_not_
         territory = node_data.territory,
         extra_storage = node_data.extra_storage
     );
+    after_node_added(node);
 
     for (cluster in clusters) {
         if (roles.has_node_access(provider)) {
@@ -32,7 +33,7 @@ function add_node_internal(provider, node_data: register_node_data, require_not_
         }
         node_list.last_update = op_context.last_block_time;
     }
-    after_node_added(node);
+    after_node_and_clusters_added(node);
     return node;
 }
 
@@ -80,5 +81,12 @@ function get_cluster_count_for_node(node): integer {
     return cluster_node @ { node } ( @sum 1 ) + cluster_replica_node @ { node } ( @sum 1 );
 }
 
-@extendable
-function after_node_added(node) {}
+@extendable function after_node_added(node) {}
+
+@extendable function before_node_removal(node) {}
+
+@extendable function after_node_updated(node) {}
+
+@extendable function after_node_capability_added(node, type: node_capability_type) {}
+
+@extendable function before_node_capability_removal(node, type: node_capability_type) {}

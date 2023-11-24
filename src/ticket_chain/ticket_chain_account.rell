@@ -1,0 +1,56 @@
+operation register_account(pubkey) {
+    require_admin();
+
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(pubkey, set(["T"]));
+
+    before_account_registration(auth_descriptor);
+    val account_id = ft4.accounts.Unsafe.create_account_with_auth(auth_descriptor);
+    val account = ft4.accounts.account_by_id(account_id);
+    after_account_registration(account, auth_descriptor);
+}
+
+@extend(auth.before_account_registration) function(ft4.accounts.auth_descriptor, ft4.auth.signature) {
+    before_account_registration(auth_descriptor);
+}
+
+function before_account_registration(ft4.accounts.auth_descriptor) {
+    require_initialized();
+}
+
+@extend(auth.after_account_registration) function(ft4.accounts.account, ft4.accounts.auth_descriptor, ft4.auth.signature) {
+    after_account_registration(account, auth_descriptor);
+}
+
+function after_account_registration(ft4.accounts.account, ft4.accounts.auth_descriptor) {
+    log("Account created: %s".format(account.id));
+
+    ft4.assets.Unsafe.mint(account, get_asset(), chain_context.args.amount_to_mint);
+
+    create user(account = account, last_refill_millis = op_context.last_block_time);
+}
+
+function get_account_balance(ft4.accounts.account): big_integer =
+        (ft4.assets.balance @? { account, get_asset() }.amount) ?: 0L;
+
+function get_asset(): ft4.assets.asset {
+    val asset_id = (chain_context.args.asset_name, chain_context.blockchain_rid).hash();
+    return ft4.assets.asset @ { .id == asset_id };
+}
+
+function create_pool_account(): ft4.accounts.account {
+    return ft4.accounts.account_by_id(ft4.accounts.Unsafe.create_account_with_auth(get_pool_account_auth_descriptor()));
+}
+
+function get_pool_account() = ft4.accounts.account_by_id(get_pool_account_auth_descriptor().hash());
+
+function get_pool_account_auth_descriptor() = ft4.accounts.single_sig_auth_descriptor(chain_context.args.pool_account_pubkey, set(["A", "T"]));
+
+function register_assets() {
+    ft4.assets.Unsafe.register_asset(
+        chain_context.args.asset_name,
+        chain_context.args.asset_symbol,
+        chain_context.args.asset_decimals,
+        chain_context.blockchain_rid,
+        chain_context.args.asset_icon
+    );
+}

@@ -1,0 +1,30 @@
+query get_pool_balance(): big_integer = get_account_balance(get_pool_account());
+
+query get_create_container_ticket_by_transaction(tx_rid: byte_array): container_ticket_data? =
+        create_container_ticket @? { .ticket.transaction.tx_rid == tx_rid }
+            (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
+
+query get_create_container_ticket_by_id(ticket_id: integer): container_ticket_data? =
+        create_container_ticket @? { .ticket.rowid == rowid(ticket_id) }
+            (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
+
+query get_upgrade_container_ticket_by_transaction(tx_rid: byte_array): container_ticket_data? =
+        upgrade_container_ticket @? { .ticket.transaction.tx_rid == tx_rid }
+            (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
+
+query get_upgrade_container_ticket_by_id(ticket_id: integer): container_ticket_data? =
+        upgrade_container_ticket @? { .ticket.rowid == rowid(ticket_id) }
+            (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
+
+query get_leases_by_account(account_id: byte_array): list<lease_data> =
+        lease @* { .account.id == account_id } (lease_data(.container_name, container_units = .container_units, extra_storage_gib = .extra_storage_gib, expire_time_millis = .start_time + .duration_millis, .expired, .auto_renew));
+
+query get_lease_by_container_name(container_name: text): lease_data? =
+        lease @? { container_name } (lease_data(.container_name, container_units = .container_units, extra_storage_gib = .extra_storage_gib, expire_time_millis = .start_time + .duration_millis, .expired, .auto_renew));
+
+query get_chr_asset() = ft4.assets.map_asset(get_asset());
+
+query get_balance(account_id: byte_array): big_integer {
+    val account = require(ft4.accounts.account @? { account_id }, "Account %s not found".format(account_id));
+    return get_account_balance(account);
+}

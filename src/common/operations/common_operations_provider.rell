@@ -22,7 +22,9 @@ operation register_provider(my_pubkey: pubkey, pubkey, provider_tier) {
     );
     if (_is_node_provider(provider_tier)) {
         require(roles.has_system_access(me), "Must be system provider to add a node provider");
-        enroll.node(provider @ { pubkey });
+        val provider = provider @ { pubkey };
+        enroll.node(provider);
+        after_provider_updated(provider);
     }
 }
 
@@ -32,6 +34,7 @@ operation promote_node_provider(my_pubkey: pubkey, provider_pubkey: pubkey) { //
     val p = require_provider(provider_pubkey);
     require(p.tier != provider_tier.NODE_PROVIDER, "Provider already has this role");
     enroll.node(p);
+    after_provider_updated(p);
 }
 
 

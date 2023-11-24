@@ -6,7 +6,13 @@ val create_container_topic = ICMF_TOPIC_GLOBAL_PREFIX + "create_container";
 val stop_container_topic = ICMF_TOPIC_GLOBAL_PREFIX + "stop_container";
 val restart_container_topic = ICMF_TOPIC_GLOBAL_PREFIX + "restart_container";
 val upgrade_container_topic = ICMF_TOPIC_GLOBAL_PREFIX + "upgrade_container";
+
 val ticket_result_topic = ICMF_TOPIC_LOCAL_PREFIX + "ticket_result";
+val cluster_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "cluster_update";
+val cluster_node_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "cluster_node_update";
+val provider_registered_topic = ICMF_TOPIC_LOCAL_PREFIX + "provider_registered";
+val node_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "node_update";
+val node_capability_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "node_capability_update";
 
 struct create_container_message {
     ticket_id: integer;
@@ -38,4 +44,47 @@ struct ticket_result_message {
     ticket_id: integer;
     error_message: text?;
     container_name: text? = null;
+}
+
+struct cluster_update_message {
+    name;
+    deleted: boolean;
+    operational: boolean;
+    cluster_units: integer;
+    extra_storage: integer;
+}
+
+struct cluster_node_update_message {
+    name?;
+    pubkey;
+    replica_node: boolean;
+    deleted: boolean;
+}
+
+struct provider_registered_message {
+    pubkey;
+    system: boolean;
+    tier: text;
+    cluster_name : text? = null;
+}
+
+struct cluster_provider_update_message {
+    pairs: list<(text, pubkey)>;
+    deleted: boolean;
+}
+
+struct node_update_message {
+    provider_pubkey: pubkey;
+    pubkey;
+    active: boolean;
+    territory: text;
+    cluster_units: integer;
+    extra_storage: integer;
+    deleted: boolean;
+}
+
+struct node_capability_update_message {
+    pubkey;
+    type: text;
+    deleted: boolean;
 }

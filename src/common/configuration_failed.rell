@@ -50,8 +50,10 @@
     if (exists(excluded_signers)) {
         log("Pending config %s failed, removed signers will be re-added to the cluster %s".format(pending_configuration.config_hash, cluster.name));
         for (signer in excluded_signers) {
-            create cluster_node(cluster, require_node(signer));
+            val node = require_node(signer);
+            create cluster_node(cluster, node);
             log("cluster_node created: " + signer);
+            after_node_added_to_cluster(node, cluster);
         }
     }
     delete signer_excluded_from_pending_configuration @* { bc, .config_hash == pending_configuration.config_hash };

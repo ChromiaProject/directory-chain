@@ -16,6 +16,7 @@ function _is_node_provider(tier: provider_tier) = tier == provider_tier.NODE_PRO
     if (exists(voter_set)) {
         create voter_set_member(voter_set, provider);
     }
+    after_provider_registered(provider, cluster);
 }
 
 // Recover provider's action points and consume one, if possible
@@ -32,8 +33,7 @@ function provider_rate_limit(provider) {
     var got_points = 0;
     var update_time = state.last_update;
 
-    if (time_delta > recovery_time)
-    {
+    if (time_delta > recovery_time) {
         got_points = time_delta / recovery_time;
         // advance  update_time to a multiple of recovery_time to avoid wasting time
         update_time = state.last_update + got_points * recovery_time;
@@ -65,3 +65,7 @@ function require_provider_quota(provider, quota_type: provider_quota_type) {
 function _require_provider_quota(quota: integer, quota_type: provider_quota_type, count: integer) {
     require(count < quota , "Provider quota exceeded: %s = %d".format(quota_type, quota));
 }
+
+@extendable function after_provider_registered(provider, cluster: cluster?) {}
+
+@extendable function after_provider_updated(provider) {}

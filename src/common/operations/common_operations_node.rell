@@ -85,6 +85,7 @@ function replace_node_with_node_data_impl(my_pubkey: pubkey, node_data: replace_
         territory = node_data.new_territory ?: old_node.territory,
         extra_storage = node_data.new_extra_storage ?: old_node.extra_storage);
 
+    before_node_removal(old_node);
     delete old_node;
     val new_node = add_node_internal(me, register_node_data, require_not_exists = false);
 
@@ -126,6 +127,7 @@ operation enable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
     require(not(node.active), "Node is already active: " + node_pubkey);
     node.active = true;
     after_node_added(node);
+    after_node_and_clusters_added(node);
     log("-----------------------------------");
 }
 
@@ -149,9 +151,12 @@ operation disable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
     for (cl in clusters) {
         update_configuration_signers(cl, node_to_disable);
     }
+    after_node_removed_from_cluster(node_to_disable, null);
 
     // cluster replica nodes
     delete cluster_replica_node @* { .node.pubkey == node_pubkey };
+    after_replica_node_removed_from_cluster(node_to_disable, null);
+
     // blockchain replica nodes
     delete blockchain_replica_node @* { .node.pubkey == node_pubkey };
 
@@ -166,6 +171,7 @@ operation remove_node(my_pubkey: pubkey, node_pubkey: pubkey) {
     val node_to_remove = require_node(node_pubkey);
     require(provider == node_to_remove.provider, "It is only allowed to remove own nodes: " + node_pubkey);
     require(not(node_to_remove.active), "Can't remove active nodes: " + node_pubkey);
+    before_node_removal(node_to_remove);
     delete node_to_remove;
     log("---------------------------------------");
 }
@@ -225,6 +231,7 @@ function update_node_with_node_data_impl(my_pubkey: pubkey, node_data: update_no
             "Can not update extra storage to %d MiB since the node needs at least %d MiB to support current clusters.".format(extra_storage, needed_extra_storage));
         node.extra_storage = extra_storage;
     }
+    after_node_updated(node);
 }
 
 operation update_node_capability(my_pubkey: pubkey, node_pubkey: pubkey, type: node_capability_type, add: boolean) {
@@ -232,8 +239,10 @@ operation update_node_capability(my_pubkey: pubkey, node_pubkey: pubkey, type: n
     if (add) {
         require(node_capabilities @? { node, type } == null, "Node already has this capability");
         create node_capabilities(node, type);
+        after_node_capability_added(node, type);
     } else {
         require(node_capabilities @? { node, type } != null, "Node does not have this capability");
+        before_node_capability_removal(node, type);
         delete node_capabilities @ { node, type };
     }
 }

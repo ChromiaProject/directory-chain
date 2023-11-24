@@ -15,15 +15,19 @@ function apply_provider_batch(proposal) {
     for (pi in providers) {
         if (empty(provider @? { pi.pubkey })) {
             register_and_enable_provider(pi, ppb.provider_tier, null, null, ppb.active);
+            val provider = provider @ { pi.pubkey };
             when {
                 ppb.system -> {
-                    val provider = provider @ { pi.pubkey };
                     enroll.system(provider);
                     if (not(ppb.active)) {
                         update_provider_state(provider, false, proposal);
                     }
+                    after_provider_updated(provider);
                 }
-                _is_node_provider(ppb.provider_tier) -> enroll.node(provider @ { pi.pubkey });
+                _is_node_provider(ppb.provider_tier) -> {
+                    enroll.node(provider @ { pi.pubkey });
+                    after_provider_updated(provider);
+                }
             }
         } else {
             log("Warning: provider already exists: " + pi.pubkey);
