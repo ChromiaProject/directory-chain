@@ -31,6 +31,14 @@ function get_blockchains_replicated_by_node(node) = set(
     } (blockchain_info(.blockchain.rid, .blockchain.system, .blockchain.state))
 );
 
+function get_mandatory_system_chains(): set<blockchain_info> {
+    val system_anchoring_blockchain = if (system_anchoring_chain.rid.empty()) null
+        else blockchain @? { .rid == system_anchoring_chain.rid, .state in [blockchain_state.RUNNING, blockchain_state.PAUSED, blockchain_state.IMPORTING, blockchain_state.UNARCHIVING] };
+
+    return if (system_anchoring_blockchain != null) set([blockchain_info(system_anchoring_chain.rid, true, system_anchoring_blockchain.state)])
+        else set();
+}
+
 function get_blockchain_replica_nodes(blockchain_rid: byte_array): set<byte_array> {
     val replicas = set<byte_array>();
 
