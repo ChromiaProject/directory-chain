@@ -83,10 +83,12 @@ function _add_replica_node_to_cluster_internal(cluster, node) {
     require_cluster_units_for_node(cluster, node);
     require_extra_storage_for_node(cluster, node);
     create cluster_replica_node(cluster, node);
+    after_replica_node_added_to_cluster(node, cluster);
 }
 
-function _remove_replica_node_from_cluster_internal(node) {
+function _remove_replica_node_from_cluster_internal(cluster, node) {
     delete cluster_replica_node @* { node };
+    after_replica_node_removed_from_cluster(node, cluster);
 }
 
 /**
@@ -116,7 +118,7 @@ function add_node_to_cluster_internal(provider, node, cluster) {
     if (exists(cluster_provider @* { cluster, provider })) {
         val provider_cluster_nodes = cluster_node @* { cluster, .node in node @* { provider } };
         require(empty(provider_cluster_nodes), "A provider can only provide one node to each cluster");
-        _remove_replica_node_from_cluster_internal(node);
+        _remove_replica_node_from_cluster_internal(cluster, node);
         require_cluster_units_for_node(cluster, node);
         require_extra_storage_for_node(cluster, node);
         create cluster_node(cluster, node);
@@ -124,7 +126,7 @@ function add_node_to_cluster_internal(provider, node, cluster) {
         // check if cluster now is operational, if so update the flag:
         check_operational(cluster);
         log("blockchain configuration signers are updated");
-        after_node_added_to_cluster(cluster, node);
+        after_node_added_to_cluster(node, cluster);
     } else {
         log("Provider %s is not a member of cluster %s".format(provider.pubkey, cluster.name));
     }
@@ -251,4 +253,16 @@ function cluster_has_capability(cluster, node_capability_type): boolean {
 
 @extendable function after_cluster_operational(cluster) {}
 
-@extendable function after_node_added_to_cluster(cluster, node) {}
+@extendable function after_cluster_updated(cluster) {}
+
+@extendable function after_node_added_to_cluster(node, cluster) {}
+
+@extendable function after_replica_node_added_to_cluster(node, cluster) {}
+
+@extendable function after_node_removed_from_cluster(node, cluster?) {}
+
+@extendable function after_replica_node_removed_from_cluster(node, cluster?) {}
+
+// Needed for anchoring chain
+// Special case when both node has been added and possibly cluster_node has been updated
+@extendable function after_node_and_clusters_added(node) {}

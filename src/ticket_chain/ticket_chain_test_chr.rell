@@ -1,0 +1,24 @@
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "claim_test_chr",
+    flags = ["T"],
+    message = claim_test_chr_auth_message(*)
+);
+
+function claim_test_chr_auth_message(gtv) =
+    "Please sign the message\nto receive %s %s on account {account_id}".format(
+        ft4.assets.format_amount_with_decimals(chain_context.args.amount_to_mint, chain_context.args.asset_decimals),
+        chain_context.args.asset_symbol);
+
+operation claim_test_chr() {
+    require_initialized();
+
+    val account = ft4.auth.authenticate();
+    val user = require(user @? { account }, "No user for account %s".format(account.id));
+
+    require(user.last_refill_millis + millis_per_week < op_context.last_block_time,
+        "You have already claimed %s within the last 7 days, come back later".format(chain_context.args.asset_name));
+
+    ft4.assets.Unsafe.mint(account, get_asset(), chain_context.args.amount_to_mint);
+    user.last_refill_millis = op_context.last_block_time;
+}

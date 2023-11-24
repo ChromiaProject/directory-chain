@@ -1,0 +1,72 @@
+function has_pending_upgrade(container_name: text): boolean {
+    val upgrade_ticket = upgrade_container_ticket @? { container_name };
+    return upgrade_ticket != null and upgrade_ticket.ticket.state == ticket_state.PENDING;
+}
+
+function receive_ticket_result_message(body: gtv) {
+    val message = ticket_result_message.from_gtv(body);
+    val ticket = ticket @? { .rowid == rowid(message.ticket_id) };
+    if (ticket == null) {
+        log("ticket_id %s not found".format(message.ticket_id));
+        return;
+    }
+    ticket.state = if (message.error_message == null) ticket_state.SUCCESS else ticket_state.FAILURE;
+    ticket.error_message = message.error_message ?: "";
+
+    when (ticket.type) {
+        ticket_type.CREATE_CONTAINER -> {
+            val specific_ticket = create_container_ticket @ { ticket };
+            when (ticket.state) {
+                ticket_state.SUCCESS -> {
+                    val container_name = message.container_name!!;
+                    log("Successfully created container %s for ticket %s".format(container_name, message.ticket_id));
+                    specific_ticket.container_name = container_name;
+                    create lease(
+                        container_name = container_name,
+                        account = ticket.account,
+                        container_units = specific_ticket.container_units,
+                        extra_storage_gib = specific_ticket.extra_storage_gib,
+                        cluster_class = specific_ticket.cluster_class,
+                        start_time = op_context.last_block_time,
+                        duration_millis = specific_ticket.duration_millis,
+                        auto_renew = specific_ticket.auto_renew
+                    );
+                }
+                ticket_state.FAILURE -> {
+                    log("Failed to create container for ticket %s".format(message.ticket_id));
+
+                    ft4.assets.Unsafe.transfer(get_pool_account(), ticket.account, get_asset(), specific_ticket.cost);
+                }
+            }
+        }
+        ticket_type.UPGRADE_CONTAINER -> {
+            val specific_ticket = upgrade_container_ticket @ { ticket };
+            when (ticket.state) {
+                ticket_state.SUCCESS -> {
+                    // Note: When we implement "move" the container name might change so we should check what name D1 returns
+                    val upgraded_container_name = message.container_name!!;
+                    log("Successfully upgraded container %s for ticket %s".format(upgraded_container_name, message.ticket_id));
+                    val current_lease = lease @ { .container_name == specific_ticket.container_name };
+                    val currently_auto_renewed = current_lease.auto_renew;
+                    val current_duration = current_lease.duration_millis;
+                    delete current_lease;
+                    create lease(
+                        container_name = upgraded_container_name,
+                        account = ticket.account,
+                        container_units = specific_ticket.container_units,
+                        extra_storage_gib = specific_ticket.extra_storage_gib,
+                        cluster_class = specific_ticket.cluster_class,
+                        start_time = op_context.last_block_time,
+                        duration_millis = current_duration,
+                        auto_renew = currently_auto_renewed
+                    );
+                }
+                ticket_state.FAILURE -> {
+                    log("Failed to upgrade container for ticket %s".format(message.ticket_id));
+
+                    ft4.assets.Unsafe.transfer(get_pool_account(), ticket.account, get_asset(), specific_ticket.cost);
+                }
+            }
+        }
+    }
+}

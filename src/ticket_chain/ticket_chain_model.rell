@@ -1,0 +1,129 @@
+enum ticket_state {
+    PENDING, SUCCESS, FAILURE
+}
+
+enum ticket_type {
+    CREATE_CONTAINER, UPGRADE_CONTAINER
+}
+
+object state {
+mutable initialized: boolean = false;
+}
+
+entity user {
+    key ft4.accounts.account;
+    mutable last_refill_millis: integer;
+}
+
+entity lease {
+    key container_name: text;
+    index ft4.accounts.account;
+    container_units: integer;
+    extra_storage_gib: integer;
+    cluster_class: text;
+    start_time: integer;
+    mutable duration_millis: integer;
+    mutable expired: boolean = false;
+    mutable auto_renew: boolean = false;
+}
+
+entity ticket {
+    index transaction = op_context.transaction;
+    index type: ticket_type;
+    account: ft4.accounts.account;
+    mutable state: ticket_state = ticket_state.PENDING;
+    mutable error_message: text = "";
+}
+
+entity create_container_ticket {
+    key ticket;
+    container_units: integer;
+    extra_storage_gib: integer;
+    duration_millis: integer;
+    cluster_class: text;
+    cost: integer;
+    auto_renew: boolean = false;
+    mutable container_name: text = "";
+}
+
+entity upgrade_container_ticket {
+    key ticket;
+    container_name: text;
+    container_units: integer;
+    extra_storage_gib: integer;
+    cluster_class: text;
+    cost: integer;
+}
+
+struct container_ticket_data {
+    ticket_id: integer;
+    type: ticket_type;
+    state: ticket_state;
+    error_message: text;
+    container_name: text;
+}
+
+struct lease_data {
+    container_name: text;
+    container_units: integer;
+    extra_storage_gib: integer;
+    expire_time_millis: integer;
+    expired: boolean;
+    auto_renew: boolean;
+}
+
+//////////////////////////////////
+// directory-chain synced entities
+enum provider_tier {
+    COMMUNITY_NODE_PROVIDER,
+    NODE_PROVIDER
+}
+
+entity provider {
+    key pubkey;
+    mutable system: boolean = false;
+    mutable tier: provider_tier;
+// TODO: Add when we implement payment
+// mutable beneficiary_account: ft4.accounts.account;
+}
+
+enum node_capability_type {
+    SYSTEM_MANAGED,
+    ETHEREUM_BRIDGE,
+    ETHEREUM_TESTNET_BRIDGE,
+    BCS_BRIDGE,
+    BCS_TESTNET_BRIDGE,
+    POLYGON_BRIDGE,
+    POLYGON_TESTNET_BRIDGE
+}
+
+entity node {
+    index provider;
+    key pubkey;
+    mutable active: boolean;
+    mutable territory: text;
+    mutable cluster_units: integer;
+    mutable extra_storage: integer;
+}
+
+entity node_capabilities {
+    key node, type: node_capability_type;
+}
+
+val system_cluster_name = "system";
+
+entity cluster {
+    key name;
+    mutable operational: boolean;
+    mutable cluster_units: integer;
+    mutable extra_storage: integer;
+}
+
+entity cluster_node {
+    key cluster, node;
+}
+
+entity cluster_replica_node {
+    key cluster, node;
+}
+//////////////////////////////////

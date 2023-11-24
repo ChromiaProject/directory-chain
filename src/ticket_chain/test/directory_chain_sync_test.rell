@@ -1,0 +1,298 @@
+@test module;
+
+import ^^.*;
+import ^.helpers.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.assets;
+    import lib.ft4.auth;
+    import test_utils: lib.ft4.test.utils;
+}
+import lib.auth;
+
+struct module_args {
+    auth_privkey: byte_array;
+    admin_privkey: byte_array;
+}
+
+function test_provider() {
+    rell.test.tx().op(init()).run();
+
+    val provider_pubkey = rell.test.keypairs.bob.pub;
+
+    // Add provider
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER, null);
+    assert_false(provider.system);
+    assert_equals(provider.tier, provider_tier.NODE_PROVIDER);
+}
+
+function test_cluster() {
+    rell.test.tx().op(init()).run();
+
+    val cluster_name = "Bob's cluster";
+
+    // Add cluster
+    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
+    assert_false(cluster.operational);
+    assert_equals(cluster.cluster_units, 1);
+    assert_equals(cluster.extra_storage, 1024);
+
+    // Update cluster
+    val updated_cluster = ensure_cluster(cluster_name, false, true, 2, 42);
+    assert_true(updated_cluster.operational);
+    assert_equals(updated_cluster.cluster_units, 2);
+    assert_equals(updated_cluster.extra_storage, 42);
+
+    // Remove cluster
+    rell.test.tx().op(
+        icmf_message_op(x"", cluster_update_topic, body = cluster_update_message(
+            cluster_name, deleted = true, operational = false, cluster_units = 1, extra_storage = 1024).to_gtv())
+    ).run();
+    assert_null(cluster @? { cluster_name });
+}
+
+function test_node() {
+    rell.test.tx().op(init()).run();
+
+    val provider_pubkey = rell.test.keypairs.bob.pub;
+    val node_pubkey = rell.test.pubkeys.charlie;
+
+    // Missing provider should fail
+    rell.test.tx().op(
+        icmf_message_op(x"", node_update_topic, body = node_update_message(
+            provider_pubkey = provider_pubkey,
+            pubkey = node_pubkey,
+            active = true,
+            territory = "",
+            cluster_units = 1,
+            extra_storage = 1024,
+            deleted = false).to_gtv()
+        )
+    ).run_must_fail("due to missing provider");
+
+    // Add provider
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER, null);
+
+    // Add node
+    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
+    assert_true(node.active);
+    assert_equals(node.territory, "SE");
+    assert_equals(node.cluster_units, 1);
+    assert_equals(node.extra_storage, 1024);
+
+    // Update node
+    val updated_node = ensure_node(provider_pubkey, node_pubkey, false, "", 10, 42, false);
+    assert_false(updated_node.active);
+    assert_equals(updated_node.territory, "");
+    assert_equals(updated_node.cluster_units, 10);
+    assert_equals(updated_node.extra_storage, 42);
+
+    // Remove node
+    rell.test.tx().op(
+        icmf_message_op(x"", node_update_topic, body = node_update_message(
+            provider_pubkey = provider_pubkey,
+            pubkey = node_pubkey,
+            active = false,
+            territory = "",
+            cluster_units = 10,
+            extra_storage = 1042,
+            deleted = true).to_gtv()
+        )
+    ).run();
+    assert_null(node @? { node_pubkey });
+}
+
+function test_node_capabilities() {
+    rell.test.tx().op(init()).run();
+
+    val provider_pubkey = rell.test.keypairs.bob.pub;
+    val node_pubkey = rell.test.pubkeys.charlie;
+
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER, null);
+    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
+
+    // Add capability
+    assert_null(node_capabilities @? { node, node_capability_type.ETHEREUM_TESTNET_BRIDGE });
+    add_node_capability(node_pubkey, node_capability_type.ETHEREUM_TESTNET_BRIDGE);
+    assert_not_null(node_capabilities @? { node, node_capability_type.ETHEREUM_TESTNET_BRIDGE });
+
+    // Remove capability
+    rell.test.tx().op(
+        icmf_message_op(x"", node_capability_update_topic, body = node_capability_update_message(
+            pubkey = node_pubkey,
+            type = node_capability_type.ETHEREUM_TESTNET_BRIDGE.name,
+            deleted = true).to_gtv()
+        )
+    ).run();
+    assert_null(node_capabilities @? { node, node_capability_type.ETHEREUM_TESTNET_BRIDGE });
+}
+
+function test_cluster_node() {
+    rell.test.tx().op(init()).run();
+
+    val provider_pubkey = rell.test.keypairs.bob.pub;
+    val node_pubkey = rell.test.pubkeys.charlie;
+    val cluster_name = "Bob's cluster";
+    val cluster_name_replica = "Alice's cluster";
+
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER, null);
+    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
+    val cluster = ensure_cluster(cluster_name, false, true, 1, 1024);
+    val cluster_replica = ensure_cluster(cluster_name_replica, false, true, 1, 1024);
+
+    // Add cluster_node
+    assert_null(cluster_node @? { cluster, node });
+    assert_null(cluster_replica_node @? { cluster_replica, node });
+
+    add_cluster_node(cluster_name, node_pubkey, false);
+    add_cluster_node(cluster_name_replica, node_pubkey, true);
+
+    assert_not_null(cluster_node @? { cluster, node });
+    assert_not_null(cluster_replica_node @? { cluster_replica, node });
+
+    // Remove cluster node
+    rell.test.tx().op(
+        icmf_message_op(x"", cluster_node_update_topic, body = cluster_node_update_message(
+            name = cluster_name,
+            pubkey = node_pubkey,
+            replica_node = false,
+            deleted = true).to_gtv()
+        ),
+        icmf_message_op(x"", cluster_node_update_topic, body = cluster_node_update_message(
+            name = cluster_name_replica,
+            pubkey = node_pubkey,
+            replica_node = true,
+            deleted = true).to_gtv()
+        )
+    ).run();
+    assert_null(cluster_node @? { cluster, node });
+    assert_null(cluster_replica_node @? { cluster_replica, node });
+}
+
+function test_full_cluster_remove() {
+    rell.test.tx().op(init()).run();
+
+    val provider_pubkey = rell.test.keypairs.bob.pub;
+    val node_pubkey = rell.test.pubkeys.charlie;
+    val node_pubkey_2 = rell.test.pubkeys.alice;
+    val cluster_name = "Bob's cluster";
+
+    val cluster = ensure_cluster(cluster_name, false, true, 1, 1024);
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER, cluster_name);
+    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
+    val node_2 = ensure_node(provider_pubkey, node_pubkey_2, true, "SE", 1, 1024, false);
+
+    add_cluster_node(cluster_name, node_pubkey, false);
+    add_cluster_node(cluster_name, node_pubkey_2, true);
+
+    assert_not_null(cluster_node @? { cluster, node });
+    assert_not_null(cluster_replica_node @? { cluster, node_2 });
+
+    // Remove cluster
+    rell.test.tx().op(
+        icmf_message_op(x"", cluster_update_topic, body = cluster_update_message(
+            cluster_name, deleted = true, operational = false, cluster_units = 1, extra_storage = 1024).to_gtv())
+    ).run();
+
+    // Verify
+    assert_null(cluster_node @? { cluster, node });
+    assert_null(cluster_replica_node @? { cluster, node_2 });
+    assert_null(cluster @? { cluster_name });
+}
+
+function test_full_node_remove() {
+    rell.test.tx().op(init()).run();
+
+    val provider_pubkey = rell.test.keypairs.bob.pub;
+    val node_pubkey = rell.test.pubkeys.charlie;
+    val cluster_name = "Bob's cluster";
+    val cluster_name_replica = "Alice's cluster";
+
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER, null);
+    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
+    val cluster = ensure_cluster(cluster_name, false, true, 1, 1024);
+    val cluster_replica = ensure_cluster(cluster_name_replica, false, true, 1, 1024);
+
+    add_cluster_node(cluster_name, node_pubkey, false);
+    add_cluster_node(cluster_name_replica, node_pubkey, true);
+    add_node_capability(node_pubkey, node_capability_type.ETHEREUM_TESTNET_BRIDGE);
+
+    assert_not_null(cluster_replica_node @? { cluster_replica, node });
+    assert_not_null(cluster_replica_node @? { cluster_replica, node });
+    assert_not_null(node_capabilities @? { node, node_capability_type.ETHEREUM_TESTNET_BRIDGE });
+
+    // Remove node
+    rell.test.tx().op(
+        icmf_message_op(x"", node_update_topic, body = node_update_message(
+            provider_pubkey = provider_pubkey,
+            pubkey = node_pubkey,
+            active = false,
+            territory = "",
+            cluster_units = 10,
+            extra_storage = 1042,
+            deleted = true).to_gtv()
+        )
+    ).run();
+
+    // Verify
+    assert_null(cluster_replica_node @? { cluster_replica, node });
+    assert_null(cluster_replica_node @? { cluster_replica, node });
+    assert_null(node_capabilities @? { node, node_capability_type.ETHEREUM_TESTNET_BRIDGE });
+    assert_null(node @? { node_pubkey });
+}
+
+///////////////////
+// Helper functions
+function add_provider(pubkey: pubkey, system: boolean, tier: provider_tier, cluster_name: text?): provider {
+    rell.test.tx().op(
+        icmf_message_op(x"", provider_registered_topic, body = provider_registered_message(
+            pubkey, system, tier = tier.name, cluster_name).to_gtv()
+        )
+    ).run();
+    return require(provider @? { pubkey });
+}
+
+function ensure_cluster(name: text, deleted: boolean, operational: boolean, cluster_units: integer, extra_storage: integer): cluster {
+    rell.test.tx().op(
+        icmf_message_op(x"", cluster_update_topic, body = cluster_update_message(
+            name, deleted, operational, cluster_units, extra_storage).to_gtv())
+    ).run();
+    return require(cluster @? { name });
+}
+
+function ensure_node(provider_pubkey: pubkey, node_pubkey: pubkey, active: boolean, territory: text, cluster_units: integer, extra_storage: integer, deleted: boolean): node {
+    rell.test.tx().op(
+        icmf_message_op(x"", node_update_topic, body = node_update_message(
+            provider_pubkey = provider_pubkey,
+            pubkey = node_pubkey,
+            active = active,
+            territory = territory,
+            cluster_units = cluster_units,
+            extra_storage = extra_storage,
+            deleted = deleted).to_gtv()
+        )
+    ).run();
+    return require(node @? { node_pubkey });
+}
+
+function add_cluster_node(cluster_name: text, node_pubkey: pubkey, replica_node: boolean) {
+    rell.test.tx().op(
+        icmf_message_op(x"", cluster_node_update_topic, body = cluster_node_update_message(
+            name = cluster_name,
+            pubkey = node_pubkey,
+            replica_node = replica_node,
+            deleted = false).to_gtv()
+        )
+    ).run();
+}
+
+function add_node_capability(pubkey, node_capability_type) {
+    rell.test.tx().op(
+        icmf_message_op(x"", node_capability_update_topic, body = node_capability_update_message(
+            pubkey = pubkey,
+            type = node_capability_type.name,
+            deleted = false).to_gtv()
+        )
+    ).run();
+}

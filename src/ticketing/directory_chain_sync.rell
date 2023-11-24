@@ -1,0 +1,127 @@
+@extend(after_provider_registered) function(provider, cluster: cluster?) {
+    send_message(provider_registered_topic, provider_registered_message(
+        pubkey = provider.pubkey,
+        system = provider.system,
+        tier = provider.tier.name,
+        cluster_name = cluster?.name
+    ).to_gtv());
+}
+
+@extend(after_cluster_creation) function (provider, cluster) {
+    update_cluster(cluster);
+}
+
+@extend(after_cluster_operational) function(cluster) {
+    update_cluster(cluster);
+}
+
+@extend(after_cluster_updated) function(cluster) {
+    update_cluster(cluster);
+}
+
+function update_cluster(cluster) {
+    send_message(cluster_update_topic, cluster_update_message(
+        name = cluster.name,
+        deleted = false,
+        operational = cluster.operational,
+        cluster_units = cluster.cluster_units,
+        extra_storage = cluster.extra_storage
+    ).to_gtv());
+}
+
+@extend(before_cluster_removal) function(cluster) {
+    send_message(cluster_update_topic, cluster_update_message(
+        name = cluster.name,
+        deleted = true,
+        operational = cluster.operational,
+        cluster_units = cluster.cluster_units,
+        extra_storage = cluster.extra_storage
+    ).to_gtv());
+}
+
+@extend(after_node_added) function(node) {
+    send_message(node_update_topic, node_update_message(
+        provider_pubkey = node.provider.pubkey,
+        pubkey = node.pubkey,
+        active = node.active,
+        territory = node.territory,
+        cluster_units = node.cluster_units,
+        extra_storage = node.extra_storage,
+        deleted = false
+    ).to_gtv());
+}
+
+@extend(after_node_updated) function(node) {
+    send_message(node_update_topic, node_update_message(
+        provider_pubkey = node.provider.pubkey,
+        pubkey = node.pubkey,
+        active = node.active,
+        territory = node.territory,
+        cluster_units = node.cluster_units,
+        extra_storage = node.extra_storage,
+        deleted = false
+    ).to_gtv());
+}
+
+@extend(before_node_removal) function(node) {
+    send_message(node_update_topic, node_update_message(
+        provider_pubkey = node.provider.pubkey,
+        pubkey = node.pubkey,
+        active = node.active,
+        territory = node.territory,
+        cluster_units = node.cluster_units,
+        extra_storage = node.extra_storage,
+        deleted = true
+    ).to_gtv());
+}
+
+@extend(after_node_capability_added) function(node, type: node_capability_type) {
+    send_message(node_capability_update_topic, node_capability_update_message(
+        pubkey = node.pubkey,
+        type = type.name,
+        deleted = false
+    ).to_gtv());
+}
+
+@extend(before_node_capability_removal) function(node, type: node_capability_type) {
+    send_message(node_capability_update_topic, node_capability_update_message(
+        pubkey = node.pubkey,
+        type = type.name,
+        deleted = true
+    ).to_gtv());
+}
+
+@extend(after_node_added_to_cluster) function(node, cluster) {
+    after_node_added_to_cluster_impl(node, cluster, false);
+}
+
+@extend(after_replica_node_added_to_cluster) function(node, cluster) {
+    after_node_added_to_cluster_impl(node, cluster, true);
+}
+
+function after_node_added_to_cluster_impl(node, cluster, replica: boolean) {
+    send_message(cluster_node_update_topic, cluster_node_update_message(
+        name = cluster.name,
+        pubkey = node.pubkey,
+        replica_node = replica,
+        deleted = false
+    ).to_gtv());
+}
+
+@extend(after_node_removed_from_cluster) function(node, cluster?) {
+    after_node_removed_from_cluster_impl(node, cluster, false);
+}
+
+@extend(after_replica_node_removed_from_cluster) function(node, cluster?) {
+    after_node_removed_from_cluster_impl(node, cluster, true);
+}
+
+function after_node_removed_from_cluster_impl(node, cluster?, replica: boolean) {
+    val name = if (exists(cluster)) cluster.name else null;
+    send_message(cluster_node_update_topic, cluster_node_update_message(
+        name = name,
+        pubkey = node.pubkey,
+        replica_node = replica,
+        deleted = true
+    ).to_gtv());
+}

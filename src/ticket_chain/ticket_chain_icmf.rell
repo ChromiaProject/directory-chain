@@ -1,0 +1,26 @@
+operation __icmf_message(sender: byte_array, topic: text, body: gtv) {
+    if (topic_needs_initialization(topic)) require_initialized();
+
+    if (not try_call(receive_icmf_message(sender, topic, body, *))) {
+        log("Error while processing ICMF message in topic %s".format(topic));
+    }
+}
+
+function receive_icmf_message(sender: byte_array, topic: text, body: gtv) {
+    // No need to validate sender since we use a local ICMF receiver
+    when (topic) {
+        ticket_result_topic -> receive_ticket_result_message(body);
+        cluster_update_topic -> receive_cluster_update_message(body);
+        provider_registered_topic -> receive_provider_registered_message(body);
+        node_update_topic -> receive_node_update_message(body);
+        node_capability_update_topic -> receive_node_capability_update_message(body);
+        cluster_node_update_topic -> receive_cluster_node_update_message(body);
+        else -> log("Unexpected ICMF topic %s".format(topic));
+    }
+}
+
+function topic_needs_initialization(topic: text): boolean =
+    when (topic) {
+        ticket_result_topic -> true;
+        else -> false;
+    };

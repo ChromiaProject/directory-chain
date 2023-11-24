@@ -61,12 +61,18 @@ function test_create_container_with_auto_create_provider() {
             cluster_name = "Bob's cluster"
         ).to_gtv())).run();
     val container1 = container @ { bob_cluster, .system == false };
-    assert_events(("icmf_message", (
-        topic = ticket_result_topic,
-        body = ticket_result_message(1, error_message = null, container_name = container1.name).to_gtv(),
-        block_height = 2).to_gtv_pretty()
-    ));
-
+    assert_events(
+        ("icmf_message", (
+            topic = provider_registered_topic,
+            body = provider_registered_message(test_provider.pub, false, tier = provider_tier.COMMUNITY_NODE_PROVIDER.name, null).to_gtv(),
+            block_height = 2).to_gtv_pretty()
+        ),
+        ("icmf_message", (
+            topic = ticket_result_topic,
+            body = ticket_result_message(1, error_message = null, container_name = container1.name).to_gtv(),
+            block_height = 2).to_gtv_pretty()
+        )
+    );
     assert_not_null(provider @? { test_provider.pub });
 
     rell.test.tx().op(
@@ -116,11 +122,18 @@ function test_create_container_fail() {
             cluster_name = "bogus cluster"
         ).to_gtv())).run();
 
-    assert_events(("icmf_message", (
-        topic = ticket_result_topic,
-        body = ticket_result_message(1, error_message = "Unable to find suitable cluster", container_name = "").to_gtv(),
-        block_height = 2).to_gtv_pretty()
-    ));
+    assert_events(
+        ("icmf_message", (
+            topic = provider_registered_topic,
+            body = provider_registered_message(test_provider.pub, false, tier = provider_tier.COMMUNITY_NODE_PROVIDER.name, null).to_gtv(),
+            block_height = 2).to_gtv_pretty()
+        ),
+        ("icmf_message", (
+            topic = ticket_result_topic,
+            body = ticket_result_message(1, error_message = "Unable to find suitable cluster", container_name = "").to_gtv(),
+            block_height = 2).to_gtv_pretty()
+        )
+    );
 
     assert_not_null(provider @? { test_provider.pub });
 }

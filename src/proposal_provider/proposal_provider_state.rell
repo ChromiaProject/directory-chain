@@ -59,12 +59,18 @@ function update_provider_state(provider, active: boolean, proposal: proposal? = 
         delete cluster_node @* { .node.provider == provider };
         for (cn in cluster_nodes) {
             update_configuration_signers(cn.cluster, cn.node);
+            after_node_removed_from_cluster(cn.node, cn.cluster);
         }
 
         val pending_proposals_with_provider_as_voter = (prop: proposal, vsm: voter_set_member) @* { prop.voter_set == vsm.voter_set, vsm.provider == provider, prop.state == proposal_state.PENDING } ( prop );
 
         // cluster replica nodes
+        val cluster_replica_nodes = cluster_replica_node @* { .node.provider == provider } ( .cluster, .node );
         delete cluster_replica_node @* { .node.provider == provider };
+        for (crn in cluster_replica_nodes) {
+            after_replica_node_removed_from_cluster(crn.node, crn.cluster);
+        }
+
         // blockchain replica nodes
         delete blockchain_replica_node @* { .node.provider == provider };
         // remove disabled provider from voter_set_member table

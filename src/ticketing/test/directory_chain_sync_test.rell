@@ -1,0 +1,271 @@
+@test module;
+
+import ^^^.common.operations.*;
+import ^^^.common.test.setup.*;
+import ^^^.common.test.util.*;
+import ^^^.direct_cluster.*;
+import ^^.*;
+import ^^^.model.*;
+import ^.helpers.*;
+
+function test_init_events() {
+    setup_module();
+
+    assert_events(
+        ("icmf_message", (
+            topic = provider_registered_topic,
+            body = provider_registered_message(
+                pubkey = initial_provider.pub,
+                system = false,
+                tier = provider_tier.NODE_PROVIDER.name,
+                cluster_name = null).to_gtv(),
+            block_height = 0).to_gtv_pretty()
+        ),
+        ("icmf_message", (
+            topic = cluster_update_topic,
+            body = cluster_update_message(
+                clusters.system,
+                deleted = false,
+                operational = false,
+                cluster_units = 1,
+                extra_storage = 0).to_gtv(),
+            block_height = 0).to_gtv_pretty()
+        ),
+        ("icmf_message", (
+            topic = node_update_topic,
+            body = node_update_message(
+                provider_pubkey = initial_provider.pub,
+                pubkey = test_node.pubkey,
+                active = true,
+                territory = test_node.territory,
+                cluster_units = 1,
+                extra_storage = 0,
+                deleted = false).to_gtv(),
+            block_height = 0).to_gtv_pretty()
+        ),
+        ("icmf_message", (
+            topic = cluster_node_update_topic,
+            body = cluster_node_update_message(
+                name = clusters.system,
+                pubkey = test_node.pubkey,
+                replica_node = false,
+                deleted = false).to_gtv(),
+            block_height = 0).to_gtv_pretty()
+        ),
+        ("icmf_message", (
+            topic = cluster_update_topic,
+            body = cluster_update_message(
+                clusters.system,
+                deleted = false,
+                operational = true,
+                cluster_units = 1,
+                extra_storage = 0).to_gtv(),
+            block_height = 0).to_gtv_pretty()
+        )
+    );
+}
+
+function test_provider() {
+    setup_module();
+
+    val test_provider = rell.test.keypairs.bob;
+
+    // Add provider (after_provider_registered)
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, test_provider.pub, provider_tier.NODE_PROVIDER)
+    ).sign(initial_provider).run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = provider_registered_topic,
+            body = provider_registered_message(
+                pubkey = test_provider.pub,
+                system = false,
+                tier = provider_tier.NODE_PROVIDER.name,
+                cluster_name = null).to_gtv(),
+            block_height = 1).to_gtv_pretty()
+        )
+    );
+}
+
+function test_cluster() {
+    setup_module();
+
+    val test_provider = rell.test.keypairs.bob;
+    val cluster_name = "Bob's cluster";
+    val cluster_quota = cluster_quota_data(cluster_units = 1, extra_storage = 1024);
+
+    // Add cluster (after_cluster_creation)
+    rell.test.tx().op(
+        create_cluster_with_cluster_quota_data(initial_provider.pub, cluster_name, system_voter_set().name, [initial_provider.pub], cluster_quota)
+    ).sign(initial_provider).run();
+    val bob_cluster = cluster @ { cluster_name };
+
+    assert_events(
+        ("icmf_message", (
+            topic = cluster_update_topic,
+            body = cluster_update_message(cluster_name, deleted = false, operational = false, cluster_units = 1, extra_storage = 1024).to_gtv(),
+            block_height = 1).to_gtv_pretty()
+        )
+    );
+
+    // Remove cluster (before_cluster_removal)
+    rell.test.tx().op(
+        cluster_remove(bob_cluster)
+    ).sign(initial_provider).run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = cluster_update_topic,
+            body = cluster_update_message(cluster_name, deleted = true, operational = false, cluster_units = 1, extra_storage = 1024).to_gtv(),
+            block_height = 2).to_gtv_pretty()
+        )
+    );
+}
+
+function test_node() {
+    setup_module();
+
+    val test_provider = rell.test.keypairs.bob;
+    val provider = initial_provider;
+    val provider_pubkey = initial_provider.pub;
+    val node_pubkey = rell.test.pubkeys.charlie;
+
+    // Add node (after_node_added)
+    val register_node_data = register_node_data(
+        node_pubkey, host = "host", port = 7777, api_url = "http://host/api_url", list<text>(),
+        cluster_units = 1, extra_storage = 1024
+    );
+
+    rell.test.tx().op(
+        register_node_with_node_data(provider_pubkey, register_node_data)
+    ).sign(provider).run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = node_update_topic,
+            body = node_update_message(
+                provider_pubkey = provider_pubkey,
+                pubkey = node_pubkey,
+                active = true,
+                territory = "",
+                cluster_units = 1,
+                extra_storage = 1024,
+                deleted = false).to_gtv(),
+            block_height = 1).to_gtv_pretty()
+        )
+    );
+
+    // Update node (after_node_updated)
+    val update_node_data = update_node_data(node_pubkey, host = "host", port = 7777,
+        api_url = "http://host/api_url", cluster_units = 10, extra_storage = 42, territory = ""
+    );
+
+    rell.test.tx().op(
+        update_node_with_node_data(provider_pubkey, update_node_data)
+    ).sign(provider).run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = node_update_topic,
+            body = node_update_message(
+                provider_pubkey = provider_pubkey,
+                pubkey = node_pubkey,
+                active = true,
+                territory = "",
+                cluster_units = 10,
+                extra_storage = 42,
+                deleted = false).to_gtv(),
+            block_height = 2).to_gtv_pretty()
+        )
+    );
+
+    // Disable and remove node (before_node_removal)
+    rell.test.tx().op(
+        disable_node(my_pubkey = provider_pubkey, node_pubkey = node_pubkey),
+        remove_node(my_pubkey = provider_pubkey, node_pubkey = node_pubkey)
+    ).sign(provider).run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = cluster_node_update_topic,
+            body = cluster_node_update_message(
+                name = null,
+                pubkey = node_pubkey,
+                replica_node = false,
+                deleted = true).to_gtv(),
+            block_height = 3).to_gtv_pretty()
+        ),
+        ("icmf_message", (
+            topic = cluster_node_update_topic,
+            body = cluster_node_update_message(
+                name = null,
+                pubkey = node_pubkey,
+                replica_node = true,
+                deleted = true).to_gtv(),
+            block_height = 3).to_gtv_pretty()
+        ),
+        ("icmf_message", (
+            topic = node_update_topic,
+            body = node_update_message(
+                provider_pubkey = provider_pubkey,
+                pubkey = node_pubkey,
+                active = false,
+                territory = "",
+                cluster_units = 10,
+                extra_storage = 42,
+                deleted = true).to_gtv(),
+            block_height = 3).to_gtv_pretty()
+        )
+    );
+}
+
+function test_node_capability() {
+    setup_module();
+
+    val test_provider = rell.test.keypairs.bob;
+    val provider = initial_provider;
+    val provider_pubkey = initial_provider.pub;
+    val node_pubkey = rell.test.pubkeys.charlie;
+
+    // Add node
+    val register_node_data = register_node_data(
+        node_pubkey, host = "host", port = 7777, api_url = "http://host/api_url", list<text>(),
+        cluster_units = 1, extra_storage = 1024
+    );
+    rell.test.tx().op(
+        register_node_with_node_data(provider_pubkey, register_node_data)
+    ).sign(provider).run();
+
+    // Add node capability (after_node_capability_added)
+    rell.test.tx().op(
+        update_node_capability(provider_pubkey, node_pubkey, node_capability_type.ETHEREUM_TESTNET_BRIDGE, true)
+    ).sign(provider).run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = node_capability_update_topic,
+            body = node_capability_update_message(
+                pubkey = node_pubkey,
+                type = node_capability_type.ETHEREUM_TESTNET_BRIDGE.name,
+                deleted = false).to_gtv(),
+            block_height = 2).to_gtv_pretty()
+        )
+    );
+
+    // Remove node capability (before_node_capability_removal)
+    rell.test.tx().op(
+        update_node_capability(provider_pubkey, node_pubkey, node_capability_type.ETHEREUM_TESTNET_BRIDGE, false)
+    ).sign(provider).run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = node_capability_update_topic,
+            body = node_capability_update_message(
+                pubkey = node_pubkey,
+                type = node_capability_type.ETHEREUM_TESTNET_BRIDGE.name,
+                deleted = true).to_gtv(),
+            block_height = 3).to_gtv_pretty()
+        )
+    );
+}
