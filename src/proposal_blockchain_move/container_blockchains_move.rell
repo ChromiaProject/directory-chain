@@ -1,0 +1,83 @@
+import messaging.icmf.*;
+import messaging.anchoring_api.*;
+
+function move_container_blockchains_impl(provider_pubkey: pubkey, src_container_name: text, destination_cluster_name: text, anchored_blockchains: map<byte_array, integer>): text {
+    val provider = require_is_provider_with_rate_limit(provider_pubkey);
+    // require src container
+    val src_container = require_container(src_container_name);
+    require_container_deployer(src_container, provider);
+    val src_cluster = src_container.cluster;
+    val src_nodes = cluster_node @* { src_cluster } ( .node );
+
+    // require dst cluster
+    val dst_cluster = require_cluster(destination_cluster_name);
+    val dst_nodes = cluster_node @* { dst_cluster } ( .node );
+    require(dst_nodes.size() > 0, "Cluster %s must have at least one node".format(dst_cluster.name));
+
+    // require blockchains
+    val bcs = container_blockchain @* { src_container } ( .blockchain );
+    require(anchored_blockchains.keys().contains_all(bcs @* {} ( .rid )),
+        "Last anchored height for some of cluster %s blockchains not found".format(src_cluster.name));
+
+    // require blockchain states
+    for (bc in bcs) {
+        require(bc.state == blockchain_state.PAUSED,
+            "Only blockchains in PAUSED states can be moved; current state of blockchain %s is: %s".format(bc.rid, bc.state)
+        );
+    }
+
+    // require blockchain is not being moved right now
+    for (bc in bcs) {
+        require(empty(moving_blockchain @? { bc.rid }), "Blockchain %s is being moved".format(bc.rid));
+    }
+
+    // require there no pending blockchain actions (pause, resume, remove, archive, unarchive)
+    for (bc in bcs) {
+        val pba = pending_blockchain_action @? { bc.rid };
+        require(empty(pba), "Blockchain %s cannot be moved due to a pending proposal %s related to it".format(bc.rid, pba?.proposal));
+    }
+
+    // Moving blockchains between containers running on the same node is not currently allowed
+    val intersection = (cn1: cluster_node, cn2: cluster_node) @* {
+        cn1.node == cn2.node,
+        cn1.cluster == src_cluster,
+        cn2.cluster == dst_cluster
+    } (cn1.node.pubkey);
+    require(empty(intersection),
+        "Moving blockchains between containers running on the same node is not allowed. Nodes belongs to clusters %s and %s are: %s"
+            .format(src_container.cluster.name, dst_cluster.name, intersection)
+    );
+
+    // create dst container
+    val name = src_container + "_new";
+    val dst_container = create_container_impl(
+        provider, name, dst_cluster, -1, [provider.pubkey],
+        standard_container_defaults.container_units,
+        standard_container_defaults.max_blockchains,
+        standard_container_defaults.extra_storage
+    );
+
+    // moving
+    for (bc in bcs) {
+        val finish_at_height = anchored_blockchains[bc.rid];
+        create moving_blockchain(bc, source = src_container, destination = dst_container, finish_at_height/*, remove_on_nodes*/);
+        for (node in src_nodes) {
+            create blockchain_replica_node(bc, node);
+        }
+        // remove bc from src_container
+        delete container_blockchain @* { bc };
+        // add bc to the dst_container
+        create container_blockchain(dst_container, bc);
+        // remove dst cluster/container nodes from bc replicas if any exists
+        for (node in dst_nodes) {
+            delete blockchain_replica_node @* { bc, node };
+        }
+        // FYI: PCU-based update (i.e. update_configuration_signers_regular()) can't be used here.
+        require_up_to_height_is_less_or_equals_last_config_height(bc, finish_at_height);
+        // prepare a final signer config
+        val encoded_dst_nodes = (dst_nodes @* {} ( @sort .pubkey )).to_gtv().to_bytes();
+        create blockchain_configuration_signers(bc, finish_at_height, encoded_dst_nodes);
+    }
+
+    return dst_container.name;
+}

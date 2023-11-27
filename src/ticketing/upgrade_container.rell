@@ -1,6 +1,8 @@
 import ^.common;
 import ^.messaging.icmf.*;
 import ^.messaging.ticketing.*;
+import ^.messaging.anchoring_api.*;
+import ^.proposal_blockchain_move.*;
 
 @extend(common.receive_icmf_message) function receive_upgrade_container(sender: byte_array, topic: text, body: gtv) {
     if (topic != upgrade_container_topic) return;
@@ -13,29 +15,88 @@ import ^.messaging.ticketing.*;
     receive_upgrade_container_impl(body);
 }
 
+entity ticket_chain_pending_last_anchored_heights_request {
+    request_id: integer;
+    upgrade_container_message: byte_array;
+}
+
 function receive_upgrade_container_impl(body: gtv) {
     val message = upgrade_container_message.from_gtv(body);
 
-    val upgrade_success = try_call(upgrade_container_from_ticket(
-        container_name = message.container_name,
-        container_units = message.container_units,
-        cluster_class = message.cluster_class,
-        extra_storage = message.extra_storage,
-        cluster_name = message.cluster_name,
-        *
+    val container = container @ { message.container_name };
+    if (container.cluster.name == message.cluster_name) {
+        val upgrade_result = try_call(check_and_upgrade_container(container, message, *));
+        send_upgrade_container_result(message, if (upgrade_result) null else "Unable to upgrade container %s".format(message.container_name));
+    } else {
+        val error_message = start_creating_container_and_moving_blockchains_async(message);
+        if (error_message??) {
+            send_upgrade_container_result(message, "Unable to upgrade container due to: " + error_message);
+        }
+    }
+}
+
+function send_upgrade_container_result(message: upgrade_container_message, error_message: text?, dst_container_name: text? = null) {
+    send_message(
+        ticket_result_topic,
+        ticket_result_message(
+            ticket_id = message.ticket_id,
+            error_message = error_message,
+            container_name = dst_container_name ?: message.container_name
+        ).to_gtv()
+    );
+}
+
+function check_and_upgrade_container(container, message: upgrade_container_message) {
+    require(is_cluster_in_class(container.cluster, message.cluster_class), "Requested cluster for upgraded container does not match cluster class");
+    upgrade_container(container, message.container_units, message.extra_storage, standard_container_defaults.max_blockchains);
+    // In case container was stopped
+    restart_container(message.container_name);
+}
+
+function start_creating_container_and_moving_blockchains_async(message: upgrade_container_message): text? {
+    // validate dst cluster
+    val dst_cluster = require_cluster(message.cluster_name);
+    if (not is_cluster_in_class(dst_cluster, message.cluster_class)) {
+        return "Requested cluster %s for upgraded container does not match cluster class %s".format(message.cluster_name, message.cluster_class);
+    }
+    if (empty(cluster_node @? { dst_cluster })) {
+        return "Cluster %s must have at least one node".format(message.cluster_name);
+    }
+    val src_container = container @? { message.container_name };
+    if (empty(src_container)) {
+        return "Container %s not found".format(message.container_name);
+    }
+
+    // fetching last_anchored_heights
+    val cac = cluster_anchoring_chain @ { src_container.cluster } ( .blockchain.rid );
+    val brids = container_blockchain @* { src_container, not .blockchain.system } ( .blockchain.rid );
+    val request_id = request_last_anchored_heights(cac, brids);
+    create ticket_chain_pending_last_anchored_heights_request(
+        request_id, message.to_bytes()
+    );
+
+    return null;
+}
+
+@extend(on_last_anchored_heights_received) function last_anchored_heights_received(request_id: integer, anchored_blockchains: map<byte_array, integer>) {
+    val pending_request = ticket_chain_pending_last_anchored_heights_request @? { request_id };
+    if (empty(pending_request)) {
+        log("Pending get_last_anchored_heights request not found: " + request_id);
+        return;
+    }
+
+    val message = upgrade_container_message.from_bytes(pending_request.upgrade_container_message);
+
+    // TODO: Retrieve error messages from `require()`:s
+    val dst_container_name = try_call(
+        move_container_blockchains_impl(
+            x"", // TODO: Resolve
+            message.container_name,
+            message.cluster_name,
+            anchored_blockchains,
+            *
     ));
 
-    // In case container was stopped
-    val restart_success = try_call(restart_container(message.container_name, *));
-
-    val error_message = if (not upgrade_success)
-            "Unable to upgrade container %s".format(message.container_name)
-        else if (not restart_success)
-            "Unable to restart container %s".format(message.container_name)
-        else null;
-    send_message(ticket_result_topic, ticket_result_message(
-        ticket_id = message.ticket_id,
-        error_message = error_message,
-        container_name = message.container_name
-    ).to_gtv());
+    val error_message = if (dst_container_name??) null else "Unable to upgrade container %s, check logs".format(message.container_name);
+    send_upgrade_container_result(message, error_message, dst_container_name);
 }

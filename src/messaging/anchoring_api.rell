@@ -1,0 +1,72 @@
+module;
+
+import ^^.common.*;
+import ^.icmf.*;
+
+val get_last_anchored_heights_topic = ICMF_TOPIC_GLOBAL_PREFIX + "get_last_anchored_heights";
+val last_anchored_heights_topic = ICMF_TOPIC_GLOBAL_PREFIX + "last_anchored_heights";
+
+entity pending_request {
+    key request_id: integer;
+}
+
+object request_counter {
+    mutable counter: integer = 0;
+}
+
+function next_request_id(): integer {
+    request_counter.counter = request_counter.counter + 1;
+    return request_counter.counter;
+}
+
+struct get_last_anchored_heights_message {
+    request_id: integer;
+    target_anchoring_chain: byte_array;
+    blockchains: list<byte_array>;
+}
+
+struct last_anchored_heights_message {
+    request_id: integer;
+    anchored_blockchains: map<byte_array, integer>;
+}
+
+function request_last_anchored_heights(target_anchoring_chain: byte_array, blockchain_rids: list<byte_array>): integer {
+    val request_id = next_request_id();
+
+    send_message(
+        get_last_anchored_heights_topic,
+        get_last_anchored_heights_message(
+            request_id = request_id,
+            target_anchoring_chain = target_anchoring_chain,
+            blockchains = blockchain_rids
+        ).to_gtv()
+    );
+
+    return request_id;
+}
+
+@extend(receive_icmf_message) function receive_last_anchored_heights(sender: byte_array, topic: text, body: gtv) {
+    if (topic != last_anchored_heights_topic) return;
+
+    val anchoring_chains = set<byte_array>();
+    anchoring_chains.add(system_anchoring_chain.rid);
+    anchoring_chains.add_all(cluster_anchoring_chain @* {} ( .blockchain.rid ));
+    if (sender not in anchoring_chains) {
+        log("Sender %s is not the anchoring chain, ignoring".format(sender));
+        return;
+    }
+
+    val message = last_anchored_heights_message.from_gtv(body);
+    val pending_req = pending_request @? { message.request_id };
+    if (empty(pending_req)) {
+        log("get_last_anchored_heights request not found: " + message.request_id);
+        return;
+    }
+
+    on_last_anchored_heights_received(message.request_id, message.anchored_blockchains);
+
+    delete pending_req;
+}
+
+@extendable function on_last_anchored_heights_received(request_id: integer, anchored_blockchains: map<byte_array, integer>);
+
