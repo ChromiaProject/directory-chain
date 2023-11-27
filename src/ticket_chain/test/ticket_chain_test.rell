@@ -60,6 +60,23 @@ function test_admin_register_account() {
     assert_not_null(user @? { .account.id == account_ids[0] });
 }
 
+function test_provider_register_account() {
+    rell.test.tx().op(init()).run();
+
+    val provider_key = rell.test.keypairs.bob;
+    val provider = add_provider(provider_key.pub, false, provider_tier.NODE_PROVIDER, null);
+
+    rell.test.tx().op(
+        register_provider_account(provider_key.pub)
+    ).sign(provider_key).run();
+
+    val account_ids = ft4.accounts.external.get_accounts_by_participant_id(provider_key.pub);
+    assert_equals(account_ids.size(), 1);
+
+    assert_not_null(provider_account @? { .account.id == account_ids[0] });
+    assert_not_null(provider_account @? { provider });
+}
+
 function test_create_account_requires_init() {
     do_create_account(rell.test.keypairs.alice, "Ticket chain is not initialized");
 }
@@ -581,4 +598,13 @@ function do_upgrade_container(
 
 function test_asset_units() {
     assert_equals(units_per_asset, 1000000);
+}
+
+function add_provider(pubkey: pubkey, system: boolean, tier: provider_tier, cluster_name: text?): provider {
+    rell.test.tx().op(
+        icmf_message_op(x"", provider_registered_topic, body = provider_registered_message(
+            pubkey, system, tier = tier.name, cluster_name).to_gtv()
+        )
+    ).run();
+    return require(provider @? { pubkey });
 }
