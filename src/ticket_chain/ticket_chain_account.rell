@@ -1,4 +1,15 @@
-operation register_account(pubkey) {
+function register_provider_account_impl(provider_pubkey: pubkey) {
+    val provider = require(provider @? { provider_pubkey }, "No provider found with pubkey %s".format(provider_pubkey));
+    require(provider_account @? { provider } == null, "Account already registered. Only one account per provider is allowed");
+
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(provider_pubkey, set(["T"]));
+    val account_id = ft4.accounts.create_account_with_auth(auth_descriptor);
+    val account = ft4.accounts.account_by_id(account_id);
+
+    create provider_account(provider, account);
+}
+
+function register_account_impl(pubkey) {
     require_admin();
 
     val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(pubkey, set(["T"]));
