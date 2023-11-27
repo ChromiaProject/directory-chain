@@ -19,6 +19,7 @@ definitions:
       - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
     gtx:
       modules:
+        - "net.postchain.d1.icmf.IcmfSenderGTXModule"
         - "net.postchain.d1.icmf.IcmfReceiverGTXModule"
     icmf:
       receiver:
@@ -26,6 +27,7 @@ definitions:
           topics:
             - G_configuration_updated
             - G_configuration_failed
+            - G_last_anchored_heights
   proposal_blockchain.util: &proposal_blockchain_util
     max_config_path_depth: 10
     max_config_size: 2097152 # 2 MiB
@@ -87,10 +89,21 @@ blockchains:
         name: "net.postchain.d1.anchoring.AnchoringBlockBuildingStrategy"
       revolt:
         fast_revolt_status_timeout: 2000
+      sync_ext:
+        - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
       gtx:
         modules:
           - "net.postchain.d1.anchoring.system.SystemAnchoringGTXModule"
           - "net.postchain.d1.icmf.IcmfSenderGTXModule"
+          - "net.postchain.d1.icmf.IcmfReceiverGTXModule"
+      icmf:
+        receiver:
+          global:
+            topics:
+              - G_get_last_anchored_heights
+    moduleArgs:
+      common:
+        allow_blockchain_dependencies: false
   cluster_anchoring:
     module: anchoring_chain_cluster
     config:
@@ -100,10 +113,21 @@ blockchains:
         name: "net.postchain.d1.anchoring.AnchoringBlockBuildingStrategy"
       revolt:
         fast_revolt_status_timeout: 2000
+      sync_ext:
+        - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
       gtx:
         modules:
           - "net.postchain.d1.anchoring.cluster.ClusterAnchoringGTXModule"
           - "net.postchain.d1.icmf.IcmfSenderGTXModule"
+          - "net.postchain.d1.icmf.IcmfReceiverGTXModule"
+      icmf:
+        receiver:
+          global:
+            topics:
+              - G_get_last_anchored_heights
+    moduleArgs:
+      common:
+        allow_blockchain_dependencies: false
   ticket_chain:
     module: ticket_chain
     config:

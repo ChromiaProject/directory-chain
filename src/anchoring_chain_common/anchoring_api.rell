@@ -1,0 +1,21 @@
+import common.*;
+import messaging.icmf.*;
+import messaging.anchoring_api.*;
+
+@extend(receive_icmf_message) function receive_get_last_anchored_heights(sender: byte_array, topic: text, body: gtv) {
+    if (topic != get_last_anchored_heights_topic) return;
+
+    val message = get_last_anchored_heights_message.from_gtv(body);
+
+    if (message.target_anchoring_chain != chain_context.blockchain_rid) return;
+
+    val anchored_blockchains = map<byte_array, integer>();
+    for (brid in message.blockchains) {
+        anchored_blockchains[brid] = get_last_anchored_block(brid)?.block_height ?: -1;
+    }
+
+    send_message(
+        last_anchored_heights_topic,
+        last_anchored_heights_message(message.request_id, anchored_blockchains).to_gtv()
+    );
+}
