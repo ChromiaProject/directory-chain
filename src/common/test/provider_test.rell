@@ -406,7 +406,11 @@ function test_promote_node_provider() {
     rell.test.tx().op(
         promote_node_provider(system_provider.pub, dapp_provider2.pub)
     ).sign(system_provider).run();
-    assert_equals(provider @ { dapp_provider2.pub } (.tier), provider_tier.NODE_PROVIDER);
+    val promoted_provider = provider @ { dapp_provider2.pub };
+    assert_equals(promoted_provider.tier, provider_tier.NODE_PROVIDER);
+    // Assert that promoted provider needs voting to be enabled
+    assert_equals(promoted_provider.active, false);
+
     // * SP > NP, fails since NP is already a node provider
     rell.test.tx().op(
         promote_node_provider(system_provider.pub, node_provider2.pub)
