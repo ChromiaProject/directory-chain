@@ -89,6 +89,13 @@ function test_propose_provider_quota__max_actions_per_day() {
         propose_provider_quota(initial_provider.pub, provider_tier.COMMUNITY_NODE_PROVIDER, provider_quota_type.max_actions_per_day, 20)
     ).sign(initial_provider).run();
     assert_equals(get_max_action_points_quota(), (10, 20));
+    // Assert that new providers will get points allocated based on current quota
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.keypairs.bob.pub, provider_tier.NODE_PROVIDER)
+    ).sign(initial_provider).run();
+    val new_provider = provider @ { rell.test.keypairs.bob.pub };
+    val new_provider_max_actions = provider_rl_state @ { new_provider }.points;
+    assert_equals(new_provider_max_actions, 10);
 
     // 0 and -1 is not allowed
     rell.test.tx().op(
