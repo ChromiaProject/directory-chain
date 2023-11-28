@@ -1,0 +1,66 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.assets;
+    import lib.ft4.auth;
+    import test_utils: lib.ft4.test.utils;
+}
+import lib.auth;
+
+struct module_args {
+    auth_privkey: byte_array;
+    admin_privkey: byte_array;
+}
+
+val auth_privkey = chain_context.args.auth_privkey;
+
+function test_init() {
+    rell.test.tx().op(
+        claim_test_chr()
+    ).run_must_fail("Ticket chain is not initialized");
+
+    rell.test.tx().op(
+        init()
+    ).run();
+
+    val asset = get_chr_asset();
+    assert_equals(asset.symbol, "tCHR");
+
+    get_pool_account();
+
+    rell.test.tx().op(
+        init()
+    ).nop().run_must_fail("Ticket chain is already initialized");
+}
+
+function test_claim_test_chr_success() {
+    rell.test.tx().op(init()).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val initial_balance = get_account_balance(alice);
+    rell.test.set_next_block_time_delta(millis_per_week + 1);
+    rell.test.block().run();
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "claim_test_chr", [])
+    ).op(
+        claim_test_chr()
+    ).run();
+    val new_balance = get_account_balance(alice);
+    assert_gt(new_balance, initial_balance);
+    assert_equals(get_balance(alice.id), new_balance);
+}
+
+function test_claim_test_chr_failure() {
+    rell.test.tx().op(init()).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    rell.test.set_next_block_time_delta(millis_per_week - rell.test.DEFAULT_BLOCK_INTERVAL - 1);
+    rell.test.block().run();
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "claim_test_chr", [])
+    ).op(
+        claim_test_chr()
+    ).run_must_fail("You have already claimed");
+}

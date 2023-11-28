@@ -1,0 +1,67 @@
+function calculate_rewards(current_time_millis: timestamp) {
+    val pool = get_pool_account();
+    var pool_balance = get_account_balance(pool);
+
+    for (pa in provider_account @* { current_time_millis >= .last_reward_check + millis_per_day }) {
+        if (pa.last_reward_check == 0) { // At least one day must have passed before any reward
+            pa.last_reward_check = current_time_millis;
+            continue;
+        }
+        val reward = calculate_reward(pa, current_time_millis);
+        if (reward > 0) {
+            if (pool_balance >= reward) {
+                if (transfer_reward(pool, pa, reward)) {
+                    pool_balance -= reward;
+                } else {
+                    pa.reward_debt = reward;
+                }
+            } else if (pool_balance <= 0) { // No funds to pay reward
+                log("Reward pool is empty!");
+                pa.reward_debt = reward;
+            } else { // Missing funds to pay full reward
+                log("Reward pool does not have enough funds to transfer full reward.");
+                if (transfer_reward(pool, pa, pool_balance)) {
+                    pa.reward_debt = reward - pool_balance;
+                    pool_balance = 0;
+                } else {
+                    pa.reward_debt = reward;
+                }
+            }
+        }
+        pa.last_reward_check = current_time_millis;
+    }
+}
+
+function calculate_reward(pa: provider_account, current_time_millis: integer): big_integer {
+    val debt = pa.reward_debt;
+    if (debt > 0) pa.reward_debt = 0;
+
+    val nodes = list<node>();
+    for (node in node @* { pa.provider }) {
+        if ((cluster_node @ { node } (@sum 1) + cluster_replica_node @ { node } (@sum 1)) > 0) {
+            nodes.add(node);
+        }
+    }
+
+    val container_units = nodes @ {} ( @sum .cluster_units ) * standard_cluster_unit.container_units;
+    val extra_storage_gib = nodes @ {} ( @sum .extra_storage ) / 1024;
+    val days = if (pa.last_reward_check > 0) (current_time_millis - pa.last_reward_check) / millis_per_day else 1;
+
+    // TODO: Update this with correct formula when decided
+    val reward = (container_units * SCU_REWARD + extra_storage_gib * EXTRA_STORAGE_REWARD) * units_per_asset * days;
+
+    return debt + reward;
+}
+
+function transfer_reward(pool: ft4.accounts.account, pa: provider_account, amount: big_integer): boolean {
+    log("Transfer reward %s to provider %s".format(amount, pa.provider.pubkey));
+    val success = try_call(try_transfer_reward(pool, pa, amount, *));
+    if (not success) {
+        log("Unable to transfer reward to provider %s".format(pa.provider.pubkey));
+    }
+    return success;
+}
+
+function try_transfer_reward(pool: ft4.accounts.account, pa: provider_account, amount: big_integer) {
+    ft4.assets.Unsafe.transfer(get_pool_account(), pa.account, get_asset(), amount);
+}
