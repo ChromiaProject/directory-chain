@@ -9,7 +9,11 @@ function _is_node_provider(tier: provider_tier) = tier == provider_tier.NODE_PRO
         active = enabled_by_default,
         tier = provider_tier
     );
-    create provider_rl_state(provider, points = 100, last_update=op_context.last_block_time);
+    val max_actions_per_day = provider_quota @ {
+        .tier == provider_tier,
+        provider_quota_type.max_actions_per_day
+    } .value;
+    create provider_rl_state(provider, points = max_actions_per_day, last_update=op_context.last_block_time);
     if (exists(cluster)) {
         create cluster_provider(cluster, provider);
     }
