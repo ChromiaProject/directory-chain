@@ -63,9 +63,11 @@ function apply_blockchain_move(proposal) {
     val pbm = pending_blockchain_move @ { proposal } ($.to_struct());
 
     // keep src cluster/container nodes as replicas
-    val src_container = container_blockchain @ { pbm.blockchain } ( .container );
-    val src_cluster_nodes = cluster_node @* { src_container.cluster } ( .node );
-    for (node in src_cluster_nodes) {
+    val src_container = container_blockchain @ { pbm.blockchain } (.container);
+    val src_cluster_nodes_to_replicate_on = cluster_node @* {
+        src_container.cluster, .node not in blockchain_replica_node @* { pbm.blockchain } (.node)
+    } (.node);
+    for (node in src_cluster_nodes_to_replicate_on) {
         create blockchain_replica_node(pbm.blockchain, node);
     }
     // remove bc from container

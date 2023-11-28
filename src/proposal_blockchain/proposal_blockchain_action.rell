@@ -85,9 +85,11 @@ function _apply_unarchive_blockchain(action: pending_blockchain_action, proposal
     val args = unarchive_args.from_bytes(action.args);
 
     // keep src cluster/container nodes as replicas
-    val src_container = container_blockchain @ { action.blockchain } ( .container );
-    val src_cluster_nodes = cluster_node @* { src_container.cluster } ( .node );
-    for (node in src_cluster_nodes) {
+    val src_container = container_blockchain @ { action.blockchain } (.container);
+    val src_cluster_nodes_to_replicate_on = cluster_node @* {
+        src_container.cluster, .node not in blockchain_replica_node @* { action.blockchain } (.node)
+    } (.node);
+    for (node in src_cluster_nodes_to_replicate_on) {
         create blockchain_replica_node(action.blockchain, node);
     }
     // remove bc from container
@@ -155,7 +157,7 @@ function propose_blockchain_action_impl(my_pubkey: pubkey, blockchain_rid: byte_
     }
 
     // complex state: moving
-    if (exists(pending_blockchain_move @? { blockchain }) or exists(moving_blockchain @? { blockchain })) {
+    if (exists(pending_blockchain_move @? { blockchain }) or exists(moving_blockchain @? { blockchain, .finish_at_height == -1 })) {
         require(false, "Moving blockchain can't be %sd: %s".format(action.name, blockchain.rid));
     }
 
