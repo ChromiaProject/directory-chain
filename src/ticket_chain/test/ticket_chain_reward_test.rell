@@ -16,6 +16,7 @@ struct module_args {
     admin_privkey: byte_array;
 }
 
+val auth_privkey = chain_context.args.auth_privkey;
 val provider_key = rell.test.keypairs.bob;
 val provider_pubkey = provider_key.pub;
 val node_pubkey = rell.test.pubkeys.charlie;
@@ -98,6 +99,27 @@ function test_provider_is_rewarded_correct_amount_of_times() {
     assert_equals(pa.reward_debt, 0);
     assert_equals(get_pool_balance(), base_reward);
 }
+
+function test_transfer_to_pool() {
+    rell.test.tx().op(init()).run();
+
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val amount: big_integer = 10;
+
+    assert_equals(get_pool_balance(), 0);
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "transfer_to_pool",
+            [amount.to_gtv()])
+    ).op(
+        transfer_to_pool(amount)
+    ).run();
+
+    assert_equals(get_pool_balance(), amount);
+}
+
+///////////////////
+// Helper functions
 
 function reward_setup(pool_assets: big_integer = 0, add_cluster_node: boolean = true) {
     rell.test.tx().op(init()).run();

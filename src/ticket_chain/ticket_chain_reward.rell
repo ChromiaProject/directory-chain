@@ -65,3 +65,27 @@ function transfer_reward(pool: ft4.accounts.account, pa: provider_account, amoun
 function try_transfer_reward(pool: ft4.accounts.account, pa: provider_account, amount: big_integer) {
     ft4.assets.Unsafe.transfer(get_pool_account(), pa.account, get_asset(), amount);
 }
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "transfer_to_pool",
+    flags = ["T"],
+    message = transfer_to_pool_auth_message(*)
+);
+
+function transfer_to_pool_auth_message(gtv): text {
+    val args = struct<transfer_to_pool>.from_gtv(gtv);
+
+    return "Please sign the message\nto transfer %s %s from account {account_id} \nto pool account.".format(
+        ft4.assets.format_amount_with_decimals(args.amount, chain_context.args.asset_decimals),
+        chain_context.args.asset_symbol);
+}
+
+function transfer_to_pool_impl(amount: big_integer) {
+    require_initialized();
+
+    val account = ft4.auth.authenticate();
+    require(user @? { account }, "No user for account %s".format(account.id));
+
+    ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), amount);
+}
