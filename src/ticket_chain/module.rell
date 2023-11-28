@@ -15,6 +15,8 @@ namespace ft4 {
 // TODO: Revise when we have real pricing
 val SCU_COST = 1;
 val EXTRA_STORAGE_COST = 1;
+val SCU_REWARD = 1;
+val EXTRA_STORAGE_REWARD = 1;
 
 struct module_args {
     asset_name: text;
@@ -29,7 +31,8 @@ struct module_args {
 // Rell does not have a power function/operator
 val units_per_asset = integer("1" + "0".repeat(chain_context.args.asset_decimals));
 
-val millis_per_week = 7 * 24 * 60 * 60 * 1000;
+val millis_per_day = 24 * 60 * 60 * 1000;
+val millis_per_week = 7 * millis_per_day;
 
 operation init() {
     require(state.initialized == false, "Ticket chain is already initialized");
@@ -45,6 +48,7 @@ operation init() {
 operation __begin_block(height: integer) {
     if (state.initialized) {
         expire_leases(op_context.last_block_time);
+        calculate_rewards(op_context.last_block_time);
     }
 }
 

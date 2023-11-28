@@ -1,7 +1,8 @@
 @test module;
 
 import ^^.*;
-import ^.helpers.*;
+import ^.helper_functions.*;
+import ^.helper_operations.*;
 
 namespace ft4 {
     import lib.ft4.accounts;
@@ -16,108 +17,11 @@ struct module_args {
     admin_privkey: byte_array;
 }
 
-function test_init() {
-    rell.test.tx().op(
-        claim_test_chr()
-    ).run_must_fail("Ticket chain is not initialized");
-
-    rell.test.tx().op(
-        init()
-    ).run();
-
-    val asset = get_chr_asset();
-    assert_equals(asset.symbol, "tCHR");
-
-    get_pool_account();
-
-    rell.test.tx().op(
-        init()
-    ).nop().run_must_fail("Ticket chain is already initialized");
-}
-
-function test_create_accounts() {
-    rell.test.tx().op(init()).run();
-
-    val alice = require(do_create_account(rell.test.keypairs.alice));
-    assert_gt(get_account_balance(alice), 0);
-
-    val bob = require(do_create_account(rell.test.keypairs.bob));
-    assert_gt(get_account_balance(bob), 0);
-
-    assert_not_equals(alice.id, bob.id);
-}
-
-function test_admin_register_account() {
-    rell.test.tx().op(init()).run();
-
-    rell.test.tx().op(
-        register_account(rell.test.pubkeys.alice)
-    ).sign(chain_context.args.admin_privkey).run();
-
-    val account_ids = ft4.accounts.external.get_accounts_by_participant_id(rell.test.pubkeys.alice);
-    assert_equals(account_ids.size(), 1);
-
-    assert_not_null(user @? { .account.id == account_ids[0] });
-}
-
-function test_provider_register_account() {
-    rell.test.tx().op(init()).run();
-
-    val provider_key = rell.test.keypairs.bob;
-    val provider = add_provider(provider_key.pub, false, provider_tier.NODE_PROVIDER, null);
-
-    rell.test.tx().op(
-        register_provider_account(provider_key.pub)
-    ).sign(provider_key).run();
-
-    val account_ids = ft4.accounts.external.get_accounts_by_participant_id(provider_key.pub);
-    assert_equals(account_ids.size(), 1);
-
-    assert_not_null(provider_account @? { .account.id == account_ids[0] });
-    assert_not_null(provider_account @? { provider });
-}
-
-function test_create_account_requires_init() {
-    do_create_account(rell.test.keypairs.alice, "Ticket chain is not initialized");
-}
-
-function test_create_account_duplicate() {
-    rell.test.tx().op(init()).run();
-    do_create_account(rell.test.keypairs.alice);
-    do_create_account(rell.test.keypairs.alice, "duplicate key value violates unique constraint");
-}
-
-function test_claim_test_chr_success() {
-    rell.test.tx().op(init()).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice));
-    val initial_balance = get_account_balance(alice);
-    rell.test.set_next_block_time_delta(millis_per_week + 1);
-    rell.test.block().run();
-    rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "claim_test_chr", [])
-    ).op(
-        claim_test_chr()
-    ).run();
-    val new_balance = get_account_balance(alice);
-    assert_gt(new_balance, initial_balance);
-    assert_equals(get_balance(alice.id), new_balance);
-}
-
-function test_claim_test_chr_failure() {
-    rell.test.tx().op(init()).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice));
-    rell.test.set_next_block_time_delta(millis_per_week - rell.test.DEFAULT_BLOCK_INTERVAL - 1);
-    rell.test.block().run();
-    rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "claim_test_chr", [])
-    ).op(
-        claim_test_chr()
-    ).run_must_fail("You have already claimed");
-}
+val auth_privkey = chain_context.args.auth_privkey;
 
 function test_create_container_success() {
     rell.test.tx().op(init()).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16, container_units = 2);
 
     assert_false(lease @ { container_name } (.auto_renew));
@@ -141,7 +45,7 @@ function test_create_container_success() {
 
 function test_create_container_with_auto_renew() {
     rell.test.tx().op(init()).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16, container_units = 2, auto_renew = true);
 
     assert_true(lease @ { container_name } (.auto_renew));
@@ -165,7 +69,7 @@ function test_create_container_with_auto_renew() {
 
 function test_create_container_failure() {
     rell.test.tx().op(init()).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     do_create_container(alice, rell.test.keypairs.alice, success = false, block_height = 2, ticket_id = 16);
 }
 
@@ -178,7 +82,7 @@ function test_create_container_no_auth() {
 
 function test_create_container_insufficient_funds() {
     rell.test.tx().op(init()).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "create_container",
             [rell.test.pubkeys.alice.to_gtv(), (100).to_gtv(), "".to_gtv(), (100).to_gtv(), (0).to_gtv(), "".to_gtv(), false.to_gtv()])
@@ -189,7 +93,7 @@ function test_create_container_insufficient_funds() {
 
 function test_expire_lease() {
     rell.test.tx().op(init()).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16);
 
     assert_false(lease @ { container_name } (.expired));
@@ -206,7 +110,7 @@ function test_expire_lease() {
 
 function test_not_expire_lease() {
     rell.test.tx().op(init()).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16);
 
     assert_false(lease @ { container_name } (.expired));
@@ -219,7 +123,7 @@ function test_not_expire_lease() {
 
 function test_auto_renew_and_cancel_renew_lease() {
     rell.test.tx().op(init()).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16);
 
     assert_false(lease @ { container_name } (.auto_renew));
@@ -260,7 +164,7 @@ function test_auto_renew_and_cancel_renew_lease() {
 
 function test_auto_renew_lease_insufficient_funds() {
     rell.test.tx().op(init()).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16);
 
     assert_false(lease @ { container_name } (.auto_renew));
@@ -290,7 +194,7 @@ function test_auto_renew_lease_insufficient_funds() {
 
 function test_renew_non_expired_container() {
     rell.test.tx().op(init()).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16);
 
     val alice_balance = get_account_balance(alice);
@@ -312,7 +216,7 @@ function test_renew_non_expired_container() {
 
 function test_renew_expired_container() {
     rell.test.tx().op(init()).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16);
 
     val alice_balance = get_account_balance(alice);
@@ -342,7 +246,7 @@ function test_renew_expired_container() {
 
 function test_auto_renew_expired_container() {
     rell.test.tx().op(init()).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16);
 
     val alice_balance = get_account_balance(alice);
@@ -371,7 +275,7 @@ function test_auto_renew_expired_container() {
 
 function test_renew_container_insufficient_funds() {
     rell.test.tx().op(init()).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16);
 
     rell.test.tx().op(
@@ -384,7 +288,7 @@ function test_renew_container_insufficient_funds() {
 
 function test_upgrade_container_success() {
     rell.test.tx().op(init()).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16, container_units = 2);
 
     val created_lease = lease @ { container_name };
@@ -409,7 +313,7 @@ function test_upgrade_container_success() {
 
 function test_upgrade_container_insufficient_funds() {
     rell.test.tx().op(init()).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16, container_units = 2);
 
     rell.test.tx().op(
@@ -422,7 +326,7 @@ function test_upgrade_container_insufficient_funds() {
 
 function test_remaining_lease_value_is_correct() {
     rell.test.tx().op(init()).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16, container_units = 2);
 
     val lease = lease @ { container_name };
@@ -440,7 +344,7 @@ function test_remaining_lease_value_is_correct() {
 
 function test_expire_lease_not_done_when_upgrade_is_pending() {
     rell.test.tx().op(init()).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice));
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, block_height = 2, ticket_id = 16);
 
     // Make a pending upgrade
@@ -456,25 +360,6 @@ function test_expire_lease_not_done_when_upgrade_is_pending() {
     rell.test.block().run();
     rell.test.block().run();
     assert_false(lease @ { container_name } (.expired));
-}
-
-function do_create_account(keypair: rell.test.keypair, failure: text? = null): ft4.accounts.account? {
-    val eth_address = ft4.test_utils.evm_address_from_privkey(keypair.priv);
-    log("eth_address=%s".format(eth_address));
-    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(eth_address, set(["T"]));
-    val signature = ft4.test_utils.evm_sign(auth.get_message_to_sign(), keypair.priv);
-
-    val tx = rell.test.tx().op(
-        auth.register_account(auth_descriptor, signature)
-    ).nop().sign(chain_context.args.auth_privkey);
-
-    if (failure != null) {
-        tx.run_must_fail(failure);
-        return null;
-    } else {
-        tx.run();
-        return ft4.accounts.account_by_id(auth_descriptor.hash());
-    }
 }
 
 function do_create_container(
@@ -594,17 +479,4 @@ function do_upgrade_container(
         assert_equals(get_account_balance(account), initial_balance);
         assert_equals(get_pool_balance(), initial_pool_balance);
     }
-}
-
-function test_asset_units() {
-    assert_equals(units_per_asset, 1000000);
-}
-
-function add_provider(pubkey: pubkey, system: boolean, tier: provider_tier, cluster_name: text?): provider {
-    rell.test.tx().op(
-        icmf_message_op(x"", provider_registered_topic, body = provider_registered_message(
-            pubkey, system, tier = tier.name, cluster_name).to_gtv()
-        )
-    ).run();
-    return require(provider @? { pubkey });
 }

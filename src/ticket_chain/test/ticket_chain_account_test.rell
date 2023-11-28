@@ -1,0 +1,85 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import ^.helper_operations.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.assets;
+    import lib.ft4.auth;
+    import test_utils: lib.ft4.test.utils;
+}
+import lib.auth;
+
+struct module_args {
+    auth_privkey: byte_array;
+    admin_privkey: byte_array;
+}
+
+val auth_privkey = chain_context.args.auth_privkey;
+
+function test_asset_units() {
+    assert_equals(units_per_asset, 1000000);
+}
+
+function test_create_accounts() {
+    rell.test.tx().op(init()).run();
+
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    assert_gt(get_account_balance(alice), 0);
+
+    val bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
+    assert_gt(get_account_balance(bob), 0);
+
+    assert_not_equals(alice.id, bob.id);
+}
+
+function test_admin_register_account() {
+    rell.test.tx().op(init()).run();
+
+    rell.test.tx().op(
+        register_account(rell.test.pubkeys.alice)
+    ).sign(chain_context.args.admin_privkey).run();
+
+    val account_ids = ft4.accounts.external.get_accounts_by_participant_id(rell.test.pubkeys.alice);
+    assert_equals(account_ids.size(), 1);
+
+    assert_not_null(user @? { .account.id == account_ids[0] });
+}
+
+function test_provider_register_account() {
+    rell.test.tx().op(init()).run();
+
+    val provider_key = rell.test.keypairs.bob;
+    val provider = add_provider(provider_key.pub, false, provider_tier.NODE_PROVIDER, null);
+
+    rell.test.tx().op(
+        register_provider_account(provider_key.pub)
+    ).sign(provider_key).run();
+
+    val account_ids = ft4.accounts.external.get_accounts_by_participant_id(provider_key.pub);
+    assert_equals(account_ids.size(), 1);
+
+    assert_not_null(provider_account @? { .account.id == account_ids[0] });
+    assert_not_null(provider_account @? { provider });
+}
+
+function test_create_account_requires_init() {
+    do_create_account(rell.test.keypairs.alice, auth_privkey, "Ticket chain is not initialized");
+}
+
+function test_create_account_duplicate() {
+    rell.test.tx().op(init()).run();
+    do_create_account(rell.test.keypairs.alice, auth_privkey);
+    do_create_account(rell.test.keypairs.alice, auth_privkey, "duplicate key value violates unique constraint");
+}
+
+function add_provider(pubkey: pubkey, system: boolean, tier: provider_tier, cluster_name: text?): provider {
+    rell.test.tx().op(
+        icmf_message_op(x"", provider_registered_topic, body = provider_registered_message(
+            pubkey, system, tier = tier.name, cluster_name).to_gtv()
+        )
+    ).run();
+    return require(provider @? { pubkey });
+}

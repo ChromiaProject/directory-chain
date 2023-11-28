@@ -1,0 +1,101 @@
+@test module;
+
+import ^^.*;
+import ^.helper_operations.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.assets;
+    import lib.ft4.auth;
+    import test_utils: lib.ft4.test.utils;
+}
+import lib.auth;
+
+function do_create_account(keypair: rell.test.keypair, auth_privkey: byte_array, failure: text? = null): ft4.accounts.account? {
+    val eth_address = ft4.test_utils.evm_address_from_privkey(keypair.priv);
+    log("eth_address=%s".format(eth_address));
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(eth_address, set(["T"]));
+    val signature = ft4.test_utils.evm_sign(auth.get_message_to_sign(), keypair.priv);
+
+    val tx = rell.test.tx().op(
+        auth.register_account(auth_descriptor, signature)
+    ).nop().sign(auth_privkey);
+
+    if (failure != null) {
+        tx.run_must_fail(failure);
+        return null;
+    } else {
+        tx.run();
+        return ft4.accounts.account_by_id(auth_descriptor.hash());
+    }
+}
+
+function add_provider(pubkey: pubkey, system: boolean, tier: provider_tier, cluster_name: text?): provider {
+    rell.test.tx().op(
+        icmf_message_op(x"", provider_registered_topic, body = provider_registered_message(
+            pubkey, system, tier = tier.name, cluster_name).to_gtv()
+        )
+    ).run();
+    return require(provider @? { pubkey });
+}
+
+function ensure_cluster(name: text, deleted: boolean, operational: boolean, cluster_units: integer, extra_storage: integer): cluster {
+    rell.test.tx().op(
+        icmf_message_op(x"", cluster_update_topic, body = cluster_update_message(
+            name, deleted, operational, cluster_units, extra_storage).to_gtv())
+    ).run();
+    return require(cluster @? { name });
+}
+
+function ensure_node(provider_pubkey: pubkey, node_pubkey: pubkey, active: boolean, territory: text, cluster_units: integer, extra_storage: integer, deleted: boolean): node {
+    rell.test.tx().op(
+        icmf_message_op(x"", node_update_topic, body = node_update_message(
+            provider_pubkey = provider_pubkey,
+            pubkey = node_pubkey,
+            active = active,
+            territory = territory,
+            cluster_units = cluster_units,
+            extra_storage = extra_storage,
+            deleted = deleted).to_gtv()
+        )
+    ).run();
+    return require(node @? { node_pubkey });
+}
+
+function add_cluster_node(cluster_name: text, node_pubkey: pubkey, replica_node: boolean) {
+    rell.test.tx().op(
+        icmf_message_op(x"", cluster_node_update_topic, body = cluster_node_update_message(
+            name = cluster_name,
+            pubkey = node_pubkey,
+            replica_node = replica_node,
+            deleted = false).to_gtv()
+        )
+    ).run();
+}
+
+function remove_cluster_node(cluster_name: text, node_pubkey: pubkey, replica_node: boolean) {
+    rell.test.tx().op(
+        icmf_message_op(x"", cluster_node_update_topic, body = cluster_node_update_message(
+            name = cluster_name,
+            pubkey = node_pubkey,
+            replica_node = replica_node,
+            deleted = true).to_gtv()
+        )
+    ).run();
+}
+
+function add_node_capability(pubkey, node_capability_type) {
+    rell.test.tx().op(
+        icmf_message_op(x"", node_capability_update_topic, body = node_capability_update_message(
+            pubkey = pubkey,
+            type = node_capability_type.name,
+            deleted = false).to_gtv()
+        )
+    ).run();
+}
+
+function add_assets_to_pool(amount: big_integer) {
+    rell.test.tx().op(
+        mint_to_pool(amount)
+    ).run();
+}
