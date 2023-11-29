@@ -17,10 +17,14 @@ query get_upgrade_container_ticket_by_id(ticket_id: integer): container_ticket_d
             (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
 
 query get_leases_by_account(account_id: byte_array): list<lease_data> =
-        lease @* { .account.id == account_id } (lease_data(.container_name, container_units = .container_units, extra_storage_gib = .extra_storage_gib, expire_time_millis = .start_time + .duration_millis, .expired, .auto_renew));
+        lease @* { .account.id == account_id } (lease_data(.container_name, .cluster_name, container_units = .container_units, extra_storage_gib = .extra_storage_gib, expire_time_millis = .start_time + .duration_millis, .expired, .auto_renew));
 
 query get_lease_by_container_name(container_name: text): lease_data? =
-        lease @? { container_name } (lease_data(.container_name, container_units = .container_units, extra_storage_gib = .extra_storage_gib, expire_time_millis = .start_time + .duration_millis, .expired, .auto_renew));
+        lease @? { container_name } (lease_data(.container_name, .cluster_name, container_units = .container_units, extra_storage_gib = .extra_storage_gib, expire_time_millis = .start_time + .duration_millis, .expired, .auto_renew));
+
+query get_min_lease_duration(): integer = MIN_LEASE_TIME_WEEKS;
+
+query get_max_lease_duration(): integer = MAX_LEASE_TIME_WEEKS;
 
 query get_chr_asset() = ft4.assets.map_asset(get_asset());
 

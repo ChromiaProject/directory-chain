@@ -16,6 +16,8 @@ struct cluster_data {
     cluster_units: integer?;
     extra_storage: integer?;
     number_of_nodes: integer;
+    container_units_available: integer?;
+    extra_storage_available: integer?;
 }
 
 query get_cluster_data(name) {
@@ -26,7 +28,9 @@ query get_cluster_data(name) {
         is_operational = cluster.operational,
         cluster_units = cluster.cluster_units,
         extra_storage = cluster.extra_storage,
-        number_of_nodes = number_of_nodes_in_cluster(cluster)
+        number_of_nodes = number_of_nodes_in_cluster(cluster),
+        container_units_available = get_available_container_units(cluster),
+        extra_storage_available = get_available_extra_storage(cluster)
     );
 }
 
@@ -38,7 +42,9 @@ query get_operational_dapp_clusters(): list<cluster_data> {
         is_operational = .operational,
         cluster_units = .cluster_units,
         extra_storage = .extra_storage,
-        number_of_nodes = counts.get_or_default($, 0)
+        number_of_nodes = counts.get_or_default($, 0),
+        container_units_available = get_available_container_units($),
+        extra_storage_available = get_available_extra_storage($)
     ));
 }
 
