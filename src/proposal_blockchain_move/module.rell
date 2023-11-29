@@ -11,15 +11,21 @@ entity remove_moved_blockchain_on_original_node {
 
 @extend(on_configuration_updated)
 function try_to_finalize_blockchain_move(message: configuration_updated) {
-    val bc_move_state = moving_blockchain @? { .blockchain.rid == message.blockchain_rid, .finish_at_height == message.height };
-    if (exists(bc_move_state)) {
-        val src_nodes = list<pubkey>.from_gtv(gtv.from_bytes(bc_move_state.remove_on_nodes));
-        for (pk in src_nodes) {
-            val node = require_node(pk);
-            log("blockchain_replica_node removed: %s".format(pk));
-            delete blockchain_replica_node @? { bc_move_state.blockchain, node };
-            create remove_moved_blockchain_on_original_node(bc_move_state.blockchain, node);
+    val moving_bc = moving_blockchain @? { .blockchain.rid == message.blockchain_rid, .finish_at_height == message.height };
+    if (exists(moving_bc)) {
+        val src_nodes = cluster_node @* { moving_bc.source.cluster } ( .node );
+        for (node in src_nodes) {
+            delete blockchain_replica_node @? { moving_bc.blockchain, node };
+            create remove_moved_blockchain_on_original_node(moving_bc.blockchain, node);
         }
-        log("Blockchain moving was finished at height %s".format(message.height));
+        if (not src_nodes.empty()) {
+            log("blockchain_replica_node removed: %s".format(src_nodes @* {} ( .pubkey )));
+        }
+
+        log("Blockchain %s moving from container %s to container %s was finished at height %s".format(
+            moving_bc.blockchain.rid, moving_bc.source.name, moving_bc.destination.name, moving_bc.finish_at_height)
+        );
+
+        delete moving_bc;
     }
 }
