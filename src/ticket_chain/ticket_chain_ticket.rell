@@ -19,7 +19,8 @@ function receive_ticket_result_message(body: gtv) {
             when (ticket.state) {
                 ticket_state.SUCCESS -> {
                     val container_name = message.container_name!!;
-                    log("Successfully created container %s for ticket %s".format(container_name, message.ticket_id));
+                    val cluster_name = message.cluster_name!!;
+                    log("Successfully created container %s in cluster %s for ticket %s".format(container_name, cluster_name, message.ticket_id));
                     specific_ticket.container_name = container_name;
                     create lease(
                         container_name = container_name,
@@ -27,6 +28,7 @@ function receive_ticket_result_message(body: gtv) {
                         container_units = specific_ticket.container_units,
                         extra_storage_gib = specific_ticket.extra_storage_gib,
                         cluster_class = specific_ticket.cluster_class,
+                        cluster_name = cluster_name,
                         start_time = op_context.last_block_time,
                         duration_millis = specific_ticket.duration_millis,
                         auto_renew = specific_ticket.auto_renew
@@ -45,6 +47,7 @@ function receive_ticket_result_message(body: gtv) {
                 ticket_state.SUCCESS -> {
                     // Note: When we implement "move" the container name might change so we should check what name D1 returns
                     val upgraded_container_name = message.container_name!!;
+                    val upgraded_cluster_name = message.cluster_name!!;
                     log("Successfully upgraded container %s for ticket %s".format(upgraded_container_name, message.ticket_id));
                     val current_lease = lease @ { .container_name == specific_ticket.container_name };
                     val currently_auto_renewed = current_lease.auto_renew;
@@ -56,6 +59,7 @@ function receive_ticket_result_message(body: gtv) {
                         container_units = specific_ticket.container_units,
                         extra_storage_gib = specific_ticket.extra_storage_gib,
                         cluster_class = specific_ticket.cluster_class,
+                        cluster_name = upgraded_cluster_name,
                         start_time = op_context.last_block_time,
                         duration_millis = current_duration,
                         auto_renew = currently_auto_renewed

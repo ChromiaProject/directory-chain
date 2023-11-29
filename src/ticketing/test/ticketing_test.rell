@@ -58,7 +58,7 @@ function test_create_container_with_auto_create_provider() {
             container_units = 1,
             cluster_class = "",
             extra_storage = 0,
-            cluster_name = "Bob's cluster"
+            cluster_name = cluster_name
         ).to_gtv())).run();
     val container1 = container @ { bob_cluster, .system == false };
     assert_events(
@@ -69,7 +69,7 @@ function test_create_container_with_auto_create_provider() {
         ),
         ("icmf_message", (
             topic = ticket_result_topic,
-            body = ticket_result_message(1, error_message = null, container_name = container1.name).to_gtv(),
+            body = ticket_result_message(1, error_message = null, container_name = container1.name, cluster_name = cluster_name).to_gtv(),
             block_height = 2).to_gtv_pretty()
         )
     );
@@ -82,12 +82,12 @@ function test_create_container_with_auto_create_provider() {
             container_units = 2,
             cluster_class = "",
             extra_storage = 1024,
-            cluster_name = null
+            cluster_name = cluster_name
         ).to_gtv())).run();
     val container2 = container @ { bob_cluster, .system == false, .name != container1.name };
     assert_events(("icmf_message", (
         topic = ticket_result_topic,
-        body = ticket_result_message(2, error_message = null, container_name = container2.name).to_gtv(),
+        body = ticket_result_message(2, error_message = null, container_name = container2.name, cluster_name = cluster_name).to_gtv(),
         block_height = 3).to_gtv_pretty()
     ));
 
@@ -130,7 +130,7 @@ function test_create_container_fail() {
         ),
         ("icmf_message", (
             topic = ticket_result_topic,
-            body = ticket_result_message(1, error_message = "Unable to find suitable cluster", container_name = "").to_gtv(),
+            body = ticket_result_message(1, error_message = "Unable to find suitable cluster", container_name = "", cluster_name = "").to_gtv(),
             block_height = 2).to_gtv_pretty()
         )
     );
@@ -166,11 +166,11 @@ function test_upgrade_container() {
             container_units = 2,
             cluster_class = "",
             extra_storage = 0,
-            cluster_name = "Bob's cluster"
+            cluster_name = cluster_name
         ).to_gtv())).run();
     assert_events(("icmf_message", (
         topic = ticket_result_topic,
-        body = ticket_result_message(1, error_message = null, container_name = container_name).to_gtv(),
+        body = ticket_result_message(1, error_message = null, container_name = container_name, cluster_name = cluster_name).to_gtv(),
         block_height = 2).to_gtv_pretty()
     ));
 
@@ -204,11 +204,15 @@ function test_upgrade_container_fail() {
             container_units = 13, // Too many SCUs requested
             cluster_class = "",
             extra_storage = 0,
-            cluster_name = "Bob's cluster"
+            cluster_name = cluster_name
         ).to_gtv())).run();
     assert_events(("icmf_message", (
         topic = ticket_result_topic,
-        body = ticket_result_message(1, error_message = "Unable to upgrade container %s".format(container_name), container_name = container_name).to_gtv(),
+        body = ticket_result_message(
+            1,
+            error_message = "Unable to upgrade container %s".format(container_name),
+            container_name = container_name,
+            cluster_name = cluster_name).to_gtv(),
         block_height = 2).to_gtv_pretty()
     ));
 }

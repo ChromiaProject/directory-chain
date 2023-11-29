@@ -35,13 +35,14 @@ function receive_upgrade_container_impl(body: gtv) {
     }
 }
 
-function send_upgrade_container_result(message: upgrade_container_message, error_message: text?, dst_container_name: text? = null) {
+function send_upgrade_container_result(message: upgrade_container_message, error_message: text?, dst_container_name: text? = null, dst_cluster_name: text? = null) {
     send_message(
         ticket_result_topic,
         ticket_result_message(
             ticket_id = message.ticket_id,
             error_message = error_message,
-            container_name = dst_container_name ?: message.container_name
+            container_name = dst_container_name ?: message.container_name,
+            cluster_name = dst_cluster_name ?: message.cluster_name
         ).to_gtv()
     );
 }
@@ -88,7 +89,7 @@ function start_creating_container_and_moving_blockchains_async(message: upgrade_
     val message = upgrade_container_message.from_bytes(pending_request.upgrade_container_message);
 
     // TODO: Retrieve error messages from `require()`:s
-    val dst_container_name = try_call(
+    val dst_container_cluster_names = try_call(
         move_container_blockchains_impl(
             x"", // TODO: Resolve
             message.container_name,
@@ -97,6 +98,6 @@ function start_creating_container_and_moving_blockchains_async(message: upgrade_
             *
     ));
 
-    val error_message = if (dst_container_name??) null else "Unable to upgrade container %s, check logs".format(message.container_name);
-    send_upgrade_container_result(message, error_message, dst_container_name);
+    val error_message = if (dst_container_cluster_names??) null else "Unable to upgrade container %s, check logs".format(message.container_name);
+    send_upgrade_container_result(message, error_message, dst_container_cluster_names?.container_name, dst_container_cluster_names?.cluster_name);
 }

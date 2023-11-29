@@ -43,7 +43,7 @@ function create_provider_if_not_exist(pubkey): provider {
 }
 
 function create_container_from_ticket(provider_pubkey: pubkey, container_units: integer, cluster_class: text,
-        extra_storage: integer, cluster_name: text?): text {
+        extra_storage: integer, cluster_name: text?): (container_name: text, cluster_name: text) {
     require_pubkey(provider_pubkey);
     val provider = create_provider_if_not_exist(provider_pubkey);
 
@@ -57,10 +57,10 @@ function create_container_from_ticket(provider_pubkey: pubkey, container_units: 
             and (cluster_name == null or cluster_name == cluster.name)
         ) {
             val container = create_container_in_cluster(provider, cluster, container_units, extra_storage);
-            return container.name;
+            return (container_name = container.name, cluster_name = cluster.name);
         }
     }
-    return "";
+    return (container_name = "", cluster_name = "");
 }
 
 function create_container_in_cluster(provider, cluster, container_units: integer, extra_storage: integer): container {
