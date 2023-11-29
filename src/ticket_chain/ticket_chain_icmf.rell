@@ -1,12 +1,12 @@
-operation __icmf_message(sender: byte_array, topic: text, body: gtv) {
+@extend(receive_icmf_message) function icmf_message_receive(sender: byte_array, topic: text, body: gtv) {
     if (topic_needs_initialization(topic)) require_initialized();
 
-    if (not try_call(receive_icmf_message(sender, topic, body, *))) {
+    if (not try_call(handle_icmf_message(sender, topic, body, *))) {
         log("Error while processing ICMF message in topic %s".format(topic));
     }
 }
 
-function receive_icmf_message(sender: byte_array, topic: text, body: gtv) {
+function handle_icmf_message(sender: byte_array, topic: text, body: gtv) {
     // No need to validate sender since we use a local ICMF receiver
     when (topic) {
         ticket_result_topic -> receive_ticket_result_message(body);
