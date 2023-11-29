@@ -1,6 +1,5 @@
 module;
 
-import ^^.common.*;
 import ^.icmf.*;
 
 val get_last_anchored_heights_topic = ICMF_TOPIC_GLOBAL_PREFIX + "get_last_anchored_heights";
@@ -47,14 +46,6 @@ function request_last_anchored_heights(target_anchoring_chain: byte_array, block
 
 @extend(receive_icmf_message) function receive_last_anchored_heights(sender: byte_array, topic: text, body: gtv) {
     if (topic != last_anchored_heights_topic) return;
-
-    val anchoring_chains = set<byte_array>();
-    anchoring_chains.add(system_anchoring_chain.rid);
-    anchoring_chains.add_all(cluster_anchoring_chain @* {} ( .blockchain.rid ));
-    if (sender not in anchoring_chains) {
-        log("Sender %s is not the anchoring chain, ignoring".format(sender));
-        return;
-    }
 
     val message = last_anchored_heights_message.from_gtv(body);
     val pending_req = pending_request @? { message.request_id };
