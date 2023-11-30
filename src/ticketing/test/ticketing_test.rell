@@ -64,14 +64,12 @@ function test_create_container_with_auto_create_provider() {
     assert_events(
         ("icmf_message", (
             topic = provider_registered_topic,
-            body = provider_registered_message(test_provider.pub, false, tier = provider_tier.COMMUNITY_NODE_PROVIDER.name, null).to_gtv(),
-            block_height = 2).to_gtv_pretty()
-        ),
+            body = provider_registered_message(test_provider.pub, false, tier = provider_tier.COMMUNITY_NODE_PROVIDER.name, null).to_gtv()
+        ).to_gtv_pretty()),
         ("icmf_message", (
             topic = ticket_result_topic,
-            body = ticket_result_message(1, error_message = null, container_name = container1.name, cluster_name = cluster_name).to_gtv(),
-            block_height = 2).to_gtv_pretty()
-        )
+            body = ticket_result_message(1, error_message = null, container_name = container1.name, cluster_name = cluster_name).to_gtv()
+        ).to_gtv_pretty())
     );
     assert_not_null(provider @? { test_provider.pub });
 
@@ -87,9 +85,8 @@ function test_create_container_with_auto_create_provider() {
     val container2 = container @ { bob_cluster, .system == false, .name != container1.name };
     assert_events(("icmf_message", (
         topic = ticket_result_topic,
-        body = ticket_result_message(2, error_message = null, container_name = container2.name, cluster_name = cluster_name).to_gtv(),
-        block_height = 3).to_gtv_pretty()
-    ));
+        body = ticket_result_message(2, error_message = null, container_name = container2.name, cluster_name = cluster_name).to_gtv()
+    ).to_gtv_pretty()));
 
     val container_scu_limit = container_resource_limit @ { container2, .container_resource_limit_type == container_resource_limit_type.container_units }.value;
     assert_equals(container_scu_limit, 2);
@@ -125,14 +122,12 @@ function test_create_container_fail() {
     assert_events(
         ("icmf_message", (
             topic = provider_registered_topic,
-            body = provider_registered_message(test_provider.pub, false, tier = provider_tier.COMMUNITY_NODE_PROVIDER.name, null).to_gtv(),
-            block_height = 2).to_gtv_pretty()
-        ),
+            body = provider_registered_message(test_provider.pub, false, tier = provider_tier.COMMUNITY_NODE_PROVIDER.name, null).to_gtv()
+        ).to_gtv_pretty()),
         ("icmf_message", (
             topic = ticket_result_topic,
-            body = ticket_result_message(1, error_message = "Unable to find suitable cluster", container_name = "", cluster_name = "").to_gtv(),
-            block_height = 2).to_gtv_pretty()
-        )
+            body = ticket_result_message(1, error_message = "Unable to find suitable cluster", container_name = "", cluster_name = "").to_gtv()
+        ).to_gtv_pretty())
     );
 
     assert_not_null(provider @? { test_provider.pub });
@@ -170,9 +165,8 @@ function test_upgrade_container() {
         ).to_gtv())).run();
     assert_events(("icmf_message", (
         topic = ticket_result_topic,
-        body = ticket_result_message(1, error_message = null, container_name = container_name, cluster_name = cluster_name).to_gtv(),
-        block_height = 2).to_gtv_pretty()
-    ));
+        body = ticket_result_message(1, error_message = null, container_name = container_name, cluster_name = cluster_name).to_gtv()
+    ).to_gtv_pretty()));
 
     val upgraded_limits = get_current_container_resource_limits(container_name);
     assert_equals(upgraded_limits[container_resource_limit_type.container_units], 2);
@@ -212,7 +206,6 @@ function test_upgrade_container_fail() {
             1,
             error_message = "Unable to upgrade container %s".format(container_name),
             container_name = container_name,
-            cluster_name = cluster_name).to_gtv(),
-        block_height = 2).to_gtv_pretty()
-    ));
+            cluster_name = cluster_name).to_gtv()
+    ).to_gtv_pretty()));
 }
