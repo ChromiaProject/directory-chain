@@ -39,10 +39,10 @@ function add_provider(pubkey: pubkey, system: boolean, tier: provider_tier, clus
     return require(provider @? { pubkey });
 }
 
-function ensure_cluster(name: text, deleted: boolean, operational: boolean, cluster_units: integer, extra_storage: integer): cluster {
+function ensure_cluster(name: text, deleted: boolean, operational: boolean, cluster_units: integer, extra_storage: integer, cluster_class: text): cluster {
     rell.test.tx().op(
         icmf_message_op(x"", cluster_update_topic, body = cluster_update_message(
-            name, deleted, operational, cluster_units, extra_storage).to_gtv())
+            name, deleted, operational, cluster_units, extra_storage, cluster_class).to_gtv())
     ).run();
     return require(cluster @? { name });
 }
@@ -80,16 +80,6 @@ function remove_cluster_node(cluster_name: text, node_pubkey: pubkey, replica_no
             pubkey = node_pubkey,
             replica_node = replica_node,
             deleted = true).to_gtv()
-        )
-    ).run();
-}
-
-function add_node_capability(pubkey, node_capability_type) {
-    rell.test.tx().op(
-        icmf_message_op(x"", node_capability_update_topic, body = node_capability_update_message(
-            pubkey = pubkey,
-            type = node_capability_type.name,
-            deleted = false).to_gtv()
         )
     ).run();
 }

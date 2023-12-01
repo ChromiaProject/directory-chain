@@ -19,25 +19,29 @@ function test_cluster() {
     rell.test.tx().op(init()).run();
 
     val cluster_name = "Bob's cluster";
+    val cluster_class = "Bob's class";
+    val cluster_class_2 = "Bob's class 2";
 
     // Add cluster
-    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
+    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024, cluster_class);
     assert_false(cluster.operational);
     assert_equals(cluster.cluster_units, 1);
     assert_equals(cluster.extra_storage, 1024);
+    assert_equals(cluster.cluster_class, cluster_class);
 
     // Update cluster
-    val updated_cluster = ensure_cluster(cluster_name, false, true, 2, 42);
+    val updated_cluster = ensure_cluster(cluster_name, false, true, 2, 42, cluster_class_2);
     assert_true(updated_cluster.operational);
     assert_equals(updated_cluster.cluster_units, 2);
     assert_equals(updated_cluster.extra_storage, 42);
+    assert_equals(cluster.cluster_class, cluster_class_2);
 
     // Remove cluster
     rell.test.tx().op(
         icmf_message_op(x"", cluster_update_topic, body = cluster_update_message(
-            cluster_name, deleted = true, operational = false, cluster_units = 1, extra_storage = 1024).to_gtv())
+            name = cluster_name, deleted = true, operational = false, cluster_units = 1, extra_storage = 1024, cluster_class = cluster_class).to_gtv())
     ).run();
-    assert_null(cluster @? { cluster_name });
+    assert_null(cluster @? { .name == cluster_name });
 }
 
 function test_node() {
@@ -91,31 +95,6 @@ function test_node() {
     assert_null(node @? { node_pubkey });
 }
 
-function test_node_capabilities() {
-    rell.test.tx().op(init()).run();
-
-    val provider_pubkey = rell.test.keypairs.bob.pub;
-    val node_pubkey = rell.test.pubkeys.charlie;
-
-    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER, null);
-    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
-
-    // Add capability
-    assert_null(node_capabilities @? { node, node_capability_type.ETHEREUM_TESTNET_BRIDGE });
-    add_node_capability(node_pubkey, node_capability_type.ETHEREUM_TESTNET_BRIDGE);
-    assert_not_null(node_capabilities @? { node, node_capability_type.ETHEREUM_TESTNET_BRIDGE });
-
-    // Remove capability
-    rell.test.tx().op(
-        icmf_message_op(x"", node_capability_update_topic, body = node_capability_update_message(
-            pubkey = node_pubkey,
-            type = node_capability_type.ETHEREUM_TESTNET_BRIDGE.name,
-            deleted = true).to_gtv()
-        )
-    ).run();
-    assert_null(node_capabilities @? { node, node_capability_type.ETHEREUM_TESTNET_BRIDGE });
-}
-
 function test_cluster_node() {
     rell.test.tx().op(init()).run();
 
@@ -123,11 +102,12 @@ function test_cluster_node() {
     val node_pubkey = rell.test.pubkeys.charlie;
     val cluster_name = "Bob's cluster";
     val cluster_name_replica = "Alice's cluster";
+    val cluster_class = "";
 
     val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER, null);
     val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
-    val cluster = ensure_cluster(cluster_name, false, true, 1, 1024);
-    val cluster_replica = ensure_cluster(cluster_name_replica, false, true, 1, 1024);
+    val cluster = ensure_cluster(cluster_name, false, true, 1, 1024, cluster_class);
+    val cluster_replica = ensure_cluster(cluster_name_replica, false, true, 1, 1024, cluster_class);
 
     // Add cluster_node
     assert_null(cluster_node @? { cluster, node });
@@ -153,8 +133,9 @@ function test_full_cluster_remove() {
     val node_pubkey = rell.test.pubkeys.charlie;
     val node_pubkey_2 = rell.test.pubkeys.alice;
     val cluster_name = "Bob's cluster";
+    val cluster_class = "";
 
-    val cluster = ensure_cluster(cluster_name, false, true, 1, 1024);
+    val cluster = ensure_cluster(cluster_name, false, true, 1, 1024, cluster_class);
     val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER, cluster_name);
     val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
     val node_2 = ensure_node(provider_pubkey, node_pubkey_2, true, "SE", 1, 1024, false);
@@ -168,13 +149,13 @@ function test_full_cluster_remove() {
     // Remove cluster
     rell.test.tx().op(
         icmf_message_op(x"", cluster_update_topic, body = cluster_update_message(
-            cluster_name, deleted = true, operational = false, cluster_units = 1, extra_storage = 1024).to_gtv())
+            name = cluster_name, deleted = true, operational = false, cluster_units = 1, extra_storage = 1024, cluster_class).to_gtv())
     ).run();
 
     // Verify
     assert_null(cluster_node @? { cluster, node });
     assert_null(cluster_replica_node @? { cluster, node_2 });
-    assert_null(cluster @? { cluster_name });
+    assert_null(cluster @? { .name == cluster_name });
 }
 
 function test_full_node_remove() {
@@ -184,19 +165,18 @@ function test_full_node_remove() {
     val node_pubkey = rell.test.pubkeys.charlie;
     val cluster_name = "Bob's cluster";
     val cluster_name_replica = "Alice's cluster";
+    val cluster_class = "";
 
     val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER, null);
     val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
-    val cluster = ensure_cluster(cluster_name, false, true, 1, 1024);
-    val cluster_replica = ensure_cluster(cluster_name_replica, false, true, 1, 1024);
+    val cluster = ensure_cluster(cluster_name, false, true, 1, 1024, cluster_name);
+    val cluster_replica = ensure_cluster(cluster_name_replica, false, true, 1, 1024, cluster_name);
 
     add_cluster_node(cluster_name, node_pubkey, false);
     add_cluster_node(cluster_name_replica, node_pubkey, true);
-    add_node_capability(node_pubkey, node_capability_type.ETHEREUM_TESTNET_BRIDGE);
 
     assert_not_null(cluster_replica_node @? { cluster_replica, node });
     assert_not_null(cluster_replica_node @? { cluster_replica, node });
-    assert_not_null(node_capabilities @? { node, node_capability_type.ETHEREUM_TESTNET_BRIDGE });
 
     // Remove node
     rell.test.tx().op(
@@ -214,6 +194,5 @@ function test_full_node_remove() {
     // Verify
     assert_null(cluster_replica_node @? { cluster_replica, node });
     assert_null(cluster_replica_node @? { cluster_replica, node });
-    assert_null(node_capabilities @? { node, node_capability_type.ETHEREUM_TESTNET_BRIDGE });
     assert_null(node @? { node_pubkey });
 }

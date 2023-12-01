@@ -1,8 +1,15 @@
-function create_cluster_impl(me: provider, name, governor: voter_set, providers: list<pubkey>, cluster_quota_data) {
+function create_cluster_impl(me: provider, name, governor: voter_set, providers: list<pubkey>, cluster_creation_data) {
     require(empty(cluster @* { name }), "Cluster with name %s already exists".format(name));
-    require(cluster_quota_data.cluster_units > 0, "Cluster must have at least 1 cluster unit");
-    require(cluster_quota_data.extra_storage >= 0, "Extra storage must not be negative");
-    val c = create cluster(name, governor, false, cluster_units = cluster_quota_data.cluster_units, extra_storage = cluster_quota_data.extra_storage);
+    require(cluster_creation_data.cluster_units > 0, "Cluster must have at least 1 cluster unit");
+    require(cluster_creation_data.extra_storage >= 0, "Extra storage must not be negative");
+    val c = create cluster(
+        name,
+        governor,
+        false,
+        cluster_units = cluster_creation_data.cluster_units,
+        extra_storage = cluster_creation_data.extra_storage,
+        cluster_class = cluster_creation_data.cluster_class
+    );
 
     for (p_key in providers) {
         val provider = require_provider(p_key);
@@ -100,7 +107,7 @@ function check_operational(cl: cluster) {
     val providers = cluster_provider @* { cl }.provider;
     val nodes = cluster_node @* { cl }.node;
     if (nodes.size() == providers.size()) {
-        update cluster @ { cl.name } (.operational = true);
+        update cluster @ { .name == cl.name } (.operational = true);
         after_cluster_operational(cl);
     }
 }
@@ -237,15 +244,6 @@ function remove_cluster_impl(cluster) {
 }
 
 function number_of_nodes_in_cluster(cluster): integer = cluster_node @ { cluster } ( @sum 1 );
-
-function cluster_has_capability(cluster, node_capability_type): boolean {
-    val nodes = cluster_node @* { cluster } ( .node );
-    for (node in nodes) {
-        val node_capabilities = node_capabilities @* { node } ( .type );
-        if (not node_capabilities.contains(node_capability_type)) return false;
-    }
-    return true;
-}
 
 @extendable function before_cluster_removal(cluster) {}
 

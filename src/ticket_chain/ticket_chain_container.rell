@@ -62,6 +62,7 @@ function create_container_impl(
     require(container_units > 0, "container_units must be positive");
     require_lease_duration(duration_weeks);
     require(extra_storage_gib > -1, "extra_storage_gib must not be negative");
+    require(not cluster_class.empty() or not cluster_name.empty(), "Either cluster class and/or cluster name must be specified");
 
     val account = ft4.auth.authenticate();
     require(user @? { account }, "No user for account %s".format(account.id));
@@ -74,7 +75,6 @@ function create_container_impl(
         container_units = container_units,
         extra_storage_gib = extra_storage_gib,
         duration_millis = duration_weeks * millis_per_week,
-        cluster_class = cluster_class,
         cost = cost,
         auto_renew = auto_renew
     );
@@ -144,7 +144,6 @@ function upgrade_container_impl(
         container_name = container_name,
         container_units = upgraded_container_units,
         extra_storage_gib = upgraded_extra_storage_gib,
-        cluster_class = upgraded_cluster_class,
         cost = cost
     );
     send_message(upgrade_container_topic, upgrade_container_message(
