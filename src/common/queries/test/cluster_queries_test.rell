@@ -17,13 +17,23 @@ function test_get_operational_dapp_clusters() {
 
     // Create a new node
     rell.test.tx().op(
-        register_node_with_node_data(rell.test.pubkeys.alice, register_node_data(rell.test.pubkeys.bob, host = "host", port = 7777, api_url = "http://host/api_url"))
+        register_node_with_node_data(rell.test.pubkeys.alice,
+            register_node_data(
+                rell.test.pubkeys.bob,
+                host = "host",
+                port = 7777,
+                api_url = "http://host/api_url",
+                cluster_units = 2,
+                extra_storage = 2048))
     ).sign(rell.test.keypairs.alice).run();
     val node = node @ { .pubkey == rell.test.pubkeys.bob };
 
+    val cluster_class = "a very special cluster";
+    val cluster_creation_data = cluster_creation_data(cluster_units = 2, extra_storage = 1024, cluster_class);
+
     // Adding a new cluster
     rell.test.tx().op(
-        create_cluster(rell.test.pubkeys.alice, "cluster1", voter_sets.system_p, [rell.test.pubkeys.alice])
+        create_cluster_with_cluster_data(rell.test.pubkeys.alice, "cluster1", voter_sets.system_p, [rell.test.pubkeys.alice], cluster_creation_data)
     ).sign(rell.test.keypairs.alice).run();
 
     rell.test.tx().op(
@@ -36,11 +46,12 @@ function test_get_operational_dapp_clusters() {
             name = "cluster1",
             governor = voter_sets.system_p,
             is_operational = true,
-            cluster_units = 1,
-            extra_storage = 0,
+            cluster_units = 2,
+            extra_storage = 1024,
             number_of_nodes = 1,
-            container_units_available = 12,
-            extra_storage_available = 0
+            container_units_available = 28,
+            extra_storage_available = 1024,
+            cluster_class = cluster_class
         )
     ];
     assert_equals(clusters, expected_clusters);
