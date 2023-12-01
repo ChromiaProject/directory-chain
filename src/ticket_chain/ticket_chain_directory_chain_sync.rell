@@ -1,6 +1,6 @@
 function receive_cluster_update_message(body: gtv) {
     val message = cluster_update_message.from_gtv(body);
-    val cluster = cluster @? { message.name };
+    val cluster = cluster @? { .name == message.name };
     if (message.deleted) {
         if (exists(cluster)) {
             log("Deleting cluster %s".format(message.name));
@@ -13,17 +13,19 @@ function receive_cluster_update_message(body: gtv) {
     } else {
         if (exists(cluster)) {
             log("Updating cluster %s".format(message.name));
-            update cluster @ { message.name } (
+            update cluster @ { .name == message.name } (
                 operational = message.operational,
                 cluster_units = message.cluster_units,
-                extra_storage = message.extra_storage
+                extra_storage = message.extra_storage,
+                cluster_class = message.cluster_class
             );
         } else {
             log("Creating cluster %s".format(message.name));
             create cluster(name = message.name,
                 operational = message.operational,
                 cluster_units = message.cluster_units,
-                extra_storage = message.extra_storage
+                extra_storage = message.extra_storage,
+                cluster_class = message.cluster_class
             );
         }
     }
@@ -48,7 +50,6 @@ function receive_node_update_message(body: gtv) {
             log("Deleting node %s".format(message.pubkey));
             delete cluster_node @* { node };
             delete cluster_replica_node @* { node };
-            delete node_capabilities @* { node };
             delete node;
         } else {
             log("Did not have to delete node %s".format(message.pubkey));
@@ -72,28 +73,6 @@ function receive_node_update_message(body: gtv) {
                 cluster_units = message.cluster_units,
                 extra_storage = message.extra_storage
             );
-        }
-    }
-}
-
-function receive_node_capability_update_message(body: gtv) {
-    val message = node_capability_update_message.from_gtv(body);
-    val node = require(node @? { message.pubkey }, "Cannot update node_capability %s on node %s due to missing node".format(message.type, message.pubkey));
-    val type = node_capability_type.value(message.type);
-    val nc = node_capabilities @? { node, type };
-    if (message.deleted) {
-        if (exists(nc)) {
-            log("Deleting node_capabilities for node %s type %s".format(message.pubkey, message.type));
-            delete nc;
-        } else {
-            log("Did not find node_capabilities to delete for node %s type %s".format(message.pubkey, message.type));
-        }
-    } else {
-        if (exists(nc)) {
-            log("Did not create node_capabilities since it already exists for node %s type %s".format(message.pubkey, message.type));
-        } else {
-            log("Creating node_capabilities for node %s type %s".format(message.pubkey, message.type));
-            create node_capabilities(node, type);
         }
     }
 }

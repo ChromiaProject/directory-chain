@@ -256,16 +256,3 @@ function update_node_with_node_data_impl(my_pubkey: pubkey, node_data: update_no
     }
     after_node_updated(node);
 }
-
-operation update_node_capability(my_pubkey: pubkey, node_pubkey: pubkey, type: node_capability_type, add: boolean) {
-    val node = require_node_provider(node_pubkey, my_pubkey);
-    if (add) {
-        require(node_capabilities @? { node, type } == null, "Node already has this capability");
-        create node_capabilities(node, type);
-        after_node_capability_added(node, type);
-    } else {
-        require(node_capabilities @? { node, type } != null, "Node does not have this capability");
-        before_node_capability_removal(node, type);
-        delete node_capabilities @ { node, type };
-    }
-}

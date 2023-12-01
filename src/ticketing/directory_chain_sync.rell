@@ -25,7 +25,8 @@ function update_cluster(cluster) {
         deleted = false,
         operational = cluster.operational,
         cluster_units = cluster.cluster_units,
-        extra_storage = cluster.extra_storage
+        extra_storage = cluster.extra_storage,
+        cluster_class = cluster.cluster_class
     ).to_gtv());
 }
 
@@ -35,7 +36,8 @@ function update_cluster(cluster) {
         deleted = true,
         operational = cluster.operational,
         cluster_units = cluster.cluster_units,
-        extra_storage = cluster.extra_storage
+        extra_storage = cluster.extra_storage,
+        cluster_class = cluster.cluster_class
     ).to_gtv());
 }
 
@@ -71,22 +73,6 @@ function update_cluster(cluster) {
         territory = node.territory,
         cluster_units = node.cluster_units,
         extra_storage = node.extra_storage,
-        deleted = true
-    ).to_gtv());
-}
-
-@extend(after_node_capability_added) function(node, type: node_capability_type) {
-    send_message(node_capability_update_topic, node_capability_update_message(
-        pubkey = node.pubkey,
-        type = type.name,
-        deleted = false
-    ).to_gtv());
-}
-
-@extend(before_node_capability_removal) function(node, type: node_capability_type) {
-    send_message(node_capability_update_topic, node_capability_update_message(
-        pubkey = node.pubkey,
-        type = type.name,
         deleted = true
     ).to_gtv());
 }

@@ -23,11 +23,12 @@ function test_init_events() {
         ("icmf_message", (
             topic = cluster_update_topic,
             body = cluster_update_message(
-                clusters.system,
+                name = clusters.system,
                 deleted = false,
                 operational = false,
                 cluster_units = 1,
-                extra_storage = 0).to_gtv()).to_gtv_pretty()
+                extra_storage = 0,
+                cluster_class = "").to_gtv()).to_gtv_pretty()
         ),
         ("icmf_message", (
             topic = node_update_topic,
@@ -51,11 +52,12 @@ function test_init_events() {
         ("icmf_message", (
             topic = cluster_update_topic,
             body = cluster_update_message(
-                clusters.system,
+                name = clusters.system,
                 deleted = false,
                 operational = true,
                 cluster_units = 1,
-                extra_storage = 0).to_gtv()).to_gtv_pretty()
+                extra_storage = 0,
+                cluster_class = "").to_gtv()).to_gtv_pretty()
         )
     );
 }
@@ -87,18 +89,19 @@ function test_cluster() {
 
     val test_provider = rell.test.keypairs.bob;
     val cluster_name = "Bob's cluster";
-    val cluster_quota = cluster_quota_data(cluster_units = 1, extra_storage = 1024);
+    val cluster_class = "foo";
+    val cluster_creation_data = cluster_creation_data(cluster_units = 1, extra_storage = 1024, cluster_class = cluster_class);
 
     // Add cluster (after_cluster_creation)
     rell.test.tx().op(
-        create_cluster_with_cluster_quota_data(initial_provider.pub, cluster_name, system_voter_set().name, [initial_provider.pub], cluster_quota)
+        create_cluster_with_cluster_data(initial_provider.pub, cluster_name, system_voter_set().name, [initial_provider.pub], cluster_creation_data)
     ).sign(initial_provider).run();
-    val bob_cluster = cluster @ { cluster_name };
+    val bob_cluster = cluster @ { .name == cluster_name };
 
     assert_events(
         ("icmf_message", (
             topic = cluster_update_topic,
-            body = cluster_update_message(cluster_name, deleted = false, operational = false, cluster_units = 1, extra_storage = 1024).to_gtv()
+            body = cluster_update_message(name = cluster_name, deleted = false, operational = false, cluster_units = 1, extra_storage = 1024, cluster_class = cluster_class).to_gtv()
         ).to_gtv_pretty())
     );
 
@@ -110,7 +113,7 @@ function test_cluster() {
     assert_events(
         ("icmf_message", (
             topic = cluster_update_topic,
-            body = cluster_update_message(cluster_name, deleted = true, operational = false, cluster_units = 1, extra_storage = 1024).to_gtv()
+            body = cluster_update_message(name = cluster_name, deleted = true, operational = false, cluster_units = 1, extra_storage = 1024, cluster_class = cluster_class).to_gtv()
         ).to_gtv_pretty())
     );
 }
@@ -204,53 +207,5 @@ function test_node() {
                 extra_storage = 42,
                 deleted = true).to_gtv()).to_gtv_pretty()
         )
-    );
-}
-
-function test_node_capability() {
-    setup_module();
-
-    val test_provider = rell.test.keypairs.bob;
-    val provider = initial_provider;
-    val provider_pubkey = initial_provider.pub;
-    val node_pubkey = rell.test.pubkeys.charlie;
-
-    // Add node
-    val register_node_data = register_node_data(
-        node_pubkey, host = "host", port = 7777, api_url = "http://host/api_url", list<text>(),
-        cluster_units = 1, extra_storage = 1024
-    );
-    rell.test.tx().op(
-        register_node_with_node_data(provider_pubkey, register_node_data)
-    ).sign(provider).run();
-
-    // Add node capability (after_node_capability_added)
-    rell.test.tx().op(
-        update_node_capability(provider_pubkey, node_pubkey, node_capability_type.ETHEREUM_TESTNET_BRIDGE, true)
-    ).sign(provider).run();
-
-    assert_events(
-        ("icmf_message", (
-            topic = node_capability_update_topic,
-            body = node_capability_update_message(
-                pubkey = node_pubkey,
-                type = node_capability_type.ETHEREUM_TESTNET_BRIDGE.name,
-                deleted = false).to_gtv()
-        ).to_gtv_pretty())
-    );
-
-    // Remove node capability (before_node_capability_removal)
-    rell.test.tx().op(
-        update_node_capability(provider_pubkey, node_pubkey, node_capability_type.ETHEREUM_TESTNET_BRIDGE, false)
-    ).sign(provider).run();
-
-    assert_events(
-        ("icmf_message", (
-            topic = node_capability_update_topic,
-            body = node_capability_update_message(
-                pubkey = node_pubkey,
-                type = node_capability_type.ETHEREUM_TESTNET_BRIDGE.name,
-                deleted = true).to_gtv()
-        ).to_gtv_pretty())
     );
 }
