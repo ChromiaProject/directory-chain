@@ -1,16 +1,15 @@
-
 @extend(receive_icmf_message) function receive_upgrade_container(sender: byte_array, topic: text, body: gtv) {
     if (topic != upgrade_container_topic) return;
 
-    if (sender != ticket_chain.rid) {
-        log("Sender %s is not the ticket chain, ignoring".format(sender));
+    if (sender != economy_chain.rid) {
+        log("Sender %s is not the economy chain, ignoring".format(sender));
         return;
     }
 
     receive_upgrade_container_impl(body);
 }
 
-entity ticket_chain_pending_last_anchored_heights_request {
+entity economy_chain_pending_last_anchored_heights_request {
     request_id: integer;
     upgrade_container_message: byte_array;
 }
@@ -74,7 +73,7 @@ function start_creating_container_and_moving_blockchains_async(message: upgrade_
     val cac = cluster_anchoring_chain @ { src_container.cluster } ( .blockchain.rid );
     val brids = container_blockchain @* { src_container, not .blockchain.system } ( .blockchain.rid );
     val request_id = request_last_anchored_heights(cac, brids);
-    create ticket_chain_pending_last_anchored_heights_request(
+    create economy_chain_pending_last_anchored_heights_request(
         request_id, message.to_bytes()
     );
 
@@ -82,7 +81,7 @@ function start_creating_container_and_moving_blockchains_async(message: upgrade_
 }
 
 @extend(on_last_anchored_heights_received) function last_anchored_heights_received(request_id: integer, anchored_blockchains: map<byte_array, integer>) {
-    val pending_request = ticket_chain_pending_last_anchored_heights_request @? { request_id };
+    val pending_request = economy_chain_pending_last_anchored_heights_request @? { request_id };
     if (empty(pending_request)) {
         log("Pending get_last_anchored_heights request not found: " + request_id);
         return;
