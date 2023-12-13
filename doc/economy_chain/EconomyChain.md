@@ -1,4 +1,4 @@
-# Ticket Chain
+# Economy Chain
 
 ## Purpose
 
@@ -7,17 +7,19 @@
 - Handle payment from dApps, through leases
 - Request resources from Directory Chain
 
-## Ticket Chain API
+## Economy Chain API
 
-- [Operations](./TC_Operations.md)
-- [Queries](./TC_Queries.md)
+- [Operations](./EC_Operations)
+- [Queries](./EC_Queries)
 
 ## Ticket
 
-Tickets are internally used between Ticket Chain (TC) and Directory Chain (DC). When a user, for example, requests a
-new container, it will go via TC that handles the payment of the container through a lease. A container is requested
-from DC via a `Ticket`. When the container is set up in DC, the result is sent back as a `Ticket Result` and on
-success a `Lease` is set up for the container in TC. If DC fails to create a container, the payment is refunded.
+Tickets are internally used between Economy Chain (EC) and Directory Chain (DC).
+
+When a user, for example, requests a new container, it will go via EC that handles the payment of the container through
+a lease. A container is requested from DC via a `Ticket`. When the container is set up in DC, the result is sent back
+as a `Ticket Result` and on success a `Lease` is set up for the container in EC. If DC fails to create a container,
+the payment is refunded.
 
 From a DC perspective, a ticket is a command to allocate or reserve resources. It should be specific enough to
 specify how much and what resources to allocate/reserve. DC receives tickets and sends results over ICMF.
@@ -25,21 +27,21 @@ specify how much and what resources to allocate/reserve. DC receives tickets and
 ```mermaid
 sequenceDiagram
     actor U as User
-    participant TC as Ticket Chain
+    participant EC as Economy Chain
     participant DC as Directory Chain
-    U->>+TC: Create container (operation)
-    TC->>+TC: Create container ticket
-    TC->>+DC: Send `Create container ticket`
+    U->>+EC: Create container (operation)
+    EC->>+EC: Create container ticket
+    EC->>+DC: Send `Create container ticket`
     DC->>+DC: Create container if possible
-    DC->>+TC: Send `Ticket Result` with success or failure
+    DC->>+EC: Send `Ticket Result` with success or failure
     opt Success
-    TC->>+TC: Create Lease
+        EC->>+EC: Create Lease
     end
 ```
 
 ## Container Lease
 
-We call an association between a container and its owner a `Lease`. TC will handle all leases. A lease is done
+We call an association between a container and its owner a `Lease`. EC will handle all leases. A lease is done
 on a weekly basis with a minimum of 1 week and a maximum of 12 weeks. A lease can be either prolonged manually or be
 set up for auto-renewal. 
 

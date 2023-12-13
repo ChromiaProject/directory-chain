@@ -6,30 +6,30 @@ import ^.messaging.anchoring_api.*;
 import ^.proposal_blockchain_move.*;
 import ^.messaging.icmf.*;
 import ^.messaging.icmf.receiver.*;
-import ^.messaging.ticketing.*;
+import ^.messaging.economy_chain.*;
 
-val ticket_chain_name = "ticket_chain";
+val economy_chain_name = "economy_chain";
 
-object ticket_chain {
+object economy_chain {
     mutable rid: byte_array = x"";
 }
 
-operation init_ticketing(my_pubkey: pubkey, ticket_chain_config: byte_array) {
+operation init_economy_chain(my_pubkey: pubkey, economy_chain_config: byte_array) {
     require_is_provider_with_rate_limit(my_pubkey);
     require_is_system_provider(my_pubkey);
 
-    require(ticket_chain.rid == x"", "Ticket chain is already started");
+    require(economy_chain.rid == x"", "Economy chain is already started");
 
     val nodes = cluster_node @* { system_cluster() } (@sort .node.pubkey);
     // do not write new configuration when size is 0 since it's impossible to recover from that
     require(nodes.size() > 0, "System cluster must have at least one node");
 
-    log("Adding ticket chain to system container");
-    val ticket_blockchain = add_blockchain(ticket_chain_config, nodes, ticket_chain_name, system_container(), true);
-    update ticket_chain(rid = ticket_blockchain.rid);
+    log("Adding economy chain to system container");
+    val economy_blockchain = add_blockchain(economy_chain_config, nodes, economy_chain_name, system_container(), true);
+    update economy_chain(rid = economy_blockchain.rid);
 }
 
-query get_ticket_chain_rid(): byte_array? = if (ticket_chain.rid == x"") null else ticket_chain.rid;
+query get_economy_chain_rid(): byte_array? = if (economy_chain.rid == x"") null else economy_chain.rid;
 
 function create_provider_if_not_exist(pubkey): provider {
     var provider = provider @? { pubkey };
