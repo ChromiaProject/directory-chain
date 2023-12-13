@@ -14,9 +14,9 @@ import direct_cluster.*;
 import ^.utils.*;
 import nm_api.*;
 
-function test_blockchain_unarchiving_to_container_on_the_same_node_is_not_allowed() {
+function test_blockchain_unarchiving_within_a_node() {
     // setup
-    setup_module(provider_quota_max_containers = 2);
+    setup_module(provider_quota_max_containers = 2, cluster_anchoring_config = ["any": "value".to_gtv()]);
     val ip = provider @ { initial_provider.pub };
     var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
 
@@ -38,13 +38,51 @@ function test_blockchain_unarchiving_to_container_on_the_same_node_is_not_allowe
     ).sign(initial_provider).run();
     assert_equals(foo_chain.state, blockchain_state.ARCHIVED);
 
-    // 2. Asserting that bc unarchiving from c1a to c1b is not allowed
+    // 2. Unarchive blockchain from c1a to c1b
     rell.test.tx().op(
         propose_blockchain_unarchive_action(initial_provider.pub, foo_chain.rid, "c1b", 100)
-    ).sign(initial_provider).run_must_fail(
-        "Unarchiving blockchains from a container to another container running on the same node is not allowed. Nodes belongs to clusters s1 and s1 are: [%s]"
-        .format(test_node.pubkey)
-    );
+    ).sign(initial_provider).run();
+
+    // asserting unarchiving_blockchain_info though NM API
+    /// for node0
+    val ubni = nm_get_unarchiving_blockchain_node_info(test_node.pubkey, foo_chain.rid);
+    assert_true(exists(ubni));
+    assert_equals(ubni!!.source_container, "c1a");
+    assert_equals(ubni.destination_container, "c1b");
+    assert_equals(ubni.is_source_node, true);
+    assert_equals(ubni.is_destination_node, true);
+    assert_equals(ubni.up_to_height, 100);
+    // asserting foo_chain is not in inactive_blockchain table
+    assert_true(empty(inactive_blockchain @? { foo_chain }));
+    // new config
+    assert_not_null(blockchain_configuration @? { foo_chain, 100 + 1 });
+    // new signers config
+    val new_signers = blockchain_configuration_signers @? { foo_chain, 100 + 1 } .signers;
+    assert_true(exists(new_signers));
+    assert_equals(list<pubkey>.from_gtv(gtv.from_bytes(new_signers!!)), [test_node.pubkey]);
+    // old signers are not replicas
+    assert_true(empty(blockchain_replica_node @* { foo_chain }));
+
+    // imitation of ICMF message receiving
+    rell.test.tx().op(
+        receive_configuration_updated_op(
+            cluster_anchoring_chain @ { .cluster.name == "s1" } ( .blockchain.rid ),
+            configuration_updated_topic,
+            configuration_updated(
+                blockchain_rid = foo_chain.rid,
+                height = 101,
+                config_hash = x"" // x"" is enough for this test
+            ).to_gtv()
+        )
+    ).run();
+    // no replicas for foo_chain
+    assert_true(empty(blockchain_replica_node @* { foo_chain }));
+    // no unarchiving state for foo_chain
+    assert_true(empty(unarchiving_blockchain @? { foo_chain }));
+    // asserting unarchiving_blockchain_info though NM API
+    assert_null(nm_get_unarchiving_blockchain_node_info(test_node.pubkey, foo_chain.rid));
+    // bs state changed from UNARCHIVING to RUNNING
+    assert_equals(foo_chain.state, blockchain_state.RUNNING);
 }
 
 function test_blockchain_archiving_and_unarchiving_to_container_running_on_another_node() {
@@ -132,17 +170,21 @@ function test_blockchain_archiving_and_unarchiving_to_container_running_on_anoth
     assert_true(exists(ubni0));
     assert_equals(ubni0!!.source_container, "c1");
     assert_equals(ubni0.destination_container, "c2");
-    assert_equals(ubni0.up_to_height, 100);
     assert_equals(ubni0.is_source_node, true);
+    assert_equals(ubni0.is_destination_node, false);
+    assert_equals(ubni0.up_to_height, 100);
     /// for node1
     val ubni1 = nm_get_unarchiving_blockchain_node_info(node1.pubkey, foo_chain.rid);
     assert_true(exists(ubni1));
     assert_equals(ubni1!!.source_container, "c1");
     assert_equals(ubni1.destination_container, "c2");
-    assert_equals(ubni1.up_to_height, 100);
     assert_equals(ubni1.is_source_node, false);
+    assert_equals(ubni1.is_destination_node, true);
+    assert_equals(ubni1.up_to_height, 100);
     // asserting foo_chain is not in inactive_blockchain table
     assert_true(empty(inactive_blockchain @? { foo_chain }));
+    // new config
+    assert_not_null(blockchain_configuration @? { foo_chain, 100 + 1 });
     // new signers config
     val new_signers = blockchain_configuration_signers @? { foo_chain, 100 + 1 } .signers;
     assert_true(exists(new_signers));
