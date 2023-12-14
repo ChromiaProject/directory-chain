@@ -33,15 +33,21 @@ query get_blockchain_move_finish_proposal(rowid?):
 
 function apply_blockchain_move_finish(proposal) {
     val pbmf = pending_blockchain_move_finish @ { proposal } ( $.to_struct() );
-    val bc_move_state = require(moving_blockchain @? { pbmf.blockchain }, "Blockchain %s is not being moved".format(pbmf.blockchain.rid));
+    val mv_bc = require(moving_blockchain @? { pbmf.blockchain }, "Blockchain %s is not being moved".format(pbmf.blockchain.rid));
 
-    // create a final signer config
+    // create a base_config and signers config at up_to_height (base_config needed if signers don't change)
     // FYI: PCU-based update (i.e. update_configuration_signers_regular()) can't be used here.
+    // base config
+    val base_config = require(get_blockchain_configuration(pbmf.blockchain.rid, pbmf.finish_at_height - 1)?.base_config,
+        "Can't find config for %s for block %s".format(pbmf.blockchain.rid, pbmf.finish_at_height - 1));
+    compress_and_store_configuration(pbmf.blockchain, pbmf.finish_at_height, make_config_unique(base_config));
+    // signers config
     val encoded_dst_nodes = (cluster_node @* { pbmf.destination.cluster } (@sort .node.pubkey)).to_gtv().to_bytes();
     create blockchain_configuration_signers(pbmf.blockchain, pbmf.finish_at_height, encoded_dst_nodes);
 
-    bc_move_state.finish_at_height = pbmf.finish_at_height;
-    bc_move_state.remove_on_nodes = (cluster_node @* { bc_move_state.source.cluster } (@sort .node.pubkey )).to_gtv().to_bytes();
+    // update moving_blockchain state
+    mv_bc.finish_at_height = pbmf.finish_at_height;
+    mv_bc.remove_on_nodes = (cluster_node @* { mv_bc.source.cluster } (@sort .node.pubkey )).to_gtv().to_bytes();
 }
 
 function delete_pending_blockchain_move_finish(proposal) {

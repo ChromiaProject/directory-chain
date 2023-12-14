@@ -43,9 +43,9 @@ function test_blockchain_unarchiving_within_a_node() {
         propose_blockchain_unarchive_action(initial_provider.pub, foo_chain.rid, "c1b", 100)
     ).sign(initial_provider).run();
 
-    // asserting unarchiving_blockchain_info though NM API
+    // asserting migrating_blockchain_info though NM API
     /// for node0
-    val ubni = nm_get_unarchiving_blockchain_node_info(test_node.pubkey, foo_chain.rid);
+    val ubni = nm_get_migrating_blockchain_node_info(test_node.pubkey, foo_chain.rid);
     assert_true(exists(ubni));
     assert_equals(ubni!!.source_container, "c1a");
     assert_equals(ubni.destination_container, "c1b");
@@ -80,7 +80,7 @@ function test_blockchain_unarchiving_within_a_node() {
     // no unarchiving state for foo_chain
     assert_true(empty(unarchiving_blockchain @? { foo_chain }));
     // asserting unarchiving_blockchain_info though NM API
-    assert_null(nm_get_unarchiving_blockchain_node_info(test_node.pubkey, foo_chain.rid));
+    assert_null(nm_get_migrating_blockchain_node_info(test_node.pubkey, foo_chain.rid));
     // bs state changed from UNARCHIVING to RUNNING
     assert_equals(foo_chain.state, blockchain_state.RUNNING);
 }
@@ -164,23 +164,23 @@ function test_blockchain_archiving_and_unarchiving_to_container_running_on_anoth
     assert_equals(ub!!.source.name, "c1");
     assert_equals(ub.destination.name, "c2");
     assert_equals(ub.up_to_height, 100);
-    // asserting unarchiving_blockchain_info though NM API
+    // asserting migrating_blockchain_info though NM API
     /// for node0
-    val ubni0 = nm_get_unarchiving_blockchain_node_info(node0.pubkey, foo_chain.rid);
-    assert_true(exists(ubni0));
-    assert_equals(ubni0!!.source_container, "c1");
-    assert_equals(ubni0.destination_container, "c2");
-    assert_equals(ubni0.is_source_node, true);
-    assert_equals(ubni0.is_destination_node, false);
-    assert_equals(ubni0.up_to_height, 100);
+    val info0 = nm_get_migrating_blockchain_node_info(node0.pubkey, foo_chain.rid);
+    assert_true(exists(info0));
+    assert_equals(info0!!.source_container, "c1");
+    assert_equals(info0.destination_container, "c2");
+    assert_equals(info0.is_source_node, true);
+    assert_equals(info0.is_destination_node, false);
+    assert_equals(info0.up_to_height, 100);
     /// for node1
-    val ubni1 = nm_get_unarchiving_blockchain_node_info(node1.pubkey, foo_chain.rid);
-    assert_true(exists(ubni1));
-    assert_equals(ubni1!!.source_container, "c1");
-    assert_equals(ubni1.destination_container, "c2");
-    assert_equals(ubni1.is_source_node, false);
-    assert_equals(ubni1.is_destination_node, true);
-    assert_equals(ubni1.up_to_height, 100);
+    val info1 = nm_get_migrating_blockchain_node_info(node1.pubkey, foo_chain.rid);
+    assert_true(exists(info1));
+    assert_equals(info1!!.source_container, "c1");
+    assert_equals(info1.destination_container, "c2");
+    assert_equals(info1.is_source_node, false);
+    assert_equals(info1.is_destination_node, true);
+    assert_equals(info1.up_to_height, 100);
     // asserting foo_chain is not in inactive_blockchain table
     assert_true(empty(inactive_blockchain @? { foo_chain }));
     // new config
@@ -209,8 +209,8 @@ function test_blockchain_archiving_and_unarchiving_to_container_running_on_anoth
     // no unarchiving state for foo_chain
     assert_true(empty(unarchiving_blockchain @? { foo_chain }));
     // asserting unarchiving_blockchain_info though NM API
-    assert_null(nm_get_unarchiving_blockchain_node_info(node0.pubkey, foo_chain.rid));
-    assert_null(nm_get_unarchiving_blockchain_node_info(node1.pubkey, foo_chain.rid));
+    assert_null(nm_get_migrating_blockchain_node_info(node0.pubkey, foo_chain.rid));
+    assert_null(nm_get_migrating_blockchain_node_info(node1.pubkey, foo_chain.rid));
     // bs state changed from UNARCHIVING to RUNNING
     assert_equals(foo_chain.state, blockchain_state.RUNNING);
 }
