@@ -20,7 +20,8 @@ val auth_privkey = chain_context.args.auth_privkey;
 val provider_key = rell.test.keypairs.bob;
 val provider_pubkey = provider_key.pub;
 val node_pubkey = rell.test.pubkeys.charlie;
-val base_reward: big_integer = 17000000; // cluster_units = 1, extra_storage = 1024
+val base_reward: big_integer = 1360015000; // SCU = 16, extra_storage = 1024, 5 CHR/USD
+val system_node_reward: big_integer = 170000000; // system node reward = 34, 5 CHR/USD
 val base_time = 10000000000000;
 
 function test_asset_units() {
@@ -58,6 +59,28 @@ function test_provider_is_rewarded() {
     assert_equals(get_account_balance(pa.account), base_reward);
     assert_equals(pa.reward_debt, 0);
     assert_equals(get_pool_balance(), base_reward);
+}
+
+function test_provider_is_rewarded_for_system_node() {
+    reward_setup(base_reward, false, true);
+
+    rell.test.block().run();
+
+    val pa = provider_account @ { provider @ { provider_pubkey } };
+    assert_equals(get_account_balance(pa.account), system_node_reward);
+    assert_equals(pa.reward_debt, 0);
+    assert_equals(get_pool_balance(), base_reward - system_node_reward);
+}
+
+function test_provider_is_rewarded_for_cluster_node_and_system_node() {
+    reward_setup(base_reward * 2, true, true);
+
+    rell.test.block().run();
+
+    val pa = provider_account @ { provider @ { provider_pubkey } };
+    assert_equals(get_account_balance(pa.account), base_reward + system_node_reward);
+    assert_equals(pa.reward_debt, 0);
+    assert_equals(get_pool_balance(), base_reward - system_node_reward);
 }
 
 function test_provider_is_rewarded_and_with_debt() {
@@ -121,7 +144,7 @@ function test_transfer_to_pool() {
 ///////////////////
 // Helper functions
 
-function reward_setup(pool_assets: big_integer = 0, add_cluster_node: boolean = true) {
+function reward_setup(pool_assets: big_integer = 0, add_cluster_node: boolean = true, add_to_system_cluster: boolean = false) {
     rell.test.tx().op(init()).run();
 
     val provider_key = rell.test.keypairs.bob;
@@ -133,6 +156,10 @@ function reward_setup(pool_assets: big_integer = 0, add_cluster_node: boolean = 
     val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
     val cluster = ensure_cluster(cluster_name, false, false, 1, 1024, "");
     if (add_cluster_node) add_cluster_node(cluster_name, node_pubkey, false);
+    if (add_to_system_cluster) {
+        ensure_cluster(system_cluster_name, false, true, 1, 0, "");
+        add_cluster_node(system_cluster_name, node_pubkey, false);
+    }
 
     assert_true(node.active);
     assert_equals(node.cluster_units, 1);

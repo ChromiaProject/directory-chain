@@ -36,21 +36,38 @@ function calculate_reward(pa: provider_account, current_time_millis: integer): b
     val debt = pa.reward_debt;
     if (debt > 0) pa.reward_debt = 0;
 
-    val nodes = list<node>();
+    val dapp_nodes = list<node>();
+    val system_nodes = list<node>();
     for (node in node @* { pa.provider }) {
-        if ((cluster_node @ { node } (@sum 1) + cluster_replica_node @ { node } (@sum 1)) > 0) {
-            nodes.add(node);
+        if ((cluster_node @ { node, .cluster.name != system_cluster_name } (@sum 1) + cluster_replica_node @ { node, .cluster.name != system_cluster_name } (@sum 1)) > 0) {
+            dapp_nodes.add(node);
+        }
+        if ((cluster_node @ { node, .cluster.name == system_cluster_name } (@sum 1) + cluster_replica_node @ { node, .cluster.name == system_cluster_name } (@sum 1)) > 0) {
+            system_nodes.add(node);
         }
     }
 
-    val container_units = nodes @ {} ( @sum .cluster_units ) * standard_cluster_unit.container_units;
-    val extra_storage_gib = nodes @ {} ( @sum .extra_storage ) / 1024;
+    val dapp_container_units = dapp_nodes @ {} ( @sum .cluster_units ) * standard_cluster_unit.container_units;
+    val dapp_extra_storage_gib = dapp_nodes @ {} ( @sum .extra_storage ) / 1024;
     val days = if (pa.last_reward_check > 0) (current_time_millis - pa.last_reward_check) / millis_per_day else 1;
 
-    // TODO: Update this with correct formula when decided
-    val reward = (container_units * SCU_REWARD + extra_storage_gib * EXTRA_STORAGE_REWARD) * units_per_asset * days;
+    val system_nodes_reward = system_nodes.size() * economy_constants.system_node_reward;
+    val dapp_reward = dapp_container_units * economy_constants.scu_dapp_reward;
+    val extra_storage_reward = dapp_extra_storage_gib * economy_constants.extra_storage_reward;
+    // TODO: When bridge chains are added
+    // var bridge_chain_reward = 0;
+    // for (cluster in clusters_with_bridge) {
+    //   bridge_chain_reward += #<pa.provider nodes in cluster> * bridge_chains * economy_constants.bridge_chain_reward;
+    // }
+    val bridge_chain_reward = 0;
 
-    return debt + reward;
+    // TODO: Fetch from statistics
+    val uptime_factor = 1;
+
+    val reward = (system_nodes_reward + dapp_reward + extra_storage_reward + bridge_chain_reward) * uptime_factor * days * economy_constants.chr_per_usd * units_per_asset;
+    log("Reward for provider %s is %s".format(pa.provider.pubkey, reward));
+
+    return debt + reward.to_big_integer();
 }
 
 function transfer_reward(pool: ft4.accounts.account, pa: provider_account, amount: big_integer): boolean {

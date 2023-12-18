@@ -270,9 +270,15 @@ function restart_container(lease) {
     lease.expired = false;
 }
 
-// TODO: Consider cluster class in pricing (when we actually know how it should be calculated)!
-function calculate_container_cost(duration_weeks: integer, container_units: integer, extra_storage_gib: integer): integer =
-        (container_units * SCU_COST + extra_storage_gib * EXTRA_STORAGE_COST) * duration_weeks * 4 * units_per_asset;
+function calculate_container_cost(duration_weeks: integer, container_units: integer, extra_storage_gib: integer): integer {
+    val scu_cost = container_units * economy_constants.dapp_scu_cost;
+    val extra_storage_cost = extra_storage_gib * economy_constants.dapp_extra_storage_cost;
+    // TODO: Add when bridge chains are added
+    // val bridge_chains_cost = bridge_chains * economy_constants.dapp_bridge_chain_cost;
+    val bridge_chains_cost = 0;
+
+    return ((scu_cost + extra_storage_cost + bridge_chains_cost) * duration_weeks * 4 * economy_constants.chr_per_usd * units_per_asset).to_integer();
+}
 
 function calculate_remaining_lease_value(lease, current_time: integer): integer {
     val lease_weekly_cost = calculate_container_cost(1, lease.container_units, lease.extra_storage_gib);
@@ -285,6 +291,6 @@ function calculate_remaining_lease_value(lease, current_time: integer): integer 
 function require_lease(container_name: text) = require(lease @? { container_name }, "No current lease for container %s".format(container_name));
 
 function require_lease_duration(duration_weeks: integer) {
-    require(duration_weeks >= MIN_LEASE_TIME_WEEKS, "duration_weeks must be at least %s weeks".format(MIN_LEASE_TIME_WEEKS));
-    require(duration_weeks <= MAX_LEASE_TIME_WEEKS, "duration_weeks can be max %s weeks".format(MAX_LEASE_TIME_WEEKS));
+    require(duration_weeks >= economy_constants.min_lease_time_weeks, "duration_weeks must be at least %s weeks".format(economy_constants.min_lease_time_weeks));
+    require(duration_weeks <= economy_constants.max_lease_time_weeks, "duration_weeks can be max %s weeks".format(economy_constants.max_lease_time_weeks));
 }
