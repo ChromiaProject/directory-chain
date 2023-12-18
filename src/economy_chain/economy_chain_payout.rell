@@ -1,0 +1,47 @@
+/*Parameters:
+
+Number of nodes/number of clusters: proportional to the total number of nodes, dominance in the network, diminishing returns for adding more nodes. If CW is running everything, running 5% of the things should give more than 5% reward - strong incentive to break in. 
+Type/quality of node/number of SCUs in cluster: misrepresentation (being caught) is a slashable offence!
+Provider deposit: amount staked by the provider on their own behalf, this is pay to play, per cluster, fixed amount. What should this amount be? Other blockchains do a fixed amount. Periodic opportunity for adjustment. Subject to slashing. Native.
+Delegated stake: amount delegated to a given provider. Delegated stake modulates the amount that a provider can deposit, and therefore the amount of nodes they can run. 
+Time: epoch based? How often do we want to monitor Ethereum state for delegation? Snapshots every epoch for reward calculation and distribution.
+Bridging: reward providers in native CHR, allow them to bridge out somehow.
+Block ratio: in a perfect world, all nodes in a cluster should propose and validate the same number of blocks. If one is falling behind or timing out, its ratio will fall below 1. This is bad and slashable after a while
+
+----
+
+Suggested forumula from meeting https://docs.google.com/document/d/17SVy3pwd75eCdjxqF5JHcpSKUXGe8msmSDP-66vTrXg/edit?usp=sharing
+
+Static pricing
+-
+dapp_extra_storage_price = $0.003
+dapp_scu_price = $17
+system_scu_multiplier = 2
+bridge_chain_price = $5
+uptime_lookback_padding_size = 2
+uptime_penalty_allowance_fraction = 0.05
+
+Observations of the provider's nodes
+Average of the preceding day
+-
+dapp_extra_storage_used = Total GBs of additional storage
+dapp_scu_used = Count of SCUs used for DApps
+bridge_node_count = Nodes which observe an EVM chain
+bridge_chain_count = Count of observed EVM chains (usually 2)
+system_scu_count = SCUs consumed by system chain (usually equal to number of system grade nodes)
+
+uptime_lookback = number of nodes + uptime_lookback_padding_size
+uptime_ratio = uptime_signed_attestations / uptime_lookback
+uptime_factor = max(0, uptime_ratio - (1 - uptime_penalty_allowance_fraction))
+
+system_scu_price = dapp_scu_price * system_scu_multiplier
+dapp_store = dapp_extra_storage_used * dapp_extra_storage_price
+dapp_compute = dapp_scu_price * dapp_scu_used
+dapp_reward = dapp_compute + dapp_store
+bridge_reward = bridge_node_count * bridge_chain_count * bridge_chain_price
+system_reward = system_scu_price * system_scu_count
+raw_reward = dapp_reward + bridge_reward + system_reward
+
+final_reward = raw_reward * uptime_factor
+
+*/
