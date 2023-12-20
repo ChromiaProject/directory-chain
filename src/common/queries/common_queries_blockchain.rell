@@ -3,12 +3,12 @@ query get_blockchain(rid: byte_array) = blockchain @ { rid };
 query get_blockchain_signers(blockchain_rid: byte_array): list<(byte_array, text, integer, boolean, integer)> {
     val blockchain = require_blockchain(blockchain_rid, true);
     return get_blockchain_signer_nodes(blockchain) @* {} (
-            @sort _ = .pubkey,
-            _ = .host,
-            _ = .port,
-            _ = .active,
-            _ = .last_updated
-        );
+        @sort _ = .pubkey,
+        _ = .host,
+        _ = .port,
+        _ = .active,
+        _ = .last_updated
+    );
 }
 
 query get_blockchain_replicas(blockchain_rid: byte_array) {
@@ -44,6 +44,9 @@ struct blockchain_info {
     container: name?;
     cluster: name?;
     system: boolean?;
+    is_foreign_importing: boolean?;
+    is_moving: boolean?;
+    is_unarchiving: boolean?;
 }
 
 query get_blockchain_info(rid: byte_array): blockchain_info? {
@@ -56,7 +59,10 @@ query get_blockchain_info(rid: byte_array): blockchain_info? {
             state = blockchain.state,
             container = container?.name,
             cluster = container?.cluster?.name,
-            system = blockchain.system
+            system = blockchain.system,
+            is_foreign_importing = importing_foreign_blockchain @? { .blockchain_rid == rid } ??,
+            is_moving = moving_blockchain @? { blockchain } ??,
+            is_unarchiving = unarchiving_blockchain @? { blockchain } ??
         );
     } else {
         return null;
@@ -85,7 +91,10 @@ query get_blockchain_info_list(include_inactive: boolean): list<blockchain_info>
             state = bc.blockchain.state,
             container = bc.container?.name,
             cluster = bc.container?.cluster?.name,
-            system = bc.blockchain.system
+            system = bc.blockchain.system,
+            is_foreign_importing = importing_foreign_blockchain @? { .blockchain_rid == bc.blockchain.rid } ??,
+            is_moving = moving_blockchain @? { bc.blockchain } ??,
+            is_unarchiving = unarchiving_blockchain @? { bc.blockchain } ??
         ));
     }
     return result;
@@ -107,4 +116,19 @@ query get_blockchain_signer_updates(blockchain_rid: byte_array, from_height: int
 }
 
 query get_compressed_configuration_parts(configuration_part_hashes: set<byte_array>): list<byte_array> =
-    compressed_blockchain_configuration_part @* { .hash in configuration_part_hashes }.hash;
+        compressed_blockchain_configuration_part @* { .hash in configuration_part_hashes }.hash;
+
+query get_importing_foreign_blockchain_info(blockchain_rid: byte_array): struct<importing_foreign_blockchain>? =
+        importing_foreign_blockchain @? { blockchain_rid } ($.to_struct());
+
+query get_moving_blockchain_info(blockchain_rid: byte_array) = moving_blockchain @? { .blockchain.rid == blockchain_rid } (
+    source_container = .source.name,
+    destination_container = .destination.name,
+    finish_at_height = .finish_at_height
+);
+
+query get_unarchiving_blockchain_info(blockchain_rid: byte_array) = unarchiving_blockchain @? { .blockchain.rid == blockchain_rid } (
+    source_container = .source.name,
+    destination_container = .destination.name,
+    finish_at_height = .up_to_height
+);
