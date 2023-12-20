@@ -2,7 +2,7 @@
  * Returns NM API Version
  * NM API Version: 1
  */
-query nm_api_version() = 14;
+query nm_api_version() = 15;
 
 /**
  * Returns version of peerlist
@@ -338,6 +338,7 @@ query nm_find_next_inactive_blockchains(height: integer): list<inactive_blockcha
 /**
  * Returns unarchiving blockchain info.
  * NM API Version 13
+ * @deprecated since NM API Version 15, use nm_get_migrating_blockchain_node_info()
  */
 query nm_get_unarchiving_blockchain_node_info(pubkey, blockchain_rid: byte_array): unarchiving_blockchain_node_info? {
     val node = require_node(pubkey);
@@ -355,4 +356,39 @@ query nm_get_unarchiving_blockchain_node_info(pubkey, blockchain_rid: byte_array
         is_destination_node = exists(cluster_node @? { ubc.destination.cluster, node }),
         up_to_height = ubc.up_to_height
     );
+}
+
+/**
+ * Returns migrating (moving or unarchiving) blockchain info.
+ * NM API Version 15
+ */
+query nm_get_migrating_blockchain_node_info(node_id: pubkey, blockchain_rid: byte_array): migrating_blockchain_node_info? {
+    val node = require_node(node_id);
+    val bc = require_blockchain_entity(blockchain_rid);
+
+    val mvbc = moving_blockchain @? { bc } ($.to_struct());
+    if (exists(mvbc)) {
+        return migrating_blockchain_node_info(
+            rid = [bc.rid.to_gtv(), mvbc.transaction.tx_rid.to_gtv()].hash(),
+            source_container = mvbc.source.name,
+            destination_container = mvbc.destination.name,
+            is_source_node = exists(cluster_node @? { mvbc.source.cluster, node }),
+            is_destination_node = exists(cluster_node @? { mvbc.destination.cluster, node }),
+            up_to_height = mvbc.finish_at_height
+        );
+    }
+
+    val unbc = unarchiving_blockchain @? { bc } ($.to_struct());
+    if (exists(unbc)) {
+        return migrating_blockchain_node_info(
+            rid = [bc.rid.to_gtv(), unbc.transaction.tx_rid.to_gtv()].hash(),
+            source_container = unbc.source.name,
+            destination_container = unbc.destination.name,
+            is_source_node = exists(cluster_node @? { unbc.source.cluster, node }),
+            is_destination_node = exists(cluster_node @? { unbc.destination.cluster, node }),
+            up_to_height = unbc.up_to_height
+        );
+    }
+
+    return null;
 }

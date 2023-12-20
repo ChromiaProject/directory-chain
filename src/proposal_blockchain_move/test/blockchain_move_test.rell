@@ -3,6 +3,7 @@
 import ^^.*;
 import common.operations.*;
 import common.test.ops.*;
+import common.test.config_test_helpers.*;
 import common.test.setup.*;
 import common.test.util.*;
 import proposal.voting.test.ops.*;
@@ -14,9 +15,9 @@ import direct_container.*;
 import direct_cluster.*;
 import nm_api.*;
 
-function test_blockchain_moving_between_containers_within_one_node_is_not_allowed() {
+function test_blockchain_moving_within_a_node() {
     // setup
-    setup_module(provider_quota_max_containers = 2);
+    setup_module(provider_quota_max_containers = 2, cluster_anchoring_config = ["any": "value".to_gtv()]);
     val ip = provider @ { initial_provider.pub };
     var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
 
@@ -32,18 +33,68 @@ function test_blockchain_moving_between_containers_within_one_node_is_not_allowe
     ).sign(initial_provider).run();
     val foo_chain = blockchain @ { "foo_chain" };
 
-    // asserting that bc moving from c1a to c1b is not allowed
+    // 1. start blockchain moving
     rell.test.tx().op(
         propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c1b")
-    ).sign(initial_provider).run_must_fail(
-        "Moving blockchains between containers running on the same node is not allowed. Nodes belongs to clusters s1 and s1 are: [%s]"
-        .format(test_node.pubkey)
-    );
+    ).sign(initial_provider).run();
+    // asserting moving_blockchain
+    val mv_bc = moving_blockchain @? { foo_chain,
+        .source.name == "c1a", .destination.name == "c1b",
+        .finish_at_height == -1, .remove_on_nodes == x""
+    };
+    assert_not_null(mv_bc);
+    // asserting that s1/c1 nodes are not blockchain replicas
+    assert_true(empty(blockchain_replica_node @* { foo_chain }));
+    // asserting that blockchain belongs to c1b
+    assert_equals(container_blockchain @ { foo_chain } ( .container.name ), "c1b");
+
+    // 2. finish blockchain moving
+    rell.test.tx().op(
+        propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 123)
+    ).sign(initial_provider).run();
+    // asserting migrating_blockchain_info though NM API
+    /// for node0
+    val info = nm_get_migrating_blockchain_node_info(test_node.pubkey, foo_chain.rid);
+    assert_true(exists(info));
+    assert_equals(info!!.source_container, "c1a");
+    assert_equals(info.destination_container, "c1b");
+    assert_equals(info.is_source_node, true);
+    assert_equals(info.is_destination_node, true);
+    assert_equals(info.up_to_height, 123);
+    // new config
+    assert_not_null(blockchain_configuration @? { foo_chain, 123 });
+    // new signers config
+    val new_signers = blockchain_configuration_signers @? { foo_chain, 123 } .signers;
+    assert_true(exists(new_signers));
+    assert_equals(list<pubkey>.from_gtv(gtv.from_bytes(new_signers!!)), [test_node.pubkey]);
+    // old signers are not replicas
+    assert_true(empty(blockchain_replica_node @* { foo_chain }));
+
+    // imitation of ICMF message receiving
+    rell.test.tx().op(
+        receive_configuration_updated_op(
+            cluster_anchoring_chain @ { .cluster.name == "s1" } ( .blockchain.rid ),
+            configuration_updated_topic,
+            configuration_updated(
+                blockchain_rid = foo_chain.rid,
+                height = 123,
+                config_hash = x"" // x"" is enough for this test
+            ).to_gtv()
+        )
+    ).run();
+    // no replicas for foo_chain
+    assert_true(empty(blockchain_replica_node @* { foo_chain }));
+    // no moving state for foo_chain
+    assert_true(empty(moving_blockchain @? { foo_chain }));
+    // asserting migrating_blockchain_info though NM API
+    assert_null(nm_get_migrating_blockchain_node_info(test_node.pubkey, foo_chain.rid));
+    // bs state didn't change (RUNNING)
+    assert_equals(foo_chain.state, blockchain_state.RUNNING);
 }
 
 function test_blockchain_moving_between_containers_running_on_different_nodes() {
     // setup
-    setup_module(provider_quota_max_containers = 3);
+    setup_module(provider_quota_max_containers = 3, cluster_anchoring_config = ["any": "value".to_gtv()]);
     val ip = provider @ { initial_provider.pub };
     val node0 = node @ { test_node.pubkey };
     var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
@@ -90,18 +141,33 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
     ).sign(initial_provider).run_must_fail("Moving blockchain can't be paused");
     // Continuing with pending_blockchain_move
     bob_votes();
-    val bc_move_state = moving_blockchain @? { foo_chain,
+    val mv_bc = moving_blockchain @? { foo_chain,
         .source.name == "c1", .destination.name == "c2",
         .finish_at_height == -1, .remove_on_nodes == x""
     };
-    assert_not_null(bc_move_state);
+    assert_not_null(mv_bc);
     // asserting that s1/c1 nodes are blockchain replicas
     assert_equals(blockchain_replica_node @* { foo_chain } ( .node ), [node0]);
     // asserting that blockchain belongs to c2
     assert_equals(container_blockchain @ { foo_chain } ( .container.name ), "c2");
-    // asserting that nm_get_container_for_blockchain_on_node returns proper values for node0 and node1
-    assert_equals(nm_get_container_for_blockchain_on_node(node0.pubkey, foo_chain.rid), "c1");
-    assert_equals(nm_get_container_for_blockchain_on_node(node1.pubkey, foo_chain.rid), "c2");
+    // asserting migrating_blockchain_info though NM API
+    /// for node0
+    val info0 = nm_get_migrating_blockchain_node_info(node0.pubkey, foo_chain.rid);
+    assert_true(exists(info0));
+    assert_equals(info0!!.source_container, "c1");
+    assert_equals(info0.destination_container, "c2");
+    assert_equals(info0.is_source_node, true);
+    assert_equals(info0.is_destination_node, false);
+    assert_equals(info0.up_to_height, -1);
+    /// for node1
+    val info1 = nm_get_migrating_blockchain_node_info(node1.pubkey, foo_chain.rid);
+    assert_true(exists(info1));
+    assert_equals(info1!!.source_container, "c1");
+    assert_equals(info1.destination_container, "c2");
+    assert_equals(info1.is_source_node, false);
+    assert_equals(info1.is_destination_node, true);
+    assert_equals(info1.up_to_height, -1);
+
     // Trying again to propose an blockchain_action, must fail due to non-null moving_blockchain
     rell.test.tx().op(
         propose_blockchain_action(initial_provider.pub, foo_chain.rid, blockchain_action.pause)
@@ -121,15 +187,40 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
     assert_equals(blockchain_replica_node @* { foo_chain } ( .node ), [node0]);
     // asserting that blockchain belongs to c2
     assert_equals(container_blockchain @ { foo_chain } ( .container.name ), "c2");
+    // asserting migrating_blockchain_info
+    assert_equals(nm_get_migrating_blockchain_node_info(node0.pubkey, foo_chain.rid)?.up_to_height, 123);
+    assert_equals(nm_get_migrating_blockchain_node_info(node1.pubkey, foo_chain.rid)?.up_to_height, 123);
+    // new config
+    assert_not_null(blockchain_configuration @? { foo_chain, 123 });
     // asserting that a new signers config is present at the proposed height
     val bcs = blockchain_configuration_signers @? { foo_chain, 123 };
     assert_not_null(bcs);
     assert_equals(bcs.signers, [node1.pubkey].to_gtv().to_bytes());
-    // asserting that bc_move_state has relevant .finish_at_height and .remove_on_nodes
-    assert_equals(bc_move_state.finish_at_height, 123);
-    assert_equals(bc_move_state.remove_on_nodes, [node0.pubkey].to_gtv().to_bytes());
+    // asserting that mv_bc has relevant .finish_at_height and .remove_on_nodes
+    assert_equals(mv_bc.finish_at_height, 123);
+    assert_equals(mv_bc.remove_on_nodes, [node0.pubkey].to_gtv().to_bytes());
 
-    // Further code flow (i.e. ICMF messaging) and results currently can't be tested due to limitations of Rell Test Framework
+    // imitation of ICMF message receiving
+    rell.test.tx().op(
+        receive_configuration_updated_op(
+            cluster_anchoring_chain @ { .cluster.name == "s2" } ( .blockchain.rid ),
+            configuration_updated_topic,
+            configuration_updated(
+                blockchain_rid = foo_chain.rid,
+                height = 123,
+                config_hash = x"" // x"" is enough for this test
+            ).to_gtv()
+        )
+    ).run();
+    // no replicas for foo_chain
+    assert_true(empty(blockchain_replica_node @* { foo_chain }));
+    // no moving state for foo_chain
+    assert_true(empty(moving_blockchain @? { foo_chain }));
+    // asserting migrating_blockchain_info though NM API
+    assert_null(nm_get_migrating_blockchain_node_info(node0.pubkey, foo_chain.rid));
+    assert_null(nm_get_migrating_blockchain_node_info(node1.pubkey, foo_chain.rid));
+    // bs state didn't chang (RUNNING)
+    assert_equals(foo_chain.state, blockchain_state.RUNNING);
 }
 
 function test_paused_blockchain_moving_between_containers_running_on_different_nodes() {
@@ -170,11 +261,11 @@ function test_paused_blockchain_moving_between_containers_running_on_different_n
     ).sign(initial_provider).run();
     assert_not_null(pending_blockchain_move @? { foo_chain });
     bob_votes();
-    val bc_move_state = moving_blockchain @? { foo_chain,
+    val mv_bc = moving_blockchain @? { foo_chain,
         .source.name == "c1", .destination.name == "c2",
         .finish_at_height == -1, .remove_on_nodes == x""
     };
-    assert_not_null(bc_move_state);
+    assert_not_null(mv_bc);
     // asserting that s1/c1 nodes are blockchain replicas
     assert_equals(blockchain_replica_node @* { foo_chain } ( .node ), [node0]);
     // asserting that blockchain belongs to c2
@@ -196,9 +287,9 @@ function test_paused_blockchain_moving_between_containers_running_on_different_n
     val bcs = blockchain_configuration_signers @? { foo_chain, 123 };
     assert_not_null(bcs);
     assert_equals(bcs.signers, [node1.pubkey].to_gtv().to_bytes());
-    // asserting that bc_move_state has relevant .finish_at_height and .remove_on_nodes
-    assert_equals(bc_move_state.finish_at_height, 123);
-    assert_equals(bc_move_state.remove_on_nodes, [node0.pubkey].to_gtv().to_bytes());
+    // asserting that mv_bc has relevant .finish_at_height and .remove_on_nodes
+    assert_equals(mv_bc.finish_at_height, 123);
+    assert_equals(mv_bc.remove_on_nodes, [node0.pubkey].to_gtv().to_bytes());
     // asserting that blockchain_state is PAUSED
     assert_equals(foo_chain.state, blockchain_state.PAUSED);
 }
