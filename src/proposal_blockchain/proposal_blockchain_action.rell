@@ -108,7 +108,7 @@ function _apply_unarchive_blockchain(action: pending_blockchain_action, proposal
 
     // create a base_config and signers config at up_to_height (base_config needed if signers don't change)
     // FYI: PCU-based update (i.e. update_configuration_signers_regular()) can't be used here.
-    require_up_to_height_is_less_or_equals_last_config_height(action.blockchain, args.up_to_height);
+    require_height_is_greater_or_equal_to_last_config_height(action.blockchain, args.up_to_height);
     // base config
     val base_config = require(get_blockchain_configuration(action.blockchain.rid, args.up_to_height)?.base_config,
         "Can't find config for %s for block %s".format(action.blockchain.rid, args.up_to_height));
@@ -213,15 +213,5 @@ query get_blockchain_unarchive_action_proposal(rowid) {
         source_container = source_container,
         destination_container = args.destination_container,
         up_to_height = args.up_to_height
-    );
-}
-
-function require_up_to_height_is_less_or_equals_last_config_height(blockchain, up_to_height: integer) {
-    val last_config_height = require(blockchain_configuration @? { blockchain } (@sort_desc .height) limit 1,
-        "No configurations found for importing blockchain: " + blockchain.rid
-    );
-    require(last_config_height <= up_to_height,
-        "Proposed up_to_height (%s) must be greater or equal to the height (%s) of the latest imported configuration: %s"
-        .format(up_to_height, last_config_height, blockchain.rid)
     );
 }
