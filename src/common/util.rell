@@ -12,3 +12,13 @@ function make_config_unique(config_data: byte_array): byte_array {
 
     return config_map.to_gtv().to_bytes();
 }
+
+function require_height_is_greater_or_equal_to_last_config_height(blockchain, height: integer) {
+    val last_config_height = require(blockchain_configuration @? { blockchain } (@sort_desc .height) limit 1,
+        "No configurations found for blockchain: " + blockchain.rid
+    );
+    require(height >= last_config_height,
+        "Given height %d must be greater than or equal to the last config height %d for blockchain %s"
+            .format(height, last_config_height, blockchain.rid)
+    );
+}
