@@ -7,6 +7,9 @@ entity pending_blockchain_move {
 operation propose_blockchain_move(my_pubkey: pubkey, blockchain_rid: byte_array, destination_container: text, description: text = "") {
     val me = require_is_provider_with_rate_limit(my_pubkey);
     val blockchain = require(blockchain @? { blockchain_rid }, "Unknown blockchain " + blockchain_rid);
+    // require blockchain is not system
+    require(not(blockchain.system), "Moving of system chains is not allowed: " + blockchain_rid);
+
     // require blockchain state
     require(blockchain.state in [blockchain_state.RUNNING, blockchain_state.PAUSED],
         "Only blockchains in RUNNING | PAUSED states can be moved; current state of blockchain %s is: %s".format(blockchain.rid, blockchain.state)

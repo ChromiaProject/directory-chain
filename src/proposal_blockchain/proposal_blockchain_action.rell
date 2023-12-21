@@ -175,6 +175,8 @@ function propose_blockchain_action_impl(my_pubkey: pubkey, blockchain_rid: byte_
     // action requirements
     if (action == blockchain_action.remove) {
         require(empty(blockchain_dependency @* { .dependent_on == blockchain }), "Blockchain can't be removed since other blockchains depend on it: " + blockchain.rid);
+    } else if (action == blockchain_action.archive) {
+        require(not(blockchain.system), "Archiving of system chains is not allowed: " + blockchain_rid);
     } else if (action == blockchain_action.unarchive) {
         // unarchiving from a container to another container running on the same node is not allowed
         val args0 = unarchive_args.from_bytes(args);
