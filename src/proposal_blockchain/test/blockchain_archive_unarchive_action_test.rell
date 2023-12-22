@@ -214,3 +214,10 @@ function test_blockchain_archiving_and_unarchiving_to_container_running_on_anoth
     // bs state changed from UNARCHIVING to RUNNING
     assert_equals(foo_chain.state, blockchain_state.RUNNING);
 }
+
+function test_system_blockchain_archiving_is_not_allowed() {
+    setup_module();
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, blockchain @ { blockchains.directory_chain } (.rid), blockchain_action.archive)
+    ).sign(initial_provider).run_must_fail(" Archiving of system chains is not allowed: ");
+}
