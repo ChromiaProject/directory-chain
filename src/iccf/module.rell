@@ -1,24 +1,33 @@
 module;
 
+/**
+ * Inter-Chain Confirmation Facility (ICCF)
+ * 
+ * This module intends to make it easier for developers to verify that a proof has been 
+ * sent as a separate operation in this transaction.
+ */
+
 val iccf_op_name = "iccf_proof";
-val num_intra_network_iccf_op_args = 6;
+// For verifications across clusters all 6 arguments must be included in the proof
+val iccf_anchored_proof_argument_count = 6;
 
 /**
  * Requires the presented transaction to be proved and extracts an argument from the specified operation
  * 
  * @param gtx_transaction The transaction to verify
  * @param op_name Name of the operation to extract
- * @param require_intra_network_iccf_op Whether or not this transaction was done within the same cluster or not
+ * @param arg Index of the argument to be extracted (default: first argument)
  * @param verify_signers Whether or not the signers must match current transaction signatures
+ * @param require_anchored_proof Whether or not we should require the proof to be anchored
  */
 function extract_operation_arg(
     gtx_transaction,
     op_name: text,
-    arg: integer,
-    require_intra_network_iccf_op: boolean = false,
-    verify_signers: boolean = true
+    arg: integer = 0,
+    verify_signers: boolean = true,
+    require_anchored_proof: boolean = false
 ): gtv {
-    val args = extract_operation_args(gtx_transaction, op_name, require_intra_network_iccf_op, verify_signers);
+    val args = extract_operation_args(gtx_transaction, op_name, require_anchored_proof, verify_signers);
     require(
         args.size() >= arg,
         "Argument number %d not found on operation %s. %d arguments found"
@@ -32,16 +41,16 @@ function extract_operation_arg(
  * 
  * @param gtx_transaction The transaction to verify
  * @param op_name Name of the operation to extract
- * @param require_intra_network_iccf_op Whether or not this transaction was done within the same cluster or not
  * @param verify_signers Whether or not the signers must match current transaction signatures
+ * @param require_anchored_proof Whether or not we should require the proof to be anchored
  */
 function extract_operation_args(
     gtx_transaction,
     op_name: text,
-    require_intra_network_iccf_op: boolean = false,
-    verify_signers: boolean = true
+    verify_signers: boolean = true,
+    require_anchored_proof: boolean = false
 ): list<gtv> {
-    return require_operation(gtx_transaction, op_name, require_intra_network_iccf_op, verify_signers).args;
+    return require_operation(gtx_transaction, op_name, require_anchored_proof, verify_signers).args;
 }
 
 /**
@@ -49,16 +58,16 @@ function extract_operation_args(
  * 
  * @param gtx_transaction The transaction to verify
  * @param op_name Name of the operation to extract
- * @param require_intra_network_iccf_op Whether or not this transaction was done within the same cluster or not
  * @param verify_signers Whether or not the signers must match current transaction signatures
+ * @param require_anchored_proof Whether or not we should require the proof to be anchored
  */
 function require_operation(
     gtx_transaction,
     op_name: text,
-    require_intra_network_iccf_op: boolean = false,
-    verify_signers: boolean = true
+    verify_signers: boolean = true,
+    require_anchored_proof: boolean = false
 ): gtx_operation {
-    require_valid_proof(gtx_transaction, require_intra_network_iccf_op, verify_signers);
+    require_valid_proof(gtx_transaction, require_anchored_proof, verify_signers);
     return require(
         gtx_transaction.body.operations @? { .name == op_name },
         "Operation with name %s not found in transaction %s".format(op_name, gtx_transaction)
@@ -69,16 +78,16 @@ function require_operation(
  * Requires the presented transaction to be proved
  * 
  * @param gtx_transaction The transaction to verify
- * @param require_intra_network_iccf_op Whether or not this transaction was done within the same cluster or not
- * @param verify_signers Whether or not the signers must match current transaction signatures
+ * @param require_anchored_proof Whether or not this transaction was done within the same cluster or not
+ * @param require_anchored_proof Whether or not we should require the proof to be anchored
  */
 function require_valid_proof(
     gtx_transaction,
-    require_intra_network_iccf_op: boolean = false,
-    verify_signers: boolean = true
+    verify_signers: boolean = true,
+    require_anchored_proof: boolean = false
 ) {
     val tx_hash = gtx_transaction.to_gtv().hash();
-    require(_has_proof(gtx_transaction, require_intra_network_iccf_op), "No proof operation present for TX");
+    require(_has_proof(gtx_transaction, require_anchored_proof), "No proof operation present for TX");
     if (verify_signers) {
         require(
             _has_signers(gtx_transaction),
@@ -100,14 +109,14 @@ function _has_signers(gtx_transaction): boolean {
 }
 
 /**
- * Checks whether the current transaction contains a `iccf_proof` operation corresponding to the givven transaction.
+ * Checks whether the current transaction contains a `iccf_proof` operation corresponding to the given transaction.
  * 
  * @param gtx_transaction The transaction to check
- * @param require_intra_network_iccf_op Whether or not this transaction was done within the same cluster or not
+ * @param require_anchored_proof Whether or not we should require the proof to be anchored
  */
 function _has_proof(
     gtx_transaction,
-    require_intra_network_iccf_op: boolean = false
+    require_anchored_proof: boolean = false
 ): boolean {
     val blockchain_rid = gtx_transaction.body.blockchain_rid;
     val tx_hash = gtx_transaction.to_gtv().hash();
@@ -115,7 +124,7 @@ function _has_proof(
         .name == iccf_op_name,
         byte_array.from_gtv(.args[0]) == blockchain_rid,
         byte_array.from_gtv(.args[1]) == tx_hash,
-        not require_intra_network_iccf_op or .args.size() == num_intra_network_iccf_op_args
+        not require_anchored_proof or .args.size() == iccf_anchored_proof_argument_count
     };
     return exists(proof_operation);
 }
