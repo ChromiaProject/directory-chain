@@ -27,7 +27,7 @@ function extract_operation_arg(
     verify_signers: boolean = true,
     require_anchored_proof: boolean = false
 ): gtv {
-    val args = extract_operation_args(gtx_transaction, op_name, require_anchored_proof, verify_signers);
+    val args = extract_operation_args(gtx_transaction, op_name, verify_signers, require_anchored_proof);
     require(
         args.size() >= arg,
         "Argument number %d not found on operation %s. %d arguments found"
@@ -50,7 +50,7 @@ function extract_operation_args(
     verify_signers: boolean = true,
     require_anchored_proof: boolean = false
 ): list<gtv> {
-    return require_operation(gtx_transaction, op_name, require_anchored_proof, verify_signers).args;
+    return require_operation(gtx_transaction, op_name, verify_signers, require_anchored_proof).args;
 }
 
 /**
@@ -67,7 +67,7 @@ function require_operation(
     verify_signers: boolean = true,
     require_anchored_proof: boolean = false
 ): gtx_operation {
-    require_valid_proof(gtx_transaction, require_anchored_proof, verify_signers);
+    require_valid_proof(gtx_transaction, verify_signers, require_anchored_proof);
     return require(
         gtx_transaction.body.operations @? { .name == op_name },
         "Operation with name %s not found in transaction %s".format(op_name, gtx_transaction)
