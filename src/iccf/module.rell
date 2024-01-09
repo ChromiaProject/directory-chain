@@ -1,15 +1,152 @@
 module;
 
-val iccf_op_name = "iccf_proof";
-val num_intra_network_iccf_op_args = 6;
+/**
+ * Inter-Chain Confirmation Facility (ICCF)
+ * 
+ * This module intends to make it easier for developers to verify that a proof has been 
+ * sent as a separate operation in this transaction.
+ */
 
-function check_iccf_proof(blockchain_rid: byte_array, tx_hash: byte_array, require_intra_network_iccf_op: boolean = false): boolean {
-    for (op in op_context.get_all_operations()) {
-        if (op.name == iccf_op_name and byte_array.from_gtv(op.args[0]) == blockchain_rid and byte_array.from_gtv(op.args[1]) == tx_hash) {
-            if (not require_intra_network_iccf_op or op.args.size() == num_intra_network_iccf_op_args) {
-                return true;
-            }
-        }
+val iccf_op_name = "iccf_proof";
+// For verifications across clusters all 6 arguments must be included in the proof
+val iccf_anchored_proof_argument_count = 6;
+
+/**
+ * Requires the presented transaction to be proved and extracts an argument from the specified operation
+ * 
+ * @param gtx_transaction The transaction to verify
+ * @param op_name Name of the operation to extract
+ * @param arg Index of the argument to be extracted (default: first argument)
+ * @param verify_signers Whether or not the signers must match current transaction signatures
+ * @param require_anchored_proof Whether or not we require inclusion of a proof that the block containing the transaction has been anchored in cluster anchoring chain
+ */
+function extract_operation_arg(
+    gtx_transaction,
+    op_name: text,
+    arg: integer = 0,
+    verify_signers: boolean = true,
+    require_anchored_proof: boolean = false
+): gtv {
+    val args = extract_operation_args(gtx_transaction, op_name, require_anchored_proof, verify_signers);
+    require(
+        args.size() >= arg,
+        "Argument number %d not found on operation %s. %d arguments found"
+            .format(arg, op_name, args.size())
+    );
+    return args[arg];
+}
+
+/**
+ * Requires the presented transaction to be proved and extracts arguments of the specified operation
+ * 
+ * @param gtx_transaction The transaction to verify
+ * @param op_name Name of the operation to extract
+ * @param verify_signers Whether or not the signers must match current transaction signatures
+ * @param require_anchored_proof Whether or not we require inclusion of a proof that the block containing the transaction has been anchored in cluster anchoring chain
+ */
+function extract_operation_args(
+    gtx_transaction,
+    op_name: text,
+    verify_signers: boolean = true,
+    require_anchored_proof: boolean = false
+): list<gtv> {
+    return require_operation(gtx_transaction, op_name, require_anchored_proof, verify_signers).args;
+}
+
+/**
+ * Requires the presented transaction to be proved and extracts the specified operation
+ * 
+ * @param gtx_transaction The transaction to verify
+ * @param op_name Name of the operation to extract
+ * @param verify_signers Whether or not the signers must match current transaction signatures
+ * @param require_anchored_proof Whether or not we require inclusion of a proof that the block containing the transaction has been anchored in cluster anchoring chain
+ */
+function require_operation(
+    gtx_transaction,
+    op_name: text,
+    verify_signers: boolean = true,
+    require_anchored_proof: boolean = false
+): gtx_operation {
+    require_valid_proof(gtx_transaction, require_anchored_proof, verify_signers);
+    return require(
+        gtx_transaction.body.operations @? { .name == op_name },
+        "Operation with name %s not found in transaction %s".format(op_name, gtx_transaction)
+    );
+}
+
+/**
+ * Requires the presented transaction to be proved
+ * 
+ * @param gtx_transaction The transaction to verify
+ * @param verify_signers Whether or not the signers must match current transaction signatures
+ * @param require_anchored_proof Whether or not we require inclusion of a proof that the block containing the transaction has been anchored in cluster anchoring chain
+ */
+function require_valid_proof(
+    gtx_transaction,
+    verify_signers: boolean = true,
+    require_anchored_proof: boolean = false
+) {
+    val tx_hash = gtx_transaction.to_gtv().hash();
+    require(_has_proof(gtx_transaction, require_anchored_proof), "No proof operation present for TX");
+    if (verify_signers) {
+        require(
+            _has_signers(gtx_transaction),
+            "Proof TX has to be signed by all the signers that signed the source TX"
+        );
     }
-    return false;
+    return gtx_transaction.body.operations;
+}
+
+/**
+ * Checks whether or not the current transaction is signed by the same signers as the given transaction
+ * 
+ * @param gtx_transaction The transaction to verify signers against
+ */
+function _has_signers(gtx_transaction): boolean {
+    val proof_signers = gtx_transaction.body.signers @* { } ( byte_array.from_gtv($) );
+    val signers = op_context.get_signers();
+    return signers.contains_all(proof_signers);
+}
+
+/**
+ * Checks whether the current transaction contains a `iccf_proof` operation corresponding to the given transaction.
+ * 
+ * @param gtx_transaction The transaction to check
+ * @param require_anchored_proof Whether or not we require inclusion of a proof that the block containing the transaction has been anchored in cluster anchoring chain
+ */
+function _has_proof(
+    gtx_transaction,
+    require_anchored_proof: boolean = false
+): boolean {
+    val blockchain_rid = gtx_transaction.body.blockchain_rid;
+    val tx_hash = gtx_transaction.to_gtv().hash();
+    val proof_operation = op_context.get_all_operations() @? {
+        .name == iccf_op_name,
+        byte_array.from_gtv(.args[0]) == blockchain_rid,
+        byte_array.from_gtv(.args[1]) == tx_hash,
+        not require_anchored_proof or .args.size() == iccf_anchored_proof_argument_count
+    };
+    return exists(proof_operation);
+}
+
+/**
+ * Prevents this transaction to be proved multiple times by storing the hash
+ * 
+ * @param gtx_transaction The transaction to make unique
+ */
+function make_transaction_unique(gtx_transaction) {
+    require(
+        not(exists(
+            iccf_verified_transaction @? {
+                .hash == gtx_transaction.hash()
+            }
+        )),
+        "Transaction has already been processed"
+    );
+    create iccf_verified_transaction ( gtx_transaction.hash() );
+}
+
+@log
+entity iccf_verified_transaction {
+    key hash: byte_array;
 }
