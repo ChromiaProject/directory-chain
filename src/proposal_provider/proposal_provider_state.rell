@@ -79,7 +79,8 @@ function update_provider_state(provider, active: boolean, proposal: proposal? = 
         node_list.last_update = op_context.last_block_time;
         // if provider is last to vote on proposals make sure the proposals are voted on
         for (prop in pending_proposals_with_provider_as_voter) {
-            if (proposal != null and prop == proposal) continue;
+            // We should delete any vote that the removed provider has cast on the pending proposal (for correctness)
+            delete vote @? { prop, provider };
             try_to_apply_proposal(prop);
         }
     } else { // enable

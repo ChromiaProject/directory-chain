@@ -7,6 +7,7 @@ import common.test.util.*;
 import direct_container.*;
 
 val system_provider = rell.test.keypairs.bob;
+val system_provider2 = rell.test.keypairs.charlie;
 val node_provider = rell.test.keypairs.trudy;
 val dapp_provider = rell.test.keypair(
      priv = x"B39E4CCCB9B0FD71B7AC9FFF1216C34648FA7362ECD9874743776BDFDEE4F6A8",
@@ -137,4 +138,38 @@ function test_propose_providers_with_invalid_pubkey() {
     rell.test.tx().op(
         propose_providers(initial_provider.pub, keys, provider_tier.NODE_PROVIDER, true, false)
     ).sign(initial_provider).run_must_fail();
+}
+
+function test_multiple_provider_disable_proposals() {
+    setup_module();
+    val keys = [provider_info(provider1.pub), provider_info(provider2.pub)];
+
+    // setup
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, system_provider.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, system_provider.pub, true)
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, system_provider2.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, system_provider2.pub, true)
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(system_provider);
+
+    rell.test.tx().op(
+        propose_provider_state(initial_provider.pub, system_provider2.pub, false)
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(system_provider);
+
+    rell.test.tx().op(
+        propose_provider_state(initial_provider.pub, system_provider.pub, false)
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(system_provider);
+
+    // Now system_provider2 should be able to vote to remove system_provider
+    vote_for_last_proposal(system_provider2);
+
+    // Ensure that vote to disable system_provider2 is still pending (vote from removed system_provider should be retracted)
+    val active_system_providers = provider @* { .active, .system }.pubkey;
+    assert_equals(set(active_system_providers), set([initial_provider.pub, system_provider2.pub]));
 }

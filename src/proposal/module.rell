@@ -62,12 +62,12 @@ operation revoke_proposal(my_pubkey: pubkey, proposal_rowid: rowid) {
     val prop = proposal @? { proposal_rowid };
     require(exists(prop), "Proposal not found: %d".format(proposal_rowid));
     require(prop!!.proposed_by == me, "It is only allowed to revoke own proposals");
-    delete_proposal(prop, proposal_state.REVOKED);
+    prop.state = proposal_state.REVOKED;
+    delete_proposal(prop);
 }
 
-function delete_proposal(prop: proposal, state: proposal_state) {
+function delete_proposal(prop: proposal) {
     delete_proposal_handlers()[prop.proposal_type.name](prop);
-    prop.state = state;
 }
 
 @extendable function delete_proposal_handlers(): map<text, (proposal) -> unit>;
