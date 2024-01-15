@@ -11,7 +11,7 @@ entity remove_moved_blockchain_on_original_node {
 
 @extend(on_configuration_updated)
 function try_to_finalize_blockchain_move(message: configuration_updated) {
-    val moving_bc = moving_blockchain @? { .blockchain.rid == message.blockchain_rid, .finish_at_height == message.height };
+    val moving_bc = moving_blockchain @? { .blockchain.rid == message.blockchain_rid, .finish_at_height == message.height - 1 };
     if (exists(moving_bc)) {
         val src_nodes = cluster_node @* { moving_bc.source.cluster } ( .node );
         for (node in src_nodes) {

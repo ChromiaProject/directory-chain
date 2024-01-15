@@ -62,9 +62,9 @@ function test_blockchain_moving_within_a_node() {
     assert_equals(info.is_destination_node, true);
     assert_equals(info.up_to_height, 123);
     // new config
-    assert_not_null(blockchain_configuration @? { foo_chain, 123 });
+    assert_not_null(blockchain_configuration @? { foo_chain, 124 });
     // new signers config
-    val new_signers = blockchain_configuration_signers @? { foo_chain, 123 } .signers;
+    val new_signers = blockchain_configuration_signers @? { foo_chain, 124 } .signers;
     assert_true(exists(new_signers));
     assert_equals(list<pubkey>.from_gtv(gtv.from_bytes(new_signers!!)), [test_node.pubkey]);
     // old signers are not replicas
@@ -77,7 +77,7 @@ function test_blockchain_moving_within_a_node() {
             configuration_updated_topic,
             configuration_updated(
                 blockchain_rid = foo_chain.rid,
-                height = 123,
+                height = 124,
                 config_hash = x"" // x"" is enough for this test
             ).to_gtv()
         )
@@ -191,9 +191,9 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
     assert_equals(nm_get_migrating_blockchain_node_info(node0.pubkey, foo_chain.rid)?.up_to_height, 123);
     assert_equals(nm_get_migrating_blockchain_node_info(node1.pubkey, foo_chain.rid)?.up_to_height, 123);
     // new config
-    assert_not_null(blockchain_configuration @? { foo_chain, 123 });
+    assert_not_null(blockchain_configuration @? { foo_chain, 124 });
     // asserting that a new signers config is present at the proposed height
-    val bcs = blockchain_configuration_signers @? { foo_chain, 123 };
+    val bcs = blockchain_configuration_signers @? { foo_chain, 124 };
     assert_not_null(bcs);
     assert_equals(bcs.signers, [node1.pubkey].to_gtv().to_bytes());
     // asserting that mv_bc has relevant .finish_at_height and .remove_on_nodes
@@ -207,7 +207,7 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
             configuration_updated_topic,
             configuration_updated(
                 blockchain_rid = foo_chain.rid,
-                height = 123,
+                height = 124,
                 config_hash = x"" // x"" is enough for this test
             ).to_gtv()
         )
@@ -284,7 +284,7 @@ function test_paused_blockchain_moving_between_containers_running_on_different_n
     // asserting that blockchain belongs to c2
     assert_equals(container_blockchain @ { foo_chain } ( .container.name ), "c2");
     // asserting that a new signers config is present at the proposed height
-    val bcs = blockchain_configuration_signers @? { foo_chain, 123 };
+    val bcs = blockchain_configuration_signers @? { foo_chain, 124 };
     assert_not_null(bcs);
     assert_equals(bcs.signers, [node1.pubkey].to_gtv().to_bytes());
     // asserting that mv_bc has relevant .finish_at_height and .remove_on_nodes
