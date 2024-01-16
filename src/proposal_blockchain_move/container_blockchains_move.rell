@@ -64,8 +64,8 @@ function move_container_blockchains_impl(
 
     // moving
     for (bc in bcs) {
-        val finish_at_height = anchored_blockchains[bc.rid];
-        create moving_blockchain(bc, source = src_container, destination = dst_container, finish_at_height/*, remove_on_nodes*/);
+        val final_height = anchored_blockchains[bc.rid];
+        create moving_blockchain(bc, source = src_container, destination = dst_container, final_height/*, remove_on_nodes*/);
         for (node in src_nodes) {
             create blockchain_replica_node(bc, node);
         }
@@ -78,10 +78,10 @@ function move_container_blockchains_impl(
             delete blockchain_replica_node @* { bc, node };
         }
         // FYI: PCU-based update (i.e. update_configuration_signers_regular()) can't be used here.
-        require_height_is_greater_or_equal_to_last_config_height(bc, finish_at_height);
+        require_height_is_greater_or_equal_to_last_config_height(bc, final_height);
         // prepare a final signer config
         val encoded_dst_nodes = (dst_nodes @* {} ( @sort .pubkey )).to_gtv().to_bytes();
-        create blockchain_configuration_signers(bc, finish_at_height, encoded_dst_nodes);
+        create blockchain_configuration_signers(bc, final_height, encoded_dst_nodes);
     }
 
     return (container_name = dst_container.name, cluster_name = dst_cluster.name, cluster_class = dst_cluster.cluster_class);
