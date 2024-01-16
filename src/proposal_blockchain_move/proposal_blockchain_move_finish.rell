@@ -2,21 +2,21 @@ entity pending_blockchain_move_finish {
     key proposal;
     blockchain;
     destination: container;
-    finish_at_height: integer;
+    final_height: integer;
 }
 
-operation propose_blockchain_move_finish(my_pubkey: pubkey, blockchain_rid: byte_array, finish_at_height: integer, description: text = "") {
+operation propose_blockchain_move_finish(my_pubkey: pubkey, blockchain_rid: byte_array, final_height: integer, description: text = "") {
     val me = require_is_provider_with_rate_limit(my_pubkey);
     val blockchain = require_blockchain(blockchain_rid);
     val bc_move_state = require(moving_blockchain @? { blockchain }, "Blockchain %s is not being moved".format(blockchain.rid));
 
     val prop = create proposal(op_context.last_block_time, proposal_type.blockchain_move_finish, me, bc_move_state.destination.deployer, description); // TODO: POS-961: src + dst?
-    create pending_blockchain_move_finish(prop, blockchain, bc_move_state.destination, finish_at_height);
+    create pending_blockchain_move_finish(prop, blockchain, bc_move_state.destination, final_height);
     internal_vote(me, prop, true);
 }
 
 query get_blockchain_move_finish_proposal(rowid?):
-        (blockchain_rid: byte_array, blockchain_name: text, cluster: text, container: text, finish_at_height: integer)? {
+        (blockchain_rid: byte_array, blockchain_name: text, cluster: text, container: text, final_height: integer)? {
     val proposal = get_latest_proposal(rowid, proposal_type.blockchain_import);
     if (proposal == null) return null;
     return pending_blockchain_move_finish @ { proposal } (
@@ -24,7 +24,7 @@ query get_blockchain_move_finish_proposal(rowid?):
         blockchain_name = .blockchain.name,
         cluster = .destination.cluster.name,
         container = .destination.name,
-        finish_at_height = .finish_at_height
+        final_height = .final_height
     );
 }
 
@@ -35,18 +35,18 @@ function apply_blockchain_move_finish(proposal) {
     val pbmf = pending_blockchain_move_finish @ { proposal } ( $.to_struct() );
     val mv_bc = require(moving_blockchain @? { pbmf.blockchain }, "Blockchain %s is not being moved".format(pbmf.blockchain.rid));
 
-    // create a base_config and signers config at up_to_height (base_config needed if signers don't change)
+    // create a base_config and signers config at final_height (base_config needed if signers don't change)
     // FYI: PCU-based update (i.e. update_configuration_signers_regular()) can't be used here.
     // base config
-    val base_config = require(get_blockchain_configuration(pbmf.blockchain.rid, pbmf.finish_at_height)?.base_config,
-        "Can't find config for %s for block %s".format(pbmf.blockchain.rid, pbmf.finish_at_height));
-    compress_and_store_configuration(pbmf.blockchain, pbmf.finish_at_height + 1, make_config_unique(base_config));
+    val base_config = require(get_blockchain_configuration(pbmf.blockchain.rid, pbmf.final_height)?.base_config,
+        "Can't find config for %s for block %s".format(pbmf.blockchain.rid, pbmf.final_height));
+    compress_and_store_configuration(pbmf.blockchain, pbmf.final_height + 1, make_config_unique(base_config));
     // signers config
     val encoded_dst_nodes = (cluster_node @* { pbmf.destination.cluster } (@sort .node.pubkey)).to_gtv().to_bytes();
-    create blockchain_configuration_signers(pbmf.blockchain, pbmf.finish_at_height + 1, encoded_dst_nodes);
+    create blockchain_configuration_signers(pbmf.blockchain, pbmf.final_height + 1, encoded_dst_nodes);
 
     // update moving_blockchain state
-    mv_bc.finish_at_height = pbmf.finish_at_height;
+    mv_bc.final_height = pbmf.final_height;
     mv_bc.remove_on_nodes = (cluster_node @* { mv_bc.source.cluster } (@sort .node.pubkey )).to_gtv().to_bytes();
 }
 

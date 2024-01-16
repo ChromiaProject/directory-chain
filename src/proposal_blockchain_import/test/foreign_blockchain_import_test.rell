@@ -47,7 +47,7 @@ function test_propose_import_blockchain() {
     assert_true(exists(fbi));
     val fbi0 = fbi!!;
     assert_equals(
-        (fbi0.pubkey, fbi0.host, fbi0.port, fbi0.api_url, fbi0.chain0_rid, fbi0.blockchain_rid, fbi0.up_to_height).to_gtv(),
+        (fbi0.pubkey, fbi0.host, fbi0.port, fbi0.api_url, fbi0.chain0_rid, fbi0.blockchain_rid, fbi0.final_height).to_gtv(),
         (foreign_node.pub, "node0.foreign", 9870, "http://node0.foreign:7740/", foreign_chain0, brid, -1).to_gtv()
     );
 
@@ -92,17 +92,17 @@ function test_propose_import_blockchain() {
     ).sign(initial_provider).run_must_fail("Importing blockchain can't be unarchived");
 
     // Step 2: proposing foreign blockchain blocks import
-    /// up_to_height < last_config_height
+    /// final_height < last_config_height
     rell.test.tx().op(
         propose_foreign_blockchain_blocks_import(initial_provider.pub, brid, 9)
     ).sign(initial_provider).run_must_fail("Given height 9 must be greater than or equal to the last config height 10 for blockchain");
-    /// up_to_height == last_config_height
+    /// final_height == last_config_height
     rell.test.tx().op(
         propose_foreign_blockchain_blocks_import(initial_provider.pub, brid, 10)
     ).sign(initial_provider).run();
     assert_equals(bc.state, blockchain_state.RUNNING);
     assert_true(exists(blockchain_configuration_signers @? { bc, 10 }));
-    assert_equals(fbi.up_to_height, 10);
+    assert_equals(fbi.final_height, 10);
     assert_equals((blockchain_configuration_options @* { bc }) .size(), 2);
     assert_equals(blockchain_configuration_options @ { bc, 11 } ( .suppress_special_transaction_validation ), false);
     // NM API request

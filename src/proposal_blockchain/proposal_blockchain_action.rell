@@ -8,7 +8,7 @@ enum blockchain_action {
 
 struct unarchive_args {
     destination_container: text;
-    up_to_height: integer;
+    final_height: integer;
 }
 
 entity pending_blockchain_action {
@@ -106,19 +106,19 @@ function _apply_unarchive_blockchain(action: pending_blockchain_action, proposal
         delete blockchain_replica_node @* { action.blockchain, node };
     }
 
-    // create a base_config and signers config at up_to_height (base_config needed if signers don't change)
+    // create a base_config and signers config at final_height (base_config needed if signers don't change)
     // FYI: PCU-based update (i.e. update_configuration_signers_regular()) can't be used here.
-    require_height_is_greater_or_equal_to_last_config_height(action.blockchain, args.up_to_height);
+    require_height_is_greater_or_equal_to_last_config_height(action.blockchain, args.final_height);
     // base config
-    val base_config = require(get_blockchain_configuration(action.blockchain.rid, args.up_to_height)?.base_config,
-        "Can't find config for %s for block %s".format(action.blockchain.rid, args.up_to_height));
-    compress_and_store_configuration(action.blockchain, args.up_to_height + 1, make_config_unique(base_config));
+    val base_config = require(get_blockchain_configuration(action.blockchain.rid, args.final_height)?.base_config,
+        "Can't find config for %s for block %s".format(action.blockchain.rid, args.final_height));
+    compress_and_store_configuration(action.blockchain, args.final_height + 1, make_config_unique(base_config));
     // signers config
     val encoded_dst_nodes = (dst_nodes @* {} ( .pubkey )).to_gtv().to_bytes();
-    create blockchain_configuration_signers(action.blockchain, args.up_to_height + 1, encoded_dst_nodes);
+    create blockchain_configuration_signers(action.blockchain, args.final_height + 1, encoded_dst_nodes);
 
     // create unarchiving_blockchain state
-    create unarchiving_blockchain(action.blockchain, source = src_container, destination = dst_container, args.up_to_height);
+    create unarchiving_blockchain(action.blockchain, source = src_container, destination = dst_container, args.final_height);
     delete inactive_blockchain @? { action.blockchain };
 }
 
@@ -127,8 +127,8 @@ operation propose_blockchain_action(my_pubkey: pubkey, blockchain_rid: byte_arra
     propose_blockchain_action_impl(my_pubkey, blockchain_rid, action, x"", description);
 }
 
-operation propose_blockchain_unarchive_action(my_pubkey: pubkey, blockchain_rid: byte_array, destination_container: text, up_to_height: integer, description: text = "") {
-    val args = unarchive_args(destination_container, up_to_height);
+operation propose_blockchain_unarchive_action(my_pubkey: pubkey, blockchain_rid: byte_array, destination_container: text, final_height: integer, description: text = "") {
+    val args = unarchive_args(destination_container, final_height);
     propose_blockchain_action_impl(my_pubkey, blockchain_rid, blockchain_action.unarchive, args.to_bytes(), description);
 }
 
@@ -164,7 +164,7 @@ function propose_blockchain_action_impl(my_pubkey: pubkey, blockchain_rid: byte_
     }
 
     // complex state: moving
-    if (exists(pending_blockchain_move @? { blockchain }) or exists(moving_blockchain @? { blockchain, .finish_at_height == -1 })) {
+    if (exists(pending_blockchain_move @? { blockchain }) or exists(moving_blockchain @? { blockchain, .final_height == -1 })) {
         require(false, "Moving blockchain can't be %sd: %s".format(action.name, blockchain.rid));
     }
 
@@ -214,6 +214,6 @@ query get_blockchain_unarchive_action_proposal(rowid) {
         action = pba.action,
         source_container = source_container,
         destination_container = args.destination_container,
-        up_to_height = args.up_to_height
+        final_height = args.final_height
     );
 }
