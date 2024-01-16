@@ -52,9 +52,9 @@ function test_propose_import_blockchain() {
     ).sign(initial_provider).run_must_fail("already exists");
 
     // proposing finishing import, blockchain will be activated and signers updated
-    val finish_at_height = 123; // can be any in this test
+    val final_height = 123; // can be any in this test
     rell.test.tx().op(
-        propose_finish_import_blockchain(initial_provider.pub, brid, finish_at_height)
+        propose_finish_import_blockchain(initial_provider.pub, brid, final_height)
     ).sign(initial_provider).run();
     assert_equals(bc.state, blockchain_state.RUNNING);
     assert_true(exists(blockchain_configuration_signers @? { bc, 123 + 1 }));
@@ -67,7 +67,7 @@ function test_propose_import_blockchain() {
 
     // proposing finishing import for a running blockchain
     rell.test.tx().op(
-        propose_finish_import_blockchain(initial_provider.pub, brid, finish_at_height, "unique description")
+        propose_finish_import_blockchain(initial_provider.pub, brid, final_height, "unique description")
     ).sign(initial_provider).run_must_fail("Blockchain must be in IMPORTING state to finish import");
 
     // importing blockchain to a full container
