@@ -2,3 +2,22 @@ module;
 
 import anchoring_chain_common.*;
 import messaging.icmf.constants.*;
+
+struct module_args {
+    node_availability_report_interval_ms: integer = 86400000; // 1000 * 60 * 60 * 24 - 1 day
+}
+
+operation __begin_block(height: integer) {
+    val current_number_of_signers = extract_number_of_signers_from_current_configuration();
+    update_maximum_number_of_nodes_in_cluser_since_last_report(current_number_of_signers);
+
+    if (is_time_to_send_availability_report()) {
+        send_node_availability_report();
+        reset_node_availability_report_stat(current_number_of_signers);
+    }
+}
+
+function extract_number_of_signers_from_current_configuration(): integer {
+    val config = map<text, gtv>.from_gtv(chain_context.raw_config);
+    return list<byte_array>.from_gtv(config["signers"]).size();
+}
