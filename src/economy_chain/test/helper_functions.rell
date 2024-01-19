@@ -39,10 +39,10 @@ function add_provider(pubkey: pubkey, system: boolean, tier: provider_tier, clus
     return require(provider @? { pubkey });
 }
 
-function ensure_cluster(name: text, deleted: boolean, operational: boolean, cluster_units: integer, extra_storage: integer, cluster_class: text): cluster {
+function ensure_cluster(name: text, deleted: boolean, operational: boolean, cluster_units: integer, extra_storage: integer, cluster_class: text, anchoring_chain: byte_array = x""): cluster {
     rell.test.tx().op(
         icmf_message_op(x"", cluster_update_topic, body = cluster_update_message(
-            name, deleted, operational, cluster_units, extra_storage, cluster_class).to_gtv())
+            name, deleted, operational, cluster_units, extra_storage, cluster_class, anchoring_chain).to_gtv())
     ).run();
     return require(cluster @? { name });
 }

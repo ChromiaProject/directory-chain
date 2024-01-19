@@ -4,6 +4,7 @@ import messaging.configuration_update_message.*;
 
 @log entity anchor_block {
     key blockchain_rid: byte_array, block_height: integer;
+    index timestamp: integer;
     block_rid: byte_array;
     block_header: byte_array;
     witness: byte_array;
@@ -32,7 +33,15 @@ operation __anchor_block_header(block_rid: byte_array, header: gtv, witness: byt
 
 function anchor_block_header(block_rid: byte_array, header: gtv, witness: byte_array) {
     val decoded_header = block_header.from_gtv(header);
-    create anchor_block(blockchain_rid = decoded_header.blockchain_rid, block_height = decoded_header.height, block_rid = block_rid, block_header = header.to_bytes(), witness = witness, anchoring_tx_op_index = op_context.op_index);
+    create anchor_block(
+        blockchain_rid = decoded_header.blockchain_rid,
+        block_height = decoded_header.height,
+        timestamp = decoded_header.timestamp,
+        block_rid = block_rid,
+        block_header = header.to_bytes(),
+        witness = witness,
+        anchoring_tx_op_index = op_context.op_index
+    );
 
     after_anchoring_block(block_rid, decoded_header);
 }

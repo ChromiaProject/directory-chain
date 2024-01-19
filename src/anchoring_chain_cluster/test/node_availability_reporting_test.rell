@@ -1,0 +1,156 @@
+@test module;
+
+import ^.helpers.*;
+import ^^.*;
+
+// Extracted example from devnet
+val BLOCKCHAIN_RID_1 = byte_array.from_hex("F435688B2F74933C71F8AA1952E1CFBCDAA421EF378A441EFF4EC5900896F1FA");
+val BLOCKCHAIN_RID_2 = byte_array.from_hex("2222688B2F74933C71F8AA1952E1CFBCDAA421EF378A441EFF4EC5900896F1FA");
+val BLOCK_RID_1 = byte_array.from_hex("1E06C063CD1451690352F956DBD68B3DFF3B893840B6E668707D0AA01C0ACC36");
+val BLOCK_RID_2 = byte_array.from_hex("0C04CB8E710A08C57927011FB9E810C8E5097A0FEA6DF73367287F6E1BAFF00D");
+val BLOCK_HEADER_1 = byte_array.from_hex("A581BB3081B8A1220420F435688B2F74933C71F8AA1952E1CFBCDAA421EF378A441EFF4EC5900896F1FAA1220420CFF3A130CE57D01B1772892ED8A3970713AC6F65F2A05D3D83CD4707FD00CBCEA12204208B28CC322B10D30424D773DC9945A632A419E2558AD1A483252919E1DB358501A3080206018CD72A7FB9A305020300C350A0020500A435303330310C0B636F6E6669675F68617368A1220420552942BF9C8CB791D58627809A677F691D1F7B00990571366289DD327AC19245");
+val BLOCK_HEADER_2 = byte_array.from_hex("A581BB3081B8A1220420F435688B2F74933C71F8AA1952E1CFBCDAA421EF378A441EFF4EC5900896F1FAA12204201E06C063CD1451690352F956DBD68B3DFF3B893840B6E668707D0AA01C0ACC36A122042091E49341528953227108CE7AF7CFFC95166A5C65E6F440DD31A0A15A973CB90CA3080206018CD72A87E3A305020300C351A0020500A435303330310C0B636F6E6669675F68617368A1220420552942BF9C8CB791D58627809A677F691D1F7B00990571366289DD327AC19245");
+val WITNESS_COUNT_3 = byte_array.from_hex("00000003000000210350FE40766BC0CE8D08B3F5B810E49A8352FDD458606BD5FAFE5ACDCDC8FF3F57000000407225EB0666F4BF760CE82CD5DCD40A44F1542E10E86F48B35F6214191650C21927D4AD15BF51E988B484D89775DA461B12953C3D7465C7B1DB5E523012E26F350000002103EF3F5BE98D499B048BA28B247036B611A1CED7FCF87C17C8B5CA3B3CE1EE23A40000004020B240646758310B5A4E0300AE0F6AC933E19CFCE33BEC9E9EB853525D47467738AE2FF2D831752149964D0EEA7AE825EB1F275BC87F9D358A6B755BBA2E6C1500000021035676109C54B9A16D271ABEB4954316A40A32BCCE023AC14C8E26E958AA68FBA9000000401D3C504ABA90A15CD252A1777C5CA5525E977142418286D4B8DA9A11D21ABF5033A8E45799CED313993D0B0A3DF7F6C2460536A1732138358667A833CC03D548");
+val WITNESS_COUNT_4 = byte_array.from_hex("00000004000000210350FE40766BC0CE8D08B3F5B810E49A8352FDD458606BD5FAFE5ACDCDC8FF3F57000000409FA59B7FD187265DCF3161873524004C88E80A756BC88A74FC8A38A6A5F0018B3BB794D43BDFF18F37DC03B4123AA13B940953D056767C97C135836BA3A64C790000002103F811D3E806E6D093A4BCCE49C145BA78F9A4B2FBD167753ECAB2A13530B081F8000000400E792A2E1154B95BAED7F1E41B58C032D04DB82FC5833A8CEC550CAD19C7E42875527F76E6C1F6700D8BFA2263C252949B74515D3EDB082ECE13F50EF5AA5B950000002103EF3F5BE98D499B048BA28B247036B611A1CED7FCF87C17C8B5CA3B3CE1EE23A4000000406975E14EA06682DE5746A73FCCCBF0C4162534A3B7E725BED6D3F443034B80EE5B1EC23BCBA824FA8A6E98BDB4F8FA7EE8CBCC5EBFA0B8551359C04F340C93B200000021035676109C54B9A16D271ABEB4954316A40A32BCCE023AC14C8E26E958AA68FBA900000040B5510BE11AA25D280749F91758B490B4BE9CACB3FF9038933550DB80161DB6260D73084C1C21B1077498EB675ECA38621787E0DAA93CF408180600330FA62952");
+
+struct module_args {
+    node_availability_report_interval_ms: integer = 86400000;
+}
+
+// assumes one signer set by default in test so block range will be 1
+function test_send_node_availability_report() {
+    rell.test.set_next_block_time(1);
+    rell.test.block().run();
+
+    val time = chain_context.args.node_availability_report_interval_ms + 100;
+    rell.test.set_next_block_time(time);
+    rell.test.tx().op(
+        create_anchor_block(
+            blockchain_rid = byte_array.from_hex("F435688B2F74933C71F8AA1952E1CFBCDAA421EF378A441EFF4EC5900896F1FA"),
+            block_height = 0,
+            timestamp = chain_context.args.node_availability_report_interval_ms,
+            block_rid = BLOCK_RID_1,
+            block_header = BLOCK_HEADER_1,
+            witness = WITNESS_COUNT_4,
+            anchoring_tx_op_index = 0),
+        create_anchor_block(
+            blockchain_rid = BLOCKCHAIN_RID_1,
+            block_height = 1,
+            timestamp = chain_context.args.node_availability_report_interval_ms + 1,
+            block_rid = BLOCK_RID_2,
+            block_header = BLOCK_HEADER_2,
+            witness = WITNESS_COUNT_3,
+            anchoring_tx_op_index = 0)
+    ).run();
+
+    rell.test.block().run(); // Runs send_node_availability_report
+
+    val expected = node_availability_report(start_time = 1, end_time = time, [
+        byte_array.from_hex('0350FE40766BC0CE8D08B3F5B810E49A8352FDD458606BD5FAFE5ACDCDC8FF3F57'): 1.0,
+        byte_array.from_hex('03F811D3E806E6D093A4BCCE49C145BA78F9A4B2FBD167753ECAB2A13530B081F8'): 0.5, // Slightly shifted order - #1 vs #2
+        byte_array.from_hex('03EF3F5BE98D499B048BA28B247036B611A1CED7FCF87C17C8B5CA3B3CE1EE23A4'): 1.0,
+        byte_array.from_hex('035676109C54B9A16D271ABEB4954316A40A32BCCE023AC14C8E26E958AA68FBA9'): 1.0
+    ]);
+
+    assert_events((
+                "icmf_message",
+                (topic = node_availability_report_topic, body = expected.to_gtv())
+                    .to_gtv_pretty())
+    );
+}
+
+
+function test_calculate_node_availability_given_one_blockchain_and_four_nodes() {
+    rell.test.tx().op(
+        create_anchor_block(
+            blockchain_rid = BLOCKCHAIN_RID_1,
+            block_height = 0,
+            timestamp = 10,
+            block_rid = BLOCK_RID_1,
+            block_header = BLOCK_HEADER_1,
+            witness = WITNESS_COUNT_4,
+            anchoring_tx_op_index = 0),
+        create_anchor_block(
+            blockchain_rid = BLOCKCHAIN_RID_1,
+            block_height = 1,
+            timestamp = 11,
+            block_rid = BLOCK_RID_2,
+            block_header = BLOCK_HEADER_2,
+            witness = WITNESS_COUNT_3,
+            anchoring_tx_op_index = 0)
+    ).run();
+
+    val expected_node_availability = [
+            byte_array.from_hex('03F811D3E806E6D093A4BCCE49C145BA78F9A4B2FBD167753ECAB2A13530B081F8'): 0.5,
+            byte_array.from_hex('0350FE40766BC0CE8D08B3F5B810E49A8352FDD458606BD5FAFE5ACDCDC8FF3F57'): 1.0,
+            byte_array.from_hex('03EF3F5BE98D499B048BA28B247036B611A1CED7FCF87C17C8B5CA3B3CE1EE23A4'): 1.0,
+            byte_array.from_hex('035676109C54B9A16D271ABEB4954316A40A32BCCE023AC14C8E26E958AA68FBA9'): 1.0
+        ];
+
+    val node_availability = calculate_node_availability(9, 12, 1);
+
+    assert_equals(node_availability, expected_node_availability);
+}
+
+function test_calculate_node_availability_given_one_blockchain_and_four_nodes_with_2_chains() {
+    rell.test.tx().op(
+        create_anchor_block(
+            blockchain_rid = BLOCKCHAIN_RID_1,
+            block_height = 0,
+            timestamp = 10,
+            block_rid = BLOCK_RID_1,
+            block_header = BLOCK_HEADER_1,
+            witness = WITNESS_COUNT_4,
+            anchoring_tx_op_index = 0),
+        create_anchor_block(
+            blockchain_rid = BLOCKCHAIN_RID_1,
+            block_height = 1,
+            timestamp = 11,
+            block_rid = BLOCK_RID_2,
+            block_header = BLOCK_HEADER_2,
+            witness = WITNESS_COUNT_3,
+            anchoring_tx_op_index = 0),
+        create_anchor_block(
+            blockchain_rid = BLOCKCHAIN_RID_2,
+            block_height = 0,
+            timestamp = 10,
+            block_rid = BLOCK_RID_1,
+            block_header = BLOCK_HEADER_1,
+            witness = WITNESS_COUNT_4,
+            anchoring_tx_op_index = 0),
+        create_anchor_block(
+            blockchain_rid = BLOCKCHAIN_RID_2,
+            block_height = 1,
+            timestamp = 11,
+            block_rid = BLOCK_RID_2,
+            block_header = BLOCK_HEADER_2,
+            witness = WITNESS_COUNT_3,
+            anchoring_tx_op_index = 0)
+    ).run();
+
+    // Extracted example from devnet
+    val expected_node_availability = [
+            byte_array.from_hex('03F811D3E806E6D093A4BCCE49C145BA78F9A4B2FBD167753ECAB2A13530B081F8'): 0.5,
+            byte_array.from_hex('0350FE40766BC0CE8D08B3F5B810E49A8352FDD458606BD5FAFE5ACDCDC8FF3F57'): 1.0,
+            byte_array.from_hex('03EF3F5BE98D499B048BA28B247036B611A1CED7FCF87C17C8B5CA3B3CE1EE23A4'): 1.0,
+            byte_array.from_hex('035676109C54B9A16D271ABEB4954316A40A32BCCE023AC14C8E26E958AA68FBA9'): 1.0
+        ];
+
+    val node_availability = calculate_node_availability(9, 12, 1);
+
+    assert_equals(node_availability, expected_node_availability);
+}
+
+function test_extract_signers() {
+    // Extracted example from devnet. Expecting signers:
+    val expected_signers = set([
+        byte_array.from_hex("0350FE40766BC0CE8D08B3F5B810E49A8352FDD458606BD5FAFE5ACDCDC8FF3F57"),
+        byte_array.from_hex("03F811D3E806E6D093A4BCCE49C145BA78F9A4B2FBD167753ECAB2A13530B081F8"),
+        byte_array.from_hex("03EF3F5BE98D499B048BA28B247036B611A1CED7FCF87C17C8B5CA3B3CE1EE23A4"),
+        byte_array.from_hex("035676109C54B9A16D271ABEB4954316A40A32BCCE023AC14C8E26E958AA68FBA9")
+    ]);
+
+    val signers = extract_signers_from_witness(WITNESS_COUNT_4);
+
+    assert_equals(set(signers), expected_signers);
+}

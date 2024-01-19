@@ -1,0 +1,120 @@
+import messaging.node_availability_reporting.*;
+
+val INTEGER_SIZE = 4;
+
+object node_availability_report_stat {
+    mutable last_node_availability_report: integer = 0;
+    mutable maximum_number_of_signers_since_last_report: integer = 0;
+}
+
+struct current_range {
+    mutable block_offset: integer = 0;
+    active_signers: set<byte_array> = set();
+}
+
+struct range_statistic {
+    mutable total_ranges: integer = 0;
+    number_of_active_ranges: map<byte_array, integer> = map<byte_array, integer>();
+}
+
+function is_time_to_send_availability_report(): boolean {
+    // Initial block
+    if (op_context.last_block_time == -1) return false;
+    // Second block, set last report to now to avoid sending initial empty report
+    if (node_availability_report_stat.last_node_availability_report == 0) {
+        node_availability_report_stat.last_node_availability_report = op_context.last_block_time;
+        return false;
+    }
+
+    return op_context.last_block_time - node_availability_report_stat.last_node_availability_report >= chain_context.args.node_availability_report_interval_ms;
+}
+
+function update_maximum_number_of_nodes_in_cluser_since_last_report(current_number_of_signers: integer) {
+    if (current_number_of_signers > node_availability_report_stat.maximum_number_of_signers_since_last_report) {
+        node_availability_report_stat.maximum_number_of_signers_since_last_report = current_number_of_signers;
+    }
+}
+
+function send_node_availability_report() {
+    val node_availability = calculate_node_availability(node_availability_report_stat.last_node_availability_report, op_context.last_block_time, node_availability_report_stat.maximum_number_of_signers_since_last_report);
+    val node_availability_report = node_availability_report(start_time = node_availability_report_stat.last_node_availability_report, end_time = op_context.last_block_time, node_availability);
+
+    send_message(node_availability_report_topic, node_availability_report.to_gtv());
+}
+
+function reset_node_availability_report_stat(current_number_of_signers: integer) {
+    node_availability_report_stat.last_node_availability_report = op_context.last_block_time;
+    node_availability_report_stat.maximum_number_of_signers_since_last_report = current_number_of_signers;
+}
+
+function calculate_node_availability(start_time: integer, end_time: integer, block_range_size: integer): map<byte_array, decimal> {
+    log("Calculating node availability, between timestamps %d and %d".format(start_time, end_time));
+    val anchored_block_witnesses = anchor_block @* { .timestamp >= start_time, .timestamp < end_time } (@sort @omit .timestamp, .blockchain_rid, .witness);
+    log("Fetched %d blocks from DB".format(anchored_block_witnesses.size()));
+
+    val range_statistics = map<byte_array, range_statistic>();
+    val current_ranges = map<byte_array, current_range>();
+
+    // Any overflowing unfinished range will be calculated but not considered for node availability
+    // Maybe there is a way to avoid the calculation?
+    for ((blockchain_rid, witness) in anchored_block_witnesses) {
+        val current_range = current_ranges.get_or_default(blockchain_rid, current_range());
+        current_range.active_signers.add_all(extract_signers_from_witness(witness));
+
+        current_range.block_offset++;
+        current_ranges[blockchain_rid] = current_range;
+
+        // Range is finished let's calculate statistics for it
+        if (current_range.block_offset >= block_range_size) {
+            val range_statistic = range_statistics.get_or_default(blockchain_rid, range_statistic());
+            range_statistic.total_ranges++;
+            for (active_signer in current_range.active_signers) {
+                val active_ranges = range_statistic.number_of_active_ranges.get_or_default(active_signer, 0);
+                range_statistic.number_of_active_ranges[active_signer] = active_ranges + 1;
+            }
+            range_statistics[blockchain_rid] = range_statistic;
+
+            current_range.block_offset = 0;
+            current_range.active_signers.clear();
+        }
+    }
+
+    // Calculate availability factor
+    val node_availability = map<byte_array, decimal>();
+    for ((blockchain_rid, range_statistic) in range_statistics) {
+
+        for (signer in range_statistic.number_of_active_ranges.keys()) {
+            node_availability[signer] = node_availability.get_or_default(signer, 0) + decimal(range_statistic.number_of_active_ranges[signer]) / decimal(range_statistic.total_ranges);
+        }
+    }
+
+    for ((node, availability) in node_availability) {
+        node_availability[node] /= range_statistics.size();
+    }
+
+    log("Node availability calculation completed");
+    return node_availability;
+}
+
+function extract_signers_from_witness(witness: byte_array): list<byte_array> {
+    val sig_count = parse_integer(witness, 0);
+    var witness_bytes_index = INTEGER_SIZE;
+
+    val signers = list<byte_array>();
+    for (signature in range(sig_count)) {
+        val subject_id_size = parse_integer(witness, witness_bytes_index);
+        witness_bytes_index += INTEGER_SIZE;
+
+        val subject_id = witness.sub(witness_bytes_index, witness_bytes_index + subject_id_size);
+        witness_bytes_index += subject_id_size;
+
+        signers.add(subject_id);
+
+        val signature_size = parse_integer(witness, witness_bytes_index);
+        witness_bytes_index += INTEGER_SIZE + signature_size;
+    }
+
+    return signers;
+}
+
+function parse_integer(bytes: byte_array, start_index: integer) = integer.from_hex(bytes.sub(start_index, start_index + INTEGER_SIZE).to_hex());
