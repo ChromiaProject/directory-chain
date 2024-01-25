@@ -42,17 +42,6 @@ function move_container_blockchains_impl(
         require(empty(pba), "Blockchain %s cannot be moved due to a pending proposal %s related to it".format(bc.rid, pba?.proposal));
     }
 
-    // Moving blockchains between containers running on the same node is not currently allowed
-    val intersection = (cn1: cluster_node, cn2: cluster_node) @* {
-        cn1.node == cn2.node,
-        cn1.cluster == src_cluster,
-        cn2.cluster == dst_cluster
-    } (cn1.node.pubkey);
-    require(empty(intersection),
-        "Moving blockchains between containers running on the same node is not allowed. Nodes belongs to clusters %s and %s are: %s"
-            .format(src_container.cluster.name, dst_cluster.name, intersection)
-    );
-
     // create dst container
     val name = src_container + "_new";
     val dst_container = create_container_impl(
