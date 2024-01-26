@@ -1,0 +1,177 @@
+val NO_ONE : pubkey = x'';
+
+entity staker_deposit {
+    time: timestamp;
+    staker: pubkey;
+    balance: integer;
+    index staker;
+    key time, staker;
+}
+
+entity staker_withdrawal_request {
+    time: timestamp;
+    staker: pubkey;
+    mutable used: boolean;
+    index staker;
+    key time, staker;
+}
+
+entity provider_registration {
+    time: timestamp;
+    provider: pubkey;
+    name: text;
+    mutable active: boolean;
+    index provider;
+    key time, provider;
+}
+
+entity staker_delegation {
+    delegate: pubkey;
+    time: timestamp;
+    provider: pubkey;
+    index provider;
+    key time, provider;
+}
+
+entity reward_rate {
+    time: timestamp;
+    delegator_rate: decimal;
+    provider_rate: decimal;
+    key time;
+}
+
+object staking_config {
+    rate_change_delay_ms: integer = 7 * 8600 * 1000;
+    withdrawal_delay_ms: integer = 14 * 8600 * 1000;
+}
+
+operation staking_set_rates_at(delegator_rate: decimal, provider_rate: decimal, time: timestamp) {
+   _staking_set_rates_at(delegator_rate, provider_rate, time);
+}
+
+function _staking_set_rates_at(delegator_rate: decimal, provider_rate: decimal, time: timestamp) {
+    require(time >= _staking_cannot_change_before(), "Cannot change rate before " + _staking_cannot_change_before());
+    create reward_rate(time, delegator_rate, provider_rate);
+}
+
+operation staking_set_rates(delegator_rate: decimal, provider_rate: decimal) {
+   _staking_set_rates_at(delegator_rate, provider_rate, _staking_cannot_change_before());
+}
+
+operation staking_deposit(staker: pubkey, amount: integer) {
+    require(amount > 0, "Can't deposit nothing (or less)!");
+    // TODO Probably should take some chr from them now!
+    create staker_deposit(time=_staking_last_known_time(), staker=staker, balance=amount + staking_get_balance(staker));
+}
+
+function staking_get_balance(staker: pubkey) {
+    val existing_state = staker_deposit @* { .staker == staker } (.balance, @sort_desc .time) limit 1;
+    val existing_balance = if (existing_state.empty()) 0 else existing_state[0][0];
+
+    return existing_balance;
+}
+
+operation staking_request_withdrawal(staker: pubkey) {
+    require(staking_get_balance(staker) > 0, "Need something to withdraw.");
+    require(NO_ONE == staking_get_current_delegate(staker), "Must undelegate before requesting a withdrawal.");
+    require(null == staking_get_withdrawal_time(staker), "Only one withdrawal request at a time.");
+
+    // Make a new request
+    require(_staking_last_known_time() > 0, "Require an actual time");
+    create staker_withdrawal_request(time=_staking_last_known_time(), staker=staker, false);
+}
+
+operation staking_withdraw(staker: pubkey) {
+    val withdrawal_time = staking_get_withdrawal_time(staker);
+    require(withdrawal_time, "Need a withdrawal request.");
+    require(_staking_last_known_time() >= withdrawal_time, "Need to wait for withdrawal request.");
+    // TODO Send the balance back to them through ft4 somehow
+    create staker_deposit(time=_staking_last_known_time(), staker=staker, balance=0);
+    update staker_withdrawal_request @ {.staker == staker } (used = true );
+}
+
+query staking_get_withdrawal_time(staker: pubkey) : timestamp? {
+    val valid_request = staker_withdrawal_request @? {.staker == staker and .used == false};
+    return if (null != valid_request) valid_request.time + staking_config.withdrawal_delay_ms else null;
+}
+
+query staking_is_active_provider(provider : pubkey) : boolean {
+    val provider_registration = provider_registration @* {provider == provider} (.active, @sort_desc .time);
+    return if (provider_registration.empty()) false else provider_registration[0][0];
+}
+
+query staking_get_total_delegation_to(pubkey) : integer = 0;
+
+query staking_rewards_earned_for(_pubkey : pubkey) : integer = 0;
+query staking_rewards_collected_for(_pubkey : pubkey) : integer = 0;
+query staking_rewards_claimable_for(_pubkey : pubkey) : integer = 0;
+
+operation staking_add_provider(name : text, provider : pubkey) {
+    require(not staking_is_active_provider(provider), "Provider cannot be active.");
+    create provider_registration(_staking_last_known_time(), provider, name, true);
+}
+
+operation staking_remove_provider(provider : pubkey) {
+    require(staking_is_active_provider(provider), "Provider not active.");
+
+    // Unwind delegations immediately
+    for(removed_delegation in staker_delegation @* {.provider == provider} (@group .delegate)) {
+        if (staking_get_current_delegate(removed_delegation) == provider)
+            create staker_delegation(delegate = removed_delegation, time=staking_get_last_known_time(), provider = NO_ONE);
+    }
+
+    val name = provider_registration @ { .provider == provider } ( .name );
+    create provider_registration(_staking_last_known_time(), provider, name, false);
+}
+
+operation staking_delegate(staker : pubkey, provider: pubkey) {
+    require(staking_is_active_provider(provider), "Must be active provider.");
+    require(staking_get_balance(staker) > 0, "Must have a stake to delegate.");
+
+    // Clear any withdrawal request
+    delete staker_withdrawal_request @? {.used == false and .staker == staker};
+
+    _staking_delegate(staker, provider);
+}
+
+operation unstaking_delegate(delegator : pubkey) {
+    _staking_delegate(delegator, NO_ONE);
+}
+
+function _staking_delegate(delegator : pubkey, provider: pubkey) {
+    // TODO Require that the user has stake
+    // TODO Tackle the case of there already being a future delegator change
+    create staker_delegation(delegate = delegator, _staking_cannot_change_before(), provider = provider);
+}
+
+operation staking_claim_rewards() {}
+
+query staking_get_current_rate() : (decimal, decimal) {
+    val current_rate = reward_rate @ {
+        .time <= _staking_last_known_time()
+    } (
+        .delegator_rate, .provider_rate, @sort_desc .time
+    ) limit 1;
+    val delegator_rate = current_rate.delegator_rate;
+    val provider_rate = current_rate.provider_rate;
+    return (delegator_rate, provider_rate);
+}
+
+query staking_get_current_delegate(delegate : pubkey) : pubkey {
+    val current_delegation = staker_delegation @? {
+        .delegate == delegate and .time <= _staking_last_known_time()
+    } (
+        .provider, @sort_desc .time
+    ) limit 1;
+    return if (null != current_delegation) current_delegation[0] else NO_ONE;
+}
+
+function _staking_cannot_change_before() : timestamp = _staking_last_known_time() + staking_config.rate_change_delay_ms;
+
+query staking_get_cannot_change_before() : timestamp = _staking_cannot_change_before();
+
+// As per https://learn.chromia.com/courses/latest-known-time
+function _staking_last_known_time() 
+    = if (op_context.exists) op_context.last_block_time else block @ {} (@max .timestamp) ?: 0;
+
+query staking_get_last_known_time() = _staking_last_known_time();
