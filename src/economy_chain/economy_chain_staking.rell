@@ -1,9 +1,10 @@
 val NO_ONE : pubkey = x'';
 
-entity staker_deposit {
+entity staker_balance {
     time: timestamp;
     staker: pubkey;
-    balance: integer;
+    amount: integer;
+    mutable latest: boolean;
     index staker;
     key time, staker;
 }
@@ -61,15 +62,11 @@ operation staking_set_rates(delegator_rate: decimal, provider_rate: decimal) {
 operation staking_deposit(staker: pubkey, amount: integer) {
     require(amount > 0, "Can't deposit nothing (or less)!");
     // TODO Probably should take some chr from them now!
-    create staker_deposit(time=_staking_last_known_time(), staker=staker, balance=amount + staking_get_balance(staker));
+    update staker_balance @? { .staker==staker and .latest==true } ( latest=false );
+    create staker_balance(time=_staking_last_known_time(), staker=staker, amount=amount + staking_get_balance(staker), latest=true);
 }
 
-function staking_get_balance(staker: pubkey) {
-    val existing_state = staker_deposit @* { .staker == staker } (.balance, @sort_desc .time) limit 1;
-    val existing_balance = if (existing_state.empty()) 0 else existing_state[0][0];
-
-    return existing_balance;
-}
+function staking_get_balance(staker: pubkey) = staker_balance @? { .staker == staker and .latest==true } (.amount) ?: 0;
 
 operation staking_request_withdrawal(staker: pubkey) {
     require(staking_get_balance(staker) > 0, "Need something to withdraw.");
@@ -86,7 +83,8 @@ operation staking_withdraw(staker: pubkey) {
     require(withdrawal_time, "Need a withdrawal request.");
     require(_staking_last_known_time() >= withdrawal_time, "Need to wait for withdrawal request.");
     // TODO Send the balance back to them through ft4 somehow
-    create staker_deposit(time=_staking_last_known_time(), staker=staker, balance=0);
+    update staker_balance @? { .staker==staker and .latest==true } ( latest=false );
+    create staker_balance(time=_staking_last_known_time(), staker=staker, amount=0, latest=true);
     update staker_withdrawal_request @ {.staker == staker } (used = true );
 }
 
@@ -100,7 +98,9 @@ query staking_is_active_provider(provider : pubkey) : boolean {
     return if (provider_registration.empty()) false else provider_registration[0][0];
 }
 
-query staking_get_total_delegation_to(pubkey) : integer = 0;
+query staking_get_total_delegation_to(provider : pubkey) : integer {
+    return 0;
+}
 
 query staking_rewards_earned_for(_pubkey : pubkey) : integer = 0;
 query staking_rewards_collected_for(_pubkey : pubkey) : integer = 0;
