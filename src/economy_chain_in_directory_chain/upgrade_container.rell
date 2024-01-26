@@ -9,7 +9,7 @@
     receive_upgrade_container_impl(body);
 }
 
-entity economy_chain_pending_last_anchored_heights_request {
+entity ec_pending_last_anchored_heights_request {
     request_id: integer;
     upgrade_container_message: byte_array;
 }
@@ -73,7 +73,7 @@ function start_creating_container_and_moving_blockchains_async(message: upgrade_
     val cac = cluster_anchoring_chain @ { src_container.cluster } ( .blockchain.rid );
     val brids = container_blockchain @* { src_container, not .blockchain.system } ( .blockchain.rid );
     val request_id = request_last_anchored_heights(cac, brids);
-    create economy_chain_pending_last_anchored_heights_request(
+    create ec_pending_last_anchored_heights_request(
         request_id, message.to_bytes()
     );
 
@@ -81,7 +81,7 @@ function start_creating_container_and_moving_blockchains_async(message: upgrade_
 }
 
 @extend(on_last_anchored_heights_received) function last_anchored_heights_received(request_id: integer, anchored_blockchains: map<byte_array, integer>) {
-    val pending_request = economy_chain_pending_last_anchored_heights_request @? { request_id };
+    val pending_request = ec_pending_last_anchored_heights_request @? { request_id };
     if (empty(pending_request)) {
         log("Pending get_last_anchored_heights request not found: " + request_id);
         return;
@@ -92,7 +92,6 @@ function start_creating_container_and_moving_blockchains_async(message: upgrade_
     // TODO: Retrieve error messages from `require()`:s
     val dst_container_cluster_names = try_call(
         move_container_blockchains_impl(
-            x"", // TODO: Resolve
             message.container_name,
             message.cluster_name,
             anchored_blockchains,
@@ -100,5 +99,10 @@ function start_creating_container_and_moving_blockchains_async(message: upgrade_
     ));
 
     val error_message = if (dst_container_cluster_names??) null else "Unable to upgrade container %s, check logs".format(message.container_name);
-    send_upgrade_container_result(message, error_message, dst_container_cluster_names?.container_name, dst_container_cluster_names?.cluster_name, dst_container_cluster_names?.cluster_class);
+    send_upgrade_container_result(
+        message, error_message,
+        dst_container_cluster_names?.container_name,
+        dst_container_cluster_names?.cluster_name,
+        dst_container_cluster_names?.cluster_class
+    );
 }
