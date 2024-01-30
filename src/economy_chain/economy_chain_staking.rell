@@ -29,9 +29,12 @@ entity provider_registration {
 entity staker_delegation {
     delegate: pubkey;
     time: timestamp;
-    provider: pubkey;
-    index provider;
-    key time, provider;
+    cutover_time: timestamp;
+    new_provider: pubkey;
+    old_provider: pubkey;
+    mutable latest: boolean;
+    index delegate;
+    key time, delegate;
 }
 
 entity reward_rate {
@@ -139,9 +142,23 @@ operation unstaking_delegate(delegator : pubkey) {
 }
 
 function _staking_delegate(delegator : pubkey, provider: pubkey) {
-    // TODO Require that the user has stake
-    // TODO Tackle the case of there already being a future delegator change
-    create staker_delegation(delegate = delegator, _staking_cannot_change_before(), provider = provider);
+    require(staking_get_balance(delegator) > 0, "Need a stake to delegate.");
+
+    // Get the value before messing with the flag
+    val current_delegation = staking_get_current_delegate(delegator);
+
+    // Clear flag from previous
+    update staker_delegation @? {.delegate == delegator and .latest == true} (latest = false);
+
+    // New delegation record
+    create staker_delegation(
+        delegate = delegator,
+        time = staking_get_last_known_time(),
+        cutover_time = _staking_cannot_change_before(),
+        new_provider = provider,
+        old_provider = current_delegation,
+        latest = true
+    );
 }
 
 operation staking_claim_rewards() {}
@@ -158,12 +175,11 @@ query staking_get_current_rate() : (decimal, decimal) {
 }
 
 query staking_get_current_delegate(delegate : pubkey) : pubkey {
-    val current_delegation = staker_delegation @? {
-        .delegate == delegate and .time <= _staking_last_known_time()
-    } (
-        .provider, @sort_desc .time
-    ) limit 1;
-    return if (null != current_delegation) current_delegation[0] else NO_ONE;
+    val current_delegation = staker_delegation @? { .delegate == delegate and .latest == true };
+    return
+        if  (null == current_delegation) NO_ONE
+    else if ( staking_get_last_known_time() >= current_delegation.cutover_time ) current_delegation.new_provider
+    else    current_delegation.old_provider;
 }
 
 function _staking_cannot_change_before() : timestamp = _staking_last_known_time() + staking_config.rate_change_delay_ms;
