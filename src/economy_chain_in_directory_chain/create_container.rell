@@ -15,7 +15,6 @@ function receive_create_container_impl(body: gtv) {
     val container_cluster_names = try_call(create_container_from_ticket(
         provider_pubkey = message.provider_pubkey,
         container_units = message.container_units,
-        cluster_class = message.cluster_class,
         extra_storage = message.extra_storage,
         cluster_name = message.cluster_name,
         *));
@@ -29,37 +28,33 @@ function receive_create_container_impl(body: gtv) {
         ticket_id = message.ticket_id,
         error_message = error_message,
         container_name = container_cluster_names?.container_name,
-        cluster_name = container_cluster_names?.cluster_name,
-        cluster_class = container_cluster_names?.cluster_class
+        cluster_name = container_cluster_names?.cluster_name
     ).to_gtv());
 }
 
 function create_container_from_ticket(
     provider_pubkey: pubkey,
     container_units: integer,
-    cluster_class: text,
     extra_storage: integer,
     cluster_name: text
-): (container_name: text, cluster_name: text, cluster_class: text) {
+): (container_name: text, cluster_name: text) {
+
     require_pubkey(provider_pubkey);
-    require(not cluster_name.empty() or not cluster_class.empty(), "Cluster name and/or cluster class must be specified");
+    require(not cluster_name.empty(), "Cluster name must be specified");
 
     val provider = create_provider_if_not_exist(provider_pubkey);
+    val cluster = cluster @? { .name == cluster_name, .name != clusters.system, .operational };
 
-    val clusters = cluster @* { cluster.name != clusters.system, .operational };
-    for (cluster in clusters) {
-        val available_container_units = get_available_container_units(cluster);
-        val available_extra_storage = get_available_extra_storage(cluster);
-        if (available_container_units >= container_units
-            and available_extra_storage >= extra_storage
-            and (cluster_name.empty() or cluster_name == cluster.name)
-            and (cluster_class.empty() or cluster_class == cluster.cluster_class)
-        ) {
-            val container = create_container_in_cluster(provider, cluster, container_units, extra_storage);
-            return (container_name = container.name, cluster_name = cluster.name, cluster_class = cluster.cluster_class);
-        }
+    if (
+        cluster != null and
+        get_available_container_units(cluster) >= container_units and
+        get_available_extra_storage(cluster) >= extra_storage
+    ) {
+        val container = create_container_in_cluster(provider, cluster, container_units, extra_storage);
+        return (container_name = container.name, cluster_name = cluster.name);
     }
-    return (container_name = "", cluster_name = "", cluster_class = "");
+
+    return (container_name = "", cluster_name = "");
 }
 
 function create_container_in_cluster(provider, cluster, container_units: integer, extra_storage: integer): container {

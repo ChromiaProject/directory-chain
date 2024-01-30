@@ -21,7 +21,6 @@ function receive_ticket_container_result_message(body: gtv) {
                 ticket_state.SUCCESS -> {
                     val container_name = message.container_name!!;
                     val cluster_name = message.cluster_name!!;
-                    val cluster_class = message.cluster_class!!;
                     log("Successfully created container %s in cluster %s for ticket %s".format(container_name, cluster_name, message.ticket_id));
                     specific_ticket.container_name = container_name;
                     create lease(
@@ -29,7 +28,6 @@ function receive_ticket_container_result_message(body: gtv) {
                         account = ticket.account,
                         container_units = specific_ticket.container_units,
                         extra_storage_gib = specific_ticket.extra_storage_gib,
-                        cluster_class = cluster_class,
                         cluster = cluster,
                         start_time = op_context.last_block_time,
                         duration_millis = specific_ticket.duration_millis,
@@ -51,7 +49,6 @@ function receive_ticket_container_result_message(body: gtv) {
                     // Note: When we implement "move" the container name might change so we should check what name D1 returns
                     val upgraded_container_name = message.container_name!!;
                     val upgraded_cluster_name = message.cluster_name!!;
-                    val upgraded_cluster_class = message.cluster_class!!;
                     log("Successfully upgraded container %s for ticket %s".format(upgraded_container_name, message.ticket_id));
                     val current_lease = lease @ { .container_name == specific_ticket.container_name };
                     val currently_auto_renewed = current_lease.auto_renew;
@@ -62,7 +59,6 @@ function receive_ticket_container_result_message(body: gtv) {
                         account = ticket.account,
                         container_units = specific_ticket.container_units,
                         extra_storage_gib = specific_ticket.extra_storage_gib,
-                        cluster_class = upgraded_cluster_class,
                         cluster = cluster,
                         start_time = op_context.last_block_time,
                         duration_millis = current_duration,
