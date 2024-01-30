@@ -1,0 +1,165 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+
+val provider_key = rell.test.keypairs.bob;
+val provider_pubkey = provider_key.pub;
+
+val cluster_name = "Bob's cluster";
+val tag_1_name = "Bob's tag";
+
+function test_create_cluster() {
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op(
+        create_tag(
+            name = tag_1_name,
+            scu_price = 1,
+            extra_storage_price = 2),
+        create_cluster(
+            name = cluster_name,
+            governor_voter_set_name = "governor_voter_set",
+            voter_set_name = "voter_set",
+            cluster_units= 1,
+            extra_storage= 2,
+            tag_name= tag_1_name))
+        .sign(provider_key)
+        .run();
+
+    val expected = create_cluster_message(name = cluster_name,
+        governor_voter_set_name = "governor_voter_set",
+        voter_set_name = "voter_set",
+        cluster_units= 1,
+        extra_storage= 2,
+        proposer_pubkey= rell.test.pubkeys.bob);
+
+    val pending_cluster = pending_cluster @? { .name == cluster_name };
+
+    assert_not_null(pending_cluster);
+    assert_equals(pending_cluster.status, pending_cluster_status.PENDING);
+    assert_events(("icmf_message",(topic = create_cluster_topic, body = expected.to_gtv()).to_gtv_pretty()));
+}
+
+function test_create_cluster_fail_existing() {
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op(
+        create_test_cluster(cluster_name, tag_1_name))
+        .sign(provider_key)
+        .run();
+    rell.test.tx().op(
+        create_cluster(
+            name = cluster_name,
+            governor_voter_set_name = "governor_voter_set",
+            voter_set_name = "voter_set",
+            cluster_units= 1,
+            extra_storage= 2,
+            tag_name= tag_1_name))
+        .sign(provider_key)
+        .run_must_fail("Cluster %s already exists".format(cluster_name));
+}
+
+function test_create_cluster_fail_due_to_already_pending() {
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+
+    rell.test.tx().op(
+        create_pending_cluster(cluster_name,
+            tag_1_name,
+            pending_cluster_status.PENDING),
+        create_cluster(
+            name = cluster_name,
+            governor_voter_set_name = "governor_voter_set",
+            voter_set_name = "voter_set",
+            cluster_units = 1,
+            extra_storage = 2,
+            tag_name = tag_1_name))
+        .sign(provider_key)
+        .run_must_fail("There is already a pending request to create cluster with name %s".format(cluster_name));
+}
+
+function test_create_cluster_with_failed_pending_cluster() {
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+
+    rell.test.tx().op(
+        create_pending_cluster(cluster_name,
+            tag_1_name,
+            pending_cluster_status.FAILURE))
+        .sign(provider_key)
+        .run();
+    rell.test.tx().op(
+        create_cluster(
+            name = cluster_name,
+            governor_voter_set_name = "governor_voter_set",
+            voter_set_name = "voter_set",
+            cluster_units = 1,
+            extra_storage = 2,
+            tag_name = tag_1_name))
+        .sign(provider_key)
+        .run();
+
+    val expected = create_cluster_message(name= cluster_name,
+        governor_voter_set_name = "governor_voter_set",
+        voter_set_name = "voter_set",
+        cluster_units= 1,
+        extra_storage= 2,
+        proposer_pubkey= rell.test.pubkeys.bob);
+
+    val pending_cluster = pending_cluster @? { .name == cluster_name };
+
+    assert_not_null(pending_cluster);
+    assert_equals(pending_cluster.status, pending_cluster_status.PENDING);
+    assert_events(("icmf_message",(topic = create_cluster_topic, body = expected.to_gtv()).to_gtv_pretty()));
+}
+
+function test_change_cluster_tag() {
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+
+    rell.test.tx().op(
+        create_tag(
+            name = tag_1_name,
+            scu_price = 3,
+            extra_storage_price = 4),
+        create_test_cluster(cluster_name),
+        change_cluster_tag(
+            cluster_name= cluster_name,
+            tag_name = tag_1_name))
+        .sign(provider_key)
+        .run();
+
+    val cluster = cluster @ { .name == cluster_name };
+
+    assert_equals(cluster.tag.name,  tag_1_name);
+}
+
+function test_remove_tag_with_non_existing_tag() {
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op(
+        remove_tag(tag_1_name))
+        .sign(provider_key)
+        .run_must_fail("Tag with name %s does not exist".format(tag_1_name));
+}
+
+function test_remove_tag() {
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op(
+        create_tag(
+            name = tag_1_name,
+            scu_price = 3,
+            extra_storage_price = 4),
+        remove_tag(tag_1_name))
+        .sign(provider_key)
+        .run();
+
+    val tag = tag @? { .name == tag_1_name};
+
+    assert_null(tag);
+}
+
+function test_remove_tag_given_tag_is_used_by_cluster() {
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op(
+        create_test_cluster(cluster_name, tag_1_name),
+        remove_tag(tag_1_name))
+        .sign(provider_key)
+        .run_must_fail("Tag with name %s is in use.".format(tag_1_name));
+}
+
