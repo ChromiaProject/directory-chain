@@ -1,0 +1,34 @@
+@extend(receive_icmf_message) function receive_create_cluster(sender: byte_array, topic: text, body: gtv) {
+    if (topic != create_cluster_topic) return;
+
+    if (sender != economy_chain.rid) {
+        log("Sender %s is not the economy chain, ignoring".format(sender));
+        return;
+    }
+
+    receive_create_cluster_impl(body);
+}
+
+function receive_create_cluster_impl(body: gtv) {
+    val message = create_cluster_message.from_gtv(body);
+
+    val cluster_name = try_call(create_cluster_from_message(message, *));
+
+   if (cluster_name == null)
+        send_message(create_cluster_error_topic, create_cluster_error_message (
+            name = message.name,
+            error_message = "Unexpected error"
+        ).to_gtv());
+}
+
+function create_cluster_from_message(
+    message: create_cluster_message
+): text {
+    val proposer = require_provider(message.proposer_pubkey);
+    val governor = require_voter_set(message.governor_voter_set_name);
+    val node_provider_set = require_voter_set(message.voter_set_name);
+
+    create_cluster_impl(proposer, message.name, governor, voter_set_member @* { node_provider_set }.provider.pubkey, cluster_creation_data(cluster_units = message.cluster_units, extra_storage = message.extra_storage, ""));
+
+    return message.name;
+}

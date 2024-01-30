@@ -1,0 +1,48 @@
+@test module;
+
+import ^^^.common.test.setup.*;
+import ^^^.common.test.util.*;
+import ^^.*;
+import ^.helpers.*;
+
+function test_create_cluster() {
+    setup_module();
+
+    val conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    rell.test.tx().op(
+        init_economy_chain(initial_provider.pub, conf.to_gtv().to_bytes())
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        create_cluster_op(create_cluster_message(
+            name = "test1",
+            governor_voter_set_name = "SYSTEM_P",
+            voter_set_name = "SYSTEM_P",
+            cluster_units = 1,
+            extra_storage = 0,
+            proposer_pubkey = initial_provider.pub
+        ).to_gtv())
+    ).run();
+
+    val new_cluster = cluster @? { .name == "test1" };
+    assert_not_null(new_cluster);
+
+    // Verify error message is sent if cluster creation is requested with existing name
+    rell.test.tx().op(
+        create_cluster_op(create_cluster_message(
+            name = "test1",
+            governor_voter_set_name = "SYSTEM_P",
+            voter_set_name = "SYSTEM_P",
+            cluster_units = 1,
+            extra_storage = 0,
+            proposer_pubkey = initial_provider.pub
+        ).to_gtv())
+    ).nop().run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = create_cluster_error_topic,
+            body = create_cluster_error_message(name = "test1", error_message = "Unexpected error").to_gtv()
+        ).to_gtv_pretty())
+    );
+}

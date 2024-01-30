@@ -1,0 +1,10 @@
+function require_system_provider(): byte_array {
+    for (signer in op_context.get_signers()) {
+        val provider = provider @? {.pubkey == signer};
+        if (provider != null and provider.system and provider.active) {
+            return signer;
+        }
+    }
+    require(false, "Expected system provider signature");
+    return x""; // Return to make compiler not complain about path without return statement (the require will always fail)
+}

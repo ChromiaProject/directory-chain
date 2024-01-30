@@ -1,9 +1,18 @@
 @extend(after_provider_registered) function(provider, cluster: cluster?) {
-    send_message(provider_registered_topic, provider_registered_message(
+    send_message(provider_update_topic, provider_update_message(
         pubkey = provider.pubkey,
         system = provider.system,
         tier = provider.tier.name,
-        cluster_name = cluster?.name
+        active = provider.active
+    ).to_gtv());
+}
+
+@extend(after_provider_updated) function(provider) {
+    send_message(provider_update_topic, provider_update_message(
+        pubkey = provider.pubkey,
+        system = provider.system,
+        tier = provider.tier.name,
+        active = provider.active
     ).to_gtv());
 }
 

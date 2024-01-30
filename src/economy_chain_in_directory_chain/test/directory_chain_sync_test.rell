@@ -7,18 +7,19 @@ import ^^^.direct_cluster.*;
 import ^^.*;
 import ^^^.model.*;
 import ^.helpers.*;
+import proposal_provider.*;
 
 function test_init_events() {
     setup_module();
 
     assert_events(
         ("icmf_message", (
-            topic = provider_registered_topic,
-            body = provider_registered_message(
+            topic = provider_update_topic,
+            body = provider_update_message(
                 pubkey = initial_provider.pub,
                 system = false,
                 tier = provider_tier.NODE_PROVIDER.name,
-                cluster_name = null).to_gtv()).to_gtv_pretty()
+                active = true).to_gtv()).to_gtv_pretty()
         ),
         ("icmf_message", (
             topic = cluster_update_topic,
@@ -30,6 +31,14 @@ function test_init_events() {
                 extra_storage = 0,
                 cluster_class = "",
                 anchoring_chain = null).to_gtv()).to_gtv_pretty()
+        ),
+        ("icmf_message", (
+            topic = provider_update_topic,
+            body = provider_update_message(
+                pubkey = initial_provider.pub,
+                system = true,
+                tier = provider_tier.NODE_PROVIDER.name,
+                active = true).to_gtv()).to_gtv_pretty()
         ),
         ("icmf_message", (
             topic = node_update_topic,
@@ -76,12 +85,52 @@ function test_provider() {
 
     assert_events(
         ("icmf_message", (
-            topic = provider_registered_topic,
-            body = provider_registered_message(
+            topic = provider_update_topic,
+            body = provider_update_message(
                 pubkey = test_provider.pub,
                 system = false,
                 tier = provider_tier.NODE_PROVIDER.name,
-                cluster_name = null).to_gtv()).to_gtv_pretty()
+                active = false).to_gtv()).to_gtv_pretty()
+        ),
+        ("icmf_message", (
+            topic = provider_update_topic,
+            body = provider_update_message(
+                pubkey = test_provider.pub,
+                system = false,
+                tier = provider_tier.NODE_PROVIDER.name,
+                active = false).to_gtv()).to_gtv_pretty()
+        )
+    );
+
+    // Enable provider (after_provider_update)
+    rell.test.tx().op(
+        propose_provider_state(initial_provider.pub, test_provider.pub, true)
+    ).sign(initial_provider).run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = provider_update_topic,
+            body = provider_update_message(
+                pubkey = test_provider.pub,
+                system = false,
+                tier = provider_tier.NODE_PROVIDER.name,
+                active = true).to_gtv()).to_gtv_pretty()
+        )
+    );
+
+    // Disable provider (after_provider_update)
+    rell.test.tx().op(
+        propose_provider_state(initial_provider.pub, test_provider.pub, false)
+    ).sign(initial_provider).run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = provider_update_topic,
+            body = provider_update_message(
+                pubkey = test_provider.pub,
+                system = false,
+                tier = provider_tier.NODE_PROVIDER.name,
+                active = false).to_gtv()).to_gtv_pretty()
         )
     );
 }
