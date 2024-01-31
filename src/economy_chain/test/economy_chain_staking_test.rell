@@ -66,6 +66,8 @@ function test_add_remove_providers() {
     ).run();
 
     assert_false(staking_is_active_provider(rell.test.pubkeys.charlie));
+
+    // TODO ensure delegates have been removed
 }
 
 function test_delegation() {
@@ -86,7 +88,7 @@ function test_delegation() {
     assert_equals(staking_get_current_delegate(rell.test.pubkeys.alice), rell.test.pubkeys.charlie);
 
     rell.test.tx().op(
-        unstaking_delegate(rell.test.pubkeys.alice)
+        staking_undelegate(rell.test.pubkeys.alice)
     ).run();
 
     assert_equals(staking_get_current_delegate(rell.test.pubkeys.alice), rell.test.pubkeys.charlie); // No change now.
@@ -94,6 +96,11 @@ function test_delegation() {
     rell.test.set_next_block_time_delta(staking_config.rate_change_delay_ms);
     rell.test.block().run();
     assert_equals(staking_get_current_delegate(rell.test.pubkeys.alice), NO_ONE); // Change in a week
+
+    // Clean up
+    rell.test.tx().op(
+        staking_remove_provider(rell.test.pubkeys.charlie)
+    ).run();
 }
 
 function test_staking_deposit() {
@@ -159,4 +166,84 @@ function test_withdrawal() {
         .op(staking_request_withdrawal(rell.test.pubkeys.alice))
         .op(staking_request_withdrawal(rell.test.pubkeys.alice))
     .run_must_fail("Only one withdrawal request at a time.");
+
+    // Clean up
+    rell.test.tx()
+        .op(staking_remove_provider(rell.test.pubkeys.bob))
+    .run();
+}
+
+function test_staking_get_total_delegation_to() {
+    rell.test.tx().op(init()).run();
+
+    // Check we have a clean slate
+    assert_false(staking_is_active_provider(rell.test.pubkeys.alice));
+    assert_false(staking_is_active_provider(rell.test.pubkeys.bob));
+    assert_equals(0, staking_get_balance(rell.test.pubkeys.alice));
+    assert_equals(0, staking_get_balance(rell.test.pubkeys.bob));
+
+    assert_false(staking_is_active_provider(rell.test.pubkeys.bob));
+    rell.test.tx()
+        // Add A to the provider list
+        .op(staking_add_provider('Alice', rell.test.pubkeys.alice))
+        // Add B to the provider list
+        .op(staking_add_provider('Bob', rell.test.pubkeys.bob))
+        // Have C deposit 9 and delegate to A
+        .op(staking_deposit(rell.test.pubkeys.charlie, 9))
+        .op(staking_delegate(rell.test.pubkeys.charlie, rell.test.pubkeys.alice))
+        // Have D deposit 11 and delagate to B
+        .op(staking_deposit(rell.test.pubkeys.dave, 11))
+        .op(staking_delegate(rell.test.pubkeys.dave, rell.test.pubkeys.bob))
+    .run();
+
+    // Check the that neither A nor B has a balance delegated to them
+    assert_equals(staking_get_total_delegation_to(rell.test.pubkeys.alice), 0);
+    assert_equals(staking_get_total_delegation_to(rell.test.pubkeys.bob), 0);
+
+    // Wait a period
+    rell.test.set_next_block_time_delta(staking_config.rate_change_delay_ms);
+    rell.test.block().run();
+
+    // Check that A has 9 delegated to it
+    // Check that B has 11 delegated to it
+    assert_equals(staking_get_total_delegation_to(rell.test.pubkeys.alice), 9);
+    assert_equals(staking_get_total_delegation_to(rell.test.pubkeys.bob), 11);
+
+    // Have C deposit an additional 7
+    rell.test.tx()
+        .op(staking_deposit(rell.test.pubkeys.charlie, 7))
+    .run();
+
+    // Check that A has 16 delegated to it (adding stake is immediate)
+    assert_equals(staking_get_total_delegation_to(rell.test.pubkeys.alice), 16);
+
+    // Have D change their their delegation to A
+    rell.test.tx()
+        .op(staking_delegate(rell.test.pubkeys.dave, rell.test.pubkeys.alice))
+    .run();
+
+    // Check that A has 16 delegated to it (changing delegation takes time)
+    assert_equals(staking_get_total_delegation_to(rell.test.pubkeys.alice), 16);
+
+    // Wait a period
+    rell.test.set_next_block_time_delta(staking_config.rate_change_delay_ms);
+    rell.test.block().run();
+
+    // Check that A has 27 delegated to it
+    // Check that B has 0 delegated to it
+    assert_equals(staking_get_total_delegation_to(rell.test.pubkeys.alice), 27);
+    assert_equals(staking_get_total_delegation_to(rell.test.pubkeys.bob), 0);
+
+    // Have D undelegate
+    rell.test.tx()
+        .op(staking_undelegate(rell.test.pubkeys.dave))
+    .run();
+
+    // Wait a period
+    rell.test.set_next_block_time_delta(staking_config.rate_change_delay_ms);
+    rell.test.block().run();
+
+    // Check that A has 16 delegated to it
+    assert_equals(staking_get_total_delegation_to(rell.test.pubkeys.alice), 16);
+    assert_equals(staking_get_total_delegation_to(rell.test.pubkeys.bob), 0);
 }

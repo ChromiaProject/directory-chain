@@ -65,8 +65,9 @@ operation staking_set_rates(delegator_rate: decimal, provider_rate: decimal) {
 operation staking_deposit(staker: pubkey, amount: integer) {
     require(amount > 0, "Can't deposit nothing (or less)!");
     // TODO Probably should take some chr from them now!
+    val existing = staking_get_balance(staker);
     update staker_balance @? { .staker==staker and .latest==true } ( latest=false );
-    create staker_balance(time=_staking_last_known_time(), staker=staker, amount=amount + staking_get_balance(staker), latest=true);
+    create staker_balance(time=_staking_last_known_time(), staker=staker, amount=amount + existing, latest=true);
 }
 
 function staking_get_balance(staker: pubkey) = staker_balance @? { .staker == staker and .latest==true } (.amount) ?: 0;
@@ -97,12 +98,29 @@ query staking_get_withdrawal_time(staker: pubkey) : timestamp? {
 }
 
 query staking_is_active_provider(provider : pubkey) : boolean {
-    val provider_registration = provider_registration @* {provider == provider} (.active, @sort_desc .time);
-    return if (provider_registration.empty()) false else provider_registration[0][0];
+    val provider_registration = provider_registration @? {.provider == provider} (.active, @omit @sort_desc .rowid) limit 1;
+    return provider_registration ?: false;
 }
 
 query staking_get_total_delegation_to(provider : pubkey) : integer {
-    return 0;
+    return
+        // Join deposit and delegation information 
+        (d: staker_delegation, b: staker_balance) @ {
+            // consider only the latest entries
+            d.latest == true and b.latest ==true
+            // joined on delegate
+            and d.delegate == b.staker
+            // restricted to those currently on this provider according to the cut off date
+            and (
+                ( d.new_provider == provider and d.cutover_time <= _staking_last_known_time() )
+                or
+                ( d.old_provider == provider and d.cutover_time > _staking_last_known_time() )
+            )
+        } (
+            // sum the balances
+            @sum b.amount
+        )
+    ;
 }
 
 query staking_rewards_earned_for(_pubkey : pubkey) : integer = 0;
@@ -137,7 +155,7 @@ operation staking_delegate(staker : pubkey, provider: pubkey) {
     _staking_delegate(staker, provider);
 }
 
-operation unstaking_delegate(delegator : pubkey) {
+operation staking_undelegate(delegator : pubkey) {
     _staking_delegate(delegator, NO_ONE);
 }
 
