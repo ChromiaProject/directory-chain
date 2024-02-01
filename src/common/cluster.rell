@@ -103,11 +103,13 @@ function _remove_replica_node_from_cluster_internal(cluster, node) {
  * a provider disables its node (if it is not the last node of the cluster).
  */
 function check_operational(cl: cluster) {
-    val providers = cluster_provider @* { cl }.provider;
-    val nodes = cluster_node @* { cl }.node;
-    if (nodes.size() == providers.size()) {
-        update cluster @ { .name == cl.name } (.operational = true);
-        after_cluster_operational(cl);
+    if (not cl.operational) {
+        val providers = cluster_provider @* { cl }.provider;
+        val nodes = cluster_node @* { cl }.node;
+        if (nodes.size() == providers.size()) {
+            update cluster @ { .name == cl.name } (.operational = true);
+            after_cluster_operational(cl);
+        }
     }
 }
 
