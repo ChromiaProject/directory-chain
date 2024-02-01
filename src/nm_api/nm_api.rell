@@ -363,8 +363,11 @@ query nm_get_unarchiving_blockchain_node_info(pubkey, blockchain_rid: byte_array
  * NM API Version 15
  */
 query nm_get_migrating_blockchain_node_info(node_id: pubkey, blockchain_rid: byte_array): migrating_blockchain_node_info? {
-    val node = require_node(node_id);
-    val bc = require_blockchain_entity(blockchain_rid);
+    val node = node @? { node_id };
+    if (node == null) return null;
+
+    val bc = blockchain @? { blockchain_rid };
+    if (bc == null) return null;
 
     val mvbc = moving_blockchain @? { bc } ($.to_struct());
     if (exists(mvbc)) {

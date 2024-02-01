@@ -2,17 +2,14 @@ import messaging.icmf.*;
 import messaging.anchoring_api.*;
 
 function move_container_blockchains_impl(
-    provider_pubkey: pubkey,
     src_container_name: text,
     destination_cluster_name: text,
     anchored_blockchains: map<byte_array, integer>
 ): (container_name: text, cluster_name: text) {
-    val provider = require_is_provider_with_rate_limit(provider_pubkey);
     // require src container
     val src_container = require_container(src_container_name);
-    require_container_deployer(src_container, provider);
     val src_cluster = src_container.cluster;
-    val src_nodes = cluster_node @* { src_cluster } ( .node );
+    val src_deployer = src_container.deployer;
 
     // require dst cluster
     val dst_cluster = require_cluster(destination_cluster_name);
@@ -43,9 +40,11 @@ function move_container_blockchains_impl(
     }
 
     // create dst container
-    val name = src_container + "_new";
+    val new_name = src_container.name + "_new";
+    val new_deployers = voter_set_member @* { src_container.deployer } (.provider.pubkey);
     val dst_container = create_container_impl(
-        provider, name, dst_cluster, -1, [provider.pubkey],
+        src_container.proposed_by, new_name, dst_cluster,
+        consensus_threshold.super_majority, new_deployers,
         standard_container_defaults.container_units,
         standard_container_defaults.max_blockchains,
         standard_container_defaults.extra_storage
@@ -55,7 +54,12 @@ function move_container_blockchains_impl(
     for (bc in bcs) {
         val final_height = anchored_blockchains[bc.rid];
         create moving_blockchain(bc, source = src_container, destination = dst_container, final_height/*, remove_on_nodes*/);
-        for (node in src_nodes) {
+
+        val src_nodes_to_replicate_on = (cn: cluster_node, rn: blockchain_replica_node) @* {
+            cn.cluster == src_cluster,
+            empty(blockchain_replica_node @* { bc, cn.node })
+        } ( cn.node );
+        for (node in src_nodes_to_replicate_on) {
             create blockchain_replica_node(bc, node);
         }
         // remove bc from src_container
@@ -68,9 +72,13 @@ function move_container_blockchains_impl(
         }
         // FYI: PCU-based update (i.e. update_configuration_signers_regular()) can't be used here.
         require_height_is_greater_or_equal_to_last_config_height(bc, final_height);
-        // prepare a final signer config
+        // base config
+        val base_config = require(get_blockchain_configuration(bc.rid, final_height)?.base_config,
+            "Can't find config for %s for block %s".format(bc.rid, final_height));
+        compress_and_store_configuration(bc, final_height + 1, make_config_unique(base_config));
+        // signers config
         val encoded_dst_nodes = (dst_nodes @* {} ( @sort .pubkey )).to_gtv().to_bytes();
-        create blockchain_configuration_signers(bc, final_height, encoded_dst_nodes);
+        create blockchain_configuration_signers(bc, final_height + 1, encoded_dst_nodes);
     }
 
     return (container_name = dst_container.name, cluster_name = dst_cluster.name);

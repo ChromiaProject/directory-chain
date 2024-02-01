@@ -14,9 +14,10 @@ object request_counter {
     mutable counter: integer = 0;
 }
 
-function next_request_id(): integer {
+function create_request(): pending_request {
+    val request = create pending_request(request_counter.counter);
     request_counter.counter = request_counter.counter + 1;
-    return request_counter.counter;
+    return request;
 }
 
 struct get_last_anchored_heights_message {
@@ -31,18 +32,18 @@ struct last_anchored_heights_message {
 }
 
 function request_last_anchored_heights(target_anchoring_chain: byte_array, blockchain_rids: list<byte_array>): integer {
-    val request_id = next_request_id();
+    val request = create_request();
 
     send_message(
         get_last_anchored_heights_topic,
         get_last_anchored_heights_message(
-            request_id = request_id,
+            request_id = request.request_id,
             target_anchoring_chain = target_anchoring_chain,
             blockchains = blockchain_rids
         ).to_gtv()
     );
 
-    return request_id;
+    return request.request_id;
 }
 
 @extend(receive_icmf_message) function receive_last_anchored_heights(sender: byte_array, topic: text, body: gtv) {
@@ -61,4 +62,3 @@ function request_last_anchored_heights(target_anchoring_chain: byte_array, block
 }
 
 @extendable function on_last_anchored_heights_received(request_id: integer, anchored_blockchains: map<byte_array, integer>);
-
