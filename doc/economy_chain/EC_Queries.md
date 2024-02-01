@@ -16,6 +16,12 @@
 | get_max_lease_duration                      |                         | integer                | Get maximum lease time in weeks                             |
 | get_chr_asset                               |                         | asset info             | Get information about the CHR asset                         |
 | get_provider_account_id                     | provider_pubkey: pubkey | byte_array?            | Get provider account id                                     |
+| get_tags                                    |                         | list<tag_data>         | Get a list of all tags                                                                                                                                      |
+| get_tag_by_name                             | name: text              | tag_data?              | Get a tag by name                                                                                                                                           |
+| get_clusters                                |                         | list<cluster_data>     | Get a list of all clusters                                                                                                                                  |
+| get_cluster_by_name                         | name: text              | cluster_data?          | Get a cluster by name                                                                                                                                       |
+| get_cluster_creation_status                 | name: text              | cluster_creation_status| See if the cluster was created successfully, is still pending, or failed to be created. If the cluster does not exist, the creation status will be unknown. |
+
 
 ## Return types
 

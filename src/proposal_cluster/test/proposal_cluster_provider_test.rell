@@ -1,0 +1,77 @@
+@test module;
+
+import ^^.*;
+import common.operations.*;
+import common.test.setup.*;
+import common.test.util.*;
+import direct_cluster.*;
+import direct_container.*;
+import model.*;
+import proposal_container.*;
+import proposal_provider.*;
+
+val node_provider1 = rell.test.keypair(
+    priv = x"71C89AE77719E3779EAE09C26A229F7AF33D8C8F7E7E8D82A9A42470C224AB56",
+    pub = x"020EE9063CED9B47CC60EB931443C01F3FD7A0DAB4B2D0505D3A2FAAD4FA9ABF13"
+);
+val node_provider2 = rell.test.keypair(
+    priv = x"B39E4CCCB9B0FD71B7AC9FFF1216C34648FA7362ECD9874743776BDFDEE4F6A8",
+    pub = x"03BD01AF899839BDDB5810616C1AF8B61B415E903D73418DED238A8EEA352C72E0"
+);
+
+// Make sure a cluster gets operational when a provider is removed
+function test_operational_when_provider_is_removed() {
+    setup_module();
+
+    val cluster_name = "cluster1";
+
+    rell.test.tx().op(
+        // Register and activate 2 providers
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, rell.test.pubkeys.trudy, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.bob, true),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.trudy, true),
+
+        // Create cluster
+        create_cluster(initial_provider.pub, cluster_name, voter_sets.system_p,
+            [rell.test.pubkeys.alice, rell.test.pubkeys.bob, rell.test.pubkeys.trudy])
+    ).sign(initial_provider).run();
+
+    // No nodes added yet
+    assert_false(cluster @ { cluster_name } ( .operational ));
+
+    // Add one node (1 of 3 nodes)
+    rell.test.tx().op(
+        register_node_with_node_data(rell.test.pubkeys.bob, register_node_data(
+            node_provider1.pub,
+            host = "localhost",
+            port = 7749,
+            api_url = "http://localhost:7749",
+            clusters = [cluster_name],
+            cluster_units = 5
+        ))
+    ).sign(rell.test.keypairs.bob).run();
+
+    // Add another node (2 of 3 nodes)
+    rell.test.tx().op(
+        register_node_with_node_data(rell.test.pubkeys.trudy, register_node_data(
+            node_provider2.pub,
+            host = "localhost",
+            port = 7749,
+            api_url = "http://localhost:7749",
+            clusters = [cluster_name],
+            cluster_units = 5
+        ))
+    ).sign(rell.test.keypairs.trudy).run();
+
+    // Cluster is still not operational since we only have 2 out of 3 nodes
+    assert_false(cluster @ { cluster_name } ( .operational ));
+
+    // Remove provider (2 of 2 nodes = operational)
+    rell.test.tx().op(
+        propose_cluster_provider(rell.test.pubkeys.alice, cluster_name, rell.test.pubkeys.alice, false)
+    ).sign(rell.test.keypairs.alice).run();
+
+    // With one provider less we get a operational cluster with 2 nodes and 2 providers
+    assert_true(cluster @ { cluster_name } ( .operational ));
+}

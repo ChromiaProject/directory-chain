@@ -16,11 +16,11 @@ function receive_ticket_container_result_message(body: gtv) {
     when (ticket.type) {
         ticket_type.CREATE_CONTAINER -> {
             val specific_ticket = create_container_ticket @ { ticket };
+            val cluster = cluster @ { .name == specific_ticket.cluster_name };
             when (ticket.state) {
                 ticket_state.SUCCESS -> {
                     val container_name = message.container_name!!;
                     val cluster_name = message.cluster_name!!;
-                    val cluster_class = message.cluster_class!!;
                     log("Successfully created container %s in cluster %s for ticket %s".format(container_name, cluster_name, message.ticket_id));
                     specific_ticket.container_name = container_name;
                     create lease(
@@ -28,8 +28,7 @@ function receive_ticket_container_result_message(body: gtv) {
                         account = ticket.account,
                         container_units = specific_ticket.container_units,
                         extra_storage_gib = specific_ticket.extra_storage_gib,
-                        cluster_class = cluster_class,
-                        cluster_name = cluster_name,
+                        cluster = cluster,
                         start_time = op_context.last_block_time,
                         duration_millis = specific_ticket.duration_millis,
                         auto_renew = specific_ticket.auto_renew
@@ -44,12 +43,12 @@ function receive_ticket_container_result_message(body: gtv) {
         }
         ticket_type.UPGRADE_CONTAINER -> {
             val specific_ticket = upgrade_container_ticket @ { ticket };
+            val cluster = cluster @ { .name == specific_ticket.cluster_name };
             when (ticket.state) {
                 ticket_state.SUCCESS -> {
                     // Note: When we implement "move" the container name might change so we should check what name D1 returns
                     val upgraded_container_name = message.container_name!!;
                     val upgraded_cluster_name = message.cluster_name!!;
-                    val upgraded_cluster_class = message.cluster_class!!;
                     log("Successfully upgraded container %s for ticket %s".format(upgraded_container_name, message.ticket_id));
                     val current_lease = lease @ { .container_name == specific_ticket.container_name };
                     val currently_auto_renewed = current_lease.auto_renew;
@@ -60,8 +59,7 @@ function receive_ticket_container_result_message(body: gtv) {
                         account = ticket.account,
                         container_units = specific_ticket.container_units,
                         extra_storage_gib = specific_ticket.extra_storage_gib,
-                        cluster_class = upgraded_cluster_class,
-                        cluster_name = upgraded_cluster_name,
+                        cluster = cluster,
                         start_time = op_context.last_block_time,
                         duration_millis = current_duration,
                         auto_renew = currently_auto_renewed

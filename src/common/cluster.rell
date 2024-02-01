@@ -7,8 +7,7 @@ function create_cluster_impl(me: provider, name, governor: voter_set, providers:
         governor,
         false,
         cluster_units = cluster_creation_data.cluster_units,
-        extra_storage = cluster_creation_data.extra_storage,
-        cluster_class = cluster_creation_data.cluster_class
+        extra_storage = cluster_creation_data.extra_storage
     );
 
     for (p_key in providers) {
@@ -104,11 +103,13 @@ function _remove_replica_node_from_cluster_internal(cluster, node) {
  * a provider disables its node (if it is not the last node of the cluster).
  */
 function check_operational(cl: cluster) {
-    val providers = cluster_provider @* { cl }.provider;
-    val nodes = cluster_node @* { cl }.node;
-    if (nodes.size() == providers.size()) {
-        update cluster @ { .name == cl.name } (.operational = true);
-        after_cluster_operational(cl);
+    if (not cl.operational) {
+        val providers = cluster_provider @* { cl }.provider;
+        val nodes = cluster_node @* { cl }.node;
+        if (nodes.size() == providers.size()) {
+            update cluster @ { .name == cl.name } (.operational = true);
+            after_cluster_operational(cl);
+        }
     }
 }
 

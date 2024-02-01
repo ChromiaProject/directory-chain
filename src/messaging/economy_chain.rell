@@ -2,6 +2,9 @@ module;
 
 import ^.icmf.constants.*;
 
+val create_cluster_topic = ICMF_TOPIC_GLOBAL_PREFIX + "create_cluster";
+val create_cluster_error_topic = ICMF_TOPIC_LOCAL_PREFIX + "create_cluster_error";
+
 val create_container_topic = ICMF_TOPIC_GLOBAL_PREFIX + "create_container";
 val stop_container_topic = ICMF_TOPIC_GLOBAL_PREFIX + "stop_container";
 val restart_container_topic = ICMF_TOPIC_GLOBAL_PREFIX + "restart_container";
@@ -10,14 +13,27 @@ val upgrade_container_topic = ICMF_TOPIC_GLOBAL_PREFIX + "upgrade_container";
 val ticket_container_result_topic = ICMF_TOPIC_LOCAL_PREFIX + "ticket_container_result";
 val cluster_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "cluster_update";
 val cluster_node_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "cluster_node_update";
-val provider_registered_topic = ICMF_TOPIC_LOCAL_PREFIX + "provider_registered";
+val provider_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "provider_update";
 val node_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "node_update";
+
+struct create_cluster_message {
+    name: text;
+    governor_voter_set_name: text;
+    voter_set_name: text;
+    cluster_units: integer;
+    extra_storage: integer;
+    proposer_pubkey: byte_array;
+}
+
+struct create_cluster_error_message {
+    name: text;
+    error_message: text;
+}
 
 struct create_container_message {
     ticket_id: integer;
     provider_pubkey: pubkey;
     container_units: integer;
-    cluster_class: text;
     extra_storage: integer;
     cluster_name: text;
 }
@@ -26,7 +42,6 @@ struct upgrade_container_message {
     ticket_id: integer;
     container_name: text;
     container_units: integer;
-    cluster_class: text;
     extra_storage: integer;
     cluster_name: text;
 }
@@ -44,7 +59,6 @@ struct ticket_container_result_message {
     error_message: text?;
     container_name: text? = null;
     cluster_name: text? = null;
-    cluster_class: text? = null;
 }
 
 struct cluster_update_message {
@@ -53,7 +67,6 @@ struct cluster_update_message {
     operational: boolean;
     cluster_units: integer;
     extra_storage: integer;
-    cluster_class: text;
     anchoring_chain: byte_array?;
 }
 
@@ -64,11 +77,11 @@ struct cluster_node_update_message {
     deleted: boolean;
 }
 
-struct provider_registered_message {
+struct provider_update_message {
     pubkey;
     system: boolean;
     tier: text;
-    cluster_name : text? = null;
+    active: boolean;
 }
 
 struct cluster_provider_update_message {

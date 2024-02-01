@@ -1,0 +1,157 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+
+val provider_key = rell.test.keypairs.bob;
+val provider_pubkey = provider_key.pub;
+
+function test_get_all_tags() {
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op(
+        create_tag(
+            name = "tag1",
+            scu_price = 1,
+            extra_storage_price = 2),
+        create_tag(
+            name = "tag2",
+            scu_price = 3,
+            extra_storage_price = 4))
+        .sign(provider_key)
+        .run();
+
+    val tags = get_tags();
+
+    assert_equals(tags.size(), 2);
+}
+
+function test_get_tag_by_name() {
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op(
+        create_tag(
+            name = "tag1",
+            scu_price = 1,
+            extra_storage_price = 2),
+        create_tag(
+            name = "tag2",
+            scu_price = 3,
+            extra_storage_price = 4))
+        .sign(provider_key)
+        .run();
+
+    val tag2 = get_tag_by_name("tag2");
+    val non_existing_tag = get_tag_by_name("tagX");
+
+    assert_not_null(tag2);
+    assert_null(non_existing_tag);
+}
+
+
+function test_get_clusters() {
+
+    val cluster_name = "Bob's cluster";
+
+    rell.test.tx().op(
+            create_test_cluster(cluster_name + "1", "tag-1"),
+            create_test_cluster(cluster_name + "2", "tag-2")
+        ).sign(provider_key)
+        .run();
+
+    val clusters = get_clusters();
+
+    val expected = [
+        cluster_data(
+            name = cluster_name + "1",
+            tag_name = "tag-1"),
+        cluster_data(
+            name = cluster_name + "2",
+            tag_name = "tag-2")
+    ];
+    assert_equals(clusters, expected);
+}
+
+function test_get_cluster() {
+
+    val cluster_name = "Bob's cluster";
+
+    rell.test.tx().op(
+        create_test_cluster(cluster_name))
+        .sign(provider_key)
+        .run();
+
+    val non_existing_cluster = get_cluster_by_name("cluster-name-does-not-exist");
+    assert_null(non_existing_cluster);
+
+    val cluster = get_cluster_by_name(cluster_name);
+    val expected = cluster_data(
+        name = cluster_name,
+        tag_name = "test-tag");
+    assert_equals(cluster, expected);
+}
+
+function test_get_cluster_creation_status_with_success() {
+    val cluster_name = "Bob's cluster";
+
+    rell.test.tx().op(
+        create_test_cluster(cluster_name))
+        .sign(provider_key)
+        .run();
+
+    val status = get_cluster_creation_status(cluster_name);
+
+    assert_equals(status, cluster_creation_status.SUCCESS);
+}
+
+function test_get_cluster_creation_status_with_unknown() {
+    val cluster_name = "Bob's cluster";
+
+    val status = get_cluster_creation_status(cluster_name);
+
+    assert_equals(status, cluster_creation_status.UNKNOWN);
+}
+
+function test_get_cluster_creation_status_with_pending() {
+    val cluster_name = "Bob's cluster";
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op( create_tag(
+            name = "tag1",
+            scu_price = 1,
+            extra_storage_price = 2),
+        create_cluster(
+            cluster_name,
+            "governor_voter_set_name",
+            "voter_set_name",
+            1,
+            1,
+            "tag1"))
+        .sign(provider_key)
+        .run();
+
+    val status = get_cluster_creation_status(cluster_name);
+
+    assert_equals(status, cluster_creation_status.PENDING);
+}
+
+function test_get_cluster_creation_status_with_failure() {
+    val cluster_name = "Bob's cluster";
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op( create_tag(
+        name = "tag1",
+        scu_price = 1,
+        extra_storage_price = 2),
+        create_cluster(
+            cluster_name,
+            "governor_voter_set_name",
+            "voter_set_name",
+            1,
+            1,
+            "tag1"),
+        receive_create_cluster_error_message_op(cluster_name,"error_message"))
+        .sign(provider_key)
+        .run();
+
+    val status = get_cluster_creation_status(cluster_name);
+
+    assert_equals(status, cluster_creation_status.FAILURE);
+}
+

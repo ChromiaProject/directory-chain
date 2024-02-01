@@ -37,8 +37,7 @@ function test_create_container_with_auto_create_provider() {
 
     val test_provider = rell.test.keypairs.bob;
     val cluster_name = "Bob's cluster";
-    val cluster_class = "foo";
-    val cluster_data = cluster_creation_data(cluster_units = 1, extra_storage = 1024, cluster_class = cluster_class);
+    val cluster_data = cluster_creation_data(cluster_units = 1, extra_storage = 1024);
     val register_node_data = register_node_data(
         rell.test.pubkeys.charlie, host = "host", port = 7777, api_url = "http://host/api_url", ["Bob's cluster"],
         cluster_units = 1, extra_storage = 1024
@@ -57,19 +56,18 @@ function test_create_container_with_auto_create_provider() {
             ticket_id = 1,
             provider_pubkey = test_provider.pub,
             container_units = 1,
-            cluster_class = cluster_class,
             extra_storage = 0,
             cluster_name = cluster_name
         ).to_gtv())).run();
     val container1 = container @ { bob_cluster, .system == false };
     assert_events(
         ("icmf_message", (
-            topic = provider_registered_topic,
-            body = provider_registered_message(test_provider.pub, false, tier = provider_tier.COMMUNITY_NODE_PROVIDER.name, null).to_gtv()
+            topic = provider_update_topic,
+            body = provider_update_message(test_provider.pub, system = false, tier = provider_tier.COMMUNITY_NODE_PROVIDER.name, active = true).to_gtv()
         ).to_gtv_pretty()),
         ("icmf_message", (
             topic = ticket_container_result_topic,
-            body = ticket_container_result_message(1, error_message = null, container_name = container1.name, cluster_name = cluster_name, cluster_class = cluster_class).to_gtv()
+            body = ticket_container_result_message(1, error_message = null, container_name = container1.name, cluster_name = cluster_name).to_gtv()
         ).to_gtv_pretty())
     );
     assert_not_null(provider @? { test_provider.pub });
@@ -79,14 +77,13 @@ function test_create_container_with_auto_create_provider() {
             ticket_id = 2,
             provider_pubkey = test_provider.pub,
             container_units = 2,
-            cluster_class = cluster_class,
             extra_storage = 1024,
             cluster_name = cluster_name
         ).to_gtv())).run();
     val container2 = container @ { bob_cluster, .system == false, .name != container1.name };
     assert_events(("icmf_message", (
         topic = ticket_container_result_topic,
-        body = ticket_container_result_message(2, error_message = null, container_name = container2.name, cluster_name = cluster_name, cluster_class = cluster_class).to_gtv()
+        body = ticket_container_result_message(2, error_message = null, container_name = container2.name, cluster_name = cluster_name).to_gtv()
     ).to_gtv_pretty()));
 
     val container_scu_limit = container_resource_limit @ { container2, .container_resource_limit_type == container_resource_limit_type.container_units }.value;
@@ -115,19 +112,18 @@ function test_create_container_fail() {
             ticket_id = 1,
             provider_pubkey = test_provider.pub,
             container_units = 1,
-            cluster_class = "",
             extra_storage = 0,
             cluster_name = "bogus cluster"
         ).to_gtv())).run();
 
     assert_events(
         ("icmf_message", (
-            topic = provider_registered_topic,
-            body = provider_registered_message(test_provider.pub, false, tier = provider_tier.COMMUNITY_NODE_PROVIDER.name, null).to_gtv()
+            topic = provider_update_topic,
+            body = provider_update_message(test_provider.pub, system = false, tier = provider_tier.COMMUNITY_NODE_PROVIDER.name, active = true).to_gtv()
         ).to_gtv_pretty()),
         ("icmf_message", (
             topic = ticket_container_result_topic,
-            body = ticket_container_result_message(1, error_message = "Unable to find suitable cluster", container_name = "", cluster_name = "", cluster_class = "").to_gtv()
+            body = ticket_container_result_message(1, error_message = "Unable to find suitable cluster", container_name = "", cluster_name = "").to_gtv()
         ).to_gtv_pretty())
     );
 
@@ -160,13 +156,12 @@ function test_upgrade_container() {
             ticket_id = 1,
             container_name = container_name,
             container_units = 2,
-            cluster_class = "",
             extra_storage = 0,
             cluster_name = cluster_name
         ).to_gtv())).run();
     assert_events(("icmf_message", (
         topic = ticket_container_result_topic,
-        body = ticket_container_result_message(1, error_message = null, container_name = container_name, cluster_name = cluster_name, cluster_class = "").to_gtv()
+        body = ticket_container_result_message(1, error_message = null, container_name = container_name, cluster_name = cluster_name).to_gtv()
     ).to_gtv_pretty()));
 
     val upgraded_limits = get_current_container_resource_limits(container_name);
@@ -197,7 +192,6 @@ function test_upgrade_container_fail() {
             ticket_id = 1,
             container_name = container_name,
             container_units = 13, // Too many SCUs requested
-            cluster_class = "",
             extra_storage = 0,
             cluster_name = cluster_name
         ).to_gtv())).run();
@@ -207,7 +201,6 @@ function test_upgrade_container_fail() {
             1,
             error_message = "Unable to upgrade container %s".format(container_name),
             container_name = container_name,
-            cluster_name = cluster_name,
-            cluster_class = "").to_gtv()
+            cluster_name = cluster_name).to_gtv()
         ).to_gtv_pretty()));
 }

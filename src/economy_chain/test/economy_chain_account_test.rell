@@ -52,7 +52,7 @@ function test_provider_register_account() {
     rell.test.tx().op(init()).run();
 
     val provider_key = rell.test.keypairs.bob;
-    val provider = add_provider(provider_key.pub, false, provider_tier.NODE_PROVIDER, null);
+    val provider = add_provider(provider_key.pub, false, provider_tier.NODE_PROVIDER);
 
     rell.test.tx().op(
         register_provider_account(provider_key.pub)
@@ -75,10 +75,10 @@ function test_create_account_duplicate() {
     do_create_account(rell.test.keypairs.alice, auth_privkey, "duplicate key value violates unique constraint");
 }
 
-function add_provider(pubkey: pubkey, system: boolean, tier: provider_tier, cluster_name: text?): provider {
+function add_provider(pubkey: pubkey, system: boolean, tier: provider_tier): provider {
     rell.test.tx().op(
-        icmf_message_op(x"", provider_registered_topic, body = provider_registered_message(
-            pubkey, system, tier = tier.name, cluster_name).to_gtv()
+        icmf_message_op(x"", provider_update_topic, body = provider_update_message(
+            pubkey, system, tier = tier.name, active = true).to_gtv()
         )
     ).run();
     return require(provider @? { pubkey });

@@ -6,14 +6,14 @@ operation register_provider_account(provider_pubkey: pubkey) {
     register_provider_account_impl(provider_pubkey);
 }
 
-operation create_container(provider_pubkey: pubkey, container_units: integer, cluster_class: text,
+operation create_container(provider_pubkey: pubkey, container_units: integer,
     duration_weeks: integer, extra_storage_gib: integer, cluster_name: text, auto_renew: boolean) {
-    create_container_impl(provider_pubkey, container_units, cluster_class, duration_weeks, extra_storage_gib, cluster_name, auto_renew);
+    create_container_impl(provider_pubkey, container_units, duration_weeks, extra_storage_gib, cluster_name, auto_renew);
 }
 
-operation upgrade_container(container_name: text, upgraded_container_units: integer, upgraded_cluster_class: text,
+operation upgrade_container(container_name: text, upgraded_container_units: integer,
     upgraded_extra_storage_gib: integer, upgraded_cluster_name: text) {
-    upgrade_container_impl(container_name, upgraded_container_units, upgraded_cluster_class, upgraded_extra_storage_gib, upgraded_cluster_name);
+    upgrade_container_impl(container_name, upgraded_container_units, upgraded_extra_storage_gib, upgraded_cluster_name);
 }
 
 operation renew_container(container_name: text, duration_weeks: integer) {
@@ -36,24 +36,89 @@ operation update_economy_constants(
     min_lease_time_weeks: integer?,
     max_lease_time_weeks: integer?,
     chr_per_usd: decimal?,
-    dapp_scu_cost: decimal?,
-    dapp_extra_storage_cost: decimal?,
-    dapp_bridge_chain_cost: decimal?,
-    scu_dapp_reward: decimal?,
-    extra_storage_reward: decimal?,
-    system_node_reward: decimal?,
-    bridge_chain_reward: decimal?
+    node_utilization_value_factor: integer?,
+    node_value_vs_utilization_weight: decimal?,
+    provider_reward_share: decimal?,
+    system_provider_reward_share: decimal?
 ) {
     require_admin();
 
     economy_constants.min_lease_time_weeks = min_lease_time_weeks ?: economy_constants.min_lease_time_weeks;
     economy_constants.max_lease_time_weeks = max_lease_time_weeks ?: economy_constants.max_lease_time_weeks;
     economy_constants.chr_per_usd = chr_per_usd ?: economy_constants.chr_per_usd;
-    economy_constants.dapp_scu_cost = dapp_scu_cost ?: economy_constants.dapp_scu_cost;
-    economy_constants.dapp_extra_storage_cost = dapp_extra_storage_cost ?: economy_constants.dapp_extra_storage_cost;
-    economy_constants.dapp_bridge_chain_cost = dapp_bridge_chain_cost ?: economy_constants.dapp_bridge_chain_cost;
-    economy_constants.scu_dapp_reward = scu_dapp_reward ?: economy_constants.scu_dapp_reward;
-    economy_constants.extra_storage_reward = extra_storage_reward ?: economy_constants.extra_storage_reward;
-    economy_constants.system_node_reward = system_node_reward ?: economy_constants.system_node_reward;
-    economy_constants.bridge_chain_reward = bridge_chain_reward ?: economy_constants.bridge_chain_reward;
+    economy_constants.node_utilization_value_factor = node_utilization_value_factor ?: economy_constants.node_utilization_value_factor;
+    economy_constants.node_value_vs_utilization_weight = node_value_vs_utilization_weight ?: economy_constants.node_value_vs_utilization_weight;
+    economy_constants.provider_reward_share = provider_reward_share ?: economy_constants.provider_reward_share;
+    economy_constants.system_provider_reward_share = system_provider_reward_share ?: economy_constants.system_provider_reward_share;
+}
+
+operation create_tag(
+    name: text,
+    scu_price: integer,
+    extra_storage_price: integer
+) {
+    require_system_provider();
+    create tag(name = name, scu_price = scu_price, extra_storage_price = extra_storage_price);
+}
+
+operation update_tag(
+    name: text,
+    scu_price: integer?,
+    extra_storage_price: integer?
+) {
+    require_system_provider();
+    val tag = require_tag(name);
+
+    if (scu_price != null) tag.scu_price = scu_price;
+    if (extra_storage_price != null) tag.extra_storage_price = extra_storage_price;
+}
+
+operation remove_tag(
+    name: text
+) {
+    require_system_provider();
+    val tag = require_tag(name);
+
+    val clusters = cluster @* { tag };
+    require(clusters.empty(), "Tag with name %s is in use.".format(name));
+
+    delete tag;
+}
+
+operation create_cluster(
+    name,
+    governor_voter_set_name: text,
+    voter_set_name: text,
+    cluster_units: integer,
+    extra_storage: integer,
+    tag_name: text
+) {
+    val provider_pubkey = require_system_provider();
+
+    require(empty(cluster @* { .name == name }), "Cluster %s already exists".format(name));
+
+    val tag = require_tag(tag_name);
+
+    val pending_cluster = pending_cluster @? { name };
+    if (pending_cluster != null) {
+        require(pending_cluster.status != pending_cluster_status.PENDING, "There is already a pending request to create cluster with name %s".format(name));
+        pending_cluster.status = pending_cluster_status.PENDING;
+    } else {
+        create pending_cluster(name, tag, pending_cluster_status.PENDING);
+    }
+
+    val create_cluster_message = create_cluster_message(name, governor_voter_set_name, voter_set_name, cluster_units, extra_storage, provider_pubkey);
+
+    send_message(create_cluster_topic, create_cluster_message.to_gtv());
+}
+
+operation change_cluster_tag(
+    cluster_name: text,
+    tag_name: text
+) {
+    require_system_provider();
+    val tag = require_tag(tag_name);
+    val cluster = require_cluster(cluster_name);
+
+    cluster.tag = tag;
 }

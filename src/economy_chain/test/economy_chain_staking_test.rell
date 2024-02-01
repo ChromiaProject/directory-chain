@@ -1,0 +1,162 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import ^.helper_operations.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.assets;
+    import lib.ft4.auth;
+    import test_utils: lib.ft4.test.utils;
+}
+import lib.auth;
+
+function test_set_rates() {
+    rell.test.tx().op(init()).run();
+
+    rell.test.set_next_block_time_delta(staking_get_cannot_change_before());
+    rell.test.tx().op(
+        staking_set_rates(1.0, 4.0)
+    ).run();
+
+    val initial_rate = staking_get_current_rate();
+    assert_equals(initial_rate[0], 1);
+    assert_equals(initial_rate[1], 4);
+
+    rell.test.set_next_block_time_delta(staking_config.rate_change_delay_ms);
+    rell.test.tx().op(
+        staking_set_rates(0.5, 0.9)
+    ).run();
+
+    val second_rate = staking_get_current_rate();
+    assert_equals(second_rate[0], 0.5);
+    assert_equals(second_rate[1], 0.9);
+
+    rell.test.tx().op(
+        staking_set_rates(8.0, 8.0) // Won't take effect
+    ).run();
+
+    val third_rate = staking_get_current_rate();
+    assert_equals(third_rate[0], 0.5);
+    assert_equals(third_rate[1], 0.9);
+}
+
+function test_add_remove_providers() {
+    rell.test.tx().op(init()).run();
+
+    assert_false(staking_is_active_provider(rell.test.pubkeys.charlie));
+
+    rell.test.tx().op(
+        staking_remove_provider(rell.test.pubkeys.charlie)
+    ).run_must_fail("Provider not active.");
+
+    rell.test.tx().op(
+        staking_add_provider('Charlie', rell.test.pubkeys.charlie)
+    ).run();
+
+    rell.test.tx().op(
+        staking_add_provider('Charlie Too', rell.test.pubkeys.charlie)
+    ).run_must_fail("Provider cannot be active.");
+
+    assert_true(staking_is_active_provider(rell.test.pubkeys.charlie));
+
+    rell.test.tx().op(
+        staking_remove_provider(rell.test.pubkeys.charlie)
+    ).run();
+
+    assert_false(staking_is_active_provider(rell.test.pubkeys.charlie));
+}
+
+function test_delegation() {
+    rell.test.tx().op(init()).run();
+
+    rell.test.tx().op(
+        staking_delegate(rell.test.pubkeys.alice, rell.test.pubkeys.charlie)
+    ).run_must_fail("Must be active provider.");
+
+    rell.test.tx()
+        .op(staking_add_provider('Charlie', rell.test.pubkeys.charlie))
+        .op(staking_deposit(rell.test.pubkeys.alice, 8000))
+        .op(staking_delegate(rell.test.pubkeys.alice, rell.test.pubkeys.charlie))
+    .run();
+
+    rell.test.set_next_block_time_delta(staking_config.rate_change_delay_ms);
+    rell.test.block().run();
+    assert_equals(staking_get_current_delegate(rell.test.pubkeys.alice), rell.test.pubkeys.charlie);
+
+    rell.test.tx().op(
+        unstaking_delegate(rell.test.pubkeys.alice)
+    ).run();
+
+    assert_equals(staking_get_current_delegate(rell.test.pubkeys.alice), rell.test.pubkeys.charlie); // No change now.
+
+    rell.test.set_next_block_time_delta(staking_config.rate_change_delay_ms);
+    rell.test.block().run();
+    assert_equals(staking_get_current_delegate(rell.test.pubkeys.alice), NO_ONE); // Change in a week
+}
+
+function test_staking_deposit() {
+    rell.test.tx().op(init()).run();
+
+    assert_equals(staking_get_balance(rell.test.pubkeys.alice), 0);
+    rell.test.tx().op(
+        staking_deposit(rell.test.pubkeys.alice, 7777)
+    ).run();
+    assert_equals(staking_get_balance(rell.test.pubkeys.alice), 7777);
+}
+
+function test_withdrawal() {
+    rell.test.tx().op(init()).run();
+
+    // Need a deposit to withdraw it
+    assert_equals(staking_get_balance(rell.test.pubkeys.alice), 0);
+    rell.test.tx().op(
+        staking_request_withdrawal(rell.test.pubkeys.alice)
+    ).run_must_fail("Need something to withdraw.");
+
+    // Cannot withdraw without withdrawal request
+    rell.test.tx()
+        .op(staking_deposit(rell.test.pubkeys.alice, 7777))
+        .op(staking_withdraw(rell.test.pubkeys.alice))
+    .run_must_fail("Need a withdrawal request.");
+
+    rell.test.tx()
+        .op(staking_deposit(rell.test.pubkeys.alice, 7777))
+        .op(staking_request_withdrawal(rell.test.pubkeys.alice))
+    .run();
+
+    // Cannot withdraw without aged withdrawal request
+    rell.test.tx().op(
+        staking_withdraw(rell.test.pubkeys.alice)
+    ).run_must_fail("Need to wait for withdrawal request.");
+    assert_equals(staking_get_balance(rell.test.pubkeys.alice), 7777);
+
+    // Simple withdraw
+    rell.test.set_next_block_time_delta(staking_config.withdrawal_delay_ms);
+    rell.test.block().run();
+
+    rell.test.tx().op(
+        staking_withdraw(rell.test.pubkeys.alice)
+    ).run();
+    assert_equals(staking_get_balance(rell.test.pubkeys.alice), 0);
+
+    // Ensure that the withdrawal request is cancelled on re-delegation
+    rell.test.tx()
+        .op(staking_deposit(rell.test.pubkeys.alice, 7777))
+        .op(staking_request_withdrawal(rell.test.pubkeys.alice))
+    .nop().run();
+    assert_false(null == staking_get_withdrawal_time(rell.test.pubkeys.alice));
+    rell.test.tx()
+        .op(staking_add_provider('Bob', rell.test.pubkeys.bob))
+        .op(staking_delegate(rell.test.pubkeys.alice, rell.test.pubkeys.bob))
+    .run();
+    assert_true(null == staking_get_withdrawal_time(rell.test.pubkeys.alice));
+
+    // Only one withdrawal request at a time
+    rell.test.tx()
+        .op(staking_deposit(rell.test.pubkeys.alice, 7777))
+        .op(staking_request_withdrawal(rell.test.pubkeys.alice))
+        .op(staking_request_withdrawal(rell.test.pubkeys.alice))
+    .run_must_fail("Only one withdrawal request at a time.");
+}

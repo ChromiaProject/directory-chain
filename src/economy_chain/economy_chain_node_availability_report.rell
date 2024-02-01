@@ -1,7 +1,11 @@
 
 function receive_node_availability_report(sender: byte_array, body: gtv) {
 
-    val cluster = cluster @ { .anchoring_chain == sender };
+    val cluster = cluster @? { .anchoring_chain == sender };
+    if (cluster == null) {
+        log("Received availability report from cluster that is not tracked by economy chain from sender: %s".format(sender));
+        return;
+    }
 
-    calculate_rewards(cluster, node_availability_report.from_gtv(body));
+    pay_rewards(cluster, node_availability_report.from_gtv(body));
 }

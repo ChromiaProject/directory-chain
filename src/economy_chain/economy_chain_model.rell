@@ -6,6 +6,10 @@ enum ticket_type {
     CREATE_CONTAINER, UPGRADE_CONTAINER
 }
 
+enum cluster_creation_status {
+    SUCCESS, FAILURE, PENDING, UNKNOWN
+}
+
 object state {
     mutable initialized: boolean = false;
 }
@@ -16,14 +20,10 @@ object economy_constants {
 
     mutable chr_per_usd: decimal = 5;
 
-    mutable dapp_scu_cost: decimal = 1; // TODO: Update
-    mutable dapp_extra_storage_cost: decimal = 1; // TODO: Update
-    mutable dapp_bridge_chain_cost: decimal = 1; // TODO: Update
-
-    mutable scu_dapp_reward: decimal = 17; // USD per day
-    mutable extra_storage_reward: decimal = 0.003; // USD per GiB and day
-    mutable system_node_reward: decimal = 34; // USD per day
-    mutable bridge_chain_reward: decimal = 5; // USD per day
+    mutable node_utilization_value_factor: integer = 3;
+    mutable node_value_vs_utilization_weight: decimal = 0.8;
+    mutable provider_reward_share: decimal = 0.6;
+    mutable system_provider_reward_share: decimal = 0.1;
 }
 
 struct economy_constants_data {
@@ -32,14 +32,11 @@ struct economy_constants_data {
 
     chr_per_usd: decimal;
 
-    dapp_scu_cost: decimal;
-    dapp_extra_storage_cost: decimal;
-    dapp_bridge_chain_cost: decimal;
+    node_utilization_value_factor: integer;
+    node_value_vs_utilization_weight: decimal;
 
-    scu_dapp_reward: decimal;
-    extra_storage_reward: decimal;
-    system_node_reward: decimal;
-    bridge_chain_reward: decimal;
+    provider_reward_share: decimal;
+    system_provider_reward_share: decimal;
 }
 
 entity user {
@@ -52,8 +49,7 @@ entity lease {
     index ft4.accounts.account;
     container_units: integer;
     extra_storage_gib: integer;
-    cluster_class: text;
-    cluster_name: text;
+    cluster;
     start_time: integer;
     mutable duration_millis: integer;
     mutable expired: boolean = false;
@@ -76,6 +72,7 @@ entity create_container_ticket {
     cost: integer;
     auto_renew: boolean = false;
     mutable container_name: text = "";
+    cluster_name: text;
 }
 
 entity upgrade_container_ticket {
@@ -84,6 +81,7 @@ entity upgrade_container_ticket {
     container_units: integer;
     extra_storage_gib: integer;
     cost: integer;
+    cluster_name: text;
 }
 
 struct container_ticket_data {
@@ -104,16 +102,45 @@ struct lease_data {
     auto_renew: boolean;
 }
 
+struct cluster_data {
+    name: text;
+    tag_name: text;
+}
+
+struct tag_data {
+    name: text;
+    scu_price: integer;
+    extra_storage_price: integer;
+}
+
 entity provider_account {
     key provider, account: ft4.accounts.account;
     mutable last_reward_check: timestamp = 0;
     mutable reward_debt: big_integer = 0;
 }
 
+entity tag {
+    key name;
+    mutable scu_price: integer;
+    mutable extra_storage_price: integer;
+}
+
+enum pending_cluster_status {
+    PENDING,
+    FAILURE
+}
+
+entity pending_cluster {
+    key name;
+    tag: tag;
+    mutable status: pending_cluster_status;
+}
+
 //////////////////////////////////
 // directory-chain synced entities
 object standard_cluster_unit {
     mutable container_units: integer = 16;
+    system_container_units: integer = 4;
 }
 
 enum provider_tier {
@@ -125,6 +152,7 @@ entity provider {
     key pubkey;
     mutable system: boolean = false;
     mutable tier: provider_tier;
+    mutable active: boolean;
 }
 
 entity node {
@@ -143,8 +171,8 @@ entity cluster {
     mutable operational: boolean;
     mutable cluster_units: integer;
     mutable extra_storage: integer;
-    mutable cluster_class: text;
     mutable anchoring_chain: byte_array;
+    mutable tag;
 }
 
 entity cluster_node {

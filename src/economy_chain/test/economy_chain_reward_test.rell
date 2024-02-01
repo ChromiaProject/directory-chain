@@ -23,160 +23,167 @@ val node_pubkey = rell.test.pubkeys.charlie;
 val base_reward: big_integer = 1360015000; // SCU = 16, extra_storage = 1024, 5 CHR/USD
 val system_node_reward: big_integer = 170000000; // system node reward = 34, 5 CHR/USD
 val base_time = 10000000000000;
+val cluster_name = "Bob's cluster";
 
+function test_asset_units() {
+    assert_equals(units_per_asset, 1000000);
+}
 
-// TODO adapt to implementation when in place
-//function test_asset_units() {
-//    assert_equals(units_per_asset, 1000000);
-//}
-//
-//function test_rewards_with_no_providers() {
-//    rell.test.tx().op(init()).run();
-//
-//    add_assets_to_pool(20000000);
-//    assert_equals(get_pool_balance(), 20000000);
-//
-//    rell.test.block().run();
-//
-//    assert_equals(get_pool_balance(), 20000000);
-//}
-//
-//function test_provider_is_not_rewarded_due_to_node_not_in_cluster() {
-//    reward_setup(base_reward, false);
-//
-//    rell.test.block().run();
-//
-//    val pa = provider_account @ { provider @ { provider_pubkey } };
-//    assert_equals(get_account_balance(pa.account), 0);
-//    assert_equals(pa.reward_debt, 0);
-//    assert_equals(get_pool_balance(), base_reward);
-//}
-//
-//function test_provider_is_rewarded() {
-//    reward_setup(base_reward * 2);
-//
-//    rell.test.block().run();
-//
-//    val pa = provider_account @ { provider @ { provider_pubkey } };
-//    assert_equals(get_account_balance(pa.account), base_reward);
-//    assert_equals(pa.reward_debt, 0);
-//    assert_equals(get_pool_balance(), base_reward);
-//}
-//
-//function test_provider_is_rewarded_for_system_node() {
-//    reward_setup(base_reward, false, true);
-//
-//    rell.test.block().run();
-//
-//    val pa = provider_account @ { provider @ { provider_pubkey } };
-//    assert_equals(get_account_balance(pa.account), system_node_reward);
-//    assert_equals(pa.reward_debt, 0);
-//    assert_equals(get_pool_balance(), base_reward - system_node_reward);
-//}
-//
-//function test_provider_is_rewarded_for_cluster_node_and_system_node() {
-//    reward_setup(base_reward * 2, true, true);
-//
-//    rell.test.block().run();
-//
-//    val pa = provider_account @ { provider @ { provider_pubkey } };
-//    assert_equals(get_account_balance(pa.account), base_reward + system_node_reward);
-//    assert_equals(pa.reward_debt, 0);
-//    assert_equals(get_pool_balance(), base_reward - system_node_reward);
-//}
-//
-//function test_provider_is_rewarded_and_with_debt() {
-//    val debt = 7000000;
-//    reward_setup(base_reward - debt);
-//
-//    rell.test.block().run();
-//
-//    val pa = provider_account @ { provider @ { provider_pubkey } };
-//    assert_equals(get_account_balance(pa.account), base_reward - debt);
-//    assert_equals(pa.reward_debt, debt);
-//    assert_equals(get_pool_balance(), 0);
-//}
-//
-//function test_provider_is_not_rewarded_due_to_lack_of_funds() {
-//    reward_setup(0);
-//
-//    rell.test.block().run();
-//
-//    val pa = provider_account @ { provider @ { provider_pubkey } };
-//    assert_equals(get_account_balance(pa.account), 0);
-//    assert_equals(pa.reward_debt, base_reward);
-//    assert_equals(get_pool_balance(), 0);
-//}
-//
-//function test_provider_is_rewarded_correct_amount_of_times() {
-//    reward_setup(base_reward * 3);
-//
-//    rell.test.set_block_interval(millis_per_day / 2);
-//    log ("Should transfer");
-//    rell.test.block().run(); // 1 day has passed => Transfer reward
-//    log ("Should NOT transfer");
-//    rell.test.block().run(); // less then 1 day has passed => Do not transfer reward
-//    log ("Should transfer");
-//    rell.test.block().run(); // 1 day has passed => Transfer reward
-//
-//    val pa = provider_account @ { provider @ { provider_pubkey } };
-//    assert_equals(get_account_balance(pa.account), base_reward * 2);
-//    assert_equals(pa.reward_debt, 0);
-//    assert_equals(get_pool_balance(), base_reward);
-//}
-//
-//function test_transfer_to_pool() {
-//    rell.test.tx().op(init()).run();
-//
-//    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
-//    val amount: big_integer = 10;
-//
-//    assert_equals(get_pool_balance(), 0);
-//
-//    rell.test.tx().op(
-//        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "transfer_to_pool",
-//            [amount.to_gtv()])
-//    ).op(
-//        transfer_to_pool(amount)
-//    ).run();
-//
-//    assert_equals(get_pool_balance(), amount);
-//}
+function test_rewards_with_no_providers() {
+    rell.test.tx().op(init()).run();
+
+    add_assets_to_pool(20000000);
+    assert_equals(get_pool_balance(), 20000000);
+
+    rell.test.block().run();
+
+    assert_equals(get_pool_balance(), 20000000);
+}
+
+function test_calculate_reward_full_availability() {
+
+    val node_availability_report = node_availability_report(start_time = 0, end_time = 0, [node_pubkey: 1.0]);
+    val reward = run_calculate_reward(node_availability_report, true, false);
+
+    // 16 scu priced 1 plus 1 gb extra storage priced 1
+    assert_equals(reward, (weight_average(17, 17 * economy_constants.node_utilization_value_factor, economy_constants.node_value_vs_utilization_weight) * economy_constants.provider_reward_share * economy_constants.chr_per_usd * units_per_asset).to_integer());
+}
+
+function test_calculate_reward_availability_under_threshold() {
+
+    val node_availability_report = node_availability_report(start_time = 0, end_time = 0, [node_pubkey: 0.9]);
+    val reward = run_calculate_reward(node_availability_report, true, false);
+
+    // 0 since availability is under 90%
+    assert_equals(reward, 0);
+}
+
+function test_calculate_reward_availability_95() {
+
+    val node_availability_report = node_availability_report(start_time = 0, end_time = 0, [node_pubkey: 0.95]);
+    val reward = run_calculate_reward(node_availability_report, true, false);
+
+    // 16 scu priced 1 plus 1 gb extra storage priced 1 but with 95% availability
+    assert_equals(reward, (weight_average(17, 17 * economy_constants.node_utilization_value_factor, economy_constants.node_value_vs_utilization_weight) * 0.5  * economy_constants.provider_reward_share * economy_constants.chr_per_usd * units_per_asset).to_integer());
+}
+
+function test_calculate_reward_occupancy_rate_below_33() {
+
+    val node_availability_report = node_availability_report(start_time = 0, end_time = 0, [node_pubkey: 1.0]);
+    val reward = run_calculate_reward(node_availability_report, false, false);
+
+    // 16 scu priced 1 plus 1 gb extra storage priced 1 but with 25% occupancy rate
+    assert_equals(reward, (weight_average(17, 17 * 0.25 * economy_constants.node_utilization_value_factor, economy_constants.node_value_vs_utilization_weight)  * economy_constants.provider_reward_share * economy_constants.chr_per_usd * units_per_asset).to_integer());
+}
+
+function test_pay_rewards_full_reward_is_payed() {
+
+    val pa = run_pay_rewards(48450000, false);
+
+    assert_equals(get_account_balance(pa.account), 48450000);
+    assert_equals(pa.reward_debt, 0);
+    assert_equals(get_pool_balance(), 0);
+}
+
+function test_pay_rewards_empty_pool_balance() {
+
+    val pa = run_pay_rewards(0, false);
+
+    assert_equals(get_account_balance(pa.account), 0);
+    assert_equals(pa.reward_debt, 48450000);
+    assert_equals(get_pool_balance(), 0);
+}
+
+function test_pay_rewards_not_enough_funds() {
+
+    val pa = run_pay_rewards(1, false);
+
+    assert_equals(get_account_balance(pa.account), 1);
+    assert_equals(pa.reward_debt, 48450000 - 1);
+    assert_equals(get_pool_balance(), 0);
+}
+
+function test_calculate_system_cluster_reward_full_occupancy_full_availability() {
+    val node_availability_report = node_availability_report(start_time = 0, end_time = 0, [node_pubkey: 1.0]);
+
+    val reward =  run_calculate_reward(node_availability_report, true, true);
+
+    assert_equals(reward, (weight_average(17, 17 * economy_constants.node_utilization_value_factor, economy_constants.node_value_vs_utilization_weight) * economy_constants.system_provider_reward_share * economy_constants.chr_per_usd * units_per_asset).to_integer());
+}
+
+function test_calculate_system_cluster_reward_full_occupancy_95_availability() {
+    val node_availability_report = node_availability_report(start_time = 0, end_time = 0, [node_pubkey: 0.95]);
+
+    val reward =  run_calculate_reward(node_availability_report, true, true);
+
+    assert_equals(reward, (weight_average(17, 17 * economy_constants.node_utilization_value_factor, economy_constants.node_value_vs_utilization_weight) * 0.5 * economy_constants.system_provider_reward_share * economy_constants.chr_per_usd * units_per_asset).to_integer());
+}
+
+function test_pay_reward_to_system_cluster() {
+
+    val pa = run_pay_rewards(8075000, true);
+
+    assert_equals(get_account_balance(pa.account), 8075000);
+    assert_equals(pa.reward_debt, 0);
+    assert_equals(get_pool_balance(), 0);
+}
+
 
 ///////////////////
 // Helper functions
 
-function reward_setup(pool_assets: big_integer = 0, add_cluster_node: boolean = true, add_to_system_cluster: boolean = false) {
+function run_calculate_reward(node_availability_report: node_availability_report, create_lease: boolean, calculate_system_reward: boolean) {
+
     rell.test.tx().op(init()).run();
 
-    val provider_key = rell.test.keypairs.bob;
-    val provider_pubkey = provider_key.pub;
-    val node_pubkey = rell.test.pubkeys.charlie;
-    val cluster_name = "Bob's cluster";
-
-    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER, null);
+    val system_cluster = ensure_system_cluster();
+    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
     val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
-    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024, "");
-    if (add_cluster_node) add_cluster_node(cluster_name, node_pubkey, false);
-    if (add_to_system_cluster) {
-        ensure_cluster(system_cluster_name, false, true, 1, 0, "");
-        add_cluster_node(system_cluster_name, node_pubkey, false);
+
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+
+    if (create_lease) {
+        rell.test.tx().op(
+            create_lease("lease", 12, alice, cluster, false)
+        ).run();
     }
 
-    assert_true(node.active);
-    assert_equals(node.cluster_units, 1);
-    assert_equals(node.extra_storage, 1024);
+    if (calculate_system_reward) {
 
-    if (pool_assets > 0) add_assets_to_pool(pool_assets);
-    assert_equals(get_pool_balance(), pool_assets);
+        val system_cluster_reward = calculate_system_cluster_reward_per_node(system_cluster, 1);
+        return calculate_system_cluster_node_reward(node_availability_report, node, system_cluster_reward);
 
-    rell.test.set_next_block_time(base_time);
+    } else {
+
+        val node_value_node_utilization_average = node_value_node_utilization_average(cluster, 1);
+        return calculate_reward(node_availability_report, node, cluster, node_value_node_utilization_average);
+    }
+}
+
+function run_pay_rewards(pool_assets: big_integer = 0, calculate_system_reward: boolean) {
+
+    rell.test.tx().op(init()).run();
+
+    val system_cluster = ensure_system_cluster();
+    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
+    val node_availability_report = node_availability_report(start_time = 0, end_time = 0, [node_pubkey: 1.0]);
+
+    val calculate_cluster = if (calculate_system_reward) system_cluster else cluster;
+    add_cluster_node(calculate_cluster.name, node_pubkey, false);
+
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    if (pool_assets != 0) {
+        add_assets_to_pool(pool_assets);
+    }
+
     rell.test.tx().op(
-        register_provider_account(provider_pubkey)
+        register_provider_account(provider_pubkey),
+        pay_rewards_op(calculate_cluster, node_availability_report)
     ).sign(provider_key).run();
 
-    // Set block interval and initiate with first block to run first check
-    // which will do nothing except set last_reward_check to non-zero.
-    rell.test.set_block_interval(millis_per_day);
-    rell.test.block().run(); // First check => Do not transfer reward
+    val pa = provider_account @ { provider @ { provider_pubkey } };
+    return pa;
 }

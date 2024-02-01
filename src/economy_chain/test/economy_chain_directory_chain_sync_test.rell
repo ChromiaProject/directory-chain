@@ -4,13 +4,22 @@ import ^^.*;
 import ^.helper_functions.*;
 import ^.helper_operations.*;
 
+struct module_args {
+    auth_privkey: byte_array;
+    admin_privkey: byte_array;
+}
+
+val auth_privkey = chain_context.args.auth_privkey;
+
+val cluster_name = "Bob's cluster";
+
 function test_provider() {
     rell.test.tx().op(init()).run();
 
     val provider_pubkey = rell.test.keypairs.bob.pub;
 
     // Add provider
-    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER, null);
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
     assert_false(provider.system);
     assert_equals(provider.tier, provider_tier.NODE_PROVIDER);
 }
@@ -18,28 +27,22 @@ function test_provider() {
 function test_cluster() {
     rell.test.tx().op(init()).run();
 
-    val cluster_name = "Bob's cluster";
-    val cluster_class = "Bob's class";
-    val cluster_class_2 = "Bob's class 2";
-
     // Add cluster
-    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024, cluster_class);
+    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
     assert_false(cluster.operational);
     assert_equals(cluster.cluster_units, 1);
     assert_equals(cluster.extra_storage, 1024);
-    assert_equals(cluster.cluster_class, cluster_class);
 
     // Update cluster
-    val updated_cluster = ensure_cluster(cluster_name, false, true, 2, 42, cluster_class_2);
+    val updated_cluster = ensure_cluster(cluster_name, false, true, 2, 42);
     assert_true(updated_cluster.operational);
     assert_equals(updated_cluster.cluster_units, 2);
     assert_equals(updated_cluster.extra_storage, 42);
-    assert_equals(cluster.cluster_class, cluster_class_2);
 
     // Remove cluster
     rell.test.tx().op(
         icmf_message_op(x"", cluster_update_topic, body = cluster_update_message(
-            name = cluster_name, deleted = true, operational = false, cluster_units = 1, extra_storage = 1024, cluster_class = cluster_class, anchoring_chain = x"").to_gtv())
+            name = cluster_name, deleted = true, operational = false, cluster_units = 1, extra_storage = 1024, anchoring_chain = x"").to_gtv())
     ).run();
     assert_null(cluster @? { .name == cluster_name });
 }
@@ -64,7 +67,7 @@ function test_node() {
     ).run_must_fail("due to missing provider");
 
     // Add provider
-    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER, null);
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
 
     // Add node
     val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
@@ -100,14 +103,12 @@ function test_cluster_node() {
 
     val provider_pubkey = rell.test.keypairs.bob.pub;
     val node_pubkey = rell.test.pubkeys.charlie;
-    val cluster_name = "Bob's cluster";
     val cluster_name_replica = "Alice's cluster";
-    val cluster_class = "";
 
-    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER, null);
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
     val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
-    val cluster = ensure_cluster(cluster_name, false, true, 1, 1024, cluster_class);
-    val cluster_replica = ensure_cluster(cluster_name_replica, false, true, 1, 1024, cluster_class);
+    val cluster = ensure_cluster(cluster_name, false, true, 1, 1024);
+    val cluster_replica = ensure_cluster(cluster_name_replica, false, true, 1, 1024);
 
     // Add cluster_node
     assert_null(cluster_node @? { cluster, node });
@@ -132,11 +133,9 @@ function test_full_cluster_remove() {
     val provider_pubkey = rell.test.keypairs.bob.pub;
     val node_pubkey = rell.test.pubkeys.charlie;
     val node_pubkey_2 = rell.test.pubkeys.alice;
-    val cluster_name = "Bob's cluster";
-    val cluster_class = "";
 
-    val cluster = ensure_cluster(cluster_name, false, true, 1, 1024, cluster_class);
-    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER, cluster_name);
+    val cluster = ensure_cluster(cluster_name, false, true, 1, 1024);
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
     val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
     val node_2 = ensure_node(provider_pubkey, node_pubkey_2, true, "SE", 1, 1024, false);
 
@@ -149,7 +148,7 @@ function test_full_cluster_remove() {
     // Remove cluster
     rell.test.tx().op(
         icmf_message_op(x"", cluster_update_topic, body = cluster_update_message(
-            name = cluster_name, deleted = true, operational = false, cluster_units = 1, extra_storage = 1024, cluster_class, anchoring_chain = x"").to_gtv())
+            name = cluster_name, deleted = true, operational = false, cluster_units = 1, extra_storage = 1024, anchoring_chain = x"").to_gtv())
     ).run();
 
     // Verify
@@ -163,14 +162,12 @@ function test_full_node_remove() {
 
     val provider_pubkey = rell.test.keypairs.bob.pub;
     val node_pubkey = rell.test.pubkeys.charlie;
-    val cluster_name = "Bob's cluster";
     val cluster_name_replica = "Alice's cluster";
-    val cluster_class = "";
 
-    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER, null);
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
     val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
-    val cluster = ensure_cluster(cluster_name, false, true, 1, 1024, cluster_name);
-    val cluster_replica = ensure_cluster(cluster_name_replica, false, true, 1, 1024, cluster_name);
+    val cluster = ensure_cluster(cluster_name, false, true, 1, 1024);
+    val cluster_replica = ensure_cluster(cluster_name_replica, false, true, 1, 1024);
 
     add_cluster_node(cluster_name, node_pubkey, false);
     add_cluster_node(cluster_name_replica, node_pubkey, true);
@@ -196,3 +193,33 @@ function test_full_node_remove() {
     assert_null(cluster_replica_node @? { cluster_replica, node });
     assert_null(node @? { node_pubkey });
 }
+
+function test_remove_cluster_with_lease_refund() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val account_balance_start = get_account_balance(alice);
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = 18, cluster_name = cluster_name, container_units = 2);
+    val account_balance_after_buying_lease = get_account_balance(alice);
+    val cost = account_balance_start - account_balance_after_buying_lease;
+
+    val lease = lease @ { container_name };
+
+    val expected_refund = calculate_remaining_lease_value(lease, rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL * 3);
+
+    val message = cluster_update_message(
+        name = cluster_name,
+        deleted = true,
+        operational = true,
+        cluster_units = 1,
+        extra_storage = 0,
+        anchoring_chain = x""
+    );
+    rell.test.tx().op(
+        receive_cluster_update_message_op(message)
+    ).run();
+
+    assert_null(lease @? { container_name });
+    assert_equals(get_account_balance(alice), account_balance_start - cost + expected_refund);
+    assert_equals(get_pool_balance(), cost - expected_refund);
+}
+
