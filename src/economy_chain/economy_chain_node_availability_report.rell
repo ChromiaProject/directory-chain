@@ -6,6 +6,22 @@ function receive_node_availability_report(sender: byte_array, body: gtv) {
         log("Received availability report from cluster that is not tracked by economy chain from sender: %s".format(sender));
         return;
     }
+    val node_availability_report = node_availability_report.from_gtv(body);
+    save_node_availability(node_availability_report);
+    pay_rewards(cluster, node_availability_report);
+}
 
-    pay_rewards(cluster, node_availability_report.from_gtv(body));
+function save_node_availability(report: node_availability_report){
+    for ((node, availability) in report.node_availability) {
+        create_or_update_node_availability(node, availability, report.start_time, report.end_time);
+    }
+}
+
+function create_or_update_node_availability(node: byte_array, availability: decimal, start_time: integer, end_time: integer) {
+    val node_availability = node_availability @? { node };
+    if (node_availability == null) {
+        create node_availability(node, availability, start_time, end_time);
+    } else {
+        update node_availability @ { node } (availability, start_time, end_time);
+    }
 }

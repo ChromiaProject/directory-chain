@@ -73,6 +73,7 @@ function pay_out_node_rewards(node_reward: map<node, big_integer>) {
         if (total > 0) {
             if (pool_balance >= total) {
                 if (transfer_reward(pool, pa, total)) {
+                    create_or_update_node_payed_reward(node.pubkey, total);
                     pool_balance -= total;
                 } else {
                     pa.reward_debt = total;
@@ -83,6 +84,7 @@ function pay_out_node_rewards(node_reward: map<node, big_integer>) {
             } else { // Missing funds to pay full reward
                 log("Reward pool does not have enough funds to transfer full reward.");
                 if (transfer_reward(pool, pa, pool_balance)) {
+                    create_or_update_node_payed_reward(node.pubkey, pool_balance);
                     pa.reward_debt = total - pool_balance;
                     pool_balance = 0;
                 } else {
@@ -172,4 +174,13 @@ function transfer_to_pool_impl(amount: big_integer) {
     require(user @? { account }, "No user for account %s".format(account.id));
 
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), amount);
+}
+
+function create_or_update_node_payed_reward(node: byte_array, value: big_integer){
+    val node_payed_reward = node_payed_reward @? { node };
+    if (node_payed_reward == null) {
+        create node_payed_reward(node, value, op_context.last_block_time);
+    } else {
+        update node_payed_reward @ { node } (value, op_context.last_block_time);
+    }
 }
