@@ -83,3 +83,60 @@ query get_cluster_creation_status(name): cluster_creation_status {
     }
     return status;
 }
+
+query get_average_availability_on_a_providers_nodes(pubkey): decimal {
+    val provider = require_provider(pubkey);
+    val provider_nodes = node @* { provider } (.pubkey);
+    var number_of_nodes = 0;
+    var total_availability = 0.0;
+    val last_block_time = block @ {} (@max .timestamp) ?: 0;
+    for (node in provider_nodes) {
+        val node_availability = node_availability @? { node };
+        if (node_availability != null and last_block_time - node_availability.end_time <= millis_per_day) {
+            number_of_nodes++;
+            total_availability += node_availability.availability;
+        }
+    }
+    return if (number_of_nodes != 0 ) total_availability / number_of_nodes  else  0.0;
+}
+
+query get_total_number_of_nodes_per_provider(pubkey): integer {
+    val provider = require_provider(pubkey);
+    return node @ { provider } (@sum 1);
+}
+
+query get_total_number_of_scus_per_provider(pubkey): integer {
+    val provider = require_provider(pubkey);
+    val provider_nodes_total_cluster_units = node @ { provider } (@sum .cluster_units);
+
+    return provider_nodes_total_cluster_units * standard_cluster_unit.container_units;
+}
+
+query get_average_occupancy_rate_of_a_providers_scus(pubkey): decimal {
+    val provider = require_provider(pubkey);
+    val provider_nodes = node @* { provider };
+
+    var total_scus_used = 0;
+    var total_scus_available = 0;
+    for (node in provider_nodes) {
+        val cluster = cluster_node @ { node } ( .cluster );
+        total_scus_used += lease @ { cluster, not .expired } ( @sum .container_units ) + standard_cluster_unit.system_container_units;
+        total_scus_available += cluster.cluster_units;
+    }
+    return occupancy_rate(total_scus_used, total_scus_available);
+}
+
+query get_amount_of_the_last_reward_payout(pubkey) {
+    val provider = require_provider(pubkey);
+    val provider_nodes = node @* { provider } .pubkey;
+    var total_reward = 0L;
+    val last_block_time = block @ {} (@max .timestamp) ?: 0;
+    for (node in provider_nodes) {
+        val node_payed_reward = node_payed_reward @? { node };
+        if (node_payed_reward != null and last_block_time - node_payed_reward.time <=  millis_per_day) {
+            total_reward += node_payed_reward.value;
+        }
+    }
+
+    return total_reward;
+}
