@@ -84,38 +84,53 @@ query get_cluster_creation_status(name): cluster_creation_status {
     return status;
 }
 
-query get_average_availability_on_a_providers_nodes(pubkey): decimal {
+query get_economy_metrics(pubkey): economy_metrics {
     val provider = require_provider(pubkey);
-    val provider_nodes = node @* { provider } (.pubkey);
+    val provider_nodes = node @* { provider };
+    val last_block_time = block @ {} (@max .timestamp) ?: 0;
+
+    val average_availability_on_a_providers_nodes = get_average_availability_on_a_providers_nodes(provider_nodes, last_block_time);
+    val total_number_of_nodes_per_provider = get_total_number_of_nodes_per_provider(provider_nodes);
+    val total_number_of_scus_per_provider = get_total_number_of_scus_per_provider(provider_nodes);
+    val average_occupancy_rate_of_a_providers_scus = get_average_occupancy_rate_of_a_providers_scus(provider_nodes);
+    val amount_of_the_last_reward_payout = get_amount_of_the_last_reward_payout(provider_nodes, last_block_time);
+
+    return economy_metrics(
+        average_availability_on_a_providers_nodes,
+        total_number_of_nodes_per_provider,
+        total_number_of_scus_per_provider,
+        average_occupancy_rate_of_a_providers_scus,
+        amount_of_the_last_reward_payout
+    );
+}
+
+
+function get_average_availability_on_a_providers_nodes(provider_nodes: list<node>, last_block_time: integer): decimal {
     var number_of_nodes = 0;
     var total_availability = 0.0;
-    val last_block_time = block @ {} (@max .timestamp) ?: 0;
     for (node in provider_nodes) {
-        val node_availability = node_availability @? { node };
+        val node_availability = node_availability @? { .node == node.pubkey };
         if (node_availability != null and last_block_time - node_availability.end_time <= millis_per_day) {
             number_of_nodes++;
             total_availability += node_availability.availability;
         }
     }
-    return if (number_of_nodes != 0 ) total_availability / number_of_nodes  else  0.0;
+    return if (number_of_nodes != 0 ) total_availability / number_of_nodes  else 0.0;
 }
 
-query get_total_number_of_nodes_per_provider(pubkey): integer {
-    val provider = require_provider(pubkey);
-    return node @ { provider } (@sum 1);
+function get_total_number_of_nodes_per_provider(provider_nodes: list<node>): integer {
+    return provider_nodes.size();
 }
 
-query get_total_number_of_scus_per_provider(pubkey): integer {
-    val provider = require_provider(pubkey);
-    val provider_nodes_total_cluster_units = node @ { provider } (@sum .cluster_units);
-
+function get_total_number_of_scus_per_provider(provider_nodes: list<node>): integer {
+    var provider_nodes_total_cluster_units = 0;
+    for (node in provider_nodes) {
+        provider_nodes_total_cluster_units += node.cluster_units;
+    }
     return provider_nodes_total_cluster_units * standard_cluster_unit.container_units;
 }
 
-query get_average_occupancy_rate_of_a_providers_scus(pubkey): decimal {
-    val provider = require_provider(pubkey);
-    val provider_nodes = node @* { provider };
-
+function get_average_occupancy_rate_of_a_providers_scus(provider_nodes: list<node>): decimal {
     var total_scus_used = 0;
     var total_scus_available = 0;
     for (node in provider_nodes) {
@@ -126,17 +141,13 @@ query get_average_occupancy_rate_of_a_providers_scus(pubkey): decimal {
     return occupancy_rate(total_scus_used, total_scus_available);
 }
 
-query get_amount_of_the_last_reward_payout(pubkey) {
-    val provider = require_provider(pubkey);
-    val provider_nodes = node @* { provider } .pubkey;
+function get_amount_of_the_last_reward_payout(provider_nodes: list<node>, last_block_time: integer) {
     var total_reward = 0L;
-    val last_block_time = block @ {} (@max .timestamp) ?: 0;
     for (node in provider_nodes) {
-        val node_payed_reward = node_payed_reward @? { node };
+        val node_payed_reward = node_payed_reward @? { node.pubkey };
         if (node_payed_reward != null and last_block_time - node_payed_reward.time <=  millis_per_day) {
             total_reward += node_payed_reward.value;
         }
     }
-
     return total_reward;
 }
