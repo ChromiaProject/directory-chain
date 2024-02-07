@@ -20,30 +20,34 @@ function test_set_rates() {
         staking_set_rates(1.0, 4.0)
     ).run();
 
-    val initial_rate = staking_get_current_rate();
-    assert_equals(initial_rate[0], 1);
-    assert_equals(initial_rate[1], 4);
+    val initial_rate = staking_get_current_rates();
+    assert_equals(initial_rate.delegator_rate, 1);
+    assert_equals(initial_rate.provider_rate, 4);
 
     rell.test.set_next_block_time_delta(staking_config.rate_change_delay_ms);
     rell.test.tx().op(
         staking_set_rates(0.5, 0.9)
     ).run();
 
-    val second_rate = staking_get_current_rate();
-    assert_equals(second_rate[0], 0.5);
-    assert_equals(second_rate[1], 0.9);
+    val second_rate = staking_get_current_rates();
+    assert_equals(second_rate.delegator_rate, 0.5);
+    assert_equals(second_rate.provider_rate, 0.9);
 
     rell.test.tx().op(
         staking_set_rates(8.0, 8.0) // Won't take effect
     ).run();
 
-    val third_rate = staking_get_current_rate();
-    assert_equals(third_rate[0], 0.5);
-    assert_equals(third_rate[1], 0.9);
+    val third_rate = staking_get_current_rates();
+    assert_equals(third_rate.delegator_rate, 0.5);
+    assert_equals(third_rate.provider_rate, 0.9);
 }
 
 function test_add_remove_providers() {
     rell.test.tx().op(init()).run();
+
+    rell.test.tx().op(
+        staking_set_rates(0.5, 0.9)
+    ).run();
 
     assert_false(staking_is_active_provider(rell.test.pubkeys.charlie));
 
@@ -51,9 +55,10 @@ function test_add_remove_providers() {
         staking_remove_provider(rell.test.pubkeys.charlie)
     ).run_must_fail("Provider not active.");
 
-    rell.test.tx().op(
-        staking_add_provider('Charlie', rell.test.pubkeys.charlie)
-    ).run();
+    rell.test.tx()
+        .op(staking_add_provider('Charlie', rell.test.pubkeys.charlie))
+        .op(staking_add_provider('Bob', rell.test.pubkeys.bob))
+    .run();
 
     rell.test.tx().op(
         staking_add_provider('Charlie Too', rell.test.pubkeys.charlie)
@@ -61,17 +66,48 @@ function test_add_remove_providers() {
 
     assert_true(staking_is_active_provider(rell.test.pubkeys.charlie));
 
+    // Add some delegation
+    rell.test.tx()
+        // Have A deposit and delegate to C
+        .op(staking_deposit(rell.test.pubkeys.alice, 9))
+        .op(staking_delegate(rell.test.pubkeys.alice, rell.test.pubkeys.charlie))
+        // Have D deposit 11 and delagate to B
+        .op(staking_deposit(rell.test.pubkeys.dave, 11))
+        .op(staking_delegate(rell.test.pubkeys.dave, rell.test.pubkeys.bob))
+    .run();
+
+    // Wait for delegation to take effect
+    rell.test.set_next_block_time_delta(staking_config.rate_change_delay_ms);
+    rell.test.block().run();
+    assert_equals(staking_get_total_delegation_to(rell.test.pubkeys.charlie), 9);
+    assert_equals(staking_get_total_delegation_to(rell.test.pubkeys.bob), 11);
+
     rell.test.tx().op(
         staking_remove_provider(rell.test.pubkeys.charlie)
     ).run();
 
     assert_false(staking_is_active_provider(rell.test.pubkeys.charlie));
 
-    // TODO ensure delegates have been removed
+    // Ensure delegates have been removed
+    assert_equals(staking_get_total_delegation_to(rell.test.pubkeys.charlie), 0); // <- Removed immediately
+    assert_equals(staking_get_total_delegation_to(rell.test.pubkeys.bob), 11); // <- Unchanged
+
+    // Should have earned something
+    assert_true(staking_rewards_claimable_for(rell.test.pubkeys.alice) > 0);
 }
 
 function test_delegation() {
     rell.test.tx().op(init()).run();
+
+    rell.test.tx().op(
+        staking_set_rates(0.5, 0.9)
+    ).run();
+
+    rell.test.set_next_block_time_delta(staking_config.rate_change_delay_ms + 1);
+    rell.test.block().run();
+
+    assert_equals(staking_rewards_claimable_for(rell.test.pubkeys.alice), 0);
+    assert_equals(staking_rewards_claimable_for(rell.test.pubkeys.bob), 0);
 
     rell.test.tx().op(
         staking_delegate(rell.test.pubkeys.alice, rell.test.pubkeys.charlie)
@@ -87,6 +123,8 @@ function test_delegation() {
     rell.test.block().run();
     assert_equals(staking_get_current_delegate(rell.test.pubkeys.alice), rell.test.pubkeys.charlie);
 
+    assert_true(staking_rewards_claimable_for(rell.test.pubkeys.alice) > 0);
+
     rell.test.tx().op(
         staking_undelegate(rell.test.pubkeys.alice)
     ).run();
@@ -96,11 +134,6 @@ function test_delegation() {
     rell.test.set_next_block_time_delta(staking_config.rate_change_delay_ms);
     rell.test.block().run();
     assert_equals(staking_get_current_delegate(rell.test.pubkeys.alice), NO_ONE); // Change in a week
-
-    // Clean up
-    rell.test.tx().op(
-        staking_remove_provider(rell.test.pubkeys.charlie)
-    ).run();
 }
 
 function test_staking_deposit() {
@@ -166,21 +199,10 @@ function test_withdrawal() {
         .op(staking_request_withdrawal(rell.test.pubkeys.alice))
         .op(staking_request_withdrawal(rell.test.pubkeys.alice))
     .run_must_fail("Only one withdrawal request at a time.");
-
-    // Clean up
-    rell.test.tx()
-        .op(staking_remove_provider(rell.test.pubkeys.bob))
-    .run();
 }
 
 function test_staking_get_total_delegation_to() {
     rell.test.tx().op(init()).run();
-
-    // Check we have a clean slate
-    assert_false(staking_is_active_provider(rell.test.pubkeys.alice));
-    assert_false(staking_is_active_provider(rell.test.pubkeys.bob));
-    assert_equals(0, staking_get_balance(rell.test.pubkeys.alice));
-    assert_equals(0, staking_get_balance(rell.test.pubkeys.bob));
 
     assert_false(staking_is_active_provider(rell.test.pubkeys.bob));
     rell.test.tx()

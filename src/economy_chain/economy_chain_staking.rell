@@ -1,52 +1,53 @@
 val NO_ONE : pubkey = x'';
 
-entity staker_balance {
-    time: timestamp;
-    staker: pubkey;
-    amount: integer;
-    mutable latest: boolean;
-    index staker;
-    key time, staker;
-}
-
 entity staker_withdrawal_request {
-    time: timestamp;
+    staker_withdrawal_request_time: timestamp;
     staker: pubkey;
     mutable used: boolean;
     index staker;
-    key time, staker;
+    key staker_withdrawal_request_time, staker;
 }
 
 entity provider_registration {
-    time: timestamp;
+    provider_registration_time: timestamp;
     provider: pubkey;
     name: text;
     mutable active: boolean;
     index provider;
-    key time, provider;
+    key provider_registration_time, provider;
 }
 
-entity staker_delegation {
-    delegate: pubkey;
-    time: timestamp;
+@log
+entity staker_payout {
+    staker_payout_time: timestamp;
+    staker: pubkey;
+    payout_amount: integer;
+}
+
+entity staker_state {
+    staker_state_time: timestamp;
+    previous_staker_state_time: timestamp; // We have no windowing functions
+    staker: pubkey;
     cutover_time: timestamp;
     new_provider: pubkey;
     old_provider: pubkey;
-    mutable latest: boolean;
-    index delegate;
-    key time, delegate;
+    balance: integer;
+    previous_balance: integer; // We have no windowing functions
+    mutable latest: boolean; // We have no windowing functions
+    index staker;
 }
 
 entity reward_rate {
-    time: timestamp;
+    reward_rate_time: timestamp;
     delegator_rate: decimal;
     provider_rate: decimal;
-    key time;
+    key reward_rate_time;
 }
 
 object staking_config {
     rate_change_delay_ms: integer = 7 * 8600 * 1000;
     withdrawal_delay_ms: integer = 14 * 8600 * 1000;
+    // TODO Should have an independent setting for delegation delay
 }
 
 operation staking_set_rates_at(delegator_rate: decimal, provider_rate: decimal, time: timestamp) {
@@ -64,37 +65,79 @@ operation staking_set_rates(delegator_rate: decimal, provider_rate: decimal) {
 
 operation staking_deposit(staker: pubkey, amount: integer) {
     require(amount > 0, "Can't deposit nothing (or less)!");
-    // TODO Probably should take some chr from them now!
-    val existing = staking_get_balance(staker);
-    update staker_balance @? { .staker==staker and .latest==true } ( latest=false );
-    create staker_balance(time=_staking_last_known_time(), staker=staker, amount=amount + existing, latest=true);
+    val existing = staker_state @? { .staker == staker and .latest == true };
+    update staker_state @? { .staker == staker and .latest == true } ( latest = false );
+    if(null != existing)
+        create staker_state(
+            staker_state_time = _staking_last_known_time(),
+            previous_staker_state_time = existing.staker_state_time,
+            staker = staker,
+            balance = amount + existing.balance,
+            previous_balance = existing.balance,
+            cutover_time = existing.cutover_time,
+            new_provider = existing.new_provider,
+            old_provider = existing.old_provider,
+            latest = true
+        );
+    else
+        // Initial deposit
+        create staker_state(
+            staker_state_time = _staking_last_known_time(),
+            previous_staker_state_time = _staking_last_known_time(), // Logically correct for the first observation
+            staker = staker,
+            balance = amount,
+            previous_balance = 0,
+            cutover_time = _staking_last_known_time(),
+            new_provider = NO_ONE,
+            old_provider = NO_ONE,
+            latest = true
+        );
+    ;
 }
 
-function staking_get_balance(staker: pubkey) = staker_balance @? { .staker == staker and .latest==true } (.amount) ?: 0;
+query staking_get_balance(staker: pubkey) = staker_state @? { .staker == staker and .latest==true } ( .balance ) ?: 0;
 
 operation staking_request_withdrawal(staker: pubkey) {
     require(staking_get_balance(staker) > 0, "Need something to withdraw.");
-    require(NO_ONE == staking_get_current_delegate(staker), "Must undelegate before requesting a withdrawal.");
+    require(NO_ONE == staking_get_current_delegate(staker), "Must unstaker before requesting a withdrawal.");
     require(null == staking_get_withdrawal_time(staker), "Only one withdrawal request at a time.");
 
     // Make a new request
     require(_staking_last_known_time() > 0, "Require an actual time");
-    create staker_withdrawal_request(time=_staking_last_known_time(), staker=staker, false);
+    create staker_withdrawal_request(staker_withdrawal_request_time=_staking_last_known_time(), staker=staker, false);
 }
 
 operation staking_withdraw(staker: pubkey) {
     val withdrawal_time = staking_get_withdrawal_time(staker);
     require(withdrawal_time, "Need a withdrawal request.");
     require(_staking_last_known_time() >= withdrawal_time, "Need to wait for withdrawal request.");
+
     // TODO Send the balance back to them through ft4 somehow
-    update staker_balance @? { .staker==staker and .latest==true } ( latest=false );
-    create staker_balance(time=_staking_last_known_time(), staker=staker, amount=0, latest=true);
+
+    val existing = staker_state @ { .staker == staker and .latest==true };
+    update staker_state @? { .staker == staker and .latest==true } ( latest=false );
+    create staker_state(
+        staker_state_time =_staking_last_known_time(),
+        previous_staker_state_time = existing.staker_state_time,
+        staker = staker,
+        balance = 0,
+        previous_balance = existing.balance,
+        cutover_time = existing.cutover_time,
+        new_provider = existing.new_provider,
+        old_provider = existing.old_provider,
+        latest = true
+    );
     update staker_withdrawal_request @ {.staker == staker } (used = true );
 }
 
 query staking_get_withdrawal_time(staker: pubkey) : timestamp? {
     val valid_request = staker_withdrawal_request @? {.staker == staker and .used == false};
-    return if (null != valid_request) valid_request.time + staking_config.withdrawal_delay_ms else null;
+    return
+        if (null != valid_request)
+            valid_request.staker_withdrawal_request_time + staking_config.withdrawal_delay_ms
+        else
+            null
+        ;
 }
 
 query staking_is_active_provider(provider : pubkey) : boolean {
@@ -104,28 +147,78 @@ query staking_is_active_provider(provider : pubkey) : boolean {
 
 query staking_get_total_delegation_to(provider : pubkey) : integer {
     return
-        // Join deposit and delegation information 
-        (d: staker_delegation, b: staker_balance) @ {
-            // consider only the latest entries
-            d.latest == true and b.latest ==true
-            // joined on delegate
-            and d.delegate == b.staker
+        // Look at the full staker state 
+        (s: staker_state) @ {
+            // consider only the latest state
+            s.latest == true
             // restricted to those currently on this provider according to the cut off date
             and (
-                ( d.new_provider == provider and d.cutover_time <= _staking_last_known_time() )
+                ( s.new_provider == provider and s.cutover_time <= _staking_last_known_time() )
                 or
-                ( d.old_provider == provider and d.cutover_time > _staking_last_known_time() )
+                ( s.old_provider == provider and s.cutover_time > _staking_last_known_time() )
             )
         } (
             // sum the balances
-            @sum b.amount
+            @sum s.balance
         )
     ;
 }
 
-query staking_rewards_earned_for(_pubkey : pubkey) : integer = 0;
-query staking_rewards_collected_for(_pubkey : pubkey) : integer = 0;
-query staking_rewards_claimable_for(_pubkey : pubkey) : integer = 0;
+query staking_rewards_claimable_for(staker : pubkey) : integer {
+
+    // We are going to limit ourselves here by simply calculating the reward as of the last payout date at the
+    // prevailing reward rate. This will give a "wrong" answer as a portion of the reward will be paid at the
+    // new rate when it should have been on the old. This will not be significant.
+    // The author would like to have done something more fun here tbh. Hopefully this will get easier as Rell
+    // approaches its final form of a modern Tutorial D :)
+    // TODO extend this query to handle the above accurately
+
+    val last_payout_time = (staker_payout @? {.staker == staker} (@max .staker_payout_time)) ?: 0;
+
+    // TODO Need to disregard periods where the staker is delegated to NO_ONE
+
+    // Let's get the state at the beginning of our period
+    val starting_state = staker_state @? {
+        .staker == staker and .staker_state_time < last_payout_time
+    } (
+        staker_state.to_struct(),
+        @omit @sort_desc .rowid
+    ) limit 1;
+
+    // So we want the sum of balances that started and ended within our relevant period...
+    val (intermediate_token_time, first_intermediate_balance_time: integer?) = staker_state @ {
+        .staker == staker and .staker_state_time > last_payout_time
+    } (
+        @sum (.previous_balance * (.staker_state_time - .previous_staker_state_time)),
+        @min .staker_state_time
+    );
+
+    // ... then the start time and amount of the *current* balance to add on at the end
+    val end_state = staker_state @? {.staker == staker} (
+        staker_state.to_struct(),
+        @omit @sort .rowid /* asc */
+    ) limit 1;
+
+    // So let's start with the bit at the beginning
+    val start_token_time =
+    if (null != starting_state) (
+        ((first_intermediate_balance_time ?: last_payout_time) - last_payout_time) * starting_state.balance
+    )
+    else 0;
+
+    // Calculate the how far the current balance has run
+    val end_token_time =
+        if (null != end_state)
+            (_staking_last_known_time() - end_state.staker_state_time) * end_state.balance
+        else 0;
+
+    // Add it all together
+    val total_token_time = start_token_time + intermediate_token_time + end_token_time;
+
+    // TODO Pick a separate rate for providers
+
+    return integer(total_token_time * staking_get_current_rates().delegator_rate);
+}
 
 operation staking_add_provider(name : text, provider : pubkey) {
     require(not staking_is_active_provider(provider), "Provider cannot be active.");
@@ -136,9 +229,26 @@ operation staking_remove_provider(provider : pubkey) {
     require(staking_is_active_provider(provider), "Provider not active.");
 
     // Unwind delegations immediately
-    for (removed_delegation in staker_delegation @* {.provider == provider} (@group .delegate)) {
-        if (staking_get_current_delegate(removed_delegation) == provider)
-            create staker_delegation(delegate = removed_delegation, time=staking_get_last_known_time(), provider = NO_ONE);
+    // Find all the latest delegations involving removed provider
+    // eg. latest AND new_provider is going
+    val removed_delegations = staker_state @* { .new_provider == provider and .latest == true } (@group .staker);
+    // then for each :-
+    for (removed_delegation in removed_delegations) {
+        val existing = staker_state @ {.latest == true and .staker == removed_delegation};
+        // clear the latest flag
+        update staker_state @ {.latest == true and .staker == removed_delegation} (.latest = false);
+        // ... add an immediate transition to the prior
+        create staker_state(
+            staker = removed_delegation,
+            cutover_time = staking_get_last_known_time(),
+            staker_state_time = staking_get_last_known_time(),
+            previous_staker_state_time = existing.staker_state_time,
+            old_provider = staking_get_current_delegate(removed_delegation),
+            new_provider = NO_ONE,
+            balance = existing.balance,
+            previous_balance = existing.balance,
+            latest = true
+        );
     }
 
     val name = provider_registration @ { .provider == provider } ( .name );
@@ -147,7 +257,7 @@ operation staking_remove_provider(provider : pubkey) {
 
 operation staking_delegate(staker : pubkey, provider: pubkey) {
     require(staking_is_active_provider(provider), "Must be active provider.");
-    require(staking_get_balance(staker) > 0, "Must have a stake to delegate.");
+    require(staking_get_balance(staker) > 0, "Must have a stake to staker.");
 
     // Clear any withdrawal request
     delete staker_withdrawal_request @? {.used == false and .staker == staker};
@@ -160,44 +270,47 @@ operation staking_undelegate(delegator : pubkey) {
 }
 
 function _staking_delegate(delegator : pubkey, provider: pubkey) {
-    require(staking_get_balance(delegator) > 0, "Need a stake to delegate.");
+    require(staking_get_balance(delegator) > 0, "Need a stake to staker.");
 
-    // Get the value before messing with the flag
-    val current_delegation = staking_get_current_delegate(delegator);
+    // Get the values before messing with the flag
+    val existing = staker_state @ {.latest == true and .staker == delegator};
+    val current_provider = staking_get_current_delegate(delegator);
 
     // Clear flag from previous
-    update staker_delegation @? {.delegate == delegator and .latest == true} (latest = false);
+    update staker_state @? {.staker == delegator and .latest == true} (latest = false);
 
     // New delegation record
-    create staker_delegation(
-        delegate = delegator,
-        time = staking_get_last_known_time(),
+    create staker_state(
+        staker_state_time = staking_get_last_known_time(),
+        staker = existing.staker,
         cutover_time = _staking_cannot_change_before(),
+        previous_staker_state_time = existing.staker_state_time,
         new_provider = provider,
-        old_provider = current_delegation,
+        old_provider = current_provider,
+        balance = existing.balance,
+        previous_balance = existing.balance,
         latest = true
     );
 }
 
 operation staking_claim_rewards() {}
 
-query staking_get_current_rate() : (decimal, decimal) {
+query staking_get_current_rates() : struct<reward_rate> {
     val current_rate = reward_rate @ {
-        .time <= _staking_last_known_time()
+        .reward_rate_time <= _staking_last_known_time()
     } (
-        .delegator_rate, .provider_rate, @sort_desc .time
+        reward_rate.to_struct(),
+        @omit @sort_desc .reward_rate_time
     ) limit 1;
-    val delegator_rate = current_rate.delegator_rate;
-    val provider_rate = current_rate.provider_rate;
-    return (delegator_rate, provider_rate);
+    return current_rate;
 }
 
-query staking_get_current_delegate(delegate : pubkey) : pubkey {
-    val current_delegation = staker_delegation @? { .delegate == delegate and .latest == true };
+query staking_get_current_delegate(staker : pubkey) : pubkey {
+    val current_state = staker_state @? { .staker == staker and .latest == true };
     return
-        if  (null == current_delegation) NO_ONE
-    else if ( staking_get_last_known_time() >= current_delegation.cutover_time ) current_delegation.new_provider
-    else    current_delegation.old_provider;
+        if  (null == current_state) NO_ONE
+    else if ( staking_get_last_known_time() >= current_state.cutover_time ) current_state.new_provider
+    else    current_state.old_provider;
 }
 
 function _staking_cannot_change_before() : timestamp = _staking_last_known_time() + staking_config.rate_change_delay_ms;
