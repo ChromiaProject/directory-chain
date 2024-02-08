@@ -17,12 +17,12 @@ function test_set_rates() {
 
     rell.test.set_next_block_time_delta(staking_get_cannot_change_before());
     rell.test.tx().op(
-        staking_set_rates(1.0, 4.0)
+        staking_set_rates(0.1, 0.4)
     ).run();
 
     val initial_rate = staking_get_current_rates();
-    assert_equals(initial_rate.delegator_rate, 1);
-    assert_equals(initial_rate.provider_rate, 4);
+    assert_equals(initial_rate.delegator_rate, 0.1);
+    assert_equals(initial_rate.provider_rate, 0.4);
 
     rell.test.set_next_block_time_delta(staking_config.rate_change_delay_ms);
     rell.test.tx().op(
@@ -34,7 +34,7 @@ function test_set_rates() {
     assert_equals(second_rate.provider_rate, 0.9);
 
     rell.test.tx().op(
-        staking_set_rates(8.0, 8.0) // Won't take effect
+        staking_set_rates(0.05, 0.008) // Won't take effect
     ).run();
 
     val third_rate = staking_get_current_rates();
@@ -69,7 +69,7 @@ function test_add_remove_providers() {
     // Add some delegation
     rell.test.tx()
         // Have A deposit and delegate to C
-        .op(staking_deposit(rell.test.pubkeys.alice, 9))
+        .op(staking_deposit(rell.test.pubkeys.alice, 9999999))
         .op(staking_delegate(rell.test.pubkeys.alice, rell.test.pubkeys.charlie))
         // Have D deposit 11 and delagate to B
         .op(staking_deposit(rell.test.pubkeys.dave, 11))
@@ -79,7 +79,7 @@ function test_add_remove_providers() {
     // Wait for delegation to take effect
     rell.test.set_next_block_time_delta(staking_config.rate_change_delay_ms);
     rell.test.block().run();
-    assert_equals(staking_get_total_delegation_to(rell.test.pubkeys.charlie), 9);
+    assert_equals(staking_get_total_delegation_to(rell.test.pubkeys.charlie), 9999999);
     assert_equals(staking_get_total_delegation_to(rell.test.pubkeys.bob), 11);
 
     rell.test.tx().op(

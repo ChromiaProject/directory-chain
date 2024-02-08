@@ -1,4 +1,5 @@
 val NO_ONE : pubkey = x'';
+val MS_PER_YEAR : decimal = 365 * 3600 * 1000;
 
 entity staker_withdrawal_request {
     staker_withdrawal_request_time: timestamp;
@@ -80,10 +81,10 @@ operation staking_deposit(staker: pubkey, amount: integer) {
             latest = true
         );
     else
-        // Initial deposit
+        // First deposit
         create staker_state(
             staker_state_time = _staking_last_known_time(),
-            previous_staker_state_time = _staking_last_known_time(), // Logically correct for the first observation
+            previous_staker_state_time = 0,
             staker = staker,
             balance = amount,
             previous_balance = 0,
@@ -173,51 +174,45 @@ query staking_rewards_claimable_for(staker : pubkey) : integer {
     // approaches its final form of a modern Tutorial D :)
     // TODO extend this query to handle the above accurately
 
+    // So what we will do is consider all of the states, but we will cap the previous and current stake times
+    // at the last payout date, which will cause periods enterly before the payout date to collapse to zero
+    // duration, and the state during which the payout happened to be truncated to the payout date.
+    // Each row also potentially needs to be cut in two, as the delegate could change to NO_ONE during it, we do
+    // this by first considering the time before the cutoff date, and then the time afterwards (if any). 
+    // We also need to recognise the last row, and for this row only, include the *present* balance extended to
+    // the present date. In effect a last virtual row. (If we could UPSERT, we could cheaply create this row rather
+    // than interpolating it.)
+
     val last_payout_time = (staker_payout @? {.staker == staker} (@max .staker_payout_time)) ?: 0;
 
-    // TODO Need to disregard periods where the staker is delegated to NO_ONE
-
-    // Let's get the state at the beginning of our period
-    val starting_state = staker_state @? {
-        .staker == staker and .staker_state_time < last_payout_time
+    val total_token_time = staker_state @ {
+        .staker == staker
     } (
-        staker_state.to_struct(),
-        @omit @sort_desc .rowid
-    ) limit 1;
-
-    // So we want the sum of balances that started and ended within our relevant period...
-    val (intermediate_token_time, first_intermediate_balance_time: integer?) = staker_state @ {
-        .staker == staker and .staker_state_time > last_payout_time
-    } (
-        @sum (.previous_balance * (.staker_state_time - .previous_staker_state_time)),
-        @min .staker_state_time
+        @sum(
+            // Real and concluded states truncated by the last payment date
+            (
+                (
+                    max(.staker_state_time, last_payout_time)
+                        - max(.previous_staker_state_time, last_payout_time)
+                ) * .previous_balance
+            )
+            // TODO We need to consider the cutoff time
+            +
+            // Interpolated last row from latest row
+            (
+                when (.latest) {
+                    true -> (_staking_last_known_time() - .staker_state_time) * .balance;
+                    else -> 0;
+                }
+            )
+        )
     );
 
-    // ... then the start time and amount of the *current* balance to add on at the end
-    val end_state = staker_state @? {.staker == staker} (
-        staker_state.to_struct(),
-        @omit @sort .rowid /* asc */
-    ) limit 1;
-
-    // So let's start with the bit at the beginning
-    val start_token_time =
-    if (null != starting_state) (
-        ((first_intermediate_balance_time ?: last_payout_time) - last_payout_time) * starting_state.balance
-    )
-    else 0;
-
-    // Calculate the how far the current balance has run
-    val end_token_time =
-        if (null != end_state)
-            (_staking_last_known_time() - end_state.staker_state_time) * end_state.balance
-        else 0;
-
-    // Add it all together
-    val total_token_time = start_token_time + intermediate_token_time + end_token_time;
-
     // TODO Pick a separate rate for providers
+    val rate = staking_get_current_rates().delegator_rate / MS_PER_YEAR;
 
-    return integer(total_token_time * staking_get_current_rates().delegator_rate);
+    val token_reward = total_token_time * rate;
+    return integer(token_reward); // Can only transfer whole minor units
 }
 
 operation staking_add_provider(name : text, provider : pubkey) {
