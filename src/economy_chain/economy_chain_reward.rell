@@ -3,57 +3,47 @@ function pay_rewards(cluster: cluster, node_availability_report: node_availabili
     val node_reward = if (cluster.name == system_cluster_name)
             calculate_system_cluster_rewards(cluster, node_availability_report)
         else
-            calculate_cluster_rewards(cluster, node_availability_report);
+            calculate_dapp_cluster_rewards(cluster, node_availability_report);
 
     pay_out_node_rewards(node_reward);
 }
 
-function calculate_system_cluster_rewards(cluster: cluster, node_availability_report: node_availability_report): map<node, big_integer> {
+function calculate_system_cluster_rewards(system_cluster: cluster, node_availability_report: node_availability_report): map<node, big_integer> {
+    val system_cluster_nodes = cluster_node @* { .cluster == system_cluster} .node;
 
+    val number_of_nodes_in_system_cluster = system_cluster_nodes.size();
+    val sum_total_max_revenue_per_dapp_cluster = sum_total_max_revenue_per_dapp_cluster(system_cluster);
+
+    val system_provider_cost_share_per_node = (sum_total_max_revenue_per_dapp_cluster * economy_constants.system_provider_fee_share) / number_of_nodes_in_system_cluster;
+    val max_system_provider_reward_per_node = max(economy_constants.total_cost_system_providers * (1 - economy_constants.system_provider_risk_share) + system_provider_cost_share_per_node * economy_constants.system_provider_risk_share, system_provider_cost_share_per_node) * economy_constants.chr_per_usd * units_per_asset;
+
+    val system_node_reward = map<node, big_integer>();
+    for (system_cluster_node in system_cluster_nodes) {
+        val availability_factor = adjusted_availability_factor(node_availability_report.node_availability[system_cluster_node.pubkey]);
+        val system_provider_reward_per_node = max_system_provider_reward_per_node * availability_factor;
+        log("Reward calculated for node %s in system cluster based on total_cost_system_providers: %s, system_provider_risk_share: %s, system_provider_cost_share_per_node: %s, system_provider_risk_share: %s, availability_factor: %s, chr_per_usd: %s, units_per_asset: %s, system_provider_fee_share: %s, system_provider_reward_per_node: %s"
+            .format(system_cluster_node.pubkey, economy_constants.total_cost_system_providers, economy_constants.system_provider_risk_share, system_provider_cost_share_per_node, economy_constants.system_provider_risk_share, availability_factor, economy_constants.chr_per_usd, units_per_asset, economy_constants.system_provider_fee_share, system_provider_reward_per_node));
+        system_node_reward[system_cluster_node] = system_provider_reward_per_node.to_big_integer();
+    }
+    return system_node_reward;
+}
+
+function calculate_dapp_cluster_rewards(cluster: cluster, node_availability_report: node_availability_report): map<node, big_integer> {
     val cluster_nodes = cluster_node @* { cluster } .node;
 
-    val system_cluster_reward_per_node = calculate_system_cluster_reward_per_node(cluster, cluster_nodes.size());
+    val occupancy_rate = occupancy_rate(cluster);
+    val dapp_cluster_value = dapp_cluster_value(cluster);
+    val number_of_nodes_per_dapp_cluster = cluster_nodes.size();
+
+    val max_dapp_provider_reward_per_node = ((dapp_cluster_value * (1 - economy_constants.dapp_provider_risk_share) + dapp_cluster_value * occupancy_rate * economy_constants.dapp_provider_risk_share) / number_of_nodes_per_dapp_cluster) * economy_constants.chr_per_usd * units_per_asset;
     val node_reward = map<node, big_integer>();
-
     for (cluster_node in cluster_nodes) {
-        node_reward[cluster_node] = calculate_system_cluster_node_reward(node_availability_report, cluster_node, system_cluster_reward_per_node);
+        val availability_factor = adjusted_availability_factor(node_availability_report.node_availability[cluster_node.pubkey]);
+        val dapp_provider_reward_per_node = max_dapp_provider_reward_per_node * availability_factor;
+        log("Reward calculated for node %s in cluster %s based on dapp_cluster_value: %s, dapp_provider_risk_share: %s, dapp_cluster_value: %s, occupancy_rate: %s, number_of_nodes_per_dapp_cluster: %s, availability_factor: %s, chr_per_usd: %s, units_per_asset: %s, system_provider_fee_share: %s, staking_reward_fee_share: %s, chromia_foundation_fee_share: %s, resource_pool_margin_fee_share: %s, dapp_provider_reward_per_node: %s"
+            .format(cluster_node.pubkey, cluster.name, dapp_cluster_value, economy_constants.dapp_provider_risk_share, dapp_cluster_value, occupancy_rate, number_of_nodes_per_dapp_cluster, availability_factor, economy_constants.chr_per_usd, units_per_asset, economy_constants.system_provider_fee_share, economy_constants.staking_reward_fee_share, economy_constants.chromia_foundation_fee_share, economy_constants.resource_pool_margin_fee_share, dapp_provider_reward_per_node));
+        node_reward[cluster_node] = dapp_provider_reward_per_node.to_big_integer();
     }
-
-    return node_reward;
-}
-
-function calculate_system_cluster_node_reward(node_availability_report: node_availability_report, cluster_node: node, system_cluster_reward_per_node: decimal): big_integer {
-    val availability_factor = node_availability_report.node_availability[cluster_node.pubkey];
-    val adjusted_availability_factor = calculate_adjusted_avalability_factor(availability_factor);
-    val reward = (system_cluster_reward_per_node * adjusted_availability_factor * economy_constants.chr_per_usd * units_per_asset).to_integer();
-    log("Reward calculated for node %s in system cluster based on system_cluster_reward_per_node: %s, availability_factor: %s, adjusted_availability_factor: %s, chr_per_usd: %s, units_per_asset: %s, reward: %s"
-    .format(cluster_node.pubkey, system_cluster_reward_per_node, availability_factor, adjusted_availability_factor, economy_constants.chr_per_usd, units_per_asset,  reward));
-    return reward;
-}
-
-function node_value_node_utilization_average(cluster: cluster, cluster_size: integer): decimal {
-    val node_value = calculate_node_value(cluster, cluster_size);
-    val node_utilization_value = calculate_cluster_utilization(cluster) * node_value;
-    return weight_average(node_value, node_utilization_value, economy_constants.node_value_vs_utilization_weight);
-}
-
-function weight_average(value1: decimal, value2: decimal, weight: decimal) = value1 * weight + value2 * (1 - weight);
-
-function calculate_cluster_rewards(cluster: cluster, node_availability_report: node_availability_report): map<node, big_integer> {
-
-    val cluster_nodes = cluster_node @* { cluster } .node;
-
-    val node_value_node_utilization_average = node_value_node_utilization_average(cluster, cluster_nodes.size());
-
-    val node_reward = map<node, big_integer>();
-
-    for (cluster_node in cluster_nodes) {
-
-        val reward = calculate_reward(node_availability_report, cluster_node, cluster, node_value_node_utilization_average);
-
-        node_reward[cluster_node] = reward;
-    }
-
     return node_reward;
 }
 
@@ -95,49 +85,28 @@ function pay_out_node_rewards(node_reward: map<node, big_integer>) {
     }
 }
 
-function calculate_system_cluster_reward_per_node(system_cluster: cluster, cluster_nodes: integer): decimal {
-
-    var total = 0.0;
+function sum_total_max_revenue_per_dapp_cluster(system_cluster: cluster): decimal {
+    var sum_total_max_revenue_per_dapp_cluster = 0.0;
     val clusters = cluster @* { $ != system_cluster };
     for (cluster in clusters) {
-        val cluster_value = calculate_cluster_value(cluster);
-        val cluster_utilization_value = calculate_cluster_utilization(cluster) * cluster_value;
-        total = total + weight_average(cluster_value, cluster_utilization_value, economy_constants.node_value_vs_utilization_weight);
+        sum_total_max_revenue_per_dapp_cluster += total_max_revenue_per_dapp_cluster(cluster);
     }
-
-    return (total * economy_constants.system_provider_reward_share) / cluster_nodes;
+    return sum_total_max_revenue_per_dapp_cluster;
 }
 
-function calculate_reward(node_availability_report: node_availability_report, cluster_node: node, cluster: cluster, node_value_node_utilization_average: decimal): big_integer {
+function total_max_revenue_per_dapp_cluster(cluster: cluster): decimal = (total_available_scus(cluster.cluster_units) - standard_cluster_unit.system_container_units) * cluster.tag.scu_price + cluster.tag.extra_storage_price * (cluster.extra_storage / 1024);
 
-    val availability_factor = node_availability_report.node_availability[cluster_node.pubkey];
-    val adjusted_availability_factor = calculate_adjusted_avalability_factor(availability_factor);
-    val total_node_value_reward = adjusted_availability_factor * node_value_node_utilization_average;
+function dapp_provider_fee_share(): decimal = 1 - economy_constants.chromia_foundation_fee_share - economy_constants.resource_pool_margin_fee_share - economy_constants.system_provider_fee_share;
 
-    val reward = (total_node_value_reward * economy_constants.provider_reward_share * economy_constants.chr_per_usd * units_per_asset).to_integer();
+function dapp_cluster_value(cluster: cluster): decimal = total_max_revenue_per_dapp_cluster(cluster) * dapp_provider_fee_share() / (1 + economy_constants.staking_reward_fee_share);
 
-    log(("Reward calculated for node %s in cluster %s based on availability_factor: %s, adjusted_availability_factor: %s, "
-        + "total_node_value_reward: %s, node_value_node_utilization_average: %s, provider_reward_share: %s, chr_per_usd: %s, units_per_asset: %s, reward: %s")
-        .format(cluster_node.pubkey, cluster.name, availability_factor, adjusted_availability_factor, total_node_value_reward, node_value_node_utilization_average, economy_constants.provider_reward_share, economy_constants.chr_per_usd, units_per_asset, reward));
+function occupied_scus(cluster: cluster): integer = lease @ { cluster, not .expired } ( @sum .container_units );
 
-    return reward;
-}
+function total_available_scus(cluster_units: integer): integer = cluster_units * standard_cluster_unit.container_units;
 
-function calculate_adjusted_avalability_factor(availability_factor: decimal): decimal = max(0, availability_factor - 0.9) * 10;
+function occupancy_rate(cluster): decimal = decimal(occupied_scus(cluster)) / (total_available_scus(cluster.cluster_units) - standard_cluster_unit.system_container_units);
 
-function calculate_cluster_value(cluster: cluster): integer =
-    (cluster.cluster_units * standard_cluster_unit.container_units) * cluster.tag.scu_price + (cluster.extra_storage / 1024) * cluster.tag.extra_storage_price;
-
-function calculate_node_value(cluster: cluster, cluster_nodes: integer): integer =
-        calculate_cluster_value(cluster) / cluster_nodes;
-
-function calculate_cluster_utilization(cluster: cluster): decimal {
-
-    val container_units = lease @ { cluster, not .expired } ( @sum .container_units ) + standard_cluster_unit.system_container_units;
-    return occupancy_rate(container_units, cluster.cluster_units) * economy_constants.node_utilization_value_factor;
-}
-
-function occupancy_rate(container_units: integer, cluster_units: integer): decimal = decimal(container_units) / (decimal(cluster_units) * standard_cluster_unit.container_units);
+function adjusted_availability_factor(availability_factor: decimal): decimal = max(0, availability_factor - 0.9) * 10;
 
 function transfer_reward(pool: ft4.accounts.account, pa: provider_account, amount: big_integer): boolean {
     log("Transfer reward %s to provider %s".format(amount, pa.provider.pubkey));
