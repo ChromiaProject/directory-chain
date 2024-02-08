@@ -47,10 +47,13 @@ query get_economy_constants(): economy_constants_data = economy_constants_data(
     min_lease_time_weeks = economy_constants.min_lease_time_weeks,
     max_lease_time_weeks = economy_constants.max_lease_time_weeks,
     chr_per_usd = economy_constants.chr_per_usd,
-    node_utilization_value_factor = economy_constants.node_utilization_value_factor,
-    node_value_vs_utilization_weight = economy_constants.node_value_vs_utilization_weight,
-    provider_reward_share = economy_constants.provider_reward_share,
-    system_provider_reward_share = economy_constants.system_provider_reward_share
+    total_cost_system_providers = economy_constants.total_cost_system_providers,
+    system_provider_fee_share = economy_constants.system_provider_fee_share,
+    staking_reward_fee_share = economy_constants.staking_reward_fee_share,
+    chromia_foundation_fee_share = economy_constants.chromia_foundation_fee_share,
+    resource_pool_margin_fee_share = economy_constants.resource_pool_margin_fee_share,
+    system_provider_risk_share = economy_constants.system_provider_risk_share,
+    dapp_provider_risk_share = economy_constants.dapp_provider_risk_share
 );
 
 query get_clusters(): list<cluster_data> {
@@ -131,14 +134,12 @@ function get_total_number_of_scus_per_provider(provider_nodes: list<node>): inte
 }
 
 function get_average_occupancy_rate_of_a_providers_scus(provider_nodes: list<node>): decimal {
-    var total_scus_used = 0;
-    var total_scus_available = 0;
+    var occupancy_rate = 0.0;
     for (node in provider_nodes) {
         val cluster = cluster_node @ { node } ( .cluster );
-        total_scus_used += lease @ { cluster, not .expired } ( @sum .container_units ) + standard_cluster_unit.system_container_units;
-        total_scus_available += cluster.cluster_units;
+        occupancy_rate += occupancy_rate(cluster);
     }
-    return occupancy_rate(total_scus_used, total_scus_available);
+    return occupancy_rate / provider_nodes.size();
 }
 
 function get_amount_of_the_last_reward_payout(provider_nodes: list<node>, last_block_time: integer) {
