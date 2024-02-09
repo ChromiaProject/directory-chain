@@ -1,18 +1,23 @@
 function pay_rewards(cluster: cluster, node_availability_report: node_availability_report) {
 
-    val node_reward = if (cluster.name == system_cluster_name)
+    val is_system_cluster = cluster.name == system_cluster_name;
+    val node_reward = if (is_system_cluster)
             calculate_system_cluster_rewards(cluster, node_availability_report)
         else
             calculate_dapp_cluster_rewards(cluster, node_availability_report);
 
     pay_out_node_rewards(node_reward);
+
+    if (is_system_cluster){
+        pay_out_chromia_foundation_reward();
+    }
 }
 
 function calculate_system_cluster_rewards(system_cluster: cluster, node_availability_report: node_availability_report): map<node, big_integer> {
     val system_cluster_nodes = cluster_node @* { .cluster == system_cluster} .node;
 
     val number_of_nodes_in_system_cluster = system_cluster_nodes.size();
-    val sum_total_max_revenue_per_dapp_cluster = sum_total_max_revenue_per_dapp_cluster(system_cluster);
+    val sum_total_max_revenue_per_dapp_cluster = sum_total_max_revenue_per_dapp_cluster();
 
     val system_provider_cost_share_per_node = (sum_total_max_revenue_per_dapp_cluster * economy_constants.system_provider_fee_share) / number_of_nodes_in_system_cluster;
     val max_system_provider_reward_per_node = max(economy_constants.total_cost_system_providers * (1 - economy_constants.system_provider_risk_share) + system_provider_cost_share_per_node * economy_constants.system_provider_risk_share, system_provider_cost_share_per_node) * economy_constants.chr_per_usd * units_per_asset;
@@ -47,6 +52,21 @@ function calculate_dapp_cluster_rewards(cluster: cluster, node_availability_repo
     return node_reward;
 }
 
+function pay_out_chromia_foundation_reward() {
+    val sum_total_max_revenue_per_dapp_cluster = sum_total_max_revenue_per_dapp_cluster();
+    val chromia_foundation_reward = (sum_total_max_revenue_per_dapp_cluster * economy_constants.chromia_foundation_fee_share * economy_constants.chr_per_usd * units_per_asset).to_big_integer();
+    log("Reward calculated for chromia foundation based on sum_total_max_revenue_per_dapp_cluster: %s, chromia_foundation_fee_share: %s, chr_per_usd: %s, units_per_asset: %s is chromia_foundation_reward: %s"
+        .format(sum_total_max_revenue_per_dapp_cluster, economy_constants.chromia_foundation_fee_share, economy_constants.chr_per_usd, units_per_asset, chromia_foundation_reward));
+
+    val pool = get_pool_account();
+    var pool_balance = get_account_balance(pool);
+    val chromia_foundation_account = get_chromia_foundation_account();
+
+    val pay_reward_result = pay_reward(pool, pool_balance, chromia_foundation_account, chromia_foundation.reward_debt, chromia_foundation_reward, "Chromia Foundation");
+
+    chromia_foundation.reward_debt = pay_reward_result.reward_debt;
+}
+
 function pay_out_node_rewards(node_reward: map<node, big_integer>) {
 
     val pool = get_pool_account();
@@ -56,38 +76,46 @@ function pay_out_node_rewards(node_reward: map<node, big_integer>) {
         val provider = node.provider;
         val pa = provider_account @ { provider };
 
-        val debt = pa.reward_debt;
-        if (debt > 0) pa.reward_debt = 0;
+        val pay_reward_result = pay_reward(pool, pool_balance, pa.account, pa.reward_debt, reward, "provider %s".format(pa.provider.pubkey));
 
-        val total = reward + debt;
-        if (total > 0) {
-            if (pool_balance >= total) {
-                if (transfer_reward(pool, pa, total)) {
-                    create_or_update_node_payed_reward(node.pubkey, total);
-                    pool_balance -= total;
-                } else {
-                    pa.reward_debt = total;
-                }
-            } else if (pool_balance <= 0) { // No funds to pay reward
-                log("Reward pool is empty!");
-                pa.reward_debt = total;
-            } else { // Missing funds to pay full reward
-                log("Reward pool does not have enough funds to transfer full reward.");
-                if (transfer_reward(pool, pa, pool_balance)) {
-                    create_or_update_node_payed_reward(node.pubkey, pool_balance);
-                    pa.reward_debt = total - pool_balance;
-                    pool_balance = 0;
-                } else {
-                    pa.reward_debt = total;
-                }
-            }
-        }
+        create_or_update_node_payed_reward(node.pubkey, pay_reward_result.payed_reward);
+        pa.reward_debt = pay_reward_result.reward_debt;
+        pool_balance = pay_reward_result.pool_balance;
     }
 }
 
-function sum_total_max_revenue_per_dapp_cluster(system_cluster: cluster): decimal {
+function pay_reward(pool: ft4.accounts.account, pool_balance: big_integer, account: ft4.accounts.account, reward_debt:big_integer,  reward: big_integer, identity: text): pay_reward_result {
+    var total_pool_balance = pool_balance;
+    var total_reward_debt = reward + reward_debt;
+
+    var amount_to_transfer = 0L;
+    if (total_reward_debt > 0) {
+        if (pool_balance >= total_reward_debt) {
+            amount_to_transfer = total_reward_debt;
+        } else if (pool_balance <= 0) { // No funds to pay reward
+            log("Reward pool is empty!");
+            amount_to_transfer = 0;
+        } else { // Missing funds to pay full reward
+            log("Reward pool does not have enough funds to transfer full reward.");
+            amount_to_transfer = pool_balance;
+        }
+        if (amount_to_transfer > 0) {
+            log("Transfer reward %s to %s".format(amount_to_transfer, identity));
+            if (transfer_reward(pool, account, amount_to_transfer)) {
+                total_reward_debt -= amount_to_transfer;
+                total_pool_balance -= amount_to_transfer;
+            } else {
+                log("Unable to transfer reward to %s".format(identity));
+            }
+        }
+    }
+    return pay_reward_result(payed_reward = amount_to_transfer, pool_balance = total_pool_balance, reward_debt = total_reward_debt);
+}
+
+
+function sum_total_max_revenue_per_dapp_cluster(): decimal {
     var sum_total_max_revenue_per_dapp_cluster = 0.0;
-    val clusters = cluster @* { $ != system_cluster };
+    val clusters = cluster @* { .name != system_cluster_name };
     for (cluster in clusters) {
         sum_total_max_revenue_per_dapp_cluster += total_max_revenue_per_dapp_cluster(cluster);
     }
@@ -108,17 +136,12 @@ function occupancy_rate(cluster): decimal = decimal(occupied_scus(cluster)) / (t
 
 function adjusted_availability_factor(availability_factor: decimal): decimal = max(0, availability_factor - 0.9) * 10;
 
-function transfer_reward(pool: ft4.accounts.account, pa: provider_account, amount: big_integer): boolean {
-    log("Transfer reward %s to provider %s".format(amount, pa.provider.pubkey));
-    val success = try_call(try_transfer_reward(pool, pa, amount, *));
-    if (not success) {
-        log("Unable to transfer reward to provider %s".format(pa.provider.pubkey));
-    }
-    return success;
+function transfer_reward(pool: ft4.accounts.account, account: ft4.accounts.account, amount: big_integer): boolean {
+    return try_call(try_transfer_reward(pool, account, amount, *));
 }
 
-function try_transfer_reward(pool: ft4.accounts.account, pa: provider_account, amount: big_integer) {
-    ft4.assets.Unsafe.transfer(get_pool_account(), pa.account, get_asset(), amount);
+function try_transfer_reward(pool: ft4.accounts.account, account: ft4.accounts.account, amount: big_integer) {
+    ft4.assets.Unsafe.transfer(get_pool_account(), account, get_asset(), amount);
 }
 
 @extend(ft4.auth.auth_handler)
