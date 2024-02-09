@@ -63,8 +63,14 @@ operation create_tag(
     scu_price: integer,
     extra_storage_price: integer
 ) {
-    require_system_provider();
-    create tag(name = name, scu_price = scu_price, extra_storage_price = extra_storage_price);
+    val provider = require_system_provider_signer_entity();
+    require(tag @? { .name == name } == null, "Tag %s already exists".format(name));
+    require(pending_tag_operation @? { .name == name } == null, "A proposal for creating tag %s already exists".format(name));
+
+    val proposal = create_system_p_proposal(ec_proposal_type.tag_create, provider, "Create tag %s".format(name));
+    create pending_tag_operation(name = name, scu_price = scu_price, extra_storage_price = extra_storage_price, proposal);
+
+    internal_vote(provider, proposal, true);
 }
 
 operation update_tag(
@@ -72,23 +78,28 @@ operation update_tag(
     scu_price: integer?,
     extra_storage_price: integer?
 ) {
-    require_system_provider();
+    val provider = require_system_provider_signer_entity();
     val tag = require_tag(name);
 
-    if (scu_price != null) tag.scu_price = scu_price;
-    if (extra_storage_price != null) tag.extra_storage_price = extra_storage_price;
+    val proposal = create_system_p_proposal(ec_proposal_type.tag_update, provider, "Update tag %s".format(name));
+    create pending_tag_operation(name = name, scu_price = scu_price ?: -1, extra_storage_price = extra_storage_price ?: -1, proposal);
+
+    internal_vote(provider, proposal, true);
 }
 
 operation remove_tag(
     name: text
 ) {
-    require_system_provider();
+    val provider = require_system_provider_signer_entity();
     val tag = require_tag(name);
 
     val clusters = cluster @* { tag };
     require(clusters.empty(), "Tag with name %s is in use.".format(name));
 
-    delete tag;
+    val proposal = create_system_p_proposal(ec_proposal_type.tag_remove, provider, "Remove tag %s".format(name));
+    create pending_tag_operation(name = name, proposal);
+
+    internal_vote(provider, proposal, true);
 }
 
 operation create_cluster(
@@ -99,32 +110,49 @@ operation create_cluster(
     extra_storage: integer,
     tag_name: text
 ) {
-    val provider_pubkey = require_system_provider();
+    val provider = require_system_provider_signer_entity();
 
     require(empty(cluster @* { .name == name }), "Cluster %s already exists".format(name));
-
+    require(pending_cluster @? { name } == null, "There is already a pending request to create cluster with name %s".format(name));
     val tag = require_tag(tag_name);
 
-    val pending_cluster = pending_cluster @? { name };
-    if (pending_cluster != null) {
-        require(pending_cluster.status != pending_cluster_status.PENDING, "There is already a pending request to create cluster with name %s".format(name));
-        pending_cluster.status = pending_cluster_status.PENDING;
-    } else {
-        create pending_cluster(name, tag, pending_cluster_status.PENDING);
-    }
+    val proposal = create_system_p_proposal(ec_proposal_type.cluster_create, provider, "Create economy chain cluster %s".format(name));
 
-    val create_cluster_message = create_cluster_message(name, governor_voter_set_name, voter_set_name, cluster_units, extra_storage, provider_pubkey);
+    create pending_cluster(
+        name = name,
+        tag,
+        proposer_pubkey = provider.pubkey,
+        governor_voter_set_name = governor_voter_set_name,
+        voter_set_name = voter_set_name,
+        cluster_units,
+        extra_storage,
+        proposal,
+        pending_cluster_status.PENDING_APPROVAL
+    );
 
-    send_message(create_cluster_topic, create_cluster_message.to_gtv());
+    internal_vote(provider, proposal, true);
 }
 
 operation change_cluster_tag(
     cluster_name: text,
     tag_name: text
 ) {
-    require_system_provider();
+    val provider = require_system_provider_signer_entity();
     val tag = require_tag(tag_name);
     val cluster = require_cluster(cluster_name);
 
-    cluster.tag = tag;
+    val proposal = create_system_p_proposal(ec_proposal_type.cluster_change_tag, provider, "Change tag for cluster %s".format(cluster_name));
+    create pending_cluster_change_tag(cluster, tag, proposal);
+
+    internal_vote(provider, proposal, true);
+}
+
+function create_system_p_proposal(ec_proposal_type, provider, description: text): proposal {
+
+    return create proposal(
+        op_context.last_block_time,
+        ec_proposal_type,
+        provider,
+        system_p_voter_set(),
+        description);
 }

@@ -1,0 +1,18 @@
+
+operation make_vote(my_pubkey: pubkey, proposal_id: rowid, vote: boolean) {
+    val provider = require_system_provider_entity(my_pubkey);
+    val prop = require_proposal(proposal_id);
+    require(prop.state == proposal_state.PENDING, "The proposal is already closed as %s".format(prop.state));
+    require_voter_set_member(prop.voter_set, provider);
+    require(empty(vote @? {prop, provider}), "Only one vote per pubkey is allowed");
+    internal_vote(provider, prop, vote);
+}
+
+operation revoke_proposal(my_pubkey: pubkey, proposal_id: rowid) {
+    val me = require_system_provider_entity(my_pubkey);
+    val prop = proposal @? { proposal_id };
+    require(exists(prop), "Proposal not found: %d".format(proposal_id));
+    require(prop!!.proposed_by == me, "It is only allowed to revoke own proposals");
+    prop.state = proposal_state.REVOKED;
+    delete_proposal(prop);
+}

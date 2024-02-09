@@ -7,7 +7,7 @@ enum ticket_type {
 }
 
 enum cluster_creation_status {
-    SUCCESS, FAILURE, PENDING, UNKNOWN
+    SUCCESS, FAILURE, PENDING_APPROVAL, PENDING_CREATION, UNKNOWN
 }
 
 object state {
@@ -151,6 +151,25 @@ struct pay_reward_result {
     reward_debt: big_integer;
 }
 
+// Same structure for create, update and remove
+entity pending_tag_operation {
+    key name;
+    key proposal;
+    scu_price: integer = -1;
+    extra_storage_price: integer = -1;
+}
+
+entity pending_cluster_change_tag {
+    key cluster, tag;
+    key proposal;
+}
+
+struct pending_cluster_change_tag_data {
+    cluster: text;
+    current_tag: text;
+    new_tag: text;
+}
+
 entity tag {
     key name;
     mutable scu_price: integer;
@@ -158,14 +177,32 @@ entity tag {
 }
 
 enum pending_cluster_status {
-    PENDING,
+    PENDING_APPROVAL,
+    PENDING_CREATION,
     FAILURE
 }
 
 entity pending_cluster {
     key name;
     tag: tag;
+    proposer_pubkey: pubkey;
+    governor_voter_set_name: text;
+    voter_set_name: text;
+    cluster_units: integer;
+    extra_storage: integer;
+    proposal;
     mutable status: pending_cluster_status;
+}
+
+struct pending_cluster_data {
+    name: text;
+    tag: text;
+    proposer_pubkey: pubkey;
+    governor_voter_set_name: text;
+    voter_set_name: text;
+    cluster_units: integer;
+    extra_storage: integer;
+    status: pending_cluster_status;
 }
 
 //////////////////////////////////

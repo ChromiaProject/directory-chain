@@ -78,8 +78,10 @@ query get_cluster_creation_status(name): cluster_creation_status {
         val pending_cluster = pending_cluster @? { name };
         if (pending_cluster == null) {
             status = cluster_creation_status.UNKNOWN;
-        } else if (pending_cluster.status == pending_cluster_status.PENDING) {
-            status = cluster_creation_status.PENDING;
+        } else if (pending_cluster.status == pending_cluster_status.PENDING_APPROVAL) {
+            status = cluster_creation_status.PENDING_APPROVAL;
+        } else if (pending_cluster.status == pending_cluster_status.PENDING_CREATION) {
+            status = cluster_creation_status.PENDING_CREATION;
         } else if (pending_cluster.status == pending_cluster_status.FAILURE) {
             status = cluster_creation_status.FAILURE;
         }
@@ -106,7 +108,6 @@ query get_economy_metrics(pubkey): economy_metrics {
         amount_of_the_last_reward_payout
     );
 }
-
 
 function get_average_availability_on_a_providers_nodes(provider_nodes: list<node>, last_block_time: integer): decimal {
     var number_of_nodes = 0;
@@ -151,4 +152,41 @@ function get_amount_of_the_last_reward_payout(provider_nodes: list<node>, last_b
         }
     }
     return total_reward;
+}
+
+query get_tag_proposal(proposal_id: rowid): tag_data {
+
+    val proposal = require_proposal(proposal_id);
+    val pending_tag_operation = require(pending_tag_operation @? { proposal }, "Proposal is of different type: %s".format(proposal.ec_proposal_type));
+
+    return tag_data(name = pending_tag_operation.name, scu_price = pending_tag_operation.scu_price, extra_storage_price = pending_tag_operation.extra_storage_price);
+}
+
+query get_cluster_create_proposal(proposal_id: rowid): pending_cluster_data {
+
+    val proposal = require_proposal(proposal_id);
+    val pending_cluster = pending_cluster @ { proposal };
+
+    return pending_cluster_data(
+        name = pending_cluster.name,
+        tag = pending_cluster.tag.name,
+        proposer_pubkey = pending_cluster.proposer_pubkey,
+        governor_voter_set_name = pending_cluster.governor_voter_set_name,
+        voter_set_name = pending_cluster.voter_set_name,
+        cluster_units = pending_cluster.cluster_units,
+        extra_storage = pending_cluster.extra_storage,
+        status = pending_cluster.status
+    );
+}
+
+query get_cluster_change_tag_proposal(proposal_id: rowid) {
+
+    val proposal = require_proposal(proposal_id);
+    val pending_cluster_change_tag = pending_cluster_change_tag @ { proposal };
+
+    return pending_cluster_change_tag_data(
+        cluster = pending_cluster_change_tag.cluster.name,
+        current_tag = pending_cluster_change_tag.cluster.tag.name,
+        new_tag = pending_cluster_change_tag.tag.name
+    );
 }

@@ -1,6 +1,7 @@
 module;
 
 import ^^.*;
+import ^^.ec_proposal.test.helper_operations.*;
 
 operation icmf_message_op(sender: byte_array, topic: text, body: gtv) {
     handle_icmf_message(sender, topic, body);
@@ -15,14 +16,43 @@ operation mint_to_pool(amount: big_integer) {
     ft4.assets.Unsafe.mint(get_pool_account(), get_asset(), amount);
 }
 
-operation create_pending_cluster(cluster_name: text, tag_name: text, status: pending_cluster_status = pending_cluster_status.PENDING) {
+operation create_pending_cluster(cluster_name: text, tag_name: text, status: pending_cluster_status = pending_cluster_status.PENDING_APPROVAL) {
 
-    var tag = tag @? { tag_name };
-    if (tag == null) {
-        tag = create tag(tag_name, scu_price = 1, extra_storage_price = 1);
-    }
+    val tag = create_or_return_tag(tag_name);
+    val proposal = create_proposal(ec_proposal_type.cluster_create);
 
-    create pending_cluster(cluster_name, tag, status);
+    create pending_cluster(
+        name = cluster_name,
+        tag,
+        proposer_pubkey = x"",
+        governor_voter_set_name = "governor_voter_set_name",
+        voter_set_name = "voter_set_name",
+        cluster_units = 1,
+        extra_storage = 1,
+        proposal,
+        status
+    );
+}
+
+operation create_pending_tag_operation(name: text, scu_price: integer = -1, extra_storage_price: integer = -1) {
+
+    val proposal = create_proposal(ec_proposal_type.tag_create);
+    create pending_tag_operation(
+        name,
+        proposal,
+        scu_price = scu_price,
+        extra_storage_price = extra_storage_price
+    );
+}
+
+operation create_pending_cluster_change_tag(cluster_name: text, current_tag_name: text, new_tag_name: text) {
+
+    val current_tag = create_or_return_tag(current_tag_name);
+    val new_tag = create_or_return_tag(new_tag_name);
+    val proposal = create_proposal(ec_proposal_type.cluster_create);
+
+    val cluster = create cluster(cluster_name, true, cluster_units = 1, extra_storage = 1, anchoring_chain = x"", current_tag);
+    create pending_cluster_change_tag(cluster, proposal, new_tag);
 }
 
 operation create_test_cluster(cluster_name: text, tag_name: text = "test-tag") {
@@ -72,3 +102,20 @@ operation save_node_availability_op(report: node_availability_report) {
 operation create_or_update_node_payed_reward_op(node: byte_array, value: big_integer) {
     create_or_update_node_payed_reward(node, value);
 }
+
+function create_or_return_tag(tag_name: text) {
+    var tag = tag @? { tag_name };
+    if (tag == null) {
+        tag = create tag(tag_name, scu_price = 1, extra_storage_price = 1);
+    }
+    return tag;
+}
+
+function create_or_return_provider(pubkey, system: boolean) {
+    var provider = provider @? { pubkey };
+    if (provider == null) {
+        provider = create provider(pubkey, system = system, provider_tier.NODE_PROVIDER, active = true);
+    }
+    return provider;
+}
+

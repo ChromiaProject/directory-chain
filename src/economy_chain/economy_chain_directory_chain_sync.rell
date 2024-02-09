@@ -1,3 +1,5 @@
+import .ec_proposal.*;
+
 function receive_cluster_update_message(body: gtv) {
     val message = cluster_update_message.from_gtv(body);
     val cluster = cluster @? { .name == message.name };
@@ -27,7 +29,7 @@ function receive_cluster_update_message(body: gtv) {
                 anchoring_chain = message.anchoring_chain ?: x""
             );
         } else {
-            val pending_cluster = pending_cluster @? { message.name };
+            val pending_cluster = pending_cluster @? { .name == message.name };
             if (pending_cluster != null) {
                 log("Creating cluster %s".format(message.name));
                 create cluster(
@@ -58,7 +60,7 @@ function receive_cluster_update_message(body: gtv) {
 
 function receive_provider_update_message(body: gtv) {
     val message = provider_update_message.from_gtv(body);
-    val provider = provider @? { message.pubkey };
+    var provider = provider @? { message.pubkey };
 
     if (exists(provider)) {
         log("Updating provider %s".format(message.pubkey));
@@ -67,11 +69,29 @@ function receive_provider_update_message(body: gtv) {
         provider.active = message.active;
     } else {
         log("Creating provider %s".format(message.pubkey));
-        create provider(pubkey = message.pubkey,
+        provider = create provider(pubkey = message.pubkey,
             system = message.system,
             tier = provider_tier.value(message.tier),
             active = message.active
         );
+    }
+
+    update_system_p_vote_set(provider);
+}
+
+function update_system_p_vote_set(provider: provider) {
+
+    var system_p_voter_set = voter_set @? { voter_sets.system_p };
+    if (system_p_voter_set == null) {
+        system_p_voter_set = create_voter_set_internal(voter_sets.system_p);
+    }
+
+    val vote_set_member = voter_set_member @? { system_p_voter_set, provider };
+
+    if (provider.system and vote_set_member == null) {
+        create voter_set_member(system_p_voter_set, provider);
+    } else if (not provider.system and vote_set_member != null) {
+        delete vote_set_member;
     }
 }
 

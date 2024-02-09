@@ -1,0 +1,27 @@
+module;
+
+import ^.*;
+
+namespace voter_sets {
+    val system = "SYSTEM";
+    val system_p = "SYSTEM_P";
+}
+
+function system_p_voter_set() = voter_set @ { voter_sets.system_p };
+
+function create_voter_set_internal(name, threshold: integer = 0, governor: voter_set? = null) {
+    val vs = create voter_set(name, threshold);
+    if (exists(governor)) {
+        create voter_set_governance(voter_set = vs, governor = governor);
+    } else {
+        create voter_set_governance(voter_set = vs, governor = vs);
+    }
+    return vs;
+}
+
+
+function delete_proposal(prop: proposal) {
+    delete_proposal_handlers()[prop.ec_proposal_type.name](prop);
+}
+
+@extendable function delete_proposal_handlers(): map<text, (proposal) -> unit>;

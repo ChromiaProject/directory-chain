@@ -1,0 +1,37 @@
+@test module;
+
+import ^^.*;
+import ^.helper_operations.*;
+
+function create_provider_and_proposal(provider_key: rell.test.keypair, ec_proposal_type: ec_proposal_type) {
+
+    rell.test.tx().op(
+        create_or_return_provider_op(provider_key.pub, true))
+        .sign(provider_key)
+        .run();
+
+    val provider = provider @ { provider_key.pub };
+
+    rell.test.tx().op(
+        create_test_proposal(ec_proposal_type, provider, "voter-set"))
+        .sign(provider_key)
+        .run();
+}
+
+function get_latest_proposal_id(): rowid {
+    return proposal @ { } (
+        @sort_desc .rowid
+    ) limit 1;
+}
+
+function vote_yes(keys: rell.test.keypair, proposal_id: rowid) {
+    rell.test.tx().op(
+        make_vote(keys.pub, proposal_id, true))
+        .sign(keys)
+        .run();
+}
+
+function vote_yes_on_latest_proposal(keys: rell.test.keypair) {
+    val proposal_id = get_latest_proposal_id();
+    vote_yes(keys, proposal_id);
+}
