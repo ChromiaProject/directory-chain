@@ -9,7 +9,7 @@ operation create_test_proposal(
     voter_set_name: text
 ) {
     var voter_set = create_or_return_voter_set(voter_set_name);
-    add_voter_set_member(voter_set, provider);
+    create_voter_set_member(voter_set, provider);
     create proposal(op_context.last_block_time, proposal_type, provider, voter_set);
 }
 
@@ -37,18 +37,35 @@ function create_or_return_provider(pubkey, system: boolean) {
     return provider;
 }
 
+operation create_voter_set_op(name: text) {
+    create_or_return_voter_set(name);
+}
+
 operation create_or_return_provider_op(pubkey, system: boolean) {
     create_or_return_provider(pubkey, system);
 }
 
-function create_proposal(proposal_type: ec_proposal_type) {
+operation create_voter_set_member_op(voter_set, provider) {
 
-    val voter_set = create_or_return_voter_set("voter-set");
+    create_voter_set_member(voter_set, provider);
+}
+
+operation create_proposal_op(proposal_type: ec_proposal_type, voter_set_name: text) {
+
+    val voter_set = create_or_return_voter_set(voter_set_name);
+    val provider = create_or_return_provider(x"", true);
+
+    create proposal(op_context.last_block_time, proposal_type, provider, voter_set);
+}
+
+function create_proposal(proposal_type: ec_proposal_type, voter_set_name: text = "voter-set") {
+
+    val voter_set = create_or_return_voter_set(voter_set_name);
     val provider = create_or_return_provider(x"", true);
 
     return create proposal(op_context.last_block_time, proposal_type, provider, voter_set);
 }
 
-function add_voter_set_member(voter_set, provider) {
+function create_voter_set_member(voter_set, provider) {
     create voter_set_member(voter_set, provider);
 }
