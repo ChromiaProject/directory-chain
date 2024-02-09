@@ -335,7 +335,7 @@ function test_upgrade_container_insufficient_funds() {
 
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, "upgrade_container",
-            [container_name.to_gtv(), (100).to_gtv(), (0).to_gtv(), cluster_name.to_gtv()])
+            [container_name.to_gtv(), (10000).to_gtv(), (0).to_gtv(), cluster_name.to_gtv()])
     ).op(
         upgrade_container(container_name, 10000, 0, cluster_name)
     ).run_must_fail("Balance is too low");
@@ -383,6 +383,33 @@ function test_expire_lease_not_done_when_upgrade_is_pending() {
 function test_get_lease_duration() {
     assert_equals(get_min_lease_duration(), economy_constants.min_lease_time_weeks);
     assert_equals(get_max_lease_duration(), economy_constants.max_lease_time_weeks);
+}
+
+function test_auth_messages() {
+    // Create
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    assert_equals(
+        create_container_auth_message([rell.test.keypairs.alice.pub.to_gtv(), (1).to_gtv(), (1).to_gtv(), (0).to_gtv(), cluster_name.to_gtv(), false.to_gtv()].to_gtv()),
+        "Please sign the message\nto lease container with 1 SCUs and 0 GiB extra storage\nin cluster Bob's cluster\nfor 1 weeks\ncosting 35.000000 tCHR\non account {account_id}"
+    );
+
+    // Upgrade
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = 18, container_units = 2);
+
+    assert_equals(
+        upgrade_container_auth_message([container_name.to_gtv(), (2).to_gtv(), (0).to_gtv(), cluster_name.to_gtv()].to_gtv()),
+        "Please sign the message\nto upgrade container container name\nto have 2 SCUs and 0 GiB extra storage\nin cluster Bob's cluster\nfor 1 weeks\ncosting (before applying refund of current lease) 70.000000 tCHR\non account {account_id}"
+    );
+
+    // Renew
+    assert_equals(renew_container_auth_message([container_name.to_gtv(), (1).to_gtv()].to_gtv()), "Please sign the message\nto renew lease of container container name\nfor 1 weeks\ncosting 70.000000 tCHR\non account {account_id}");
+
+    // Auto-renew
+    assert_equals(auto_renew_container_auth_message([container_name.to_gtv()].to_gtv()), "Please sign the message\nto enable auto-renewal of container container name\ncosting 70.000000 tCHR per week\non account {account_id}");
+
+    // Cancel auto-renew
+    assert_equals(cancel_renew_container_auth_message([container_name.to_gtv()].to_gtv()), "Please sign the message\nto cancel auto-renewal of container container name\non account {account_id}");
 }
 
 function do_upgrade_container(
