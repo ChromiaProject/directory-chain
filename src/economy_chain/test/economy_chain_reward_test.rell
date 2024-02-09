@@ -233,6 +233,7 @@ function test_pay_rewards_dapp_cluster_empty_pool_balance() {
     assert_equals(get_account_balance(pa.account), 0);
     assert_equals(pa.reward_debt, 33090909);
     assert_equals(get_pool_balance(), 0);
+    assert_equals(node_payed_reward @ {} ( .value), 0);
 }
 
 function test_pay_rewards_dapp_cluster_not_enough_funds() {
@@ -245,14 +246,52 @@ function test_pay_rewards_dapp_cluster_not_enough_funds() {
     assert_equals(node_payed_reward @ {} ( .value), 1);
 }
 
+function test_pay_rewards_dapp_cluster_pay_full_debt() {
+
+    val pa = run_pay_rewards(33090909 + 100, false, 90);
+
+    assert_equals(get_account_balance(pa.account), 33090909 + 90);
+    assert_equals(pa.reward_debt, 0);
+    assert_equals(get_pool_balance(), 10);
+    assert_equals(node_payed_reward @ {} ( .value), 33090909 + 90);
+}
+
+function test_pay_rewards_dapp_cluster_pay_partialy_debt() {
+
+    val pa = run_pay_rewards(33090909 + 90, false, 100);
+
+    assert_equals(get_account_balance(pa.account), 33090909 + 90);
+    assert_equals(pa.reward_debt, 10);
+    assert_equals(get_pool_balance(), 0);
+    assert_equals(node_payed_reward @ {} ( .value), 33090909 + 90);
+}
+
 function test_pay_reward_to_system_cluster() {
 
     val pa = run_pay_rewards(3726650000, true);
 
+    val chromia_foundation_account = get_chromia_foundation_account();
+
     assert_equals(get_account_balance(pa.account), 3726650000);
     assert_equals(pa.reward_debt, 0);
+    assert_equals(get_account_balance(chromia_foundation_account), 0);
+    assert_equals(chromia_foundation.reward_debt, 6500000);
     assert_equals(get_pool_balance(), 0);
 }
+
+function test_pay_reward_to_chromia_foundation() {
+
+    val pa = run_pay_rewards(3726650000 + 500000, true);
+
+    val chromia_foundation_account = get_chromia_foundation_account();
+
+    assert_equals(get_account_balance(pa.account), 3726650000);
+    assert_equals(pa.reward_debt, 0);
+    assert_equals(get_account_balance(chromia_foundation_account), 500000);
+    assert_equals(chromia_foundation.reward_debt, 6000000);
+    assert_equals(get_pool_balance(), 0);
+}
+
 
 ///////////////////
 // Helper functions
@@ -284,7 +323,7 @@ function run_calculate_reward(node_availability_report: node_availability_report
     }
 }
 
-function run_pay_rewards(pool_assets: big_integer = 0, calculate_system_reward: boolean) {
+function run_pay_rewards(pool_assets: big_integer = 0, calculate_system_reward: boolean, reward_debt: big_integer = 0) {
 
     rell.test.tx().op(init()).run();
 
@@ -304,6 +343,7 @@ function run_pay_rewards(pool_assets: big_integer = 0, calculate_system_reward: 
 
     rell.test.tx().op(
         register_provider_account(provider_pubkey),
+        set_reward_debt_op(provider_pubkey, reward_debt),
         pay_rewards_op(calculate_cluster, node_availability_report)
     ).sign(provider_key).run();
 
