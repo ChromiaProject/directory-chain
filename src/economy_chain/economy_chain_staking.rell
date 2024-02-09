@@ -67,7 +67,7 @@ operation staking_set_rates(delegator_rate: decimal, provider_rate: decimal) {
    _staking_set_rates_at(delegator_rate, provider_rate, _staking_cannot_change_before());
 }
 
-operation staking_deposit(staker: pubkey, amount: integer) {
+operation staking_deposit(staker: pubkey, amount: integer, delegateTo: pubkey? = null) {
     require(amount > 0, "Can't deposit nothing (or less)!");
     val existing = staker_state @? { .staker == staker and .latest };
     update staker_state @? { .staker == staker and .latest } ( latest = false );
@@ -97,6 +97,13 @@ operation staking_deposit(staker: pubkey, amount: integer) {
             latest = true
         );
     ;
+
+    if (null != delegateTo) {
+        val provider = delegateTo ?: NO_ONE; // NO_ONE can never actually be used
+        // Below check is duplicated, but less overhead than 2 wrapping functions.
+        require(staking_is_active_provider(delegateTo), "Must be active provider.");
+        _staking_delegate(staker, provider);
+    }
 }
 
 query staking_get_balance(staker: pubkey) = staker_state @? { .staker == staker and .latest==true } ( .balance ) ?: 0;
@@ -255,11 +262,6 @@ operation staking_remove_provider(provider: pubkey) {
 
 operation staking_delegate(staker: pubkey, provider: pubkey) {
     require(staking_is_active_provider(provider), "Must be active provider.");
-    require(staking_get_balance(staker) > 0, "Must have a stake to staker.");
-
-    // Clear any withdrawal request
-    delete staker_withdrawal_request @? {not .used and .staker == staker};
-
     _staking_delegate(staker, provider);
 }
 
@@ -268,7 +270,10 @@ operation staking_undelegate(delegator: pubkey) {
 }
 
 function _staking_delegate(delegator: pubkey, provider: pubkey) {
-    require(staking_get_balance(delegator) > 0, "Need a stake to staker.");
+    require(staking_get_balance(delegator) > 0, "Must have a stake to staker.");
+
+    // Clear any withdrawal request
+    delete staker_withdrawal_request @? {not .used and .staker == delegator};
 
     // Get the values before messing with the flag
     val existing = staker_state @ {.latest and .staker == delegator};
