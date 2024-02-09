@@ -32,7 +32,10 @@ operation update_provider(my_pubkey: pubkey, name?, url: text?) {
 operation __begin_block(height: integer) {
     before_begin_block(height);
 
-    if (empty(blockchain @? { chain_context.blockchain_rid })) return;
+    // bc == null until chain0 is initialized
+    // if bc != null, and since it is __begin_block operation, then height > 0
+    val bc = blockchain @? { chain_context.blockchain_rid };
+    if (empty(bc)) return;
     val expected_config = get_blockchain_configuration(chain_context.blockchain_rid, height);
     if (expected_config == null or expected_config.config_hash == chain_context.raw_config.hash()) return;
 
@@ -41,7 +44,7 @@ operation __begin_block(height: integer) {
     val config_map = map<text, gtv>.from_gtv(chain_context.raw_config);
     config_map.remove_or_null("signers");
     val base_config = config_map.to_gtv().to_bytes();
-    create blockchain_configuration(blockchain @ { chain_context.blockchain_rid }, height, base_config);
+    compress_and_store_configuration(bc, height, base_config, true);
     add_dependencies(base_config, chain_context.blockchain_rid, height);
 }
 
