@@ -1,6 +1,7 @@
 @test module;
 
 import ^^.*;
+import ^.helper_functions.*;
 
 struct module_args {
     admin_privkey: byte_array;
@@ -8,7 +9,7 @@ struct module_args {
 
 val admin_privkey = chain_context.args.admin_privkey;
 
-function test_economy_constants() {
+function test_update_economy_constants() {
     val constants: economy_constants_data = get_economy_constants();
     assert_equals(constants.min_lease_time_weeks, 1);
     assert_equals(constants.max_lease_time_weeks, 12);
@@ -23,22 +24,24 @@ function test_economy_constants() {
 
     // Update constants
     rell.test.tx().op(
-        update_economy_constants(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-    ).run_must_fail("Expected admin signature");
+        update_economy_constants(1, 2, 3, 4, 5, 6)
+    ).run_must_fail("Expected system provider signature");
+
+    add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
 
     rell.test.tx().op(
-        update_economy_constants(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-    ).sign(admin_privkey).run();
+        update_economy_constants(1, 2, 3, 4, 5, 6)
+    ).sign(rell.test.keypairs.alice).run();
 
     val updated_constants: economy_constants_data = get_economy_constants();
     assert_equals(updated_constants.min_lease_time_weeks, 1);
     assert_equals(updated_constants.max_lease_time_weeks, 2);
-    assert_equals(updated_constants.chr_per_usd, 3);
-    assert_equals(updated_constants.total_cost_system_providers, 4);
-    assert_equals(updated_constants.system_provider_fee_share, 5);
-    assert_equals(updated_constants.staking_reward_fee_share, 6);
-    assert_equals(updated_constants.chromia_foundation_fee_share, 7);
-    assert_equals(updated_constants.resource_pool_margin_fee_share, 8);
-    assert_equals(updated_constants.system_provider_risk_share, 9);
-    assert_equals(updated_constants.dapp_provider_risk_share, 10);
+    assert_equals(updated_constants.chr_per_usd, 5); // Unchanged
+    assert_equals(updated_constants.total_cost_system_providers, 828); // Unchanged
+    assert_equals(updated_constants.system_provider_fee_share, 0.1); // Unchanged
+    assert_equals(updated_constants.staking_reward_fee_share, 3);
+    assert_equals(updated_constants.chromia_foundation_fee_share, 4);
+    assert_equals(updated_constants.resource_pool_margin_fee_share, 5);
+    assert_equals(updated_constants.system_provider_risk_share, 0.1); // Unchanged
+    assert_equals(updated_constants.dapp_provider_risk_share, 6);
 }

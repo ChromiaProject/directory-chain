@@ -1,0 +1,46 @@
+
+enum ec_proposal_type {
+    cluster_create,
+    cluster_change_tag,
+
+    tag_create,
+    tag_update,
+    tag_remove,
+
+    economy_constants_update,
+}
+
+enum proposal_state {
+    PENDING, APPROVED, REJECTED, REVOKED
+}
+
+entity proposal {
+    index timestamp, ec_proposal_type;
+    proposed_by: provider;
+    index voter_set;
+    description: text = "";
+    transaction = op_context.transaction;
+    mutable state: proposal_state = proposal_state.PENDING;
+}
+
+//////////////////////////////////
+// directory-chain synced entities
+entity voter_set {
+    key name;
+    mutable threshold: integer = 0;
+}
+
+entity voter_set_governance {
+    key voter_set;
+    mutable governor: voter_set;
+}
+
+entity voter_set_member {
+    key voter_set, provider;
+}
+
+entity vote {
+    key proposal, provider;
+    vote: boolean;
+}
+//////////////////////////////////

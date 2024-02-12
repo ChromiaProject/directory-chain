@@ -30,9 +30,9 @@ function do_create_account(keypair: rell.test.keypair, auth_privkey: byte_array,
     }
 }
 
-function add_provider(pubkey: pubkey, system: boolean, tier: provider_tier): provider {
+function add_provider(pubkey: pubkey, system: boolean, tier: provider_tier = provider_tier.NODE_PROVIDER): provider {
     rell.test.tx().op(
-        icmf_message_op(x"", provider_update_topic, body = provider_update_message(
+        icmf_message_op(pubkey, provider_update_topic, body = provider_update_message(
             pubkey, system, tier = tier.name, active = true).to_gtv()
         )
     ).run();
@@ -166,3 +166,31 @@ function get_provider_nodes(provider: provider){
 function get_last_blocktime(){
     return block @ {} (@max .timestamp) ?: 0;
 }
+
+
+// Create cluster proposal - keypair1 creates it, keypair2 needs to vote yes to approve it
+function create_multi_provider_cluster_proposal(cluster_name: text, tag_name: text, keypair1: rell.test.keypair, keypair2: rell.test.keypair) {
+
+    val provider1 = add_provider(keypair1.pub, true, provider_tier.NODE_PROVIDER);
+
+    rell.test.tx().op(
+        create_tag(
+            name = tag_name,
+            scu_price = 1,
+            extra_storage_price = 2))
+        .sign(keypair1)
+        .run();
+
+    val provider2 = add_provider(keypair2.pub, true, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op(
+        create_cluster(
+            name = cluster_name,
+            governor_voter_set_name = "governor_voter_set",
+            voter_set_name = "voter_set",
+            cluster_units = 1,
+            extra_storage = 2,
+            tag_name = tag_name))
+        .sign(keypair1)
+        .run();
+}
+

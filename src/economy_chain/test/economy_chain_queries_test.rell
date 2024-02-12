@@ -2,6 +2,7 @@
 
 import ^^.*;
 import ^.helper_functions.*;
+import ^^.ec_proposal.test.helper_functions.*;
 
 namespace ft4 {
     import lib.ft4.accounts;
@@ -21,6 +22,7 @@ val auth_privkey = chain_context.args.auth_privkey;
 val provider_key = rell.test.keypairs.bob;
 val provider_pubkey = provider_key.pub;
 val provider_alice_pubkey = rell.test.pubkeys.alice;
+val cluster_name = "Bob's cluster";
 val cluster_bob = "Bob's cluster";
 val cluster_charlie = "Charlie's cluster";
 val node_pubkey_bob = rell.test.pubkeys.bob;
@@ -70,12 +72,10 @@ function test_get_tag_by_name() {
 
 function test_get_clusters() {
 
-    val cluster_name = "Bob's cluster";
-
     rell.test.tx().op(
-            create_test_cluster(cluster_name + "1", "tag-1"),
-            create_test_cluster(cluster_name + "2", "tag-2")
-        ).sign(provider_key)
+        create_test_cluster(cluster_name + "1", "tag-1"),
+        create_test_cluster(cluster_name + "2", "tag-2")
+    ).sign(provider_key)
         .run();
 
     val clusters = get_clusters();
@@ -93,8 +93,6 @@ function test_get_clusters() {
 
 function test_get_cluster() {
 
-    val cluster_name = "Bob's cluster";
-
     rell.test.tx().op(
         create_test_cluster(cluster_name))
         .sign(provider_key)
@@ -111,7 +109,6 @@ function test_get_cluster() {
 }
 
 function test_get_cluster_creation_status_with_success() {
-    val cluster_name = "Bob's cluster";
 
     rell.test.tx().op(
         create_test_cluster(cluster_name))
@@ -124,37 +121,29 @@ function test_get_cluster_creation_status_with_success() {
 }
 
 function test_get_cluster_creation_status_with_unknown() {
-    val cluster_name = "Bob's cluster";
 
     val status = get_cluster_creation_status(cluster_name);
 
     assert_equals(status, cluster_creation_status.UNKNOWN);
 }
 
-function test_get_cluster_creation_status_with_pending() {
-    val cluster_name = "Bob's cluster";
-    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
-    rell.test.tx().op( create_tag(
-            name = "tag1",
-            scu_price = 1,
-            extra_storage_price = 2),
-        create_cluster(
-            cluster_name,
-            "governor_voter_set_name",
-            "voter_set_name",
-            1,
-            1,
-            "tag1"))
+function test_get_cluster_creation_status_with_pending_approval() {
+
+    rell.test.tx().op(
+        create_pending_cluster(cluster_name,
+            "tag1",
+            pending_cluster_status.PENDING_APPROVAL)
+    )
         .sign(provider_key)
         .run();
 
     val status = get_cluster_creation_status(cluster_name);
 
-    assert_equals(status, cluster_creation_status.PENDING);
+    assert_equals(status, cluster_creation_status.PENDING_APPROVAL);
 }
 
 function test_get_cluster_creation_status_with_failure() {
-    val cluster_name = "Bob's cluster";
+
     val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op( create_tag(
         name = "tag1",
@@ -167,7 +156,7 @@ function test_get_cluster_creation_status_with_failure() {
             1,
             1,
             "tag1"),
-        receive_create_cluster_error_message_op(cluster_name,"error_message"))
+        receive_create_cluster_error_message_op(cluster_name, "error_message"))
         .sign(provider_key)
         .run();
 
@@ -345,5 +334,52 @@ function test_get_economy_metrics(){
         amount_of_the_last_reward_payout= 200);
 
     assert_equals(economy_metrics, expected);
+}
+
+
+function test_get_tag_proposal() {
+
+    rell.test.tx().op(
+        create_pending_tag_operation("t1", 1, 2))
+        .sign(provider_key)
+        .run();
+
+    val tag_proposal = get_tag_proposal(get_latest_proposal_id());
+    assert_equals(tag_proposal.name, "t1");
+    assert_equals(tag_proposal.scu_price, 1);
+    assert_equals(tag_proposal.extra_storage_price, 2);
+}
+
+function test_get_cluster_create_proposal() {
+
+    rell.test.tx().op(
+        create_pending_cluster(cluster_name, "t1", pending_cluster_status.PENDING_APPROVAL))
+        .sign(provider_key)
+        .run();
+
+    val cluster_create_proposal = get_cluster_create_proposal(get_latest_proposal_id());
+
+    assert_equals(cluster_create_proposal.name, cluster_name);
+    assert_equals(cluster_create_proposal.tag, "t1");
+    assert_equals(cluster_create_proposal.proposer_pubkey, x"");
+    assert_equals(cluster_create_proposal.governor_voter_set_name, "governor_voter_set_name");
+    assert_equals(cluster_create_proposal.voter_set_name, "voter_set_name");
+    assert_equals(cluster_create_proposal.cluster_units, 1);
+    assert_equals(cluster_create_proposal.extra_storage, 1);
+    assert_equals(cluster_create_proposal.status, pending_cluster_status.PENDING_APPROVAL);
+}
+
+function test_get_cluster_change_tag_proposal() {
+
+    rell.test.tx().op(
+        create_pending_cluster_change_tag(cluster_name, "t1", "t2"))
+    .sign(provider_key)
+    .run();
+
+    val cluster_change_tag_propsal = get_cluster_change_tag_proposal(get_latest_proposal_id());
+
+    assert_equals(cluster_change_tag_propsal.cluster, cluster_name);
+    assert_equals(cluster_change_tag_propsal.current_tag, "t1");
+    assert_equals(cluster_change_tag_propsal.new_tag, "t2");
 }
 

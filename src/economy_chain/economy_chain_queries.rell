@@ -78,8 +78,10 @@ query get_cluster_creation_status(name): cluster_creation_status {
         val pending_cluster = pending_cluster @? { name };
         if (pending_cluster == null) {
             status = cluster_creation_status.UNKNOWN;
-        } else if (pending_cluster.status == pending_cluster_status.PENDING) {
-            status = cluster_creation_status.PENDING;
+        } else if (pending_cluster.status == pending_cluster_status.PENDING_APPROVAL) {
+            status = cluster_creation_status.PENDING_APPROVAL;
+        } else if (pending_cluster.status == pending_cluster_status.PENDING_CREATION) {
+            status = cluster_creation_status.PENDING_CREATION;
         } else if (pending_cluster.status == pending_cluster_status.FAILURE) {
             status = cluster_creation_status.FAILURE;
         }
@@ -106,7 +108,6 @@ query get_economy_metrics(pubkey): economy_metrics {
         amount_of_the_last_reward_payout
     );
 }
-
 
 function get_average_availability_on_a_providers_nodes(provider_nodes: list<node>, last_block_time: integer): decimal {
     var number_of_nodes = 0;
@@ -152,3 +153,70 @@ function get_amount_of_the_last_reward_payout(provider_nodes: list<node>, last_b
     }
     return total_reward;
 }
+
+query get_tag_proposal(proposal_id: rowid): tag_data {
+
+    val proposal = require_proposal(proposal_id);
+    val pending_tag_operation = require(pending_tag_operation @? { proposal }, "Proposal is of different type: %s".format(proposal.ec_proposal_type));
+
+    return tag_data(name = pending_tag_operation.name, scu_price = pending_tag_operation.scu_price, extra_storage_price = pending_tag_operation.extra_storage_price);
+}
+
+query get_cluster_create_proposal(proposal_id: rowid): pending_cluster_data {
+
+    val proposal = require_proposal(proposal_id);
+    val pending_cluster = pending_cluster @ { proposal };
+
+    return pending_cluster_data(
+        name = pending_cluster.name,
+        tag = pending_cluster.tag.name,
+        proposer_pubkey = pending_cluster.proposer_pubkey,
+        governor_voter_set_name = pending_cluster.governor_voter_set_name,
+        voter_set_name = pending_cluster.voter_set_name,
+        cluster_units = pending_cluster.cluster_units,
+        extra_storage = pending_cluster.extra_storage,
+        status = pending_cluster.status
+    );
+}
+
+query get_cluster_change_tag_proposal(proposal_id: rowid) {
+
+    val proposal = require_proposal(proposal_id);
+    val pending_cluster_change_tag = pending_cluster_change_tag @ { proposal };
+
+    return pending_cluster_change_tag_data(
+        cluster = pending_cluster_change_tag.cluster.name,
+        current_tag = pending_cluster_change_tag.cluster.tag.name,
+        new_tag = pending_cluster_change_tag.tag.name
+    );
+}
+
+query get_econony_constants_proposal(proposal_id: rowid) {
+
+    val proposal = require_proposal(proposal_id);
+    val pending_economy_constants = pending_economy_constants @ { proposal };
+
+    return pending_economy_constants_data(
+        min_lease_time_weeks = get_integer_or_default(pending_economy_constants.min_lease_time_weeks, null),
+        max_lease_time_weeks = get_integer_or_default(pending_economy_constants.max_lease_time_weeks, null),
+        staking_reward_fee_share = get_decimal_or_default(pending_economy_constants.staking_reward_fee_share, null),
+        chromia_foundation_fee_share = get_decimal_or_default(pending_economy_constants.chromia_foundation_fee_share, null),
+        resource_pool_margin_fee_share = get_decimal_or_default(pending_economy_constants.resource_pool_margin_fee_share, null),
+        dapp_provider_risk_share = get_decimal_or_default(pending_economy_constants.dapp_provider_risk_share, null)
+    );
+}
+
+function get_integer_or_default(value: integer?, default: integer?): integer? {
+    if (value != null and value >= 0) {
+        return value;
+    }
+    return default;
+}
+
+function get_decimal_or_default(value: decimal?, default: decimal?): decimal? {
+    if (value != null and value >= 0) {
+        return value;
+    }
+    return default;
+}
+

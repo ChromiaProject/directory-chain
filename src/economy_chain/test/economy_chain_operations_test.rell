@@ -2,12 +2,14 @@
 
 import ^^.*;
 import ^.helper_functions.*;
+import ^^.ec_proposal.test.helper_functions.*;
 
 val provider_key = rell.test.keypairs.bob;
 val provider_pubkey = provider_key.pub;
 
 val cluster_name = "Bob's cluster";
 val tag_1_name = "Bob's tag";
+val tag_2_name = "Bob's second tag";
 
 function test_create_cluster() {
     val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
@@ -20,24 +22,85 @@ function test_create_cluster() {
             name = cluster_name,
             governor_voter_set_name = "governor_voter_set",
             voter_set_name = "voter_set",
-            cluster_units= 1,
-            extra_storage= 2,
-            tag_name= tag_1_name))
+            cluster_units = 1,
+            extra_storage = 2,
+            tag_name = tag_1_name))
         .sign(provider_key)
         .run();
 
     val expected = create_cluster_message(name = cluster_name,
         governor_voter_set_name = "governor_voter_set",
         voter_set_name = "voter_set",
-        cluster_units= 1,
-        extra_storage= 2,
+        cluster_units = 1,
+        extra_storage = 2,
         proposer_pubkey= rell.test.pubkeys.bob);
 
     val pending_cluster = pending_cluster @? { .name == cluster_name };
 
     assert_not_null(pending_cluster);
-    assert_equals(pending_cluster.status, pending_cluster_status.PENDING);
+
+    assert_equals(pending_cluster.status, pending_cluster_status.PENDING_CREATION);
     assert_events(("icmf_message",(topic = create_cluster_topic, body = expected.to_gtv()).to_gtv_pretty()));
+}
+
+function test_create_cluster_with_voting() {
+
+    create_multi_provider_cluster_proposal(cluster_name, tag_1_name, rell.test.keypairs.bob, rell.test.keypairs.alice);
+
+    assert_equals(pending_cluster @ { .name == cluster_name } ( .status ), pending_cluster_status.PENDING_APPROVAL);
+
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val expected = create_cluster_message(name = cluster_name,
+        governor_voter_set_name = "governor_voter_set",
+        voter_set_name = "voter_set",
+        cluster_units = 1,
+        extra_storage = 2,
+        proposer_pubkey= rell.test.pubkeys.bob);
+
+    val pending_cluster = pending_cluster @? { .name == cluster_name };
+
+    assert_not_null(pending_cluster);
+
+    assert_equals(pending_cluster.status, pending_cluster_status.PENDING_CREATION);
+    assert_events(("icmf_message",(topic = create_cluster_topic, body = expected.to_gtv()).to_gtv_pretty()));
+}
+
+function test_create_cluster_revoke() {
+
+    create_multi_provider_cluster_proposal(cluster_name, tag_1_name, rell.test.keypairs.bob, rell.test.keypairs.alice);
+
+    assert_equals(pending_cluster @ { .name == cluster_name } ( .status ), pending_cluster_status.PENDING_APPROVAL);
+
+    val proposal_id = get_latest_proposal_id();
+    rell.test.tx().op(
+        revoke_proposal(provider_pubkey, proposal_id))
+        .sign(provider_key)
+        .run();
+
+    assert_equals(proposal @ { .rowid == proposal_id } ( .state ), proposal_state.REVOKED);
+    assert_null(pending_cluster @? { .name == cluster_name });
+}
+
+function test_create_cluster_revoke_after_creation_failed() {
+
+    create_multi_provider_cluster_proposal(cluster_name, tag_1_name, rell.test.keypairs.bob, rell.test.keypairs.alice);
+
+    rell.test.tx().op(
+        receive_create_cluster_error_message_op(cluster_name, "error-message"))
+        .sign(provider_key)
+        .run();
+
+    assert_equals(pending_cluster @ { .name == cluster_name } ( .status ), pending_cluster_status.FAILURE);
+
+    val proposal_id = get_latest_proposal_id();
+    rell.test.tx().op(
+        revoke_proposal(provider_pubkey, proposal_id))
+        .sign(provider_key)
+        .run();
+
+    assert_equals(proposal @ { .rowid == proposal_id } ( .state ), proposal_state.REVOKED);
+    assert_null(pending_cluster @? { .name == cluster_name });
 }
 
 function test_create_cluster_fail_existing() {
@@ -51,9 +114,9 @@ function test_create_cluster_fail_existing() {
             name = cluster_name,
             governor_voter_set_name = "governor_voter_set",
             voter_set_name = "voter_set",
-            cluster_units= 1,
-            extra_storage= 2,
-            tag_name= tag_1_name))
+            cluster_units = 1,
+            extra_storage = 2,
+            tag_name = tag_1_name))
         .sign(provider_key)
         .run_must_fail("Cluster %s already exists".format(cluster_name));
 }
@@ -64,7 +127,7 @@ function test_create_cluster_fail_due_to_already_pending() {
     rell.test.tx().op(
         create_pending_cluster(cluster_name,
             tag_1_name,
-            pending_cluster_status.PENDING),
+            pending_cluster_status.PENDING_APPROVAL),
         create_cluster(
             name = cluster_name,
             governor_voter_set_name = "governor_voter_set",
@@ -94,20 +157,7 @@ function test_create_cluster_with_failed_pending_cluster() {
             extra_storage = 2,
             tag_name = tag_1_name))
         .sign(provider_key)
-        .run();
-
-    val expected = create_cluster_message(name= cluster_name,
-        governor_voter_set_name = "governor_voter_set",
-        voter_set_name = "voter_set",
-        cluster_units= 1,
-        extra_storage= 2,
-        proposer_pubkey= rell.test.pubkeys.bob);
-
-    val pending_cluster = pending_cluster @? { .name == cluster_name };
-
-    assert_not_null(pending_cluster);
-    assert_equals(pending_cluster.status, pending_cluster_status.PENDING);
-    assert_events(("icmf_message",(topic = create_cluster_topic, body = expected.to_gtv()).to_gtv_pretty()));
+        .run_must_fail("There is already a pending request to create cluster with name %s".format(cluster_name));
 }
 
 function test_change_cluster_tag() {
@@ -118,16 +168,134 @@ function test_change_cluster_tag() {
             name = tag_1_name,
             scu_price = 3,
             extra_storage_price = 4),
+        create_tag(
+            name = tag_2_name,
+            scu_price = 3,
+            extra_storage_price = 4),
         create_test_cluster(cluster_name),
         change_cluster_tag(
-            cluster_name= cluster_name,
-            tag_name = tag_1_name))
+            cluster_name = cluster_name,
+            tag_name = tag_2_name))
         .sign(provider_key)
         .run();
 
     val cluster = cluster @ { .name == cluster_name };
 
-    assert_equals(cluster.tag.name,  tag_1_name);
+    assert_equals(cluster.tag.name, tag_2_name);
+}
+
+function test_change_cluster_tag_with_voting() {
+
+    add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+
+    rell.test.tx().op(
+        create_tag(
+            name = tag_2_name,
+            scu_price = 3,
+            extra_storage_price = 4),
+        create_test_cluster(cluster_name, tag_1_name))
+        .sign(provider_key)
+        .run();
+
+    assert_equals(cluster @ { .name == cluster_name } ( .tag.name ), tag_1_name);
+
+    add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
+
+    rell.test.tx().op(
+        change_cluster_tag(
+            cluster_name = cluster_name,
+            tag_name = tag_2_name))
+        .sign(rell.test.keypairs.alice)
+        .run();
+    vote_yes_on_latest_proposal(rell.test.keypairs.bob);
+
+    assert_equals(cluster @ { .name == cluster_name } ( .tag.name ), tag_2_name);
+}
+
+function test_update_tag() {
+
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op(
+        create_tag(
+            name = tag_1_name,
+            scu_price = 3,
+            extra_storage_price = 4),
+        update_tag(tag_1_name, scu_price = 30, extra_storage_price = null))
+        .sign(provider_key)
+        .run();
+
+    assert_equals(tag @ { tag_1_name } ( .scu_price ), 30);
+    assert_equals(tag @ { tag_1_name } ( .extra_storage_price ), 4);
+
+    rell.test.tx().op(
+        update_tag(tag_1_name, scu_price = null, extra_storage_price = 40))
+        .sign(provider_key)
+        .run();
+
+    assert_equals(tag @ { tag_1_name } ( .scu_price ), 30);
+    assert_equals(tag @ { tag_1_name } ( .extra_storage_price ), 40);
+}
+
+function test_update_tag_with_voting() {
+
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op(
+        create_tag(
+            name = tag_1_name,
+            scu_price = 3,
+            extra_storage_price = 4))
+        .sign(provider_key)
+        .run();
+
+    add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
+
+    rell.test.tx().op(
+        update_tag(tag_1_name, scu_price = 30, extra_storage_price = 40))
+        .sign(provider_key)
+        .run();
+
+    // Unchanged
+    assert_equals(tag @ { tag_1_name } ( .scu_price ), 3);
+    assert_equals(tag @ { tag_1_name } ( .extra_storage_price ), 4);
+
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    assert_equals(tag @ { tag_1_name } ( .scu_price ), 30);
+    assert_equals(tag @ { tag_1_name } ( .extra_storage_price ), 40);
+}
+
+function test_update_tag_with_voting_revoked() {
+
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op(
+        create_tag(
+            name = tag_1_name,
+            scu_price = 3,
+            extra_storage_price = 4))
+        .sign(provider_key)
+        .run();
+
+    add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
+
+    rell.test.tx().op(
+        update_tag(tag_1_name, scu_price = 30, extra_storage_price = 40))
+        .sign(provider_key)
+        .run();
+
+    // Unchanged
+    assert_equals(tag @ { tag_1_name } ( .scu_price ), 3);
+    assert_equals(tag @ { tag_1_name } ( .extra_storage_price ), 4);
+
+    rell.test.tx().op(
+        revoke_proposal(provider_pubkey, get_latest_proposal_id()))
+        .sign(provider_key)
+        .run();
+
+    // Unchanged
+    assert_equals(tag @ { tag_1_name } ( .scu_price ), 3);
+    assert_equals(tag @ { tag_1_name } ( .extra_storage_price ), 4);
+
+    assert_true(empty(pending_tag_operation @* {}));
 }
 
 function test_remove_tag_with_non_existing_tag() {
@@ -152,6 +320,29 @@ function test_remove_tag() {
     val tag = tag @? { .name == tag_1_name};
 
     assert_null(tag);
+}
+
+function test_remove_tag_with_voting() {
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op(
+        create_tag(
+            name = tag_1_name,
+            scu_price = 3,
+            extra_storage_price = 4))
+        .sign(provider_key)
+        .run();
+
+    add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op(
+        remove_tag(tag_1_name))
+        .sign(provider_key)
+        .run();
+
+    assert_true(exists(tag @? { .name == tag_1_name }));
+
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    assert_true(empty(tag @? { .name == tag_1_name }));
 }
 
 function test_remove_tag_given_tag_is_used_by_cluster() {

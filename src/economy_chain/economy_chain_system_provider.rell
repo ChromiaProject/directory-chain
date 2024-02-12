@@ -1,10 +1,25 @@
-function require_system_provider(): byte_array {
+
+function require_system_provider_signer_entity(): provider {
     for (signer in op_context.get_signers()) {
-        val provider = provider @? {.pubkey == signer};
+        val provider = provider @? { .pubkey == signer };
         if (provider != null and provider.system and provider.active) {
-            return signer;
+            return provider;
         }
     }
     require(false, "Expected system provider signature");
-    return x""; // Return to make compiler not complain about path without return statement (the require will always fail)
+    return provider @ { x"" }; // Return to make compiler not complain about path without return statement (the require will always fail)
 }
+
+function require_system_provider_entity(pubkey): provider {
+    for (signer in op_context.get_signers()) {
+        if (signer == pubkey) {
+            val provider = provider @? { .pubkey == signer };
+            if (provider != null and provider.system and provider.active) {
+                return provider;
+            }
+        }
+    }
+    require(false, "Expected system provider pubkey");
+    return provider @ { x"" }; // Return to make compiler not complain about path without return statement (the require will always fail)
+}
+
