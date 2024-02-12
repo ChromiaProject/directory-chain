@@ -35,27 +35,25 @@ operation transfer_to_pool(amount: big_integer) {
 operation update_economy_constants(
     min_lease_time_weeks: integer?,
     max_lease_time_weeks: integer?,
-    chr_per_usd: decimal?,
-    total_cost_system_providers: integer?,
-    system_provider_fee_share: decimal?,
     staking_reward_fee_share: decimal?,
     chromia_foundation_fee_share: decimal?,
     resource_pool_margin_fee_share: decimal?,
-    system_provider_risk_share: decimal?,
     dapp_provider_risk_share: decimal?
 ) {
-    require_admin();
+    val provider = require_system_provider_signer_entity();
 
-    economy_constants.min_lease_time_weeks = min_lease_time_weeks ?: economy_constants.min_lease_time_weeks;
-    economy_constants.max_lease_time_weeks = max_lease_time_weeks ?: economy_constants.max_lease_time_weeks;
-    economy_constants.chr_per_usd = chr_per_usd ?: economy_constants.chr_per_usd;
-    economy_constants.total_cost_system_providers = total_cost_system_providers ?: economy_constants.total_cost_system_providers;
-    economy_constants.system_provider_fee_share = system_provider_fee_share ?: economy_constants.system_provider_fee_share;
-    economy_constants.staking_reward_fee_share = staking_reward_fee_share ?: economy_constants.staking_reward_fee_share;
-    economy_constants.chromia_foundation_fee_share = chromia_foundation_fee_share ?: economy_constants.chromia_foundation_fee_share;
-    economy_constants.resource_pool_margin_fee_share = resource_pool_margin_fee_share ?: economy_constants.resource_pool_margin_fee_share;
-    economy_constants.system_provider_risk_share = system_provider_risk_share ?: economy_constants.system_provider_risk_share;
-    economy_constants.dapp_provider_risk_share = dapp_provider_risk_share ?: economy_constants.dapp_provider_risk_share;
+    val proposal = create_system_p_proposal(ec_proposal_type.economy_constants_update, provider, "Update economy constants");
+    create pending_economy_constants(
+        proposal,
+        min_lease_time_weeks = get_integer_or_default(min_lease_time_weeks, -1)!!,
+        max_lease_time_weeks = get_integer_or_default(max_lease_time_weeks, -1)!!,
+        staking_reward_fee_share = get_decimal_or_default(staking_reward_fee_share, -1)!!,
+        chromia_foundation_fee_share = get_decimal_or_default(chromia_foundation_fee_share, -1)!!,
+        resource_pool_margin_fee_share = get_decimal_or_default(resource_pool_margin_fee_share, -1)!!,
+        dapp_provider_risk_share = get_decimal_or_default(dapp_provider_risk_share, -1)!!
+    );
+
+    internal_vote(provider, proposal, true);
 }
 
 operation create_tag(

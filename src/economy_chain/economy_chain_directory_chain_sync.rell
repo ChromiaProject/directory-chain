@@ -102,15 +102,14 @@ function revoke_proposals_for_provider_as_member(provider) {
     val results = (voter_set_member, voter_set, proposal) @* {
         voter_set_member.provider == provider,
         voter_set == voter_set_member.voter_set,
-        proposal.voter_set == voter_set
+        proposal.voter_set == voter_set,
+        proposal.state == proposal_state.PENDING
     };
 
     for (result in results) {
-        if (result.proposal.state == proposal_state.PENDING) {
-            log("Revoke proposal %s due to system provider changes".format(result.proposal.rowid));
-            result.proposal.state = proposal_state.REVOKED;
-            delete_proposal(result.proposal);
-        }
+        log("Revoke proposal %s due to system provider changes".format(result.proposal.rowid));
+        result.proposal.state = proposal_state.REVOKED;
+        delete_proposal(result.proposal);
     }
 }
 

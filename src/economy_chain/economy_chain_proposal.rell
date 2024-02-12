@@ -3,6 +3,7 @@
 @extend(apply_voting_result_handlers) function() = [ec_proposal_type.tag_remove.name: apply_tag_remove(*)];
 @extend(apply_voting_result_handlers) function() = [ec_proposal_type.cluster_create.name: apply_cluster_create(*)];
 @extend(apply_voting_result_handlers) function() = [ec_proposal_type.cluster_change_tag.name: apply_cluster_change_tag(*)];
+@extend(apply_voting_result_handlers) function() = [ec_proposal_type.economy_constants_update.name: apply_economy_constants(*)];
 
 function apply_tag_remove(proposal) {
 
@@ -70,11 +71,38 @@ function apply_cluster_change_tag(proposal) {
     pending_cluster_change_tag.cluster.tag = pending_cluster_change_tag.tag;
 }
 
+function apply_economy_constants(proposal) {
+
+    val pending_economy_constants = pending_economy_constants @ { proposal };
+
+    log("Updating economy constants after approval of proposal %d".format(proposal.rowid));
+
+    if (pending_economy_constants.min_lease_time_weeks >= 0) {
+        economy_constants.min_lease_time_weeks = pending_economy_constants.min_lease_time_weeks;
+    }
+    if (pending_economy_constants.max_lease_time_weeks >= 0) {
+        economy_constants.max_lease_time_weeks = pending_economy_constants.max_lease_time_weeks;
+    }
+    if (pending_economy_constants.staking_reward_fee_share >= 0) {
+        economy_constants.staking_reward_fee_share = pending_economy_constants.staking_reward_fee_share;
+    }
+    if (pending_economy_constants.chromia_foundation_fee_share >= 0) {
+        economy_constants.chromia_foundation_fee_share = pending_economy_constants.chromia_foundation_fee_share;
+    }
+    if (pending_economy_constants.resource_pool_margin_fee_share >= 0) {
+        economy_constants.resource_pool_margin_fee_share = pending_economy_constants.resource_pool_margin_fee_share;
+    }
+    if (pending_economy_constants.dapp_provider_risk_share >= 0) {
+        economy_constants.dapp_provider_risk_share = pending_economy_constants.dapp_provider_risk_share;
+    }
+}
+
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [ec_proposal_type.tag_create.name: cleanup_pending_tag_operation(*)];
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [ec_proposal_type.tag_update.name: cleanup_pending_tag_operation(*)];
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [ec_proposal_type.tag_remove.name: cleanup_pending_tag_operation(*)];
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [ec_proposal_type.cluster_create.name: cleanup_pending_cluster_create(*)];
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [ec_proposal_type.cluster_change_tag.name: cleanup_pending_cluster_change_tag(*)];
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [ec_proposal_type.economy_constants_update.name: cleanup_pending_economy_constants(*)];
 
 function cleanup_pending_cluster_create(proposal) {
 
@@ -104,4 +132,11 @@ function cleanup_pending_cluster_change_tag(proposal) {
     log("Cleaning up pending_cluster_change_tag");
 
     delete pending_cluster_change_tag @ { proposal };
+}
+
+function cleanup_pending_economy_constants(proposal) {
+
+    log("Cleaning up pending_economy_constants");
+
+    delete pending_economy_constants @ { proposal };
 }

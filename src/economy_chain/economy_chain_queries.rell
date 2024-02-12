@@ -190,3 +190,33 @@ query get_cluster_change_tag_proposal(proposal_id: rowid) {
         new_tag = pending_cluster_change_tag.tag.name
     );
 }
+
+query get_econony_constants_proposal(proposal_id: rowid) {
+
+    val proposal = require_proposal(proposal_id);
+    val pending_economy_constants = pending_economy_constants @ { proposal };
+
+    return pending_economy_constants_data(
+        min_lease_time_weeks = get_integer_or_default(pending_economy_constants.min_lease_time_weeks, null),
+        max_lease_time_weeks = get_integer_or_default(pending_economy_constants.max_lease_time_weeks, null),
+        staking_reward_fee_share = get_decimal_or_default(pending_economy_constants.staking_reward_fee_share, null),
+        chromia_foundation_fee_share = get_decimal_or_default(pending_economy_constants.chromia_foundation_fee_share, null),
+        resource_pool_margin_fee_share = get_decimal_or_default(pending_economy_constants.resource_pool_margin_fee_share, null),
+        dapp_provider_risk_share = get_decimal_or_default(pending_economy_constants.dapp_provider_risk_share, null)
+    );
+}
+
+function get_integer_or_default(value: integer?, default: integer?): integer? {
+    if (value != null and value >= 0) {
+        return value;
+    }
+    return default;
+}
+
+function get_decimal_or_default(value: decimal?, default: decimal?): decimal? {
+    if (value != null and value >= 0) {
+        return value;
+    }
+    return default;
+}
+
