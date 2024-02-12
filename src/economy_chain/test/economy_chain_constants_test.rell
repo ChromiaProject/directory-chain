@@ -9,6 +9,42 @@ struct module_args {
 
 val admin_privkey = chain_context.args.admin_privkey;
 
+function test_update_chr_per_usd() {
+    val constants: economy_constants_data = get_economy_constants();
+    assert_equals(constants.chr_per_usd, 5);
+
+    rell.test.tx().op(
+        update_chr_per_usd(9)
+    ).run_must_fail("Expected admin signature");
+
+    rell.test.tx().op(
+        update_chr_per_usd(10)
+    ).sign(admin_privkey).run();
+
+    val updated_constants: economy_constants_data = get_economy_constants();
+    assert_equals(updated_constants.chr_per_usd, 10);
+}
+
+function test_update_system_provider_economy_constants() {
+    val constants: economy_constants_data = get_economy_constants();
+    assert_equals(constants.total_cost_system_providers, 828);
+    assert_equals(constants.system_provider_fee_share, 0.1);
+    assert_equals(constants.system_provider_risk_share, 0.1);
+
+    rell.test.tx().op(
+        update_system_provider_economy_constants(1, 2, 3)
+    ).run_must_fail("Expected admin signature");
+
+    rell.test.tx().op(
+        update_system_provider_economy_constants(2000, 0.2, 0.3)
+    ).sign(admin_privkey).run();
+
+    val updated_constants: economy_constants_data = get_economy_constants();
+    assert_equals(updated_constants.total_cost_system_providers, 2000);
+    assert_equals(updated_constants.system_provider_fee_share, 0.2);
+    assert_equals(updated_constants.system_provider_risk_share, 0.3);
+}
+
 function test_update_economy_constants() {
     val constants: economy_constants_data = get_economy_constants();
     assert_equals(constants.min_lease_time_weeks, 1);
