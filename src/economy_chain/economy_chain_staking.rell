@@ -26,11 +26,12 @@ entity provider_registration {
 }
 
 entity staker_payout {
-    mutable staker_payout_time: timestamp;
-    mutable staker: ft4.accounts.account;
-    mutable payout_amount: integer;
+    staker_payout_time: timestamp;
+    staker: ft4.accounts.account;
+    payout_amount: integer;
+    mutable latest: boolean;
+    key staker, staker_payout_time;
     index staker;
-    key staker;
 }
 
 entity staker_state {
@@ -308,14 +309,8 @@ operation staking_claim_rewards() {
         _pay_to(staker, payout_amount);
 
         // Record payout
-        if( null == staker_payout @? {.staker == staker} ) {
-            create staker_payout(staker_payout_time = _staking_last_known_time(), staker, payout_amount);
-        } else {
-            update staker_payout @ {.staker == staker} (
-                payout_amount = payout_amount,
-                staker_payout_time = _staking_last_known_time()
-            );
-        }
+        update staker_payout @* {.staker == staker} (latest = false);
+        create staker_payout(staker_payout_time = _staking_last_known_time(), staker, payout_amount, latest = true);
     }
 }
 
