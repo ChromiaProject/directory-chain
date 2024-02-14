@@ -26,6 +26,12 @@ function try_to_finalize_blockchain_move(message: configuration_updated) {
             moving_bc.blockchain.rid, moving_bc.source.name, moving_bc.destination.name, moving_bc.final_height)
         );
 
+        val src_container = moving_bc.source;
         delete moving_bc;
+
+        // If we are migrating all bcs in source container and they all have finished then we can now delete it
+        if (src_container.state == container_state.MIGRATING and (moving_blockchain @* { .source == src_container }).empty()) {
+            remove_container_impl(src_container);
+        }
     }
 }

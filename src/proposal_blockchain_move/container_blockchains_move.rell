@@ -39,6 +39,10 @@ function move_container_blockchains_impl(
         require(empty(pba), "Blockchain %s cannot be moved due to a pending proposal %s related to it".format(bc.rid, pba?.proposal));
     }
 
+    // require there are no pending blockchains to be added to container
+    val pb = pending_blockchain @? { src_container };
+    require(empty(pb), "Container bcs cannot be moved due to a pending proposal %s related to it".format(pb?.proposal));
+
     // create dst container
     val new_name = src_container.name + "_new";
     val new_deployers = voter_set_member @* { src_container.deployer } (.provider.pubkey);
@@ -79,6 +83,12 @@ function move_container_blockchains_impl(
         // signers config
         val encoded_dst_nodes = (dst_nodes @* {} ( @sort .pubkey )).to_gtv().to_bytes();
         create blockchain_configuration_signers(bc, final_height + 1, encoded_dst_nodes);
+    }
+
+    if (bcs.empty()) {
+        remove_container_impl(src_container);
+    } else {
+        src_container.state = container_state.MIGRATING;
     }
 
     return (container_name = dst_container.name, cluster_name = dst_cluster.name);
