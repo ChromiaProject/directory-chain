@@ -278,7 +278,7 @@ function _staking_delegate(delegator: ft4.accounts.account, provider: ft4.accoun
     require(staking_get_balance(delegator) > 0, "Must have a stake to staker.");
 
     // Clear any withdrawal request
-    delete staker_withdrawal_request @? {not .used and .staker == delegator};
+    update staker_withdrawal_request @? {not .used and .staker == delegator} (used = true);
 
     // Get the values before messing with the flag
     val existing = staker_state @ {.latest and .staker == delegator};
@@ -299,6 +299,10 @@ function _staking_delegate(delegator: ft4.accounts.account, provider: ft4.accoun
         previous_balance = existing.balance,
         latest = true
     );
+}
+
+operation staking_cancel_withdrawal(staker: ft4.accounts.account) {
+    update staker_withdrawal_request @? {not .used and .staker == staker} (used = true);
 }
 
 operation staking_claim_rewards() {
