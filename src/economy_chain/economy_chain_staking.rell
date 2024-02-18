@@ -199,7 +199,6 @@ query staking_rewards_claimable_for(staker: ft4.accounts.account): integer {
     // than interpolating it.)
 
     val last_payout_time = (staker_payout @? {.staker == staker} (@max .staker_payout_time)) ?: 0;
-
     val total_token_time = staker_state @ {
         .staker == staker
     } (
@@ -216,7 +215,7 @@ query staking_rewards_claimable_for(staker: ft4.accounts.account): integer {
             // Interpolated last row from latest row
             (
                 when (.latest) {
-                    true -> (_staking_last_known_time() - .staker_state_time) * .balance;
+                    true -> (_staking_last_known_time() - max(.staker_state_time, last_payout_time)) * .balance;
                     else -> 0;
                 }
             )
