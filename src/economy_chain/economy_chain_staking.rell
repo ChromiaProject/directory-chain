@@ -5,7 +5,8 @@ namespace ft4 {
 }
 import lib.auth;
 
-val MS_PER_YEAR: decimal = 365 * 3600 * 1000;
+// TODO Merge these constants into the ones used elsewhere in Economy Chain
+val MS_PER_YEAR: decimal = 365 * 86400 * 1000;
 
 entity staker_withdrawal_request {
     staker_withdrawal_request_time: timestamp;
@@ -27,11 +28,7 @@ entity provider_registration {
 
 entity staker_payout {
     staker_payout_time: timestamp;
-    staker: ft4.accounts.account;
-    payout_amount: integer;
-    mutable latest: boolean;
-    key staker, staker_payout_time;
-    index staker;
+    key staker_payout_time;
 }
 
 entity staker_state {
@@ -55,17 +52,24 @@ entity reward_rate {
 }
 
 object staking_config {
-    rate_change_delay_ms: integer = 7 * 8600 * 1000;
-    withdrawal_delay_ms: integer = 14 * 8600 * 1000;
+    initial_reward_rate: decimal = 0.15;
+    rate_change_delay_ms: integer = 7 * 86400 * 1000;
+    withdrawal_delay_ms: integer = 14 * 86400 * 1000;
     // TODO Should have an independent setting for delegation delay
+    payout_interval: integer = integer(MS_PER_YEAR); // Good for testing
+}
+
+// TODO  Add require_initialized() to many things
+function __staking_init() {
+   _staking_set_rates_at(staking_config.initial_reward_rate, staking_config.initial_reward_rate, _staking_last_known_time());
 }
 
 operation staking_set_rates_at(delegator_rate: decimal, provider_rate: decimal, time: timestamp) {
+    require(time >= _staking_cannot_change_before(), "Cannot change rate before " + _staking_cannot_change_before());
    _staking_set_rates_at(delegator_rate, provider_rate, time);
 }
 
 function _staking_set_rates_at(delegator_rate: decimal, provider_rate: decimal, time: timestamp) {
-    require(time >= _staking_cannot_change_before(), "Cannot change rate before " + _staking_cannot_change_before());
     create reward_rate(time, delegator_rate, provider_rate);
 }
 
@@ -198,7 +202,7 @@ query staking_rewards_claimable_for(staker: ft4.accounts.account): integer {
     // the present date. In effect a last virtual row. (If we could UPSERT, we could cheaply create this row rather
     // than interpolating it.)
 
-    val last_payout_time = (staker_payout @? {.staker == staker} (@max .staker_payout_time)) ?: 0;
+    val last_payout_time = (staker_payout @? {} (@max .staker_payout_time)) ?: 0;
     val total_token_time = staker_state @ {
         .staker == staker
     } (
@@ -305,16 +309,19 @@ operation staking_cancel_withdrawal(staker: ft4.accounts.account) {
 }
 
 operation staking_claim_rewards() {
+    _staking_claim_rewards();
+}
+
+function _staking_claim_rewards() {
     // Get a list of stakers
     for(staker in staker_state @* {} (@group .staker) ) {
         val payout_amount = staking_rewards_claimable_for(staker);
-
-        _pay_to(staker, payout_amount);
-
-        // Record payout
-        update staker_payout @* {.staker == staker} (latest = false);
-        create staker_payout(staker_payout_time = _staking_last_known_time(), staker, payout_amount, latest = true);
+        if(payout_amount > 0) {
+            _pay_to(staker, payout_amount);
+        }
     }
+    // Record payout
+    create staker_payout(staker_payout_time = _staking_last_known_time());
 }
 
 query staking_get_current_rates(): struct<reward_rate> {
@@ -333,6 +340,14 @@ query staking_get_current_delegate(staker: ft4.accounts.account): ft4.accounts.a
         if  (null == current_state) get_null_account()
     else if ( staking_get_last_known_time() >= current_state.cutover_time ) current_state.new_provider
     else    current_state.old_provider;
+}
+
+function __staking_begin_block(height: integer) {
+    val last_payout_time = (staker_payout @? {} (@max .staker_payout_time)) ?: 0;
+    val interval_since_last_payout = _staking_last_known_time() - last_payout_time;
+    if(interval_since_last_payout > staking_config.payout_interval) {
+        _staking_claim_rewards();
+    }
 }
 
 function _pay_to(staker: ft4.accounts.account, amount: integer) {
