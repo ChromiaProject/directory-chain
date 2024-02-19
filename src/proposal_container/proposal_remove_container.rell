@@ -35,3 +35,11 @@ query get_container_remove_proposal(rowid?) {
     if (proposal == null) return null;
     return pending_remove_container @ { proposal } .container.name;
 }
+
+@extend(before_remove_container) function remove_all_container_proposals(container) {
+    val prcs = pending_remove_container @* { container };
+    for (prc in prcs) {
+        prc.proposal.state = proposal_state.REVOKED;
+        delete prc;
+    }
+}

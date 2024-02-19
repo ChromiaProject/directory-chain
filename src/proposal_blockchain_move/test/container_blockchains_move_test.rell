@@ -1,0 +1,81 @@
+@test module;
+
+import ^^.*;
+import ^.helpers.*;
+import common.operations.*;
+import common.test.util.*;
+import common.test.setup.*;
+import direct_container.*;
+import direct_cluster.*;
+import proposal_provider.*;
+
+function test_move_container_blockchains() {
+    // setup
+    setup_migratable_container();
+
+    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv(), "dummy": "1".to_gtv()];
+
+    rell.test.tx().op(
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
+    ).sign(initial_provider).run();
+
+    val src_container = container @ { .name == "c1" };
+    val bc_to_be_moved = container_blockchain @ { src_container }.blockchain;
+    val bc_to_be_moved_rid = bc_to_be_moved.rid;
+
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, bc_to_be_moved_rid, blockchain_action.pause),
+        move_container_blockchains_op("c1", "s2", [bc_to_be_moved_rid: 1])
+    ).sign(initial_provider).run();
+
+    assert_not_null(container @? { .cluster.name == "s2" , .name == "c1_new" });
+    assert_not_null(moving_blockchain @? { bc_to_be_moved });
+    assert_equals(src_container.state, container_state.MIGRATING);
+
+    // Assert that new bcs can't be added to the migrating container
+    var conf2 = ["config_consensus_strategy": "HEADER_HASH".to_gtv(), "dummy": "2".to_gtv()];
+    rell.test.tx().op(
+        propose_blockchain(initial_provider.pub, conf2.to_gtv().to_bytes(), "foo_chain", "c1")
+    ).sign(initial_provider).run_must_fail("Container c1 not found or is not running");
+
+    // Finish move and ensure that source container is removed
+    rell.test.tx().op(
+        finalize_blockchain_move_op(configuration_updated(blockchain_rid = bc_to_be_moved_rid, 2, config_hash = x""))
+    ).sign(initial_provider).run();
+
+    assert_null(moving_blockchain @? { bc_to_be_moved });
+    assert_null(container @? { .cluster.name == "s1" , .name == "c1" });
+}
+
+function test_source_container_removed_if_empty() {
+    setup_migratable_container();
+
+    assert_not_null(container @? { .cluster.name == "s1" , .name == "c1" });
+
+    rell.test.tx().op(
+        move_container_blockchains_op("c1", "s2", [:])
+    ).sign(initial_provider).run();
+
+    assert_null(container @? { .cluster.name == "s1" , .name == "c1" });
+    assert_not_null(container @? { .cluster.name == "s2" , .name == "c1_new" });
+}
+
+function setup_migratable_container() {
+    setup_module();
+    val node0 = node @ { test_node.pubkey };
+    val second_node_pubkey = rell.test.pubkeys.trudy;
+    val second_node_data = register_node_data(second_node_pubkey, host = "", port = 0, api_url = "", territory = "SE", clusters = ["s2"], cluster_units = 1, extra_storage = 0);
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, rell.test.pubkeys.bob, true),
+        // s1 / c1
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1", "s1", 0, [initial_provider.pub]),
+        update_node_with_units(initial_provider.pub, node0.pubkey, cluster_units = 2),
+        add_node_to_cluster(initial_provider.pub, node0.pubkey, "s1"),
+        // s2
+        create_cluster(initial_provider.pub, "s2", voter_sets.system_p, [initial_provider.pub]),
+        register_node_with_node_data(initial_provider.pub, second_node_data)
+    ).sign(initial_provider).run();
+}

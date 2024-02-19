@@ -73,3 +73,11 @@ query get_container_limits_proposal(rowid) {
         extra_storage = pcl.extra_storage
     );
 }
+
+@extend(before_remove_container) function remove_all_container_proposals(container) {
+    val pcls = pending_container_limits @* { container };
+    for (pcl in pcls) {
+        pcl.proposal.state = proposal_state.REVOKED;
+        delete pcl;
+    }
+}
