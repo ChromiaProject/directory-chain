@@ -313,13 +313,31 @@ operation staking_claim_rewards() {
 }
 
 function _staking_claim_rewards() {
-    // Get a list of stakers
+    var payout_list: list<(ft4.accounts.account, integer)> = [];
+    var total_amount = 0;
+
+    // Get a list of payouts
     for(staker in staker_state @* {} (@group .staker) ) {
+        // Find the amounts
         val payout_amount = staking_rewards_claimable_for(staker);
+        payout_list.add((staker, payout_amount));
+        total_amount += payout_amount;
+    }
+
+    // Do not start what we cannot finish
+    if (get_account_balance(get_pool_account()) <= total_amount) {
+        print("Cannot pay rewards. Insufficient funds.");
+        return;
+    }
+
+    // Do the payouts
+    for(payment in payout_list) {
+        val (staker, payout_amount) = payment;
         if(payout_amount > 0) {
             _pay_to(staker, payout_amount);
         }
     }
+
     // Record payout
     create staker_payout(staker_payout_time = _staking_last_known_time());
 }

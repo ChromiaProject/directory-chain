@@ -50,8 +50,8 @@ operation init() {
 
 operation __begin_block(height: integer) {
     if (state.initialized) {
-        expire_leases(op_context.last_block_time);
-        __staking_begin_block(height);
+        if (not try_call(expire_leases(op_context.last_block_time, *))) print("Failed lease expiry.");
+        if (not try_call(__staking_begin_block(height, *))) print("Failed staking payout.");
     }
 }
 
