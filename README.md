@@ -52,4 +52,4 @@ libs:
     tagOrBranch: 1.35.0
     rid: x"1D567580C717B91D2F188A4D786DB1D41501086B155A68303661D25364314A4D"
 ```
-Then use `chr install` to install the icmf-library.
+Then use `chr install` to install the iccf-library.
