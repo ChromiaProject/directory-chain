@@ -1,0 +1,27 @@
+module;
+
+import common.*;
+import model.*;
+
+val evm_transaction_submitter_chain_name = "evm_transaction_submitter_chain";
+
+object evm_transaction_submitter_chain {
+    mutable rid: byte_array = x"";
+}
+
+operation init_evm_transaction_submitter_chain(my_pubkey: pubkey, transaction_submitter_chain_config: byte_array) {
+    require_is_provider_with_rate_limit(my_pubkey);
+    require_is_system_provider(my_pubkey);
+
+    require(evm_transaction_submitter_chain.rid == x"", "EVM transaction submitter chain is already started");
+
+    val nodes = cluster_node @* { system_cluster() } (@sort .node.pubkey);
+    // do not write new configuration when size is 0 since it's impossible to recover from that
+    require(nodes.size() > 0, "System cluster must have at least one node");
+
+    log("Adding EVM transaction submitter chain to system container");
+    val evm_transaction_submitter_blockchain = add_blockchain(transaction_submitter_chain_config, nodes, evm_transaction_submitter_chain_name, system_container(), true);
+    update evm_transaction_submitter_chain(rid = evm_transaction_submitter_blockchain.rid);
+}
+
+query get_evm_transaction_submitter_chain_rid(): byte_array? = if (evm_transaction_submitter_chain.rid == x"") null else evm_transaction_submitter_chain.rid;
