@@ -5,9 +5,6 @@ namespace ft4 {
 }
 import lib.auth;
 
-// TODO Merge these constants into the ones used elsewhere in Economy Chain
-val MS_PER_YEAR: decimal = 365 * 86400 * 1000;
-
 entity staker_withdrawal_request {
     staker_withdrawal_request_time: timestamp;
     staker: ft4.accounts.account;
@@ -51,17 +48,9 @@ entity reward_rate {
     key reward_rate_time;
 }
 
-object staking_config {
-    initial_reward_rate: decimal = 0.15;
-    rate_change_delay_ms: integer = 7 * 86400 * 1000;
-    withdrawal_delay_ms: integer = 14 * 86400 * 1000;
-    // TODO Should have an independent setting for delegation delay
-    payout_interval: integer = integer(MS_PER_YEAR); // Good for testing
-}
-
 // TODO  Add require_initialized() to many things
 function __staking_init() {
-   _staking_set_rates_at(staking_config.initial_reward_rate, staking_config.initial_reward_rate, _staking_last_known_time());
+   _staking_set_rates_at(chain_context.args.staking_initial_reward_rate, chain_context.args.staking_initial_reward_rate, _staking_last_known_time());
 }
 
 operation staking_set_rates_at(delegator_rate: decimal, provider_rate: decimal, time: timestamp) {
@@ -79,6 +68,12 @@ operation staking_set_rates(delegator_rate: decimal, provider_rate: decimal) {
 
 operation staking_deposit(staker: ft4.accounts.account, amount: integer, delegateTo: ft4.accounts.account? = null) {
     require(amount > 0, "Can't deposit nothing (or less)!");
+
+    // Pull in the CHR
+    // TODO Make a trust account ???
+    require(amount < get_account_balance(staker), "Insufficent funds to deposit.");
+    ft4.assets.Unsafe.transfer(staker, get_pool_account(), get_asset(), amount);
+
     val existing = staker_state @? { .staker == staker and .latest };
     update staker_state @? { .staker == staker and .latest } ( latest = false );
     if (null != existing)
@@ -132,7 +127,8 @@ operation staking_withdraw(staker: ft4.accounts.account) {
     require(withdrawal_time, "Need a withdrawal request.");
     require(_staking_last_known_time() >= withdrawal_time, "Need to wait for withdrawal request.");
 
-    // TODO Send the balance back to them through ft4 somehow
+    // Send the balance back to them through ft4
+    ft4.assets.Unsafe.transfer(get_pool_account(), staker, get_asset(), staking_get_balance(staker));
 
     val existing = staker_state @ { .staker == staker and .latest==true };
     update staker_state @? { .staker == staker and .latest==true } ( latest=false );
@@ -154,7 +150,7 @@ query staking_get_withdrawal_time(staker: ft4.accounts.account): timestamp? {
     val valid_request = staker_withdrawal_request @? {.staker == staker and not .used};
     return
         if (null != valid_request)
-            valid_request.staker_withdrawal_request_time + staking_config.withdrawal_delay_ms
+            valid_request.staker_withdrawal_request_time + chain_context.args.staking_withdrawal_delay_ms
         else
             null
         ;
@@ -227,7 +223,7 @@ query staking_rewards_claimable_for(staker: ft4.accounts.account): integer {
     );
 
     // TODO Pick a separate rate for providers
-    val rate = staking_get_current_rates().delegator_rate / MS_PER_YEAR;
+    val rate = staking_get_current_rates().delegator_rate / millis_per_year;
 
     val token_reward = total_token_time * rate;
     return integer(token_reward); // Can only transfer whole minor units
@@ -363,17 +359,17 @@ query staking_get_current_delegate(staker: ft4.accounts.account): ft4.accounts.a
 function __staking_begin_block(height: integer) {
     val last_payout_time = (staker_payout @? {} (@max .staker_payout_time)) ?: 0;
     val interval_since_last_payout = _staking_last_known_time() - last_payout_time;
-    if(interval_since_last_payout > staking_config.payout_interval) {
+    if(interval_since_last_payout > chain_context.args.staking_payout_interval_ms) {
         _staking_claim_rewards();
     }
 }
 
 function _pay_to(staker: ft4.accounts.account, amount: integer) {
     // We pay from the same pool account as provider rewards
-    ft4.assets.Unsafe.transfer(staker, get_pool_account(), get_asset(), amount);
+    ft4.assets.Unsafe.transfer(get_pool_account(), staker, get_asset(), amount);
 }
 
-function _staking_cannot_change_before(): timestamp = _staking_last_known_time() + staking_config.rate_change_delay_ms;
+function _staking_cannot_change_before(): timestamp = _staking_last_known_time() + chain_context.args.staking_rate_change_delay_ms;
 
 query staking_get_cannot_change_before(): timestamp = _staking_cannot_change_before();
 
