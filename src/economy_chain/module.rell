@@ -24,7 +24,12 @@ struct module_args {
     pool_account_pubkey: pubkey;
     chromia_foundation_account_pubkey: pubkey;
     admin_pubkey: pubkey;
-    test_chr_refill_limit_millis: integer = 604800000; // 1 week
+    staking_initial_reward_rate: decimal;
+    staking_rate_change_delay_ms: integer;
+    staking_withdrawal_delay_ms: integer;
+    staking_delegation_delay_ms: integer;
+    staking_payout_interval_ms: integer;
+    test_chr_refill_limit_millis: integer;
 }
 
 // Rell does not have a power function/operator
@@ -32,6 +37,7 @@ val units_per_asset = integer("1" + "0".repeat(chain_context.args.asset_decimals
 
 val millis_per_day = 24 * 60 * 60 * 1000;
 val millis_per_week = 7 * millis_per_day;
+val millis_per_year = 365 * millis_per_day;
 
 operation init() {
     require(state.initialized == false, "Economy chain is already initialized");
@@ -43,12 +49,15 @@ operation init() {
 
     create_chromia_foundation_account();
 
+    __staking_init();
+
     log("Economy chain was initialized");
 }
 
 operation __begin_block(height: integer) {
     if (state.initialized) {
-        expire_leases(op_context.last_block_time);
+        if (not try_call(expire_leases(op_context.last_block_time, *))) log("Failed lease expiry.");
+        if (not try_call(__staking_begin_block(height, *))) log("Failed staking payout.");
     }
 }
 
