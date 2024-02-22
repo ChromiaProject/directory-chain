@@ -26,30 +26,15 @@ function test_set_rates() {
     rell.test.tx().op(init()).run();
 
     rell.test.set_next_block_time_delta(staking_get_cannot_change_before());
-    rell.test.tx().op(
-        staking_set_rates(0.1, 0.4)
-    ).run();
-
-    val initial_rate = staking_get_current_rates();
-    assert_equals(initial_rate.delegator_rate, 0.1);
-    assert_equals(initial_rate.provider_rate, 0.4);
+    rell.test.tx().op(staking_set_rate(0.1)).run();
+    assert_equals(staking_get_current_rate(), 0.1);
 
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
-    rell.test.tx().op(
-        staking_set_rates(0.5, 0.9)
-    ).run();
+    rell.test.tx().op(staking_set_rate(0.5)).run();
+    assert_equals(staking_get_current_rate(), 0.5);
 
-    val second_rate = staking_get_current_rates();
-    assert_equals(second_rate.delegator_rate, 0.5);
-    assert_equals(second_rate.provider_rate, 0.9);
-
-    rell.test.tx().op(
-        staking_set_rates(0.05, 0.008) // Won't take effect
-    ).run();
-
-    val third_rate = staking_get_current_rates();
-    assert_equals(third_rate.delegator_rate, 0.5);
-    assert_equals(third_rate.provider_rate, 0.9);
+    rell.test.tx().op(staking_set_rate(0.05)).run(); // Won't take effect
+    assert_equals(staking_get_current_rate(), 0.5);
 }
 
 function test_add_remove_providers() {
@@ -61,7 +46,7 @@ function test_add_remove_providers() {
     val test_account_dave = require(do_create_account(rell.test.keypairs.dave, auth_privkey));
 
     rell.test.tx()
-        .op(staking_set_rates(0.5, 0.9))
+        .op(staking_set_rate(0.5))
         .op(mint_to(test_account_alice, 9999999))
         .op(mint_to(test_account_dave, 9999999))
     .run();
@@ -121,7 +106,7 @@ function test_delegation() {
     val test_account_charlie = require(do_create_account(rell.test.keypairs.charlie, auth_privkey));
 
     rell.test.tx()
-        .op(staking_set_rates(0.5, 0.9))
+        .op(staking_set_rate(0.5))
         .op(mint_to(test_account_alice, 9999999))
     .run();
 
@@ -175,7 +160,7 @@ function test_yield_and_payout_crudely () {
     // Basic intialisation
     rell.test.tx()
         .op(init())
-        .op(staking_set_rates(0.5, 0.8))
+        .op(staking_set_rate(0.5))
         .op(mint_to_pool(8888888888))
     .run();
 
