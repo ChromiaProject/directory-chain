@@ -43,27 +43,26 @@ entity staker_state {
 
 entity reward_rate {
     reward_rate_time: timestamp;
-    delegator_rate: decimal;
-    provider_rate: decimal;
+    reward_rate: decimal;
     key reward_rate_time;
 }
 
 // TODO  Add require_initialized() to many things
 function __staking_init() {
-   _staking_set_rates_at(chain_context.args.staking_initial_reward_rate, chain_context.args.staking_initial_reward_rate, _staking_last_known_time());
+   _staking_set_rate_at(chain_context.args.staking_initial_reward_rate, _staking_last_known_time());
 }
 
-operation staking_set_rates_at(delegator_rate: decimal, provider_rate: decimal, time: timestamp) {
+operation staking_set_rate_at(reward_rate: decimal, provider_rate: decimal, time: timestamp) {
     require(time >= _staking_cannot_change_before(), "Cannot change rate before " + _staking_cannot_change_before());
-   _staking_set_rates_at(delegator_rate, provider_rate, time);
+   _staking_set_rate_at(reward_rate, time);
 }
 
-function _staking_set_rates_at(delegator_rate: decimal, provider_rate: decimal, time: timestamp) {
-    create reward_rate(time, delegator_rate, provider_rate);
+function _staking_set_rate_at(reward_rate: decimal, time: timestamp) {
+    create reward_rate(time, reward_rate);
 }
 
-operation staking_set_rates(delegator_rate: decimal, provider_rate: decimal) {
-   _staking_set_rates_at(delegator_rate, provider_rate, _staking_cannot_change_before());
+operation staking_set_rate(reward_rate: decimal) {
+   _staking_set_rate_at(reward_rate, _staking_cannot_change_before());
 }
 
 operation staking_deposit(staker: ft4.accounts.account, amount: integer, delegateTo: ft4.accounts.account? = null) {
@@ -222,8 +221,7 @@ query staking_rewards_claimable_for(staker: ft4.accounts.account): integer {
         )
     );
 
-    // TODO Pick a separate rate for providers
-    val rate = staking_get_current_rates().delegator_rate / millis_per_year;
+    val rate = staking_get_current_rate() / millis_per_year;
 
     val token_reward = total_token_time * rate;
     return integer(token_reward); // Can only transfer whole minor units
@@ -338,11 +336,11 @@ function _staking_claim_rewards() {
     create staker_payout(staker_payout_time = _staking_last_known_time());
 }
 
-query staking_get_current_rates(): struct<reward_rate> {
+query staking_get_current_rate(): decimal {
     val current_rate = reward_rate @ {
         .reward_rate_time <= _staking_last_known_time()
     } (
-        reward_rate.to_struct(),
+        .reward_rate,
         @omit @sort_desc .reward_rate_time
     ) limit 1;
     return current_rate;
