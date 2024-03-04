@@ -47,12 +47,13 @@ entity reward_rate {
     key reward_rate_time;
 }
 
-// TODO  Add require_initialized() to many things
 function __staking_init() {
    _staking_set_rate_at(chain_context.args.staking_initial_reward_rate, _staking_last_known_time());
 }
 
 operation staking_set_rate_at(reward_rate: decimal, provider_rate: decimal, time: timestamp) {
+    require_initialized();
+    require_admin();
     require(time >= _staking_cannot_change_before(), "Cannot change rate before " + _staking_cannot_change_before());
    _staking_set_rate_at(reward_rate, time);
 }
@@ -62,11 +63,30 @@ function _staking_set_rate_at(reward_rate: decimal, time: timestamp) {
 }
 
 operation staking_set_rate(reward_rate: decimal) {
+    require_admin();
    _staking_set_rate_at(reward_rate, _staking_cannot_change_before());
 }
 
-operation staking_deposit(staker: ft4.accounts.account, amount: integer, delegateTo: ft4.accounts.account? = null) {
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "staking_deposit",
+    flags = ["T"],
+    message = staking_deposit_auth_message(*)
+);
+
+function staking_deposit_auth_message(gtv): text {
+    val args = struct<staking_deposit>.from_gtv(gtv);
+
+    return "Please sign the message\nto transfer %s %s from account {account_id} \nto deposit account.".format(
+        ft4.assets.format_amount_with_decimals(args.amount, chain_context.args.asset_decimals),
+        chain_context.args.asset_symbol);
+}
+
+operation staking_deposit(amount: integer, delegateTo: ft4.accounts.account? = null) {
+    require_initialized();
     require(amount > 0, "Can't deposit nothing (or less)!");
+
+    val staker = ft4.auth.authenticate();
 
     // Pull in the CHR
     // TODO Make a trust account ???
@@ -111,7 +131,22 @@ operation staking_deposit(staker: ft4.accounts.account, amount: integer, delegat
 
 query staking_get_balance(staker: ft4.accounts.account) = staker_state @? { .staker == staker and .latest==true } ( .balance ) ?: 0;
 
-operation staking_request_withdrawal(staker: ft4.accounts.account) {
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "staking_request_withdrawal",
+    flags = [],
+    message = staking_request_withdrawal_auth_message(*)
+);
+
+function staking_request_withdrawal_auth_message(gtv): text {
+    val args = struct<staking_request_withdrawal>.from_gtv(gtv);
+    return "Please sign the message to request a withdrawal.";
+}
+
+operation staking_request_withdrawal() {
+    require_initialized();
+
+    val staker = ft4.auth.authenticate();
     require(staking_get_balance(staker) > 0, "Need something to withdraw.");
     require(get_null_account() == staking_get_current_delegate(staker), "Must unstaker before requesting a withdrawal.");
     require(null == staking_get_withdrawal_time(staker), "Only one withdrawal request at a time.");
@@ -121,7 +156,21 @@ operation staking_request_withdrawal(staker: ft4.accounts.account) {
     create staker_withdrawal_request(staker_withdrawal_request_time=_staking_last_known_time(), staker=staker, false);
 }
 
-operation staking_withdraw(staker: ft4.accounts.account) {
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "staking_withdraw",
+    flags = ["T"],
+    message = staking_withdraw_auth_message(*)
+);
+
+function staking_withdraw_auth_message(gtv): text {
+    val args = struct<staking_withdraw>.from_gtv(gtv);
+    return "Please sign the message to complete the withdrawal.";
+}
+
+operation staking_withdraw() {
+    require_initialized();
+    val staker = ft4.auth.authenticate();
     val withdrawal_time = staking_get_withdrawal_time(staker);
     require(withdrawal_time, "Need a withdrawal request.");
     require(_staking_last_known_time() >= withdrawal_time, "Need to wait for withdrawal request.");
@@ -228,11 +277,15 @@ query staking_rewards_claimable_for(staker: ft4.accounts.account): integer {
 }
 
 operation staking_add_provider(name: text, provider: ft4.accounts.account) {
+    require_initialized();
+    require_admin();
     require(not staking_is_active_provider(provider), "Provider cannot be active.");
     create provider_registration(_staking_last_known_time(), provider, name, true);
 }
 
 operation staking_remove_provider(provider: ft4.accounts.account) {
+    require_initialized();
+    require_admin();
     require(staking_is_active_provider(provider), "Provider not active.");
 
     // Unwind delegations immediately
@@ -262,12 +315,41 @@ operation staking_remove_provider(provider: ft4.accounts.account) {
     create provider_registration(_staking_last_known_time(), provider, name, false);
 }
 
-operation staking_delegate(staker: ft4.accounts.account, provider: ft4.accounts.account) {
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "staking_delegate",
+    flags = [],
+    message = staking_delegate_auth_message(*)
+);
+
+function staking_delegate_auth_message(gtv): text {
+    val args = struct<staking_delegate>.from_gtv(gtv);
+    // TODO Indicate which provider?
+    return "Please sign the message to set the provider.";
+}
+
+operation staking_delegate(provider: ft4.accounts.account) {
+    require_initialized();
     require(staking_is_active_provider(provider), "Must be active provider.");
+    val staker = ft4.auth.authenticate();
     _staking_delegate(staker, provider);
 }
 
-operation staking_undelegate(delegator: ft4.accounts.account) {
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "staking_undelegate",
+    flags = [],
+    message = staking_undelegate_auth_message(*)
+);
+
+function staking_undelegate_auth_message(gtv): text {
+    val args = struct<staking_undelegate>.from_gtv(gtv);
+    return "Please sign the message to undelegate.";
+}
+
+operation staking_undelegate() {
+    require_initialized();
+    val delegator = ft4.auth.authenticate();
     _staking_delegate(delegator, get_null_account());
 }
 
@@ -298,11 +380,27 @@ function _staking_delegate(delegator: ft4.accounts.account, provider: ft4.accoun
     );
 }
 
-operation staking_cancel_withdrawal(staker: ft4.accounts.account) {
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "staking_cancel_withdrawal",
+    flags = [],
+    message = staking_cancel_withdrawal_auth_message(*)
+);
+
+function staking_cancel_withdrawal_auth_message(gtv): text {
+    val args = struct<staking_cancel_withdrawal>.from_gtv(gtv);
+    return "Please sign the message to cancel withdrawal.";
+}
+
+operation staking_cancel_withdrawal() {
+    require_initialized();
+    val staker = ft4.auth.authenticate();
     update staker_withdrawal_request @? {not .used and .staker == staker} (used = true);
 }
 
 operation staking_claim_rewards() {
+    require_initialized();
+    require_admin();
     _staking_claim_rewards();
 }
 
