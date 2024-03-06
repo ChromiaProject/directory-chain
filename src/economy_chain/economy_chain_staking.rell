@@ -124,14 +124,14 @@ operation staking_deposit(amount: integer, delegateTo: byte_array? = null) {
 
     if (null != delegateTo) {
         // Below check is duplicated, but less overhead than 2 wrapping functions.
-        val delegateToAccount = require(ft4.accounts.account @? { delegateTo }, "Account %s not found".format(delegateTo));
+        val delegateToAccount = ft4_from_account_id(delegateTo);
         require(_staking_is_active_provider(delegateToAccount), "Must be active provider.");
         _staking_delegate(staker, delegateToAccount);
     }
 }
 
 query staking_get_balance(account_id: byte_array) {
-    val account = require(ft4.accounts.account @? { account_id }, "Account %s not found".format(account_id));
+    val account = ft4_from_account_id(account_id);
     return _staking_get_balance(account);
 }
 
@@ -201,7 +201,7 @@ operation staking_withdraw() {
 }
 
 query staking_get_withdrawal_time(account_id: byte_array): timestamp? {
-    val staker = require(ft4.accounts.account @? { account_id }, "Account %s not found".format(account_id));
+    val staker = ft4_from_account_id(account_id);
     return _staking_get_withdrawal_time(staker);
 }
 
@@ -216,7 +216,7 @@ function _staking_get_withdrawal_time(staker: ft4.accounts.account): timestamp? 
 }
 
 query staking_is_active_provider(account_id: byte_array): boolean {
-    val staker = require(ft4.accounts.account @? { account_id }, "Account %s not found".format(account_id));
+    val staker = ft4_from_account_id(account_id);
     return _staking_is_active_provider(staker);
 }
 
@@ -226,7 +226,7 @@ function _staking_is_active_provider(provider: ft4.accounts.account): boolean {
 }
 
 query staking_get_total_delegation_to(account_id: byte_array): integer {
-    val staker = require(ft4.accounts.account @? { account_id }, "Account %s not found".format(account_id));
+    val staker = ft4_from_account_id(account_id);
     return _staking_get_total_delegation_to(staker);
 }
 
@@ -250,7 +250,7 @@ function _staking_get_total_delegation_to(provider: ft4.accounts.account): integ
 }
 
 query staking_rewards_claimable_for(account_id: byte_array): integer {
-    val staker = require(ft4.accounts.account @? { account_id }, "Account %s not found".format(account_id));
+    val staker = ft4_from_account_id(account_id);
     return _staking_rewards_claimable_for(staker);
 }
 
@@ -305,7 +305,7 @@ function _staking_rewards_claimable_for(staker: ft4.accounts.account): integer {
 operation staking_add_provider(name: text, account_id: byte_array) {
     require_initialized();
     require_admin();
-    val provider = require(ft4.accounts.account @? { account_id }, "Account %s not found".format(account_id));
+    val provider = ft4_from_account_id(account_id);
     require(not _staking_is_active_provider(provider), "Provider cannot be active.");
     create provider_registration(_staking_last_known_time(), provider, name, true);
 }
@@ -313,7 +313,7 @@ operation staking_add_provider(name: text, account_id: byte_array) {
 operation staking_remove_provider(account_id: byte_array) {
     require_initialized();
     require_admin();
-    val provider = require(ft4.accounts.account @? { account_id }, "Account %s not found".format(account_id));
+    val provider = ft4_from_account_id(account_id);
     require(_staking_is_active_provider(provider), "Provider not active.");
 
     // Unwind delegations immediately
@@ -474,7 +474,7 @@ query staking_get_current_rate(): decimal {
 }
 
 query staking_get_current_delegate(account_id: byte_array): ft4.accounts.account {
-    val account = require(ft4.accounts.account @? { account_id }, "Account %s not found".format(account_id));
+    val account = ft4_from_account_id(account_id);
     return _staking_get_current_delegate(account);
 }
 
