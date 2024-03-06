@@ -245,7 +245,7 @@ function test_withdrawal() {
     // Need a deposit to withdraw it
     assert_equals(staking_get_balance(test_account_alice), 0);
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, "staking_request_withdrawal", [])
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_request_withdrawal())
     ).op(
         staking_request_withdrawal()
     ).run_must_fail("Need something to withdraw.");
@@ -254,20 +254,20 @@ function test_withdrawal() {
     // Cannot withdraw without withdrawal request
     do_staking_deposit(rell.test.keypairs.alice, 7777);
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, "staking_withdraw", [])
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_withdraw())
     ).op(
         staking_withdraw()
     ).run_must_fail("Need a withdrawal request.");
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, "staking_request_withdrawal", [])
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_request_withdrawal())
     ).op(
         staking_request_withdrawal()
     ).run();
 
     // Cannot withdraw without aged withdrawal request
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, "staking_withdraw", [])
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_withdraw())
     ).op(
         staking_withdraw()
     ).run_must_fail("Need to wait for withdrawal request.");
@@ -278,7 +278,7 @@ function test_withdrawal() {
     rell.test.block().run();
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, "staking_withdraw", [])
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_withdraw())
     ).op(
         staking_withdraw()
     ).run();
@@ -287,7 +287,7 @@ function test_withdrawal() {
     // Ensure that the withdrawal request is cancelled on re-delegation
     do_staking_deposit(rell.test.keypairs.alice, 7777);
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, "staking_request_withdrawal", [])
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_request_withdrawal())
     ).op(
         staking_request_withdrawal()
     ).run();
@@ -298,12 +298,12 @@ function test_withdrawal() {
 
     // Only one withdrawal request at a time
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, "staking_request_withdrawal", [])
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_request_withdrawal())
     )
     .op(staking_request_withdrawal())
     .run();
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, "staking_request_withdrawal", [])
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_request_withdrawal())
     )
     .op(staking_request_withdrawal())
     .run_must_fail("Only one withdrawal request at a time.");
