@@ -42,10 +42,10 @@ function test_admin_register_account() {
         register_account(rell.test.pubkeys.alice)
     ).sign(chain_context.args.admin_privkey).run();
 
-    val account_ids = ft4.accounts.external.get_accounts_by_participant_id(rell.test.pubkeys.alice);
-    assert_equals(account_ids.size(), 1);
-
-    assert_not_null(user @? { .account.id == account_ids[0] });
+    val accounts_page = ft4.accounts.external.get_accounts_by_signer(rell.test.pubkeys.alice, null, null);
+    assert_equals(accounts_page.data.size(), 1);
+    val account = struct<ft4.accounts.account>.from_gtv_pretty(accounts_page.data[0]);
+    assert_not_null(user @? { .account.id == account.id });
 }
 
 function test_provider_register_account() {
@@ -58,10 +58,11 @@ function test_provider_register_account() {
         register_provider_account(provider_key.pub)
     ).sign(provider_key).run();
 
-    val account_ids = ft4.accounts.external.get_accounts_by_participant_id(provider_key.pub);
-    assert_equals(account_ids.size(), 1);
+    val accounts_page = ft4.accounts.external.get_accounts_by_signer(provider_key.pub, null, null);
+    assert_equals(accounts_page.data.size(), 1);
 
-    assert_not_null(provider_account @? { .account.id == account_ids[0] });
+    val account = struct<ft4.accounts.account>.from_gtv_pretty(accounts_page.data[0]);
+    assert_not_null(provider_account @? { .account.id == account.id });
     assert_not_null(provider_account @? { provider });
 }
 

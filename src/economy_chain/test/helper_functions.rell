@@ -12,9 +12,8 @@ namespace ft4 {
 import lib.auth;
 
 function do_create_account(keypair: rell.test.keypair, auth_privkey: byte_array, failure: text? = null): ft4.accounts.account? {
-    val eth_address = ft4.test_utils.evm_address_from_privkey(keypair.priv);
-    log("eth_address=%s".format(eth_address));
-    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(eth_address, set(["T"]));
+    val eth_address = crypto.eth_privkey_to_address(keypair.priv);
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(eth_address, set(["A", "T"]));
     val signature = ft4.test_utils.evm_sign(auth.get_message_to_sign(), keypair.priv);
 
     val tx = rell.test.tx().op(
@@ -146,8 +145,7 @@ function do_create_container(
     val initial_pool_balance = get_pool_balance();
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(keypair.priv, "create_container", [keypair.pub.to_gtv(), container_units.to_gtv(),
-            (1).to_gtv(), (0).to_gtv(), cluster_name.to_gtv(), auto_renew.to_gtv()])
+        ft4.test_utils.evm_auth_operation_for(keypair.priv, create_container(keypair.pub, container_units, 1, 0, cluster_name, auto_renew))
     ).op(
         create_container(keypair.pub, container_units, 1, 0, cluster_name, auto_renew)
     ).run();
