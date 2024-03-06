@@ -2,9 +2,8 @@ function register_provider_account_impl(provider_pubkey: pubkey) {
     val provider = require(provider @? { provider_pubkey }, "No provider found with pubkey %s".format(provider_pubkey));
     require(provider_account @? { provider } == null, "Account already registered. Only one account per provider is allowed");
 
-    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(provider_pubkey, set(["T"]));
-    val account_id = ft4.accounts.create_account_with_auth(auth_descriptor);
-    val account = ft4.accounts.account_by_id(account_id);
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(provider_pubkey, set(["A", "T"]));
+    val account = ft4.accounts.create_account_with_auth(auth_descriptor);
 
     create provider_account(provider, account);
 }
@@ -12,11 +11,10 @@ function register_provider_account_impl(provider_pubkey: pubkey) {
 function register_account_impl(pubkey) {
     require_admin();
 
-    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(pubkey, set(["T"]));
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(pubkey, set(["A", "T"]));
 
     before_account_registration(auth_descriptor);
-    val account_id = ft4.accounts.Unsafe.create_account_with_auth(auth_descriptor);
-    val account = ft4.accounts.account_by_id(account_id);
+    val account = ft4.accounts.Unsafe.create_account_with_auth(auth_descriptor);
     after_account_registration(account, auth_descriptor);
 }
 
@@ -49,7 +47,7 @@ function get_asset(): ft4.assets.asset {
 }
 
 function create_pool_account(): ft4.accounts.account {
-    return ft4.accounts.account_by_id(ft4.accounts.Unsafe.create_account_with_auth(get_pool_account_auth_descriptor()));
+    return ft4.accounts.Unsafe.create_account_with_auth(get_pool_account_auth_descriptor());
 }
 
 function get_pool_account() = ft4.accounts.account_by_id(get_pool_account_auth_descriptor().hash());
@@ -57,7 +55,7 @@ function get_pool_account() = ft4.accounts.account_by_id(get_pool_account_auth_d
 function get_pool_account_auth_descriptor() = ft4.accounts.single_sig_auth_descriptor(chain_context.args.pool_account_pubkey, set(["A", "T"]));
 
 function create_chromia_foundation_account(): ft4.accounts.account {
-    return ft4.accounts.account_by_id(ft4.accounts.Unsafe.create_account_with_auth(get_chromia_foundation_account_auth_descriptor()));
+    return ft4.accounts.Unsafe.create_account_with_auth(get_chromia_foundation_account_auth_descriptor());
 }
 
 function get_chromia_foundation_account() = ft4.accounts.account_by_id(get_chromia_foundation_account_auth_descriptor().hash());
