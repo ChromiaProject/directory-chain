@@ -52,22 +52,22 @@ function test_add_remove_providers() {
         .op(mint_to(test_account_dave, 9999999))
     .sign(admin_privkey).run();
 
-    assert_false(staking_is_active_provider(test_account_charlie));
+    assert_false(staking_is_active_provider(test_account_charlie.id));
 
     rell.test.tx().op(
-        staking_remove_provider(test_account_charlie)
+        staking_remove_provider(test_account_charlie.id)
     ).sign(admin_privkey).run_must_fail("Provider not active.");
 
     rell.test.tx()
-        .op(staking_add_provider('Charlie', test_account_charlie))
-        .op(staking_add_provider('Bob', test_account_bob))
+        .op(staking_add_provider('Charlie', test_account_charlie.id))
+        .op(staking_add_provider('Bob', test_account_bob.id))
     .sign(admin_privkey).run();
 
     rell.test.tx().op(
-        staking_add_provider('Charlie Too', test_account_charlie)
+        staking_add_provider('Charlie Too', test_account_charlie.id)
     ).sign(admin_privkey).run_must_fail("Provider cannot be active.");
 
-    assert_true(staking_is_active_provider(test_account_charlie));
+    assert_true(staking_is_active_provider(test_account_charlie.id));
 
     // Add some delegation
     // Have A deposit and delegate to C
@@ -80,21 +80,21 @@ function test_add_remove_providers() {
     // Wait for delegation to take effect
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
     rell.test.block().run();
-    assert_equals(staking_get_total_delegation_to(test_account_charlie), 9999999);
-    assert_equals(staking_get_total_delegation_to(test_account_bob), 11);
+    assert_equals(staking_get_total_delegation_to(test_account_charlie.id), 9999999);
+    assert_equals(staking_get_total_delegation_to(test_account_bob.id), 11);
 
     rell.test.tx().op(
-        staking_remove_provider(test_account_charlie)
+        staking_remove_provider(test_account_charlie.id)
     ).sign(admin_privkey).run();
 
-    assert_false(staking_is_active_provider(test_account_charlie));
+    assert_false(staking_is_active_provider(test_account_charlie.id));
 
     // Ensure delegates have been removed
-    assert_equals(staking_get_total_delegation_to(test_account_charlie), 0); // <- Removed immediately
-    assert_equals(staking_get_total_delegation_to(test_account_bob), 11); // <- Unchanged
+    assert_equals(staking_get_total_delegation_to(test_account_charlie.id), 0); // <- Removed immediately
+    assert_equals(staking_get_total_delegation_to(test_account_bob.id), 11); // <- Unchanged
 
     // Should have earned something
-    assert_true(staking_rewards_claimable_for(test_account_alice) > 0);
+    assert_true(staking_rewards_claimable_for(test_account_alice.id) > 0);
 }
 
 function test_delegation() {
@@ -112,15 +112,15 @@ function test_delegation() {
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms + 1);
     rell.test.block().run();
 
-    assert_equals(staking_rewards_claimable_for(test_account_alice), 0);
-    assert_equals(staking_rewards_claimable_for(test_account_bob), 0);
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id), 0);
+    assert_equals(staking_rewards_claimable_for(test_account_bob.id), 0);
 
     rell.test.tx().op(
-        staking_delegate(test_account_charlie)
+        staking_delegate(test_account_charlie.id)
     ).run_must_fail("Must be active provider.");
 
     rell.test.tx()
-        .op(staking_add_provider('Charlie', test_account_charlie))
+        .op(staking_add_provider('Charlie', test_account_charlie.id))
     .sign(admin_privkey).run();
 
     do_staking_deposit(rell.test.keypairs.alice, 8000);
@@ -128,17 +128,17 @@ function test_delegation() {
 
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
     rell.test.block().run();
-    assert_equals(staking_get_current_delegate(test_account_alice), test_account_charlie);
+    assert_equals(staking_get_current_delegate(test_account_alice.id), test_account_charlie);
 
-    assert_true(staking_rewards_claimable_for(test_account_alice) > 0);
+    assert_true(staking_rewards_claimable_for(test_account_alice.id) > 0);
 
     do_staking_undelegate(rell.test.keypairs.alice);
 
-    assert_equals(staking_get_current_delegate(test_account_alice), test_account_charlie); // No change now.
+    assert_equals(staking_get_current_delegate(test_account_alice.id), test_account_charlie); // No change now.
 
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
     rell.test.block().run();
-    assert_equals(staking_get_current_delegate(test_account_alice), get_null_account()); // Change in a week
+    assert_equals(staking_get_current_delegate(test_account_alice.id), get_null_account()); // Change in a week
 }
 
 function test_staking_deposit() {
@@ -146,12 +146,12 @@ function test_staking_deposit() {
 
     val test_account_alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
 
-    assert_equals(staking_get_balance(test_account_alice), 0);
+    assert_equals(staking_get_balance(test_account_alice.id), 0);
     rell.test.tx()
         .op(mint_to(test_account_alice, 9999999))
     .run();
     do_staking_deposit(rell.test.keypairs.alice, 7777);
-    assert_equals(staking_get_balance(test_account_alice), 7777);
+    assert_equals(staking_get_balance(test_account_alice.id), 7777);
 }
 
 function test_yield_and_payout_crudely () {
@@ -172,18 +172,18 @@ function test_yield_and_payout_crudely () {
     .run();
 
     // Check no yield
-    assert_equals(staking_rewards_claimable_for(test_account_alice), 0);
-    assert_equals(staking_rewards_claimable_for(test_account_bob), 0);
-    assert_equals(staking_rewards_claimable_for(test_account_charlie), 0);
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id), 0);
+    assert_equals(staking_rewards_claimable_for(test_account_bob.id), 0);
+    assert_equals(staking_rewards_claimable_for(test_account_charlie.id), 0);
 
     // FFWD
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
     rell.test.block().run(); rell.test.block().run();
 
     // Check no yield
-    assert_equals(staking_rewards_claimable_for(test_account_alice), 0);
-    assert_equals(staking_rewards_claimable_for(test_account_bob), 0);
-    assert_equals(staking_rewards_claimable_for(test_account_charlie), 0);
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id), 0);
+    assert_equals(staking_rewards_claimable_for(test_account_bob.id), 0);
+    assert_equals(staking_rewards_claimable_for(test_account_charlie.id), 0);
 
     // Deposit 100 with A
     // Deposit 200 with B
@@ -195,11 +195,11 @@ function test_yield_and_payout_crudely () {
     rell.test.block().run(); rell.test.block().run();
 
     // Check that there is a yield and that B is twice of A (allow for rounding)
-    val alice_amount = staking_rewards_claimable_for(test_account_alice);
-    val bob_amount = staking_rewards_claimable_for(test_account_bob);
+    val alice_amount = staking_rewards_claimable_for(test_account_alice.id);
+    val bob_amount = staking_rewards_claimable_for(test_account_bob.id);
     assert_true(alice_amount > 0);
     assert_true(bob_amount > 0);
-    assert_equals(staking_rewards_claimable_for(test_account_charlie), 0);
+    assert_equals(staking_rewards_claimable_for(test_account_charlie.id), 0);
     assert_true(1 >= abs(2 * alice_amount - bob_amount));
 
     // FFWD
@@ -207,29 +207,29 @@ function test_yield_and_payout_crudely () {
     rell.test.block().run(); rell.test.block().run();
 
     // Check both numbers have doubled (allow for rounding)
-    assert_true(1 >= abs(staking_rewards_claimable_for(test_account_alice) - 2 * alice_amount));
-    assert_true(1 >= abs(staking_rewards_claimable_for(test_account_bob) - 2 * bob_amount));
-    assert_equals(staking_rewards_claimable_for(test_account_charlie), 0);
+    assert_true(1 >= abs(staking_rewards_claimable_for(test_account_alice.id) - 2 * alice_amount));
+    assert_true(1 >= abs(staking_rewards_claimable_for(test_account_bob.id) - 2 * bob_amount));
+    assert_equals(staking_rewards_claimable_for(test_account_charlie.id), 0);
 
     // Do payout
     rell.test.tx().op(staking_claim_rewards()).sign(admin_privkey).run();
 
     // Ensure there's no (more than a few seconds worth of) claimable yield after payout
-    assert_equals(staking_rewards_claimable_for(test_account_alice), 0);
-    assert_equals(staking_rewards_claimable_for(test_account_bob), 0);
-    assert_equals(staking_rewards_claimable_for(test_account_charlie), 0);
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id), 0);
+    assert_equals(staking_rewards_claimable_for(test_account_bob.id), 0);
+    assert_equals(staking_rewards_claimable_for(test_account_charlie.id), 0);
 
     // Run the clock forward a 6 months and check we have claimable rewards
     rell.test.set_next_block_time_delta(integer(millis_per_year / 2));
     rell.test.block().run(); rell.test.block().run();
-    assert_true(staking_rewards_claimable_for(test_account_alice) > 100);
-    assert_true(staking_rewards_claimable_for(test_account_bob) > 100);
+    assert_true(staking_rewards_claimable_for(test_account_alice.id) > 100);
+    assert_true(staking_rewards_claimable_for(test_account_bob.id) > 100);
 
     // Run the clock forward another 24 months and see that we have less, eg. payout has triggered
     rell.test.set_next_block_time_delta(integer(millis_per_year * 2));
     rell.test.block().run(); rell.test.block().run();
-    assert_true(staking_rewards_claimable_for(test_account_alice) < 100);
-    assert_true(staking_rewards_claimable_for(test_account_bob) < 100);
+    assert_true(staking_rewards_claimable_for(test_account_alice.id) < 100);
+    assert_true(staking_rewards_claimable_for(test_account_bob.id) < 100);
 }
 
 function test_withdrawal() {
@@ -243,7 +243,7 @@ function test_withdrawal() {
     .run();
 
     // Need a deposit to withdraw it
-    assert_equals(staking_get_balance(test_account_alice), 0);
+    assert_equals(staking_get_balance(test_account_alice.id), 0);
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_request_withdrawal())
     ).op(
@@ -271,7 +271,7 @@ function test_withdrawal() {
     ).op(
         staking_withdraw()
     ).run_must_fail("Need to wait for withdrawal request.");
-    assert_equals(staking_get_balance(test_account_alice), 7777);
+    assert_equals(staking_get_balance(test_account_alice.id), 7777);
 
     // Simple withdraw
     rell.test.set_next_block_time_delta(chain_context.args.staking_withdrawal_delay_ms);
@@ -282,7 +282,7 @@ function test_withdrawal() {
     ).op(
         staking_withdraw()
     ).run();
-    assert_equals(staking_get_balance(test_account_alice), 0);
+    assert_equals(staking_get_balance(test_account_alice.id), 0);
 
     // Ensure that the withdrawal request is cancelled on re-delegation
     do_staking_deposit(rell.test.keypairs.alice, 7777);
@@ -291,10 +291,10 @@ function test_withdrawal() {
     ).op(
         staking_request_withdrawal()
     ).run();
-    assert_false(null == staking_get_withdrawal_time(test_account_alice));
-    rell.test.tx().op(staking_add_provider('Bob', test_account_bob)).sign(admin_privkey).run();
+    assert_false(null == staking_get_withdrawal_time(test_account_alice.id));
+    rell.test.tx().op(staking_add_provider('Bob', test_account_bob.id)).sign(admin_privkey).run();
     do_staking_delegate(rell.test.keypairs.alice, test_account_bob);
-    assert_true(null == staking_get_withdrawal_time(test_account_alice));
+    assert_true(null == staking_get_withdrawal_time(test_account_alice.id));
 
     // Only one withdrawal request at a time
     rell.test.tx().op(
@@ -322,12 +322,12 @@ function test_staking_get_total_delegation_to() {
         .op(mint_to(test_account_dave, 9999999))
     .run();
 
-    assert_false(staking_is_active_provider(test_account_bob));
+    assert_false(staking_is_active_provider(test_account_bob.id));
     rell.test.tx()
         // Add A to the provider list
-        .op(staking_add_provider('Alice', test_account_alice))
+        .op(staking_add_provider('Alice', test_account_alice.id))
         // Add B to the provider list
-        .op(staking_add_provider('Bob', test_account_bob))
+        .op(staking_add_provider('Bob', test_account_bob.id))
     .sign(admin_privkey).run();
     // Have C deposit 9 and delegate to A
     do_staking_deposit(rell.test.keypairs.charlie, 9);
@@ -337,8 +337,8 @@ function test_staking_get_total_delegation_to() {
     do_staking_delegate(rell.test.keypairs.dave, test_account_bob);
 
     // Check the that neither A nor B has a balance delegated to them
-    assert_equals(staking_get_total_delegation_to(test_account_alice), 0);
-    assert_equals(staking_get_total_delegation_to(test_account_bob), 0);
+    assert_equals(staking_get_total_delegation_to(test_account_alice.id), 0);
+    assert_equals(staking_get_total_delegation_to(test_account_bob.id), 0);
 
     // Wait a period
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
@@ -346,20 +346,20 @@ function test_staking_get_total_delegation_to() {
 
     // Check that A has 9 delegated to it
     // Check that B has 11 delegated to it
-    assert_equals(staking_get_total_delegation_to(test_account_alice), 9);
-    assert_equals(staking_get_total_delegation_to(test_account_bob), 11);
+    assert_equals(staking_get_total_delegation_to(test_account_alice.id), 9);
+    assert_equals(staking_get_total_delegation_to(test_account_bob.id), 11);
 
     // Have C deposit an additional 7
     do_staking_deposit(rell.test.keypairs.charlie, 7);
 
     // Check that A has 16 delegated to it (adding stake is immediate)
-    assert_equals(staking_get_total_delegation_to(test_account_alice), 16);
+    assert_equals(staking_get_total_delegation_to(test_account_alice.id), 16);
 
     // Have D change their their delegation to A
     do_staking_delegate(rell.test.keypairs.dave, test_account_alice);
 
     // Check that A has 16 delegated to it (changing delegation takes time)
-    assert_equals(staking_get_total_delegation_to(test_account_alice), 16);
+    assert_equals(staking_get_total_delegation_to(test_account_alice.id), 16);
 
     // Wait a period
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
@@ -367,8 +367,8 @@ function test_staking_get_total_delegation_to() {
 
     // Check that A has 27 delegated to it
     // Check that B has 0 delegated to it
-    assert_equals(staking_get_total_delegation_to(test_account_alice), 27);
-    assert_equals(staking_get_total_delegation_to(test_account_bob), 0);
+    assert_equals(staking_get_total_delegation_to(test_account_alice.id), 27);
+    assert_equals(staking_get_total_delegation_to(test_account_bob.id), 0);
 
     // Have D undelegate
     do_staking_undelegate(rell.test.keypairs.dave);
@@ -378,6 +378,6 @@ function test_staking_get_total_delegation_to() {
     rell.test.block().run();
 
     // Check that A has 16 delegated to it
-    assert_equals(staking_get_total_delegation_to(test_account_alice), 16);
-    assert_equals(staking_get_total_delegation_to(test_account_bob), 0);
+    assert_equals(staking_get_total_delegation_to(test_account_alice.id), 16);
+    assert_equals(staking_get_total_delegation_to(test_account_bob.id), 0);
 }
