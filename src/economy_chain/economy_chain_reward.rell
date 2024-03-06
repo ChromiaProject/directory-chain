@@ -78,7 +78,7 @@ function pay_out_node_rewards(node_reward: map<node, big_integer>) {
 
         val pay_reward_result = pay_reward(pool, pool_balance, pa.account, pa.reward_debt, reward, "provider %s".format(pa.provider.pubkey));
 
-        create_or_update_node_payed_reward(node.pubkey, pay_reward_result.payed_reward);
+        save_node_payed_reward(node.pubkey, pay_reward_result.payed_reward, op_context.last_block_time);
         pa.reward_debt = pay_reward_result.reward_debt;
         pool_balance = pay_reward_result.pool_balance;
     }
@@ -168,11 +168,6 @@ function transfer_to_pool_impl(amount: big_integer) {
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), amount);
 }
 
-function create_or_update_node_payed_reward(node: byte_array, value: big_integer){
-    val node_payed_reward = node_payed_reward @? { node };
-    if (node_payed_reward == null) {
-        create node_payed_reward(node, value, op_context.last_block_time);
-    } else {
-        update node_payed_reward @ { node } (value, op_context.last_block_time);
-    }
+function save_node_payed_reward(node: byte_array, value: big_integer, time: timestamp){
+    create node_payed_reward(node, value, time);
 }

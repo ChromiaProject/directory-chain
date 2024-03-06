@@ -11,17 +11,12 @@ function receive_node_availability_report(sender: byte_array, body: gtv) {
     pay_rewards(cluster, node_availability_report);
 }
 
-function save_node_availability(report: node_availability_report){
+function save_node_availability(report: node_availability_report) {
     for ((node, availability) in report.node_availability) {
-        create_or_update_node_availability(node, availability, report.start_time, report.end_time);
-    }
-}
-
-function create_or_update_node_availability(node: byte_array, availability: decimal, start_time: integer, end_time: integer) {
-    val node_availability = node_availability @? { node };
-    if (node_availability == null) {
-        create node_availability(node, availability, start_time, end_time);
-    } else {
-        update node_availability @ { node } (availability, start_time, end_time);
+        create node_availability(
+            node = node,
+            availability = availability,
+            start_time = report.start_time,
+            end_time = report.end_time);
     }
 }
