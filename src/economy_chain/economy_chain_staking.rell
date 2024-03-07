@@ -82,7 +82,7 @@ function staking_deposit_auth_message(gtv): text {
         chain_context.args.asset_symbol);
 }
 
-operation staking_deposit(amount: integer, delegateTo: ft4.accounts.account? = null) {
+operation staking_deposit(amount: integer, delegateTo: byte_array? = null) {
     require_initialized();
     require(amount > 0, "Can't deposit nothing (or less)!");
 
@@ -124,12 +124,18 @@ operation staking_deposit(amount: integer, delegateTo: ft4.accounts.account? = n
 
     if (null != delegateTo) {
         // Below check is duplicated, but less overhead than 2 wrapping functions.
-        require(staking_is_active_provider(delegateTo), "Must be active provider.");
-        _staking_delegate(staker, delegateTo);
+        val delegateToAccount = ft4_from_account_id(delegateTo);
+        require(_staking_is_active_provider(delegateToAccount), "Must be active provider.");
+        _staking_delegate(staker, delegateToAccount);
     }
 }
 
-query staking_get_balance(staker: ft4.accounts.account) = staker_state @? { .staker == staker and .latest==true } ( .balance ) ?: 0;
+query staking_get_balance(account_id: byte_array) {
+    val account = ft4_from_account_id(account_id);
+    return _staking_get_balance(account);
+}
+
+function _staking_get_balance(staker: ft4.accounts.account) = staker_state @? { .staker == staker and .latest==true } ( .balance ) ?: 0;
 
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
@@ -147,9 +153,9 @@ operation staking_request_withdrawal() {
     require_initialized();
 
     val staker = ft4.auth.authenticate();
-    require(staking_get_balance(staker) > 0, "Need something to withdraw.");
-    require(get_null_account() == staking_get_current_delegate(staker), "Must unstaker before requesting a withdrawal.");
-    require(null == staking_get_withdrawal_time(staker), "Only one withdrawal request at a time.");
+    require(_staking_get_balance(staker) > 0, "Need something to withdraw.");
+    require(get_null_account() == _staking_get_current_delegate(staker), "Must unstaker before requesting a withdrawal.");
+    require(null == _staking_get_withdrawal_time(staker), "Only one withdrawal request at a time.");
 
     // Make a new request
     require(_staking_last_known_time() > 0, "Require an actual time");
@@ -171,12 +177,12 @@ function staking_withdraw_auth_message(gtv): text {
 operation staking_withdraw() {
     require_initialized();
     val staker = ft4.auth.authenticate();
-    val withdrawal_time = staking_get_withdrawal_time(staker);
+    val withdrawal_time = _staking_get_withdrawal_time(staker);
     require(withdrawal_time, "Need a withdrawal request.");
     require(_staking_last_known_time() >= withdrawal_time, "Need to wait for withdrawal request.");
 
     // Send the balance back to them through ft4
-    ft4.assets.Unsafe.transfer(get_pool_account(), staker, get_asset(), staking_get_balance(staker));
+    ft4.assets.Unsafe.transfer(get_pool_account(), staker, get_asset(), _staking_get_balance(staker));
 
     val existing = staker_state @ { .staker == staker and .latest==true };
     update staker_state @? { .staker == staker and .latest==true } ( latest=false );
@@ -194,7 +200,12 @@ operation staking_withdraw() {
     update staker_withdrawal_request @ {.staker == staker } (used = true );
 }
 
-query staking_get_withdrawal_time(staker: ft4.accounts.account): timestamp? {
+query staking_get_withdrawal_time(account_id: byte_array): timestamp? {
+    val staker = ft4_from_account_id(account_id);
+    return _staking_get_withdrawal_time(staker);
+}
+
+function _staking_get_withdrawal_time(staker: ft4.accounts.account): timestamp? {
     val valid_request = staker_withdrawal_request @? {.staker == staker and not .used};
     return
         if (null != valid_request)
@@ -204,12 +215,22 @@ query staking_get_withdrawal_time(staker: ft4.accounts.account): timestamp? {
         ;
 }
 
-query staking_is_active_provider(provider: ft4.accounts.account): boolean {
+query staking_is_active_provider(account_id: byte_array): boolean {
+    val staker = ft4_from_account_id(account_id);
+    return _staking_is_active_provider(staker);
+}
+
+function _staking_is_active_provider(provider: ft4.accounts.account): boolean {
     val provider_registration = provider_registration @? {.provider == provider} (.active, @omit @sort_desc .rowid) limit 1;
     return provider_registration ?: false;
 }
 
-query staking_get_total_delegation_to(provider: ft4.accounts.account): integer {
+query staking_get_total_delegation_to(account_id: byte_array): integer {
+    val staker = ft4_from_account_id(account_id);
+    return _staking_get_total_delegation_to(staker);
+}
+
+function _staking_get_total_delegation_to(provider: ft4.accounts.account): integer {
     return
         // Look at the full staker state 
         (s: staker_state) @ {
@@ -228,7 +249,12 @@ query staking_get_total_delegation_to(provider: ft4.accounts.account): integer {
     ;
 }
 
-query staking_rewards_claimable_for(staker: ft4.accounts.account): integer {
+query staking_rewards_claimable_for(account_id: byte_array): integer {
+    val staker = ft4_from_account_id(account_id);
+    return _staking_rewards_claimable_for(staker);
+}
+
+function _staking_rewards_claimable_for(staker: ft4.accounts.account): integer {
 
     // We are going to limit ourselves here by simply calculating the reward as of the last payout date at the
     // prevailing reward rate. This will give a "wrong" answer as a portion of the reward will be paid at the
@@ -276,17 +302,19 @@ query staking_rewards_claimable_for(staker: ft4.accounts.account): integer {
     return integer(token_reward); // Can only transfer whole minor units
 }
 
-operation staking_add_provider(name: text, provider: ft4.accounts.account) {
+operation staking_add_provider(name: text, account_id: byte_array) {
     require_initialized();
     require_admin();
-    require(not staking_is_active_provider(provider), "Provider cannot be active.");
+    val provider = ft4_from_account_id(account_id);
+    require(not _staking_is_active_provider(provider), "Provider cannot be active.");
     create provider_registration(_staking_last_known_time(), provider, name, true);
 }
 
-operation staking_remove_provider(provider: ft4.accounts.account) {
+operation staking_remove_provider(account_id: byte_array) {
     require_initialized();
     require_admin();
-    require(staking_is_active_provider(provider), "Provider not active.");
+    val provider = ft4_from_account_id(account_id);
+    require(_staking_is_active_provider(provider), "Provider not active.");
 
     // Unwind delegations immediately
     // Find all the latest delegations involving removed provider
@@ -303,7 +331,7 @@ operation staking_remove_provider(provider: ft4.accounts.account) {
             cutover_time = staking_get_last_known_time(),
             staker_state_time = staking_get_last_known_time(),
             previous_staker_state_time = existing.staker_state_time,
-            old_provider = staking_get_current_delegate(removed_delegation),
+            old_provider = _staking_get_current_delegate(removed_delegation),
             new_provider = get_null_account(),
             balance = existing.balance,
             previous_balance = existing.balance,
@@ -328,9 +356,10 @@ function staking_delegate_auth_message(gtv): text {
     return "Please sign the message to set the provider.";
 }
 
-operation staking_delegate(provider: ft4.accounts.account) {
+operation staking_delegate(provider_id: byte_array) {
     require_initialized();
-    require(staking_is_active_provider(provider), "Must be active provider.");
+    val provider = require(ft4.accounts.account @? { provider_id }, "Account %s not found".format(provider_id));
+    require(_staking_is_active_provider(provider), "Must be active provider.");
     val staker = ft4.auth.authenticate();
     _staking_delegate(staker, provider);
 }
@@ -354,14 +383,14 @@ operation staking_undelegate() {
 }
 
 function _staking_delegate(delegator: ft4.accounts.account, provider: ft4.accounts.account) {
-    require(staking_get_balance(delegator) > 0, "Must have a stake to staker.");
+    require(_staking_get_balance(delegator) > 0, "Must have a stake to staker.");
 
     // Clear any withdrawal request
     update staker_withdrawal_request @? {not .used and .staker == delegator} (used = true);
 
     // Get the values before messing with the flag
     val existing = staker_state @ {.latest and .staker == delegator};
-    val current_provider = staking_get_current_delegate(delegator);
+    val current_provider = _staking_get_current_delegate(delegator);
 
     // Clear flag from previous
     update staker_state @? {.staker == delegator and .latest} (latest = false);
@@ -411,7 +440,7 @@ function _staking_claim_rewards() {
     // Get a list of payouts
     for(staker in staker_state @* {} (@group .staker) ) {
         // Find the amounts
-        val payout_amount = staking_rewards_claimable_for(staker);
+        val payout_amount = _staking_rewards_claimable_for(staker);
         payout_list.add((staker, payout_amount));
         total_amount += payout_amount;
     }
@@ -444,7 +473,12 @@ query staking_get_current_rate(): decimal {
     return current_rate;
 }
 
-query staking_get_current_delegate(staker: ft4.accounts.account): ft4.accounts.account {
+query staking_get_current_delegate(account_id: byte_array): ft4.accounts.account {
+    val account = ft4_from_account_id(account_id);
+    return _staking_get_current_delegate(account);
+}
+
+function _staking_get_current_delegate(staker: ft4.accounts.account): ft4.accounts.account {
     val current_state = staker_state @? { .staker == staker and .latest };
     return
         if  (null == current_state) get_null_account()
