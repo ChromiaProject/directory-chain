@@ -1,0 +1,44 @@
+@test module;
+
+import ^^.*;
+import ^.helper_operations.*;
+
+function test_receive_price_oracle_update() {
+
+    val name = "Chromia Test";
+    val second_name = "second";
+
+    // Create entity
+    rell.test.tx().op(
+        icmf_message_op(x"", Token_Price_Changed_Topic, body = Token_Price_Changed_Body(
+            name,
+            1.1
+        ).to_gtv())
+    ).run();
+
+    assert_equals(price_oracle_rates @ { name } ( .price ), 1.1);
+    assert_equals(economy_constants.chr_per_usd, 1.1);
+
+    // Update entity
+    rell.test.tx().op(
+        icmf_message_op(x"", Token_Price_Changed_Topic, body = Token_Price_Changed_Body(
+            name,
+            1.123456
+        ).to_gtv())
+    ).run();
+
+    assert_equals(price_oracle_rates @ { name } ( .price ), 1.123456);
+    assert_equals(economy_constants.chr_per_usd, 1.123456);
+
+    // Create a second entity - keeps the first one unchanged
+    rell.test.tx().op(
+        icmf_message_op(x"", Token_Price_Changed_Topic, body = Token_Price_Changed_Body(
+            second_name,
+            3.4
+        ).to_gtv())
+    ).run();
+
+    assert_equals(price_oracle_rates @ { second_name } ( .price ), 3.4);
+    assert_equals(price_oracle_rates @ { name } ( .price ), 1.123456);
+    assert_equals(economy_constants.chr_per_usd, 1.123456);
+}
