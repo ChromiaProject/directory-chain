@@ -90,14 +90,27 @@ function pay_reward(pool: ft4.accounts.account, pool_balance: big_integer, accou
 
     var amount_to_transfer = 0L;
     if (total_reward_debt > 0) {
-        if (pool_balance >= total_reward_debt) {
+        if (pool_balance < total_reward_debt) {
+            if (pool_details.last_refill_millis + chain_context.args.test_chr_pool_refill_limit_millis > op_context.last_block_time) {
+                log("Pool account have already claimed %s %s within the last %s millis.".format(
+                    chain_context.args.pool_amount_to_mint,
+                    chain_context.args.asset_symbol,
+                    chain_context.args.test_chr_pool_refill_limit_millis));
+            } else {
+                log("Mint %s %s to pool account.".format(chain_context.args.pool_amount_to_mint, chain_context.args.asset_symbol));
+                ft4.assets.Unsafe.mint(pool, get_asset(), chain_context.args.pool_amount_to_mint);
+                pool_details.last_refill_millis = op_context.last_block_time;
+                total_pool_balance += chain_context.args.pool_amount_to_mint;
+            }
+        }
+        if (total_pool_balance >= total_reward_debt) {
             amount_to_transfer = total_reward_debt;
-        } else if (pool_balance <= 0) { // No funds to pay reward
+        } else if (total_pool_balance <= 0) { // No funds to pay reward
             log("Reward pool is empty!");
             amount_to_transfer = 0;
         } else { // Missing funds to pay full reward
             log("Reward pool does not have enough funds to transfer full reward.");
-            amount_to_transfer = pool_balance;
+            amount_to_transfer = total_pool_balance;
         }
         if (amount_to_transfer > 0) {
             log("Transfer reward %s to %s".format(amount_to_transfer, identity));
