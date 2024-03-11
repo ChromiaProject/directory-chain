@@ -377,6 +377,24 @@ function test_pay_reward_to_chromia_foundation() {
     assert_equals(get_pool_balance(), 0);
 }
 
+function test_pay_reward_new_account_and_empty_pool() {
+
+    val alice = run_pay_reward(1000, false);
+
+    assert_equals(get_account_balance(alice), 1000000000);
+    assert_equals(get_pool_balance(), 0);
+}
+
+function test_pay_reward_mint_pool_account() {
+    rell.test.set_next_block_time_delta(86400001);
+    rell.test.block().run();
+
+    val alice = run_pay_reward(1000, true);
+
+    assert_equals(get_account_balance(alice), 1000001000);
+    assert_equals(get_pool_balance(), 999999000);
+}
+
 
 ///////////////////
 // Helper functions
@@ -421,6 +439,10 @@ function run_pay_rewards(pool_assets: big_integer = 0, calculate_system_reward: 
     val calculate_cluster = if (calculate_system_reward) system_cluster else cluster;
     add_cluster_node(calculate_cluster.name, node_pubkey, false);
 
+    rell.test.tx().op(
+        set_pool_details_last_refill_millis_last_block_time_op()
+    ).run();
+
     val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     if (pool_assets != 0) {
         add_assets_to_pool(pool_assets);
@@ -434,4 +456,25 @@ function run_pay_rewards(pool_assets: big_integer = 0, calculate_system_reward: 
 
     val pa = provider_account @ { provider @ { provider_pubkey } };
     return pa;
+}
+
+function run_pay_reward(reward: big_integer = 0, refill: boolean) {
+
+    rell.test.tx().op(init()).run();
+    val pool = get_pool_account();
+    var pool_balance = get_account_balance(pool);
+
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+
+    if (not refill) {
+        rell.test.tx().op(
+            set_pool_details_last_refill_millis_last_block_time_op()
+        ).run();
+    }
+
+    rell.test.tx().op(
+        pay_reward_op(pool, pool_balance, alice, 0, reward, "test")
+    ).run();
+
+    return alice;
 }
