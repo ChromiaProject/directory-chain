@@ -35,9 +35,21 @@ entity staker_state {
     cutover_time: timestamp;
     new_provider: ft4.accounts.account;
     old_provider: ft4.accounts.account;
+
+    // Native balances
     balance_native: integer;
-    previous_balance_native: integer; // We have no look-back windowing functions
+    previous_balance_native: integer;
+
+    // BSC balances
+    balance_bsc: integer;
+    previous_balance_bsc: integer;
+
+    // Ethereum Mainnet balances
+    balance_eth: integer;
+    previous_balance_eth: integer;
+
     mutable latest: boolean; // We have no windowing functions, and want to group by other fields
+
     index staker;
 }
 
@@ -115,6 +127,10 @@ operation staking_deposit_native(amount: integer, delegateTo: byte_array? = null
             staker = staker,
             balance_native = amount + existing.balance_native,
             previous_balance_native = existing.balance_native,
+            balance_bsc = existing.balance_bsc,
+            previous_balance_bsc = existing.balance_bsc,
+            balance_eth = existing.balance_eth,
+            previous_balance_eth = existing.balance_eth,
             cutover_time = existing.cutover_time,
             new_provider = existing.new_provider,
             old_provider = existing.old_provider,
@@ -128,6 +144,10 @@ operation staking_deposit_native(amount: integer, delegateTo: byte_array? = null
             staker = staker,
             balance_native = amount,
             previous_balance_native = 0,
+            balance_bsc = 0,
+            previous_balance_bsc = 0,
+            balance_eth = 0,
+            previous_balance_eth = 0,
             cutover_time = _staking_last_known_time(),
             new_provider = get_null_account(),
             old_provider = get_null_account(),
@@ -148,7 +168,7 @@ query staking_get_balance(account_id: byte_array) {
     return _staking_get_balance(account);
 }
 
-function _staking_get_balance(staker: ft4.accounts.account) = staker_state @? { .staker == staker and .latest==true } ( .balance_native ) ?: 0;
+function _staking_get_balance(staker: ft4.accounts.account) = staker_state @? { .staker == staker and .latest==true } ( .balance_native + .balance_bsc + .balance_eth ) ?: 0;
 
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
@@ -205,6 +225,10 @@ operation staking_withdraw() {
         staker = staker,
         balance_native = 0,
         previous_balance_native = existing.balance_native,
+        balance_bsc = existing.balance_bsc,
+        previous_balance_bsc = existing.balance_bsc,
+        balance_eth = existing.balance_eth,
+        previous_balance_eth = existing.balance_eth,
         cutover_time = existing.cutover_time,
         new_provider = existing.new_provider,
         old_provider = existing.old_provider,
@@ -259,7 +283,7 @@ function _staking_get_total_delegation_to(provider: ft4.accounts.account): integ
             )
         } (
             // sum the balances
-            @sum s.balance_native
+            @sum (s.balance_native + s.balance_bsc + s.balance_eth)
         )
     ;
 }
@@ -297,14 +321,14 @@ function _staking_rewards_claimable_for(staker: ft4.accounts.account): integer {
                 (
                     max(.staker_state_time, last_payout_time)
                         - max(.previous_staker_state_time, last_payout_time)
-                ) * .previous_balance_native
+                ) * (.previous_balance_native + .previous_balance_bsc + .previous_balance_eth)
             )
             // TODO We need to consider the cutoff time
             +
             // Interpolated last row from latest row
             (
                 when (.latest) {
-                    true -> (_staking_last_known_time() - max(.staker_state_time, last_payout_time)) * .balance_native;
+                    true -> (_staking_last_known_time() - max(.staker_state_time, last_payout_time)) * (.balance_native + .balance_bsc + .balance_eth);
                     else -> 0;
                 }
             )
@@ -350,6 +374,10 @@ operation staking_remove_provider(account_id: byte_array) {
             new_provider = get_null_account(),
             balance_native = existing.balance_native,
             previous_balance_native = existing.balance_native,
+            balance_bsc = existing.balance_bsc,
+            previous_balance_bsc = existing.balance_bsc,
+            balance_eth = existing.balance_eth,
+            previous_balance_eth = existing.balance_eth,
             latest = true
         );
     }
@@ -420,6 +448,10 @@ function _staking_delegate(delegator: ft4.accounts.account, provider: ft4.accoun
         old_provider = current_provider,
         balance_native = existing.balance_native,
         previous_balance_native = existing.balance_native,
+        balance_bsc = existing.balance_bsc,
+        previous_balance_bsc = existing.balance_bsc,
+        balance_eth = existing.balance_eth,
+        previous_balance_eth = existing.balance_eth,
         latest = true
     );
 }
