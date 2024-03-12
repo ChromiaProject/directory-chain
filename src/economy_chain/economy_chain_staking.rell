@@ -53,6 +53,15 @@ entity staker_state {
     index staker;
 }
 
+struct staker_state_delta {
+    cutover_time: timestamp?;
+    new_provider: ft4.accounts.account?;
+    old_provider: ft4.accounts.account?;
+    balance_native: integer?;
+    balance_bsc: integer?;
+    balance_eth: integer?;
+}
+
 entity reward_rate {
     reward_rate_time: timestamp;
     reward_rate: decimal;
@@ -119,30 +128,19 @@ operation staking_deposit_native(amount: integer, delegateTo: byte_array? = null
     ft4.assets.Unsafe.transfer(staker, get_pool_account(), get_asset(), amount);
 
     val existing = staker_state @? { .staker == staker and .latest };
-    update staker_state @? { .staker == staker and .latest } ( latest = false );
-    if (null != existing)
-        create staker_state(
-            staker_state_time = _staking_last_known_time(),
-            previous_staker_state_time = existing.staker_state_time,
-            staker = staker,
+    if (null != existing) {
+        val delta = staker_state_delta(
             balance_native = amount + existing.balance_native,
-            previous_balance_native = existing.balance_native,
-            balance_bsc = existing.balance_bsc,
-            previous_balance_bsc = existing.balance_bsc,
-            balance_eth = existing.balance_eth,
-            previous_balance_eth = existing.balance_eth,
-            cutover_time = existing.cutover_time,
-            new_provider = existing.new_provider,
-            old_provider = existing.old_provider,
-            latest = true
+            cutover_time = null, new_provider = null, old_provider = null, balance_bsc = null, balance_eth = null
         );
-    else
+        _staking_apply_staker_state_delta(staker, delta);
+    } else {
         // First deposit
         create staker_state(
             staker_state_time = _staking_last_known_time(),
             previous_staker_state_time = 0,
             staker = staker,
-            balance_native = amount,
+            balance_native = amount,    
             previous_balance_native = 0,
             balance_bsc = 0,
             previous_balance_bsc = 0,
@@ -153,7 +151,7 @@ operation staking_deposit_native(amount: integer, delegateTo: byte_array? = null
             old_provider = get_null_account(),
             latest = true
         );
-    ;
+    };
 
     if (null != delegateTo) {
         // Below check is duplicated, but less overhead than 2 wrapping functions.
@@ -217,24 +215,15 @@ operation staking_withdraw() {
     // Send the balance back to them through ft4
     ft4.assets.Unsafe.transfer(get_pool_account(), staker, get_asset(), _staking_get_balance(staker));
 
-    val existing = staker_state @ { .staker == staker and .latest==true };
-    update staker_state @? { .staker == staker and .latest==true } ( latest=false );
-    create staker_state(
-        staker_state_time =_staking_last_known_time(),
-        previous_staker_state_time = existing.staker_state_time,
-        staker = staker,
+    // Apply change
+    val delta = staker_state_delta(
+        cutover_time = staking_get_last_known_time(),
         balance_native = 0,
-        previous_balance_native = existing.balance_native,
-        balance_bsc = existing.balance_bsc,
-        previous_balance_bsc = existing.balance_bsc,
-        balance_eth = existing.balance_eth,
-        previous_balance_eth = existing.balance_eth,
-        cutover_time = existing.cutover_time,
-        new_provider = existing.new_provider,
-        old_provider = existing.old_provider,
-        latest = true
+        new_provider = null, old_provider = null, balance_bsc = null, balance_eth = null
     );
-    update staker_withdrawal_request @ {.staker == staker } (used = true );
+    _staking_apply_staker_state_delta(staker, delta);
+
+    update staker_withdrawal_request @ {.staker == staker } (used = true);
 }
 
 query staking_get_withdrawal_time(account_id: byte_array): timestamp? {
@@ -361,25 +350,14 @@ operation staking_remove_provider(account_id: byte_array) {
     val removed_delegations = staker_state @* { .new_provider == provider and .latest } (@group .staker);
     // then for each :-
     for (removed_delegation in removed_delegations) {
-        val existing = staker_state @ {.latest and .staker == removed_delegation};
-        // clear the latest flag
-        update staker_state @ {.latest and .staker == removed_delegation} (.latest = false);
-        // ... add an immediate transition to the prior
-        create staker_state(
-            staker = removed_delegation,
+        // Apply undelegation
+        val delta = staker_state_delta(
             cutover_time = staking_get_last_known_time(),
-            staker_state_time = staking_get_last_known_time(),
-            previous_staker_state_time = existing.staker_state_time,
-            old_provider = _staking_get_current_delegate(removed_delegation),
             new_provider = get_null_account(),
-            balance_native = existing.balance_native,
-            previous_balance_native = existing.balance_native,
-            balance_bsc = existing.balance_bsc,
-            previous_balance_bsc = existing.balance_bsc,
-            balance_eth = existing.balance_eth,
-            previous_balance_eth = existing.balance_eth,
-            latest = true
+            old_provider = _staking_get_current_delegate(removed_delegation),
+            balance_native = null, balance_bsc = null, balance_eth = null
         );
+        _staking_apply_staker_state_delta(removed_delegation, delta);
     }
 
     val name = provider_registration @ { .provider == provider } ( .name );
@@ -432,28 +410,16 @@ function _staking_delegate(delegator: ft4.accounts.account, provider: ft4.accoun
     update staker_withdrawal_request @? {not .used and .staker == delegator} (used = true);
 
     // Get the values before messing with the flag
-    val existing = staker_state @ {.latest and .staker == delegator};
     val current_provider = _staking_get_current_delegate(delegator);
 
-    // Clear flag from previous
-    update staker_state @? {.staker == delegator and .latest} (latest = false);
-
-    // New delegation record
-    create staker_state(
-        staker_state_time = staking_get_last_known_time(),
-        staker = existing.staker,
+    // Apply change
+    val delta = staker_state_delta(
         cutover_time = _staking_cannot_change_before(),
-        previous_staker_state_time = existing.staker_state_time,
         new_provider = provider,
         old_provider = current_provider,
-        balance_native = existing.balance_native,
-        previous_balance_native = existing.balance_native,
-        balance_bsc = existing.balance_bsc,
-        previous_balance_bsc = existing.balance_bsc,
-        balance_eth = existing.balance_eth,
-        previous_balance_eth = existing.balance_eth,
-        latest = true
+        balance_native = null, balance_bsc = null, balance_eth = null
     );
+    _staking_apply_staker_state_delta(delegator, delta);
 }
 
 @extend(ft4.auth.auth_handler)
@@ -544,6 +510,31 @@ function __staking_begin_block(height: integer) {
 function _pay_to(staker: ft4.accounts.account, amount: integer) {
     // We pay from the same pool account as provider rewards
     ft4.assets.Unsafe.transfer(get_pool_account(), staker, get_asset(), amount);
+}
+
+function _staking_apply_staker_state_delta(staker: ft4.accounts.account, delta: staker_state_delta) {
+    // Snapshot existing state
+    val existing = staker_state @ {.latest and .staker == staker};
+
+    // Clear flag from existing state
+    update staker_state @? { .staker == staker and .latest } ( latest = false );
+
+    // Create new from existing state + delta
+    create staker_state(
+        staker_state_time = _staking_last_known_time(),
+        previous_staker_state_time = existing.staker_state_time,
+        staker = staker,
+        cutover_time = delta.cutover_time ?: existing.cutover_time,
+        new_provider = delta.new_provider ?: existing.new_provider,
+        old_provider = delta.old_provider ?: existing.old_provider,
+        balance_native = delta.balance_native ?: existing.balance_native,
+        previous_balance_native = existing.balance_native,
+        balance_bsc = delta.balance_bsc ?: existing.balance_bsc,
+        previous_balance_bsc = existing.balance_bsc,
+        balance_eth = delta.balance_eth ?: existing.balance_eth,
+        previous_balance_eth = existing.balance_eth,
+        latest = true
+    );
 }
 
 function _staking_cannot_change_before(): timestamp = _staking_last_known_time() + chain_context.args.staking_rate_change_delay_ms;
