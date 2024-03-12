@@ -5,40 +5,43 @@ import ^.helper_operations.*;
 
 function test_receive_price_oracle_update() {
 
-    val name = "Chromia Test";
-    val second_name = "second";
+    val symbol = "tCHR";
+    val second_symbol = "BTC";
 
     // Create entity
     rell.test.tx().op(
-        icmf_message_op(x"", Token_Price_Changed_Topic, body = Token_Price_Changed_Body(
-            name,
+        icmf_message_op(x"", token_price_vhanged_topic, body = token_price_changed_body(
+            name = "N1",
+            symbol = symbol,
             1.1
         ).to_gtv())
     ).run();
 
-    assert_equals(price_oracle_rates @ { name } ( .price ), 1.1);
+    assert_equals(price_oracle_rates @ { .symbol == symbol } ( .price ), 1.1);
     assert_equals(economy_constants.chr_per_usd, 1.1);
 
     // Update entity
     rell.test.tx().op(
-        icmf_message_op(x"", Token_Price_Changed_Topic, body = Token_Price_Changed_Body(
-            name,
+        icmf_message_op(x"", token_price_vhanged_topic, body = token_price_changed_body(
+            name = "N1",
+            symbol = symbol,
             1.123456
         ).to_gtv())
     ).run();
 
-    assert_equals(price_oracle_rates @ { name } ( .price ), 1.123456);
+    assert_equals(price_oracle_rates @ { .symbol == symbol } ( .price ), 1.123456);
     assert_equals(economy_constants.chr_per_usd, 1.123456);
 
     // Create a second entity - keeps the first one unchanged
     rell.test.tx().op(
-        icmf_message_op(x"", Token_Price_Changed_Topic, body = Token_Price_Changed_Body(
-            second_name,
+        icmf_message_op(x"", token_price_vhanged_topic, body = token_price_changed_body(
+            name = "N2",
+            symbol = second_symbol,
             3.4
         ).to_gtv())
     ).run();
 
-    assert_equals(price_oracle_rates @ { second_name } ( .price ), 3.4);
-    assert_equals(price_oracle_rates @ { name } ( .price ), 1.123456);
+    assert_equals(price_oracle_rates @ { .symbol == second_symbol } ( .price ), 3.4);
+    assert_equals(price_oracle_rates @ { .symbol == symbol } ( .price ), 1.123456);
     assert_equals(economy_constants.chr_per_usd, 1.123456);
 }

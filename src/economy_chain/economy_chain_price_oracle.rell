@@ -1,27 +1,28 @@
 import lib.priceoracle.icmf_encoding.*;
 
 entity price_oracle_rates {
-    key name: text;
+    key symbol: text;
+    name: text;
     mutable price: decimal;
 }
 
 function receive_price_oracle_update(body: gtv) {
 
-    val message = Token_Price_Changed_Body.from_gtv(body);
+    val message = token_price_changed_body.from_gtv(body);
 
     set_price_oracle_rate_value(message);
 
-    if (message.name == chain_context.args.asset_name) {
+    if (message.symbol == chain_context.args.asset_symbol) {
         economy_constants.chr_per_usd = message.price;
     }
 }
 
-function set_price_oracle_rate_value(message: Token_Price_Changed_Body) {
+function set_price_oracle_rate_value(message: token_price_changed_body) {
 
     val price_oracle_rates = price_oracle_rates @? { .name == message.name };
 
     if (price_oracle_rates == null) {
-        create price_oracle_rates(message.name, message.price);
+        create price_oracle_rates(symbol = message.symbol, name = message.name, message.price);
     } else {
         price_oracle_rates.price = message.price;
     }
