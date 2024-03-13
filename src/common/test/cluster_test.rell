@@ -182,3 +182,19 @@ function test_add_disabled_node_to_cluster_fails() {
         add_replica_node_to_cluster(rell.test.pubkeys.alice, node.pubkey, "cluster1")
     ).sign(rell.test.keypairs.alice).run_must_fail("Node not found or disabled");
 }
+
+function test_add_another_providers_node_to_a_cluster_fails() {
+    setup_module();
+
+    // Add a new provider and new cluster
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.bob, true),
+        create_cluster(rell.test.pubkeys.alice, "cluster1", voter_sets.system_p, [rell.test.pubkeys.alice, rell.test.pubkeys.bob])
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Adding another providers node into a cluster should fail
+    rell.test.tx().op(
+        add_node_to_cluster(rell.test.pubkeys.bob, test_node.pubkey, "cluster1")
+    ).sign(rell.test.keypairs.bob).run_must_fail("It is only allowed to add own node to a cluster");
+}
