@@ -128,30 +128,14 @@ operation staking_deposit_native(amount: integer, delegateTo: byte_array? = null
     ft4.assets.Unsafe.transfer(staker, get_pool_account(), get_asset(), amount);
 
     val existing = staker_state @? { .staker == staker and .latest };
-    if (null != existing) {
-        val delta = staker_state_delta(
-            balance_native = amount + existing.balance_native,
-            cutover_time = null, new_provider = null, old_provider = null, balance_bsc = null, balance_eth = null
-        );
-        _staking_apply_staker_state_delta(staker, delta);
-    } else {
-        // First deposit
-        create staker_state(
-            staker_state_time = _staking_last_known_time(),
-            previous_staker_state_time = 0,
-            staker = staker,
-            balance_native = amount,    
-            previous_balance_native = 0,
-            balance_bsc = 0,
-            previous_balance_bsc = 0,
-            balance_eth = 0,
-            previous_balance_eth = 0,
-            cutover_time = _staking_last_known_time(),
-            new_provider = get_null_account(),
-            old_provider = get_null_account(),
-            latest = true
-        );
-    };
+    if (null == existing) {
+        _staking_init_staker_state(staker);
+    }
+    val delta = staker_state_delta(
+        balance_native = if (null != existing) existing.balance_native + amount else amount,
+        cutover_time = null, new_provider = null, old_provider = null, balance_bsc = null, balance_eth = null
+    );
+    _staking_apply_staker_state_delta(staker, delta);
 
     if (null != delegateTo) {
         // Below check is duplicated, but less overhead than 2 wrapping functions.
@@ -159,6 +143,35 @@ operation staking_deposit_native(amount: integer, delegateTo: byte_array? = null
         require(_staking_is_active_provider(delegateToAccount), "Must be active provider.");
         _staking_delegate(staker, delegateToAccount);
     }
+}
+
+function _staking_update_bsc(staker: ft4.accounts.account, new_balance: integer) {
+    require_initialized();
+
+    val existing = staker_state @? { .staker == staker and .latest };
+    if (null == existing) {
+        // If we're the first value, initialise first
+        _staking_init_staker_state(staker);
+    }
+    val delta = staker_state_delta(
+        balance_bsc = new_balance,
+        cutover_time = null, new_provider = null, old_provider = null, balance_native = null, balance_eth = null
+    );
+    _staking_apply_staker_state_delta(staker, delta);
+}
+
+function _staking_update_eth(staker: ft4.accounts.account, amount: integer) {
+    require_initialized();
+
+    val existing = staker_state @? { .staker == staker and .latest };
+    if (null == existing) {
+        _staking_init_staker_state(staker);
+    }
+    val delta = staker_state_delta(
+        balance_eth = if (null != existing) existing.balance_native + amount else amount,
+        cutover_time = null, new_provider = null, old_provider = null, balance_native = null, balance_bsc = null
+    );
+    _staking_apply_staker_state_delta(staker, delta);
 }
 
 query staking_get_balance(account_id: byte_array) {
@@ -182,11 +195,14 @@ function staking_request_withdrawal_auth_message(gtv): text {
 
 operation staking_request_withdrawal() {
     require_initialized();
-
     val staker = ft4.auth.authenticate();
-    require(_staking_get_balance(staker) > 0, "Need something to withdraw.");
-    require(get_null_account() == _staking_get_current_delegate(staker), "Must unstaker before requesting a withdrawal.");
     require(null == _staking_get_withdrawal_time(staker), "Only one withdrawal request at a time.");
+    _staking_request_withdrawal(staker);
+}
+
+function _staking_request_withdrawal(staker: ft4.accounts.account) {
+    require(_staking_get_balance(staker) > 0, "Need something to withdraw.");
+    require(get_null_account() == _staking_get_current_delegate(staker), "Must unstake before requesting a withdrawal.");
 
     // Make a new request
     require(_staking_last_known_time() > 0, "Require an actual time");
@@ -222,8 +238,6 @@ operation staking_withdraw() {
         new_provider = null, old_provider = null, balance_bsc = null, balance_eth = null
     );
     _staking_apply_staker_state_delta(staker, delta);
-
-    update staker_withdrawal_request @ {.staker == staker } (used = true);
 }
 
 query staking_get_withdrawal_time(account_id: byte_array): timestamp? {
@@ -533,6 +547,36 @@ function _staking_apply_staker_state_delta(staker: ft4.accounts.account, delta: 
         previous_balance_bsc = existing.balance_bsc,
         balance_eth = delta.balance_eth ?: existing.balance_eth,
         previous_balance_eth = existing.balance_eth,
+        latest = true
+    );
+
+    // Have we reduced the balance to zero, e.g. a complete withdrawal
+    if (
+        (0 != existing.balance_bsc + existing.balance_eth + existing.balance_native)
+        and
+        (0 == (delta.balance_bsc ?: 0) + (delta.balance_eth ?: 0) + (delta.balance_native ?: 0))
+        and
+        not (null == delta.balance_bsc and null == delta.balance_eth and null == delta.balance_native)
+    ) {
+        // Clear the withdrawal request
+        update staker_withdrawal_request @ {.staker == staker } (used = true);
+    }
+}
+
+function _staking_init_staker_state(staker: ft4.accounts.account) {
+    create staker_state(
+        staker_state_time = _staking_last_known_time(),
+        previous_staker_state_time = 0,
+        staker = staker,
+        balance_native = 0,    
+        previous_balance_native = 0,
+        balance_bsc = 0,
+        previous_balance_bsc = 0,
+        balance_eth = 0,
+        previous_balance_eth = 0,
+        cutover_time = _staking_last_known_time(),
+        new_provider = get_null_account(),
+        old_provider = get_null_account(),
         latest = true
     );
 }

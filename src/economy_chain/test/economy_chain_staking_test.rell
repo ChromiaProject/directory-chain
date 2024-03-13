@@ -395,9 +395,48 @@ function test_stake_and_delegate_to_chromaway() {
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(
             rell.test.keypairs.alice.priv,
-            staking_deposit(888, chromaway)
+            staking_deposit_native(888, chromaway)
         )
     )
-    .op(staking_deposit(888, chromaway))
+    .op(staking_deposit_native(888, chromaway))
     .run();
+}
+
+function test_deposit_and_withdraw_via_evm() {
+    rell.test.tx().op(init()).run();
+
+    val test_account_alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+
+    do_evm_stake_update_bsc(test_account_alice, 5000000);
+    do_evm_withdrawal_request_bsc(test_account_alice);
+
+    assert_equals(staking_get_balance(test_account_alice.id), 5000000);
+
+    // Only one withdrawal request at a time
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_request_withdrawal())
+    )
+    .op(staking_request_withdrawal())
+    .run();
+
+    // Wait a period
+    rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
+    rell.test.block().run();
+
+    // Withdraw
+    do_evm_stake_update_bsc(test_account_alice, 0);
+
+    // Reload
+    do_evm_stake_update_bsc(test_account_alice, 10);
+    do_staking_deposit_native(rell.test.keypairs.alice, 10);
+
+    // Request withdrawal on native
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_request_withdrawal())
+    )
+    .op(staking_request_withdrawal())
+    .run();
+
+    // Request withdrawal again on BSC (which is okay)
+    do_evm_withdrawal_request_bsc(test_account_alice);
 }

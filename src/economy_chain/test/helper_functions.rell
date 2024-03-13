@@ -288,3 +288,63 @@ function create_multi_provider_cluster_proposal(cluster_name: text, tag_name: te
         .run();
 }
 
+function _do_evm_stake_update(ft4.accounts.account, balance: integer, network_id: integer, contract_address: byte_array) {
+    // Derive the EVM address of the FT4 account
+    val evm_address = account.id;
+
+    // Create an EVM event
+    val evm_event = event_data(
+        tnx_hash = "NULL".hash(),
+        log_index = 0,
+        signature = "NULL".hash(),
+        contract_address = x"753218363422002DF74F3D0D8d67f6CB38bE32D0",
+        name = "StakeUpdate",
+        indexed_values = [evm_address.to_gtv()],
+        non_indexed_values = [balance.to_gtv()]
+    );
+
+    // Submit mock EVM block
+    rell.test.tx().op(
+        do_test_evm_block(
+            network_id,
+            1,
+            "NULL".hash(),
+            [evm_event]
+        )
+    ).run();
+}
+
+function do_evm_stake_update_bsc(ft4.accounts.account, balance: integer) {
+    _do_evm_stake_update(account, balance, 97, x"753218363422002DF74F3D0D8d67f6CB38bE32D0");
+}
+
+struct auth_data {
+    account_id: byte_array;
+	rell.test.keypair;
+}
+
+function do_evm_withdrawal_request_bsc(ft4.accounts.account) {
+    // Derive the EVM address of the FT4 account
+    val evm_address = account.id;
+
+    // Create an EVM event
+    val evm_event = event_data(
+        tnx_hash = "NULL".hash(),
+        log_index = 0,
+        signature = "NULL".hash(),
+        contract_address = x"753218363422002DF74F3D0D8d67f6CB38bE32D0",
+        name = "WithdrawRequest",
+        indexed_values = [evm_address.to_gtv()],
+        non_indexed_values = [integer(-1).to_gtv()]
+    );
+
+    // Submit mock EVM block
+    rell.test.tx().op(
+        do_test_evm_block(
+            97, // network id
+            1,
+            "NULL".hash(),
+            [evm_event]
+        )
+    ).nop().run();
+}
