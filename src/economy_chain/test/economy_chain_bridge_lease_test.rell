@@ -1,0 +1,141 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import ^.helper_operations.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.assets;
+    import lib.ft4.auth;
+    import test_utils: lib.ft4.test.utils;
+}
+import lib.auth;
+
+struct module_args {
+    auth_privkey: byte_array;
+    admin_privkey: byte_array;
+}
+
+val auth_privkey = chain_context.args.auth_privkey;
+val cluster_name = "test_cluster";
+
+function test_bridge_lease_add_update_and_remove() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, cluster_name = cluster_name, container_units = 2);
+
+    val container_lease = lease @ { container_name };
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 1, "validator", "bridge", [x""])),
+        add_bridge_lease(container_name, x"", 1, "validator", "bridge", [x""])
+    ).sign(rell.test.keypairs.alice).run();
+
+    assert_not_null(bridge_lease @? { .lease == container_lease });
+    assert_events(("icmf_message", (
+        topic = bridge_mapping_topic,
+        body = bridge_mapping_message(
+            blockchain_rid = x"",
+            validator_contract = "validator",
+            bridge_contract = "bridge",
+            evm_network_id = 1,
+            deleted = false,
+            signers = [x""].to_gtv().to_bytes()
+        ).to_gtv()
+    ).to_gtv_pretty()));
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, update_bridge_lease(x"", 1, "validator2", "bridge2", null)),
+        update_bridge_lease(x"", 1, "validator2", "bridge2", null)
+    ).sign(rell.test.keypairs.alice).run();
+
+    val updated_bridge_lease = bridge_lease @ { .lease == container_lease };
+    assert_equals(updated_bridge_lease.validator_contract, "validator2");
+    assert_equals(updated_bridge_lease.bridge_contract, "bridge2");
+
+    assert_events(("icmf_message", (
+        topic = bridge_mapping_topic,
+        body = bridge_mapping_message(
+            blockchain_rid = x"",
+            validator_contract = "validator2",
+            bridge_contract = "bridge2",
+            evm_network_id = 1,
+            deleted = false,
+            signers = null
+        ).to_gtv()
+    ).to_gtv_pretty()));
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, remove_bridge_lease(x"", 1)),
+        remove_bridge_lease(x"", 1)
+    ).sign(rell.test.keypairs.alice).run();
+
+    assert_null(bridge_lease @? { .lease == container_lease });
+}
+
+function test_expired_container_lease_removes_bridge_leases() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, cluster_name = cluster_name, container_units = 2);
+
+    val container_lease = lease @ { container_name };
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 1, "validator", "bridge", [x""])),
+        add_bridge_lease(container_name, x"", 1, "validator", "bridge", [x""])
+    ).sign(rell.test.keypairs.alice).run();
+
+    assert_not_null(bridge_lease @? { .lease == container_lease });
+
+    rell.test.set_next_block_time_delta(millis_per_week + 1);
+    rell.test.block().run();
+    rell.test.block().run();
+
+    assert_true(container_lease.expired);
+    assert_events(("icmf_message", (
+        topic = stop_container_topic,
+        body = stop_container_message(container_name).to_gtv()
+    ).to_gtv_pretty()),
+    ("icmf_message", (
+        topic = bridge_mapping_topic,
+        body = bridge_mapping_message(
+            blockchain_rid = x"",
+            validator_contract = "validator",
+            bridge_contract = "bridge",
+            evm_network_id = 1,
+            deleted = true,
+            signers = null
+        ).to_gtv()
+    ).to_gtv_pretty()));
+
+    // Assert no mappings can be added/updated when lease is expired
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 2, "validator", "bridge", [x""])),
+        add_bridge_lease(container_name, x"", 1, "validator", "bridge", [x""])
+    ).sign(rell.test.keypairs.alice).run_must_fail("Container lease is expired");
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, update_bridge_lease(x"", 1, "validator2", "bridge2", null)),
+        update_bridge_lease(x"", 1, "validator2", "bridge2", null)
+    ).sign(rell.test.keypairs.alice).run_must_fail("Container lease is expired");
+}
+
+function test_bridge_leases_are_transferred_on_container_upgrade() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, cluster_name = cluster_name, container_units = 2);
+
+    val container_lease = lease @ { container_name };
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 1, "validator", "bridge", [x""])),
+        add_bridge_lease(container_name, x"", 1, "validator", "bridge", [x""])
+    ).sign(rell.test.keypairs.alice).run();
+
+    assert_not_null(bridge_lease @? { .lease == container_lease });
+
+    val upgraded_container_name = do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 5, ticket_id = ticket_id_after_init + 6, current_lease = container_lease, container_units = 3, cluster_name = cluster_name, upgraded_container_name = "upgraded_container");
+
+    val upgraded_container_lease = lease @ { upgraded_container_name };
+    assert_null(bridge_lease @? { .lease == container_lease });
+    assert_not_null(bridge_lease @? { .lease == upgraded_container_lease });
+}

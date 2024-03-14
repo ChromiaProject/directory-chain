@@ -1,0 +1,166 @@
+// TODO: For now bridge leases are free (with a max cap) as long as you have a container lease but we should add some payment logic for these leases as well
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "add_bridge_lease",
+    flags = ["T"],
+    message = add_bridge_lease_auth_message(*)
+);
+
+function add_bridge_lease_auth_message(gtv) {
+    val args = struct<add_bridge_lease>.from_gtv(gtv);
+    return "Please sign the message\nto add a bridge lease to container lease %s\nfor blockchain %s and validator contract %s on network %s\n".format(
+        args.container_name,
+        args.blockchain_rid,
+        args.validator_contract,
+        args.evm_network_id
+    );
+}
+
+// We don't really know if this chain belongs to the container but it should not really matter
+function add_bridge_lease_impl(container_name: text, blockchain_rid: byte_array, evm_network_id: integer, validator_contract: text, bridge_contract: text, initial_signers: list<byte_array>) {
+    val lease = require_lease(container_name);
+    require(not lease.expired, "Container lease is expired");
+
+    val account = ft4.auth.authenticate();
+    require(user @? { account }, "No user for account %s".format(account.id));
+    require(lease.account == account, "Lease for container %s was not created by you".format(container_name));
+    require((bridge_lease @* { lease }).size() < chain_context.args.max_bridge_leases_per_container, "Container lease already has max amount of bridge leases");
+
+    create bridge_lease(blockchain_rid, evm_network_id, lease, validator_contract, bridge_contract);
+
+    send_message(bridge_mapping_topic, bridge_mapping_message(
+        blockchain_rid = blockchain_rid,
+        validator_contract = validator_contract,
+        bridge_contract = bridge_contract,
+        evm_network_id = evm_network_id,
+        deleted = false,
+        signers = initial_signers.to_gtv().to_bytes()
+    ).to_gtv());
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "update_bridge_lease",
+    flags = ["T"],
+    message = update_bridge_lease_auth_message(*)
+);
+
+function update_bridge_lease_auth_message(gtv) {
+    val args = struct<update_bridge_lease>.from_gtv(gtv);
+    return "Please sign the message\nto update bridge lease\nfor blockchain %s on network %s\n".format(
+        args.blockchain_rid,
+        args.evm_network_id
+    );
+}
+
+function update_bridge_lease_impl(blockchain_rid: byte_array, evm_network_id: integer, updated_validator_contract: text?, updated_bridge_contract: text?, updated_signers: list<byte_array>?) {
+    val bridge_lease = bridge_lease @? { .blockchain_rid == blockchain_rid, .evm_network_id == evm_network_id};
+    require(bridge_lease, "No bridge lease found");
+    require(not bridge_lease.lease.expired, "Container lease is expired");
+
+    require(updated_validator_contract != null or updated_signers != null or updated_bridge_contract != null, "Must update contract or signers");
+
+    val account = ft4.auth.authenticate();
+    require(user @? { account }, "No user for account %s".format(account.id));
+    require(bridge_lease.lease.account == account, "Lease for container %s was not created by you".format(bridge_lease.lease.container_name));
+
+    if (updated_validator_contract != null) bridge_lease.validator_contract = updated_validator_contract;
+    if (updated_bridge_contract != null) bridge_lease.bridge_contract = updated_bridge_contract;
+
+    send_message(bridge_mapping_topic, bridge_mapping_message(
+        blockchain_rid = blockchain_rid,
+        validator_contract = bridge_lease.validator_contract,
+        bridge_contract = bridge_lease.bridge_contract,
+        evm_network_id = evm_network_id,
+        deleted = false,
+        signers = updated_signers?.to_gtv()?.to_bytes()
+    ).to_gtv());
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "remove_bridge_lease",
+    flags = ["T"],
+    message = remove_bridge_lease_auth_message(*)
+);
+
+function remove_bridge_lease_auth_message(gtv) {
+    val args = struct<remove_bridge_lease>.from_gtv(gtv);
+    return "Please sign the message\nto remove bridge lease\nfor blockchain %s on network %s\n".format(
+        args.blockchain_rid,
+        args.evm_network_id
+    );
+}
+
+function remove_bridge_lease_impl(blockchain_rid: byte_array, evm_network_id: integer) {
+    val bridge_lease = bridge_lease @? { .blockchain_rid == blockchain_rid, .evm_network_id == evm_network_id};
+    require(bridge_lease, "No bridge lease found");
+
+    val account = ft4.auth.authenticate();
+    require(user @? { account }, "No user for account %s".format(account.id));
+    require(bridge_lease.lease.account == account, "Lease for container %s was not created by you".format(bridge_lease.lease.container_name));
+
+    send_bridge_lease_deleted_message(bridge_lease);
+
+    delete bridge_lease;
+}
+
+function delete_bridge_leases(lease): list<struct<bridge_lease>> {
+    val bridge_leases = bridge_lease @* { lease };
+    val deleted_leases = list<struct<bridge_lease>>();
+
+    for (bridge_lease in bridge_leases) {
+        send_bridge_lease_deleted_message(bridge_lease);
+        deleted_leases.add(bridge_lease.to_struct());
+        delete bridge_lease;
+    }
+
+    return deleted_leases;
+}
+
+@extend(on_lease_expired) function expire_bridge_leases(lease) {
+    val bridge_leases = bridge_lease @* { lease };
+
+    for (bridge_lease in bridge_leases) {
+        send_bridge_lease_deleted_message(bridge_lease);
+    }
+}
+
+@extend(on_lease_resurrected) function restore_expired_bridge_leases(lease) {
+    val bridge_leases = bridge_lease @* { lease };
+
+    for (bridge_lease in bridge_leases) {
+        send_message(bridge_mapping_topic, bridge_mapping_message(
+            blockchain_rid = bridge_lease.blockchain_rid,
+            validator_contract = bridge_lease.validator_contract,
+            bridge_contract = bridge_lease.bridge_contract,
+            evm_network_id = bridge_lease.evm_network_id,
+            deleted = false,
+            signers = null
+        ).to_gtv());
+    }
+}
+
+function transfer_bridge_leases_to_lease(lease, bridge_leases: list<struct<bridge_lease>>) {
+    for (bridge_lease in bridge_leases) {
+        create bridge_lease(
+            blockchain_rid = bridge_lease.blockchain_rid,
+            evm_network_id = bridge_lease.evm_network_id,
+            lease = lease,
+            validator_contract = bridge_lease.validator_contract,
+            bridge_contract = bridge_lease.bridge_contract
+        );
+    }
+}
+
+function send_bridge_lease_deleted_message(bridge_lease) {
+    send_message(bridge_mapping_topic, bridge_mapping_message(
+        blockchain_rid = bridge_lease.blockchain_rid,
+        validator_contract = bridge_lease.validator_contract,
+        bridge_contract = bridge_lease.bridge_contract,
+        evm_network_id = bridge_lease.evm_network_id,
+        deleted = true,
+        signers = null
+    ).to_gtv());
+}
