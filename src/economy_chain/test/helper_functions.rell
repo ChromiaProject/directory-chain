@@ -11,6 +11,8 @@ namespace ft4 {
 }
 import lib.auth;
 
+val ticket_id_after_init = 24;
+
 function do_create_account(keypair: rell.test.keypair, auth_privkey: byte_array, failure: text? = null): ft4.accounts.account? {
     val eth_address = crypto.eth_privkey_to_address(keypair.priv);
     val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(eth_address, set(["A", "T"]));
@@ -185,6 +187,71 @@ function do_create_container(
     }
 
     return container_name;
+}
+
+function do_upgrade_container(
+    ft4.accounts.account,
+    keypair: rell.test.keypair,
+    success: boolean,
+    block_height: integer,
+    ticket_id: integer,
+    current_lease: lease,
+    cluster_name: text = "Bob's cluster",
+    container_units: integer = 2,
+    auto_renew: boolean = false,
+    upgraded_container_name: text? = null
+): text {
+
+    val container_name = current_lease.container_name;
+    val new_container_name = if (upgraded_container_name != null) upgraded_container_name else current_lease.container_name;
+    val tag = cluster @ { .name == cluster_name }.tag;
+
+    val cost = calculate_container_cost(1, container_units, 0, tag) - calculate_remaining_lease_value(current_lease, rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL * (block_height - 1));
+
+    val initial_balance = get_account_balance(account);
+    val initial_pool_balance = get_pool_balance();
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(keypair.priv, upgrade_container(container_name, container_units, 0, cluster_name))
+    ).op(
+        upgrade_container(container_name, container_units, 0, cluster_name)
+    ).run();
+    val tx_rid = transaction @ {} (@sort_desc @omit .rowid, .tx_rid) limit 1;
+
+    assert_events(("icmf_message", (
+        topic = upgrade_container_topic,
+        body = upgrade_container_message(ticket_id = ticket_id, container_name = container_name, container_units = container_units, extra_storage = 0, cluster_name = cluster_name).to_gtv()
+    ).to_gtv_pretty()));
+
+    val pending_ticket = container_ticket_data(ticket_id, ticket_type.UPGRADE_CONTAINER, ticket_state.PENDING, error_message = "", container_name = container_name);
+    assert_equals(require(get_upgrade_container_ticket_by_id(ticket_id)), pending_ticket);
+    assert_equals(require(get_upgrade_container_ticket_by_transaction(tx_rid)), pending_ticket);
+
+    assert_equals(get_account_balance(account), initial_balance - cost);
+    assert_equals(get_pool_balance(), initial_pool_balance + cost);
+
+    rell.test.tx().op(
+        icmf_message_op(x"", ticket_container_result_topic, ticket_container_result_message(ticket_id = ticket_id, error_message = if (success) null else "error", container_name = new_container_name, cluster_name).to_gtv())
+    ).run();
+    val done_ticket = container_ticket_data(
+        ticket_id = ticket_id,
+        type = ticket_type.UPGRADE_CONTAINER,
+        state = if (success) ticket_state.SUCCESS else ticket_state.FAILURE,
+        error_message = if (success) "" else "error",
+        container_name = if (success) container_name else ""
+    );
+    assert_equals(require(get_upgrade_container_ticket_by_id(ticket_id)), done_ticket);
+    assert_equals(require(get_upgrade_container_ticket_by_transaction(tx_rid)), done_ticket);
+
+    if (success) {
+        assert_equals(get_account_balance(account), initial_balance - cost);
+        assert_equals(get_pool_balance(), initial_pool_balance + cost);
+    } else {
+        assert_equals(get_account_balance(account), initial_balance);
+        assert_equals(get_pool_balance(), initial_pool_balance);
+    }
+
+    return new_container_name;
 }
 
 function get_provider_nodes_pubkeys(provider: provider){

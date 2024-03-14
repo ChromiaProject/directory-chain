@@ -248,6 +248,39 @@ query get_econony_constants_proposal(proposal_id: rowid) {
     );
 }
 
+query get_bridge_lease_for_blockchain(blockchain_rid: byte_array, evm_network_id: integer) = bridge_lease @? { blockchain_rid, evm_network_id } (
+    bridge_lease_data(
+        blockchain_rid = blockchain_rid,
+        evm_network_id = evm_network_id,
+        container_name = .lease.container_name,
+        expired = .lease.expired,
+        validator_contract = .validator_contract,
+        bridge_contract = .bridge_contract
+    )
+);
+
+query get_all_bridge_leases_for_blockchain(blockchain_rid: byte_array) = bridge_lease @* { blockchain_rid } (
+    bridge_lease_data(
+        blockchain_rid = blockchain_rid,
+        evm_network_id = .evm_network_id,
+        container_name = .lease.container_name,
+        expired = .lease.expired,
+        validator_contract = .validator_contract,
+        bridge_contract = .bridge_contract
+    )
+);
+
+query get_all_bridge_leases_for_container(container_name: text) = (bridge_lease, lease) @* { lease.container_name == container_name, bridge_lease.lease == lease } (
+    bridge_lease_data(
+        blockchain_rid = .blockchain_rid,
+        evm_network_id = .evm_network_id,
+        container_name = container_name,
+        expired = .lease.expired,
+        validator_contract = .validator_contract,
+        bridge_contract = .bridge_contract
+    )
+);
+
 function get_integer_or_default(value: integer?, default: integer?): integer? {
     if (value != null and value >= 0) {
         return value;

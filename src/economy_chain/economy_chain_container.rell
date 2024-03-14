@@ -24,7 +24,10 @@ function expire_lease(lease) {
     lease.expired = true;
     log("Lease for container %s has expired, stopping it".format(lease.container_name));
     send_message(stop_container_topic, stop_container_message(container_name = lease.container_name).to_gtv()); // fire-and-forget
+    on_lease_expired(lease);
 }
+
+@extendable function on_lease_expired(lease) {}
 
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
@@ -270,7 +273,10 @@ function restart_container(lease) {
     send_message(restart_container_topic, restart_container_message(container_name = lease.container_name).to_gtv()); // fire-and-forget
     // TODO what if restart fails?
     lease.expired = false;
+    on_lease_resurrected(lease);
 }
+
+@extendable function on_lease_resurrected(lease) {}
 
 function calculate_container_cost(duration_weeks: integer, container_units: integer, extra_storage_gib: integer, tag: tag): integer {
     val scu_cost = container_units * tag.scu_price;
