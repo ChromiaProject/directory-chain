@@ -1,0 +1,27 @@
+module;
+
+import common.*;
+import model.*;
+
+val price_oracle_chain_name = "price_oracle_chain";
+
+object price_oracle_chain {
+    mutable rid: byte_array = x"";
+}
+
+operation init_price_oracle_chain(my_pubkey: pubkey, price_oracle_chain_config: byte_array) {
+    require_is_provider_with_rate_limit(my_pubkey);
+    require_is_system_provider(my_pubkey);
+
+    require(price_oracle_chain.rid == x"", "Price oracle chain is already started");
+
+    val nodes = cluster_node @* { system_cluster() } (@sort .node.pubkey);
+    // do not write new configuration when size is 0 since it's impossible to recover from that
+    require(nodes.size() > 0, "System cluster must have at least one node");
+
+    log("Adding price oracle chain to system container");
+    val price_oracle_blockchain = add_blockchain(price_oracle_chain_config, nodes, price_oracle_chain_name, system_container(), true);
+    update price_oracle_chain(rid = price_oracle_blockchain.rid);
+}
+
+query get_price_oracle_chain_rid(): byte_array? = if (price_oracle_chain.rid == x"") null else price_oracle_chain.rid;
