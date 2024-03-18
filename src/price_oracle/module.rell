@@ -2,8 +2,8 @@ module;
 
 import common.*;
 import model.*;
-
-val price_oracle_chain_name = "price_oracle_chain";
+import messaging.blockchain_rid.*;
+import messaging.icmf.*;
 
 object price_oracle_chain {
     mutable rid: byte_array = x"";
@@ -20,8 +20,10 @@ operation init_price_oracle_chain(my_pubkey: pubkey, price_oracle_chain_config: 
     require(nodes.size() > 0, "System cluster must have at least one node");
 
     log("Adding price oracle chain to system container");
-    val price_oracle_blockchain = add_blockchain(price_oracle_chain_config, nodes, price_oracle_chain_name, system_container(), true);
+    val price_oracle_blockchain = add_blockchain(price_oracle_chain_config, nodes, blockchains.price_oracle_chain_name, system_container(), true);
     update price_oracle_chain(rid = price_oracle_blockchain.rid);
+
+    send_message(blockchain_rid_topic, blockchain_rid(rid = price_oracle_blockchain.rid, name = price_oracle_blockchain.name).to_gtv());
 }
 
 query get_price_oracle_chain_rid(): byte_array? = if (price_oracle_chain.rid == x"") null else price_oracle_chain.rid;

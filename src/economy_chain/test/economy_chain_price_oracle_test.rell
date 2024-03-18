@@ -8,6 +8,11 @@ function test_receive_price_oracle_update() {
     val symbol = "tCHR";
     val second_symbol = "BTC";
 
+    // Create sender
+    rell.test.tx().op(
+        icmf_message_op(x"", blockchain_rid_topic, body = blockchain_rid(rid = x"", name = blockchains.price_oracle_chain_name).to_gtv())
+    ).run();
+
     // Create entity
     rell.test.tx().op(
         icmf_message_op(x"", token_price_changed_topic, body = token_price_changed_body(
@@ -44,4 +49,15 @@ function test_receive_price_oracle_update() {
     assert_equals(price_oracle_rates @ { .symbol == second_symbol } ( .price ), 3.4);
     assert_equals(price_oracle_rates @ { .symbol == symbol } ( .price ), 1.123456);
     assert_equals(economy_constants.chr_per_usd, 1.123456);
+}
+
+function test_receive_price_oracle_update_invalid_sender() {
+
+    rell.test.tx().op(
+        icmf_message_op(x"", token_price_changed_topic, body = token_price_changed_body(
+            name = "Chromia",
+            symbol = "CHR",
+            1.1
+        ).to_gtv())
+    ).run_must_fail("0x that is not tracked by economy chain");
 }
