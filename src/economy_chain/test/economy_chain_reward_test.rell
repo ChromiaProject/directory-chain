@@ -395,6 +395,86 @@ function test_pay_reward_mint_pool_account() {
     assert_equals(get_pool_balance(), 999999000);
 }
 
+function test_calculate_evm_transactions_submitters_rewards() {
+    rell.test.tx().op(init()).run();
+
+    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
+    add_cluster_node(cluster_name, node_pubkey, false);
+
+    rell.test.tx().op(
+        create_price_oracle_rates_op("tCHR", "Chromia Test", 1.00),
+        create_price_oracle_rates_op("ETH", "Ether", 2.00),
+        create_price_oracle_rates_op("BNB", "Binance smart chain", 10.00),
+        create_price_oracle_rates_op("MATIC", "Polygon", 0.01)
+    ).run();
+
+    val result1 = calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost(id = x"01", processed_by = node_pubkey, cost  = 10000L, currency_symbol = "ETH"));
+    val result2 = calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost(id = x"02", processed_by = node_pubkey, cost  = 10000L, currency_symbol = "BNB"));
+    val result3 = calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost(id = x"03", processed_by = node_pubkey, cost  = 10000L, currency_symbol = "MATIC"));
+
+    assert_equals(result1[node], 22000);
+    assert_equals(result2[node], 110000);
+    assert_equals(result3[node], 110);
+}
+
+function test_receive_evm_transaction_submitter_cost_message() {
+    rell.test.tx().op(init()).run();
+
+    val evm_transaction_submitter_bc_rid = x"1111";
+
+    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
+    add_cluster_node(cluster_name, node_pubkey, false);
+
+    rell.test.tx().op(
+        register_provider_account(provider_pubkey)
+    ).sign(provider_key).run();
+
+    rell.test.tx().op(
+        create_price_oracle_rates_op("tCHR", "Chromia Test", 1.00),
+        create_price_oracle_rates_op("ETH", "Ether", 2.00)
+    ).run();
+
+    rell.test.tx().op(
+        icmf_message_op(x"", blockchain_rid_topic, body = blockchain_rid(
+            rid = evm_transaction_submitter_bc_rid,
+            name = "evm_transaction_submitter_chain").to_gtv())
+    ).run();
+
+    val expected_sender = sender_blockchain @ {};
+    assert_equals(expected_sender.rid, evm_transaction_submitter_bc_rid);
+    assert_equals(expected_sender.name, "evm_transaction_submitter_chain");
+
+    rell.test.tx().op(
+        icmf_message_op(evm_transaction_submitter_bc_rid, evm_transaction_submitter_cost_topic, body = evm_transaction_submitter_cost(
+            id = x"10",
+            processed_by = node_pubkey,
+            cost = 6L,
+            currency_symbol = "ETH"
+        ).to_gtv())
+    ).run();
+
+    assert_equals(node_payed_reward @ {} ( .value), 13);
+}
+
+function test_receive_evm_transaction_submitter_cost_invalid_sender() {
+    rell.test.tx().op(init()).run();
+
+    rell.test.tx().op(
+        icmf_message_op(x"", evm_transaction_submitter_cost_topic, body = evm_transaction_submitter_cost(
+            id = x"10",
+            processed_by = node_pubkey,
+            cost = 6L,
+            currency_symbol = "ETH"
+        ).to_gtv())
+    ).run();
+    assert_true(node_payed_reward @? {} == null);
+}
+
+
 
 ///////////////////
 // Helper functions

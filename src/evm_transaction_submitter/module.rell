@@ -3,7 +3,10 @@ module;
 import common.*;
 import model.*;
 
-val evm_transaction_submitter_chain_name = "evm_transaction_submitter_chain";
+import messaging.blockchain_rid.*;
+import messaging.icmf.*;
+
+import constants.*;
 
 object evm_transaction_submitter_chain {
     mutable rid: byte_array = x"";
@@ -20,8 +23,9 @@ operation init_evm_transaction_submitter_chain(my_pubkey: pubkey, transaction_su
     require(nodes.size() > 0, "System cluster must have at least one node");
 
     log("Adding EVM transaction submitter chain to system container");
-    val evm_transaction_submitter_blockchain = add_blockchain(transaction_submitter_chain_config, nodes, evm_transaction_submitter_chain_name, system_container(), true);
+    val evm_transaction_submitter_blockchain = add_blockchain(transaction_submitter_chain_config, nodes, blockchains.evm_transaction_submitter_chain, system_container(), true);
     update evm_transaction_submitter_chain(rid = evm_transaction_submitter_blockchain.rid);
+    send_message(blockchain_rid_topic, blockchain_rid(rid = evm_transaction_submitter_blockchain.rid, name = blockchains.evm_transaction_submitter_chain).to_gtv());
 }
 
 query get_evm_transaction_submitter_chain_rid(): byte_array? = if (evm_transaction_submitter_chain.rid == x"") null else evm_transaction_submitter_chain.rid;
