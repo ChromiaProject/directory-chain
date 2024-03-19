@@ -6,7 +6,10 @@ entity price_oracle_rates {
     mutable price: decimal;
 }
 
-function receive_price_oracle_update(body: gtv) {
+function receive_price_oracle_update(sender: byte_array, body: gtv) {
+
+    require(exists(sender_blockchain @? { .name == blockchains.price_oracle_chain_name, .rid == sender }),
+        "Received price oracle message from sender: %s that is not tracked by economy chain.".format(sender));
 
     val message = token_price_changed_body.from_gtv(body);
 
