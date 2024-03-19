@@ -1,3 +1,28 @@
+function pay_evm_transaction_submitter_rewards(evm_transaction_submitter_cost: evm_transaction_submitter_cost) {
+    pay_out_node_rewards(calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost));
+}
+
+function calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost: evm_transaction_submitter_cost): map<node, big_integer> {
+    val node_reward = map<node, big_integer>();
+    val currency_to_price = map<text, decimal>(
+        price_oracle_rates @* { .symbol == chain_context.args.asset_symbol or .symbol == evm_transaction_submitter_cost.currency_symbol} (.symbol, .price)
+    );
+    require(currency_to_price.contains(chain_context.args.asset_symbol), "Reward currency %s does not exists in price oracle.".format(chain_context.args.asset_symbol));
+    val node = node @? { .pubkey == evm_transaction_submitter_cost.processed_by};
+    if (node == null) {
+        log("Warning: Node %s does not exists in EC. Transaction %s will not be rewarded.".format(evm_transaction_submitter_cost.processed_by, evm_transaction_submitter_cost.id));
+    } else {
+        if (not currency_to_price.contains(evm_transaction_submitter_cost.currency_symbol)) {
+            log("Warning: Currency %s does not exists in price oracle. Transaction %s will not be rewarded.".format(evm_transaction_submitter_cost.currency_symbol, evm_transaction_submitter_cost.id));
+        } else {
+            val native_currency_to_chr_ratio = currency_to_price[evm_transaction_submitter_cost.currency_symbol] / currency_to_price[chain_context.args.asset_symbol];
+            node_reward[node] = (evm_transaction_submitter_cost.cost * native_currency_to_chr_ratio * (1 + chain_context.args.evm_transaction_submitters_bonus)).to_big_integer();
+        }
+    }
+    return node_reward;
+}
+
+
 function pay_rewards(cluster: cluster, node_availability_report: node_availability_report) {
 
     val is_system_cluster = cluster.name == system_cluster_name;

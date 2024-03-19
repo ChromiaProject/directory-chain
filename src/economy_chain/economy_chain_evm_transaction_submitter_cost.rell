@@ -1,0 +1,9 @@
+function receive_evm_transaction_submitter_cost(sender: byte_array, body: gtv) {
+    val sender_transaction_submitter_chain_rid = sender_blockchain @? { .name == blockchains.evm_transaction_submitter_chain } ( .rid );
+    if (sender_transaction_submitter_chain_rid == null or sender_transaction_submitter_chain_rid != sender) {
+        log("Received evm transaction submitter cost message from sender: %s that is not tracked by economy chain.".format(sender));
+        return;
+    }
+    val evm_transaction_submitter_cost = evm_transaction_submitter_cost.from_gtv(body);
+    pay_evm_transaction_submitter_rewards(evm_transaction_submitter_cost);
+}
