@@ -49,6 +49,19 @@ entity reward_rate {
 
 function __staking_init() {
    _staking_set_rate_at(chain_context.args.staking_initial_reward_rate, _staking_last_known_time());
+   _staking_populate_default_providers();
+}
+
+function _staking_populate_default_providers() {
+    val default_providers = map<text, byte_array>.from_gtv_pretty(chain_context.args.default_providers);
+
+    // TODO Unify this with rewards provider logic
+    for (default_provider in default_providers) {
+        val (provider_name, provider_pubkey) = default_provider;
+        val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(provider_pubkey, set(["A", "T"]));
+        val provider = ft4.accounts.Unsafe.create_account_with_auth(auth_descriptor);
+        create provider_registration(_staking_last_known_time(), provider, provider_name, true);
+    }
 }
 
 operation staking_set_rate_at(reward_rate: decimal, provider_rate: decimal, time: timestamp) {
