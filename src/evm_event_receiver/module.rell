@@ -1,0 +1,32 @@
+module;
+
+import common.*;
+import model.*;
+
+import messaging.blockchain_rid.*;
+import messaging.icmf.*;
+
+import constants.*;
+
+object evm_event_receiver_chain {
+    mutable rid: byte_array = x"";
+}
+
+operation init_evm_event_receiver_chain(my_pubkey: pubkey, event_receiver_chain_config: byte_array) {
+    require_is_provider_with_rate_limit(my_pubkey);
+    require_is_system_provider(my_pubkey);
+
+    require(evm_event_receiver_chain.rid == x"", "EVM event receiver chain is already started");
+
+    val nodes = cluster_node @* { system_cluster() } (@sort .node.pubkey);
+    // do not write new configuration when size is 0 since it's impossible to recover from that
+    require(nodes.size() > 0, "System cluster must have at least one node");
+
+    log("Adding EVM event receiver chain to system container");
+    val evm_event_receiver_blockchain = add_blockchain(
+        event_receiver_chain_config, nodes, blockchains.evm_event_receiver_chain, system_container(), true);
+    update evm_event_receiver_chain(rid = evm_event_receiver_blockchain.rid);
+    send_message(blockchain_rid_topic, blockchain_rid(rid = evm_event_receiver_blockchain.rid, name = blockchains.evm_event_receiver_chain).to_gtv());
+}
+
+query get_evm_event_receiver_chain_rid(): byte_array? = if (evm_event_receiver_chain.rid == x"") null else evm_event_receiver_chain.rid;

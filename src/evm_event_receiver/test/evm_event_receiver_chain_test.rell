@@ -1,0 +1,29 @@
+@test module;
+
+import ^^.*;
+import ^^^.common.test.setup.*;
+import ^^^.common.test.util.*;
+
+function test_init_evm_event_receiver_chain() {
+    setup_module();
+
+    assert_equals(evm_event_receiver_chain.rid, x"");
+
+    val conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+
+    rell.test.tx().op(
+        init_evm_event_receiver_chain(initial_provider.pub, conf.to_gtv().to_bytes())
+    ).sign(initial_provider).run();
+    assert_not_equals(evm_event_receiver_chain.rid, x"");
+    val bc = blockchain @ { .name == blockchains.evm_event_receiver_chain };
+    assert_equals(bc.state, blockchain_state.RUNNING);
+    assert_true(bc.system);
+    assert_equals(bc.rid, evm_event_receiver_chain.rid);
+    assert_not_null(container_blockchain @? { bc, .container.cluster.name == clusters.system });
+
+    conf["nonce"] = "whatever".to_gtv();
+    rell.test.tx().op(
+        init_evm_event_receiver_chain(initial_provider.pub, conf.to_gtv().to_bytes())
+    ).sign(initial_provider).run_must_fail("EVM event receiver chain is already started");
+    assert_not_equals(evm_event_receiver_chain.rid, x"");
+}
