@@ -116,6 +116,15 @@ function test_precise_configuration_update_signers_happy() {
     );
     assert_false(is_pending_blockchain_configuration_applied(bc_rid, 1, pending_config1_hash));
 
+    // Assert new pending configs are "invisible"
+    val new_config = ["number": (1).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, new_config.to_gtv_pretty().to_bytes(), "first")
+    ).sign(initial_provider).run();
+    val pending_configs = nm_get_pending_blockchain_configuration(bc_rid, 5);
+    assert_equals(nm_get_pending_blockchain_configuration(bc_rid, 2).size(), 1);
+    assert_equals(pending_configs[0], pending_config1);
+
     rell.test.tx().op(
         receive_configuration_updated_op(
             anchor_chain.rid,
@@ -136,10 +145,100 @@ function test_precise_configuration_update_signers_happy() {
         updated_config.signers,
         [c.test_node.pubkey, second_node_pubkey].sorted()
     );
-    assert_true(nm_get_pending_blockchain_configuration(bc_rid, 5).empty());
     assert_true(is_pending_blockchain_configuration_applied(bc_rid, 5, pending_config1_hash));
     // Assert signer config entity is created
     assert_equals(blockchain_configuration_signers @ { .height == 5 }.signers, full_config1["signers"].to_bytes());
+    // Assert new pending configs are "visible" again
+    val pending_configs_after = nm_get_pending_blockchain_configuration(bc_rid, 5);
+    assert_equals(pending_configs_after.size(), 1);
+    assert_not_equals(pending_configs_after[0], pending_config1);
+}
+
+function test_precise_configuration_update_signers_retry() {
+    val (anchor_chain, bc_rid) = setup();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.bob, true, ""),
+        propose_provider_is_system(initial_provider.pub, rell.test.pubkeys.bob, true, "")
+    ).sign(initial_provider).run();
+    val second_provider = require_provider(rell.test.pubkeys.bob);
+    val system_cluster = require_cluster(clusters.system);
+    val second_node_pubkey = rell.test.pubkeys.trudy;
+    rell.test.tx().op(
+        create_test_node(second_provider, second_node_pubkey, system_cluster)
+    ).sign(rell.test.keypairs.bob).run();
+    rell.test.tx().op(
+        add_node_to_cluster(rell.test.pubkeys.bob, second_node_pubkey, clusters.system)
+    ).sign(rell.test.keypairs.bob).run();
+    val pending_config1 = nm_get_pending_blockchain_configuration(bc_rid, 5) @ {};
+    val full_config1 = map<text, gtv>.from_gtv(gtv.from_bytes(pending_config1.base_config));
+    full_config1["signers"] = pending_config1.signers.to_gtv();
+    val pending_config1_hash = full_config1.to_gtv().hash();
+    assert_equals(pending_config1.minimum_height, 1);
+    assert_equals(
+        map<text,gtv>.from_gtv(gtv.from_bytes(pending_config1.base_config))["number"],
+        (0).to_gtv()
+    );
+    assert_equals(
+        pending_config1.signers,
+        [c.test_node.pubkey, second_node_pubkey].sorted()
+    );
+    assert_false(is_pending_blockchain_configuration_applied(bc_rid, 1, pending_config1_hash));
+
+    rell.test.tx().op(
+        receive_configuration_failed_op(
+            anchor_chain.rid,
+            configuration_failed_topic,
+            configuration_failed(
+                blockchain_rid=bc_rid,
+                height=5,
+                config_hash=pending_config1_hash
+            ).to_gtv()
+        )
+    ).run();
+    // Assert that a retry has been created
+    assert_equals(nm_get_pending_blockchain_configuration(bc_rid, 5).size(), 1);
+    val pending_config1_retry = nm_get_pending_blockchain_configuration(bc_rid, 5) @ {};
+    val full_config1_retry = map<text, gtv>.from_gtv(gtv.from_bytes(pending_config1_retry.base_config));
+    full_config1_retry["signers"] = pending_config1_retry.signers.to_gtv();
+    val pending_config1_hash_retry = full_config1_retry.to_gtv().hash();
+    assert_equals(pending_config1_retry.minimum_height, 1);
+    assert_equals(
+        map<text,gtv>.from_gtv(gtv.from_bytes(pending_config1_retry.base_config))["number"],
+        (0).to_gtv()
+    );
+    assert_equals(
+        pending_config1_retry.signers,
+        [c.test_node.pubkey, second_node_pubkey].sorted()
+    );
+    assert_false(is_pending_blockchain_configuration_applied(bc_rid, 1, pending_config1_hash_retry));
+
+    // Complete retry
+    rell.test.tx().op(
+        receive_configuration_updated_op(
+            anchor_chain.rid,
+            configuration_updated_topic,
+            configuration_updated(
+                blockchain_rid=bc_rid,
+                height=8,
+                config_hash=pending_config1_hash_retry
+            ).to_gtv()
+        )
+    ).run();
+
+    val updated_config = require(nm_get_blockchain_configuration_v5(bc_rid, 8));
+    assert_equals(
+        map<text,gtv>.from_gtv(gtv.from_bytes(updated_config.base_config))["number"],
+        (0).to_gtv()
+    );
+    assert_equals(
+        updated_config.signers,
+        [c.test_node.pubkey, second_node_pubkey].sorted()
+    );
+    assert_true(is_pending_blockchain_configuration_applied(bc_rid, 8, pending_config1_hash));
+    // Assert signer config entity is created
+    assert_equals(blockchain_configuration_signers @ { .height == 8 }.signers, full_config1["signers"].to_bytes());
 }
 
 function test_precise_configuration_update_config_multiple_pending() {
