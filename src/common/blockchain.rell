@@ -104,11 +104,16 @@ function get_latest_blockchain_configuration_data(blockchain): (height: integer,
 }
 
 function get_pending_blockchain_configuration(blockchain, height: integer):
-    list<(base_config: byte_array, signers: list<pubkey>, minimum_height: integer)> = pending_blockchain_configuration @* { blockchain, .minimum_height <= height } (
+    list<(base_config: byte_array, signers: list<pubkey>, minimum_height: integer)> {
+    val earliest_signer_update_height = pending_blockchain_configuration @? { blockchain, .signers_update }
+        (@sort .minimum_height) limit 1;
+    val include_to_height = if (earliest_signer_update_height == null) height else min(height, earliest_signer_update_height);
+    return pending_blockchain_configuration @* { blockchain, .minimum_height <= include_to_height } (
         base_config = decompress_configuration(.base_config),
         signers = list<pubkey>.from_gtv(gtv.from_bytes(.signers)),
         @sort minimum_height = .minimum_height
     );
+}
 
 function get_pending_blockchain_configuration_by_hash(blockchain, config_hash: byte_array):
     (base_config: byte_array, signers: list<pubkey>, minimum_height: integer)? = pending_blockchain_configuration @? { blockchain, config_hash } (

@@ -42,21 +42,36 @@
         reported_at_height = message.height
     );
 
-    // Moving excluded signers of failed pending config back to cluster signers.
-    val cluster_signers = cluster_node @* { cluster } ( .node.pubkey );
-    val excluded_signers = signer_excluded_from_pending_configuration @* {
-        bc, .config_hash == pending_configuration.config_hash, .pubkey not in cluster_signers
-    } ( .pubkey );
-    if (exists(excluded_signers)) {
-        log("Pending config %s failed, removed signers will be re-added to the cluster %s".format(pending_configuration.config_hash, cluster.name));
-        for (signer in excluded_signers) {
-            val node = require_node(signer);
-            create cluster_node(cluster, node);
-            log("cluster_node created: " + signer);
-            after_node_added_to_cluster(node, cluster);
-        }
-    }
-    delete signer_excluded_from_pending_configuration @* { bc, .config_hash == pending_configuration.config_hash };
+    // Retry signers update
+    if (pending_configuration.signers_update) {
+        log("Pending config %s with signer updates failed. Retrying.".format(pending_configuration.config_hash));
+        val excluded_signer = signer_excluded_from_pending_configuration
+                @? { bc, .config_hash == pending_configuration.config_hash };
+        val new_signers = pending_configuration.signers;
+        val unique_base_config = make_config_unique(get_latest_blockchain_configuration_data(bc).config);
+        val config_hash = calculate_configuration_hash(
+            unique_base_config,
+            list<byte_array>.from_gtv(gtv.from_bytes(new_signers))
+        );
+        val minimum_height = pending_configuration.minimum_height;
 
-    delete pending_configuration;
+        delete pending_configuration;
+        create pending_blockchain_configuration(
+            bc,
+            minimum_height,
+            config_hash = config_hash,
+            base_config = unique_base_config,
+            signers = new_signers,
+            signers_update = true
+        );
+
+        if (excluded_signer != null) {
+            create signer_excluded_from_pending_configuration(
+                bc, config_hash = config_hash, pubkey = excluded_signer.pubkey
+            );
+            delete excluded_signer;
+        }
+    } else {
+        delete pending_configuration;
+    }
 }
