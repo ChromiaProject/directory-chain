@@ -440,3 +440,34 @@ function test_deposit_and_withdraw_via_evm() {
     // Request withdrawal again on BSC (which is okay)
     do_evm_withdrawal_request_bsc(test_account_alice);
 }
+
+function test_evm_account_creation() {
+    rell.test.tx().op(init()).run();
+
+    val evm_address: byte_array = x"753218363422002DF74F3D0D8d67f6CB38bE32D0";
+    val evm_event = event_data(
+        tnx_hash = "NULL".hash(),
+        log_index = 0,
+        signature = "NULL".hash(),
+        contract_address = x"753218363422002DF74F3D0D8d67f6CB38bE32D0",
+        name = "StakeUpdate",
+        indexed_values = [evm_address.to_gtv()],
+        non_indexed_values = [(100).to_gtv()]
+    );
+
+    // Submit mock EVM block
+    rell.test.tx().op(
+        do_test_evm_block(
+            1, // ETH network id
+            1,
+            "NULL".hash(),
+            [evm_event]
+        )
+    ).run();
+
+    // See that FT4 account is created
+    require(
+        ft4.accounts.auth_descriptor_signer @? {.id == evm_address} ( @omit @sort .rowid, .account_auth_descriptor.account ),
+        "Cannot find EVM account."
+    );
+}
