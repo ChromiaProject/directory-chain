@@ -14,6 +14,7 @@ namespace eif {
     import event_receiver: lib.eif_event_receiver_chain.messaging.*;
     import messaging: lib.eif.messaging;
     import lib.eif.main;
+    import lib.eif.ft4;
 }
 
 import lib.auth;
@@ -33,6 +34,11 @@ struct module_args {
     amount_to_mint: big_integer;
     pool_amount_to_mint: big_integer;
     pool_account_pubkey: pubkey;
+    evm_asset_network_id: integer;
+    evm_asset_address: byte_array;
+    evm_asset_name: text;
+    evm_asset_symbol: text;
+    evm_asset_decimals: integer;
     chromia_foundation_account_pubkey: pubkey;
     admin_pubkey: pubkey;
     staking_initial_reward_rate: decimal;
@@ -67,6 +73,8 @@ operation init() {
 
     __staking_init();
 
+    create_evm_asset_link();
+
     log("Economy chain was initialized");
 }
 
@@ -88,4 +96,3 @@ function require_pubkey(pubkey) {
 function require_is_signer(pubkey) {
     require(op_context.is_signer(pubkey), "Operation must be signed by " + pubkey);
 }
-
