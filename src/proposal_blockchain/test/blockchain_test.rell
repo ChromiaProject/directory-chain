@@ -106,3 +106,60 @@ function propose_config_at(brid: byte_array, conf: map<text, gtv>, height: integ
         propose_configuration_at(initial_provider.pub, brid, conf.to_gtv().to_bytes(), height, force)
     ).sign(initial_provider);
 }
+
+
+function test_forced_configuration() {
+    setup();
+
+    val cl = system_cluster();
+    val container = "container";
+    val alice = provider @ { rell.test.pubkeys.alice };
+    val bob = provider @ { rell.test.pubkeys.bob };
+    rell.test.tx().op(add_test_member(system_p_voter_set(), bob)).run();
+
+    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    // Proposing blockchain to a non-system container
+    rell.test.tx().op(
+        create_container(alice.pubkey, container, clusters.system, 0, [alice.pubkey, bob.pubkey]),
+        propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "foo_chain", container)
+    ).sign(rell.test.keypairs.alice).run();
+    bob_votes();
+
+    val bc = blockchain @ { .name == "foo_chain" };
+    assert_equals(bc.state, blockchain_state.RUNNING);
+
+    alice_proposes_action(bc, blockchain_action.pause);
+    bob_votes();
+    assert_equals(bc.state, blockchain_state.PAUSED);
+
+    conf["nonce"] = (10).to_gtv();
+    conf["name"] = "testConf".to_gtv();
+    force_config(bc.rid, conf, 10).run();
+    val pfc = get_proposed_forced_configuration(null);
+    assert_equals(pfc?.forced_conf?.proposal?.proposal_type, proposal_type.force_configuration);
+    assert_equals(pfc?.forced_conf?.height, 10);
+    assert_equals(pfc?.forced_conf?.blockchain, bc);
+    bob_votes();
+
+    val actual_config_bytes = blockchain_configuration @ { bc, 10 } (.data);
+    val actual_config = map<text, gtv>.from_gtv(gtv.from_bytes(actual_config_bytes));
+    assert_equals(actual_config["name"], "testConf".to_gtv());
+    assert_false(actual_config.contains("signers"));
+    val blockchain_configuration_signers = blockchain_configuration_signers @ { bc, 10 } (.signers);
+    assert_equals(blockchain_configuration_signers, [initial_signer.pub].to_gtv().to_bytes());
+    val forced_configuration_data = get_forced_configuration(bc.rid);
+    assert_equals(forced_configuration_data.size(), 1);
+    assert_equals(forced_configuration_data[0], forced_configuration_data(bc, 10, actual_config_bytes.hash()));
+}
+
+function force_config(brid: byte_array, conf: map<text, gtv>, height: integer) {
+    return rell.test.tx().op(
+        propose_forced_configuration(initial_provider.pub, brid, conf.to_gtv().to_bytes(), height)
+    ).sign(initial_provider);
+}
+
+function alice_proposes_action(bc: blockchain, action: blockchain_action) {
+    rell.test.tx().op(
+        propose_blockchain_action(rell.test.pubkeys.alice, bc.rid, action)
+    ).sign(rell.test.keypairs.alice).run();
+}

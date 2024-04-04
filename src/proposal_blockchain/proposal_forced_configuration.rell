@@ -1,0 +1,105 @@
+entity proposed_forced_configuration {
+    key proposal;
+    blockchain;
+    height: integer;
+    config_data: byte_array;
+}
+
+entity forced_configuration {
+    index blockchain;
+    height: integer;
+    config_hash: byte_array;
+}
+
+operation propose_forced_configuration(my_pubkey: pubkey, blockchain_rid: byte_array, config_data: byte_array, height: integer, description: text = "") {
+    val provider = require_is_provider_with_rate_limit(my_pubkey);
+    val blockchain = require_blockchain(blockchain_rid);
+    val container = container_blockchain @ { blockchain }.container;
+    require_container_deployer(container, provider);
+
+    val is_chain0 = blockchain.rid == chain_context.blockchain_rid;
+    require(not is_chain0, "Forcing configuration disallowed for directory chain: " + blockchain_rid);
+
+    validate_blockchain_configuration(config_data, true, header_hash = true);
+
+    val prop = create proposal(op_context.last_block_time, proposal_type.force_configuration, provider, container.deployer, description);
+    create proposed_forced_configuration(prop, blockchain, height, config_data);
+    internal_vote(provider, prop, true);
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.force_configuration.name: apply_proposed_forced_configuration(*)];
+
+function apply_proposed_forced_configuration(proposal) {
+    val pfc = proposed_forced_configuration @? { proposal };
+    if (pfc == null) return;
+
+    val blockchain = require_blockchain(pfc.blockchain.rid);
+    require(blockchain.state == blockchain_state.PAUSED, "Forcing configuration only allowed on PAUSED blockchains. Blockchain rid: %s, state: %s".format(blockchain.rid, blockchain.state));
+
+    val cluster = container_blockchain @ { blockchain }  ( .container ) .cluster;
+    val cluster_signers = cluster_node @* { cluster } (@sort .node.pubkey);
+    val signers = cluster_signers.to_gtv().to_bytes();
+
+    val config_data = make_config_unique(pfc.config_data);
+    compress_and_store_configuration(blockchain, pfc.height, config_data, true);
+
+    val blockchain_configuration_signers = blockchain_configuration_signers @? { blockchain, pfc.height};
+    if (blockchain_configuration_signers == null) {
+        create blockchain_configuration_signers(blockchain, pfc.height, signers);
+    } else {
+        blockchain_configuration_signers.signers = signers;
+    }
+    create forced_configuration(blockchain, pfc.height, config_data.hash());
+    delete pending_blockchain_configuration @* {blockchain};
+    delete signer_excluded_from_pending_configuration @* {blockchain};
+
+    add_dependencies(config_data, blockchain.rid, pfc.height);
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.force_configuration.name: delete_proposed_forced_configuration(*)];
+
+function delete_proposed_forced_configuration(proposal) {
+    delete proposed_forced_configuration @? { proposal };
+}
+
+struct proposed_forced_configuration_data {
+    proposal;
+    blockchain;
+    height: integer;
+    config_data: byte_array;
+}
+
+struct forced_configuration_data {
+    blockchain;
+    height: integer;
+    config_hash: byte_array;
+}
+
+query get_proposed_forced_configuration(rowid?): (
+    current_conf: blockchain_configuration_data,
+    forced_conf: proposed_forced_configuration_data
+)? {
+    val proposal = get_latest_proposal(rowid, proposal_type.force_configuration);
+    if (proposal == null) return null;
+    val config = proposed_forced_configuration @? { require_proposal(proposal.rowid) }
+        (proposed_forced_configuration_data(.proposal, .blockchain, .height, decompress_configuration(.config_data)));
+    if (config == null) return null;
+
+    val current = get_latest_blockchain_configuration_data(config.blockchain);
+
+    return (
+        current_conf = blockchain_configuration_data(current.height, config.blockchain, current.config),
+        forced_conf = config
+    );
+}
+
+query get_forced_configuration(blockchain_rid: byte_array): list<forced_configuration_data> {
+    val blockchain = require_blockchain(blockchain_rid, include_removed = true);
+    return forced_configuration @* { blockchain } (
+        forced_configuration_data(
+            .blockchain,
+            .height,
+            .config_hash
+        )
+    );
+}
