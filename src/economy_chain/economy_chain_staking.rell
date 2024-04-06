@@ -13,11 +13,6 @@ entity staker_withdrawal_request {
     key staker_withdrawal_request_time, staker;
 }
 
-// NOTE: We need to keep a timeline as registrations do not take effect immediately
-entity provider_registration {
-    index provider: pubkey;
-}
-
 entity staker_payout {
     staker_payout_time: timestamp;
     key staker_payout_time;
@@ -236,13 +231,9 @@ function _staking_get_withdrawal_time(staker: ft4.accounts.account): timestamp? 
         ;
 }
 
-query staking_is_active_provider(provider: pubkey): boolean {
-    return _staking_is_active_provider(provider);
-}
-
-function _staking_is_active_provider(provider: pubkey): boolean {
-    val provider_registration = provider_registration @? {.provider == provider};
-    return not (null == provider_registration); 
+function _staking_is_active_provider(_provider: pubkey): boolean {
+    val provider_registration = provider @? {.pubkey == _provider};
+    return not (null == provider_registration);
 }
 
 query staking_get_total_delegation_to(provider: pubkey): integer {
@@ -321,18 +312,7 @@ function _staking_rewards_claimable_for(staker: ft4.accounts.account): integer {
     return integer(token_reward); // Can only transfer whole minor units
 }
 
-operation staking_add_provider(name: text, provider: pubkey) {
-    require_initialized();
-    require_admin();
-    require(not _staking_is_active_provider(provider), "Provider cannot be active.");
-    create provider_registration(provider);
-}
-
-operation staking_remove_provider(provider: pubkey) {
-    require_initialized();
-    require_admin();
-    require(_staking_is_active_provider(provider), "Provider not active.");
-
+function _staking_offboard_provider(provider: pubkey) {
     // Unwind delegations immediately
     // Find all the latest delegations involving removed provider
     // eg. latest AND new_provider is going
@@ -348,9 +328,8 @@ operation staking_remove_provider(provider: pubkey) {
         );
         _staking_apply_staker_state_delta(removed_delegation, delta);
     }
-
-    delete provider_registration @ {.provider == provider};
 }
+
 
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
