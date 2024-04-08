@@ -71,10 +71,10 @@ function test_add_remove_providers() {
 
     // Add some delegation
     // Have A deposit and delegate to C
-    do_staking_deposit(rell.test.keypairs.alice, 9999999);
+    do_staking_deposit_native(rell.test.keypairs.alice, 9999999);
     do_staking_delegate(rell.test.keypairs.alice, test_account_charlie);
     // Have D deposit 11 and delagate to B
-    do_staking_deposit(rell.test.keypairs.dave, 11);
+    do_staking_deposit_native(rell.test.keypairs.dave, 11);
     do_staking_delegate(rell.test.keypairs.dave, test_account_bob);
 
     // Wait for delegation to take effect
@@ -123,7 +123,7 @@ function test_delegation() {
         .op(staking_add_provider('Charlie', test_account_charlie.id))
     .sign(admin_privkey).run();
 
-    do_staking_deposit(rell.test.keypairs.alice, 8000);
+    do_staking_deposit_native(rell.test.keypairs.alice, 8000);
     do_staking_delegate(rell.test.keypairs.alice, test_account_charlie);
 
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
@@ -150,7 +150,7 @@ function test_staking_deposit() {
     rell.test.tx()
         .op(mint_to(test_account_alice, 9999999))
     .run();
-    do_staking_deposit(rell.test.keypairs.alice, 7777);
+    do_staking_deposit_native(rell.test.keypairs.alice, 7777);
     assert_equals(staking_get_balance(test_account_alice.id), 7777);
 }
 
@@ -187,8 +187,8 @@ function test_yield_and_payout_crudely () {
 
     // Deposit 100 with A
     // Deposit 200 with B
-    do_staking_deposit(rell.test.keypairs.alice, 1000000);
-    do_staking_deposit(rell.test.keypairs.bob, 2000000);
+    do_staking_deposit_native(rell.test.keypairs.alice, 1000000);
+    do_staking_deposit_native(rell.test.keypairs.bob, 2000000);
 
     // FFWD
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
@@ -252,7 +252,7 @@ function test_withdrawal() {
 
 
     // Cannot withdraw without withdrawal request
-    do_staking_deposit(rell.test.keypairs.alice, 7777);
+    do_staking_deposit_native(rell.test.keypairs.alice, 7777);
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_withdraw())
     ).op(
@@ -285,7 +285,7 @@ function test_withdrawal() {
     assert_equals(staking_get_balance(test_account_alice.id), 0);
 
     // Ensure that the withdrawal request is cancelled on re-delegation
-    do_staking_deposit(rell.test.keypairs.alice, 7777);
+    do_staking_deposit_native(rell.test.keypairs.alice, 7777);
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_request_withdrawal())
     ).op(
@@ -330,10 +330,10 @@ function test_staking_get_total_delegation_to() {
         .op(staking_add_provider('Bob', test_account_bob.id))
     .sign(admin_privkey).run();
     // Have C deposit 9 and delegate to A
-    do_staking_deposit(rell.test.keypairs.charlie, 9);
+    do_staking_deposit_native(rell.test.keypairs.charlie, 9);
     do_staking_delegate(rell.test.keypairs.charlie, test_account_alice);
         // Have D deposit 11 and delagate to B
-    do_staking_deposit(rell.test.keypairs.dave, 11);
+    do_staking_deposit_native(rell.test.keypairs.dave, 11);
     do_staking_delegate(rell.test.keypairs.dave, test_account_bob);
 
     // Check the that neither A nor B has a balance delegated to them
@@ -350,7 +350,7 @@ function test_staking_get_total_delegation_to() {
     assert_equals(staking_get_total_delegation_to(test_account_bob.id), 11);
 
     // Have C deposit an additional 7
-    do_staking_deposit(rell.test.keypairs.charlie, 7);
+    do_staking_deposit_native(rell.test.keypairs.charlie, 7);
 
     // Check that A has 16 delegated to it (adding stake is immediate)
     assert_equals(staking_get_total_delegation_to(test_account_alice.id), 16);
@@ -395,9 +395,79 @@ function test_stake_and_delegate_to_chromaway() {
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(
             rell.test.keypairs.alice.priv,
-            staking_deposit(888, chromaway)
+            staking_deposit_native(888, chromaway)
         )
     )
-    .op(staking_deposit(888, chromaway))
+    .op(staking_deposit_native(888, chromaway))
     .run();
+}
+
+function test_deposit_and_withdraw_via_evm() {
+    rell.test.tx().op(init()).run();
+
+    val test_account_alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+
+    do_evm_stake_update_bsc(test_account_alice, 5000000);
+    do_evm_withdrawal_request_bsc(test_account_alice);
+
+    assert_equals(staking_get_balance(test_account_alice.id), 5000000);
+
+    // Only one withdrawal request at a time
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_request_withdrawal())
+    )
+    .op(staking_request_withdrawal())
+    .run();
+
+    // Wait a period
+    rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
+    rell.test.block().run();
+
+    // Withdraw
+    do_evm_stake_update_bsc(test_account_alice, 0);
+
+    // Reload
+    do_evm_stake_update_bsc(test_account_alice, 10);
+    do_staking_deposit_native(rell.test.keypairs.alice, 10);
+
+    // Request withdrawal on native
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_request_withdrawal())
+    )
+    .op(staking_request_withdrawal())
+    .run();
+
+    // Request withdrawal again on BSC (which is okay)
+    do_evm_withdrawal_request_bsc(test_account_alice);
+}
+
+function test_evm_account_creation() {
+    rell.test.tx().op(init()).run();
+
+    val evm_address: byte_array = x"753218363422002DF74F3D0D8d67f6CB38bE32D0";
+    val evm_event = event_data(
+        tnx_hash = "NULL".hash(),
+        log_index = 0,
+        signature = "NULL".hash(),
+        contract_address = x"753218363422002DF74F3D0D8d67f6CB38bE32D0",
+        name = "StakeUpdate",
+        indexed_values = [evm_address.to_gtv()],
+        non_indexed_values = [(100).to_gtv()]
+    );
+
+    // Submit mock EVM block
+    rell.test.tx().op(
+        do_test_evm_block(
+            1, // ETH network id
+            1,
+            "NULL".hash(),
+            [evm_event]
+        )
+    ).run();
+
+    // See that FT4 account is created
+    require(
+        ft4.accounts.auth_descriptor_signer @? {.id == evm_address} ( @omit @sort .rowid, .account_auth_descriptor.account ),
+        "Cannot find EVM account."
+    );
 }

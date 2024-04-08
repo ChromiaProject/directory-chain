@@ -1,0 +1,64 @@
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.assets;
+    import lib.ft4.auth;
+}
+import lib.auth;
+
+val STAKING_NETWORK_ID_BSC = 56;
+val STAKING_NETWORK_ID_ETH = 1;
+val STAKING_NETWORK_ID_BSC_TEST = 97;
+
+struct event_data {
+    tnx_hash: byte_array;
+    log_index: integer;
+    signature: byte_array;
+    contract_address: byte_array;
+    name: text;
+    indexed_values: list<gtv>;
+    non_indexed_values: list<gtv>;
+}
+
+function __staking_evm_block(network_id: integer, evm_block_height: integer, evm_block_hash: byte_array, events: list<event_data>) {
+    for (event in events) {
+        val evm_address = byte_array.from_gtv(event.indexed_values[0]);
+
+        // Get or make an FT4 account on-demand
+        val ft4_account_existing = ft4.accounts.auth_descriptor_signer @?
+            {.id == evm_address} ( @omit @sort .rowid, .account_auth_descriptor.account )
+        limit 1;
+
+        val ft4_account = when ( ft4_account_existing ) {
+            null -> ft4.accounts.Unsafe.create_account_with_auth(
+                        ft4.accounts.single_sig_auth_descriptor(evm_address, set(["A", "T"]))
+                );
+            else -> ft4_account_existing;
+        };
+
+        if (event.name == "WithdrawRequest") {
+            // We don't need to dup this over if one is already active
+            if (null != _staking_get_withdrawal_time(ft4_account) ) {
+                _staking_request_withdrawal(ft4_account);
+            }
+        } else if (event.name == "StakeUpdate") {
+            val staked_balance = integer.from_gtv(event.non_indexed_values[0]);
+            if (_staking_evm_is_network_bsc(network_id)) {
+                _staking_update_bsc(ft4_account, staked_balance);
+            } else if (_staking_evm_is_network_eth(network_id)) {
+                _staking_update_eth(ft4_account, staked_balance);
+            } else {
+                log("Unknown staking network id: ", network_id);
+            }
+        } else {
+            log("Unknown EIF event: ", event.name);
+        }
+    }
+}
+
+function _staking_evm_is_network_eth(network_id: integer) {
+    return network_id == STAKING_NETWORK_ID_ETH;
+}
+
+function _staking_evm_is_network_bsc(network_id: integer) {
+    return network_id == STAKING_NETWORK_ID_BSC or network_id == STAKING_NETWORK_ID_BSC_TEST;
+}
