@@ -11,7 +11,7 @@ namespace ft4 {
 }
 import lib.auth;
 
-val ticket_id_after_init = 76;
+val ticket_id_after_init = 26;
 
 function do_create_account(keypair: rell.test.keypair, auth_privkey: byte_array, failure: text? = null): ft4.accounts.account? {
     val eth_address = crypto.eth_privkey_to_address(keypair.priv);
@@ -31,7 +31,7 @@ function do_create_account(keypair: rell.test.keypair, auth_privkey: byte_array,
     }
 }
 
-function add_provider(pubkey: pubkey, system: boolean, tier: provider_tier = provider_tier.NODE_PROVIDER): provider {
+function add_provider(pubkey: pubkey, system: boolean = false, tier: provider_tier = provider_tier.NODE_PROVIDER): provider {
     rell.test.tx().op(
         icmf_message_op(pubkey, provider_update_topic, body = provider_update_message(
             pubkey, system, tier = tier.name, active = true).to_gtv()
@@ -39,6 +39,16 @@ function add_provider(pubkey: pubkey, system: boolean, tier: provider_tier = pro
     ).run();
     return require(provider @? { pubkey });
 }
+
+function remove_provider(pubkey: pubkey) {
+    val provider = require(provider @? { pubkey });
+    rell.test.tx().op(
+        icmf_message_op(pubkey, provider_update_topic, body = provider_update_message(
+            pubkey, system = provider.system, tier = provider.tier.name, active = false).to_gtv()
+        )
+    ).run();
+}
+
 
 function ensure_cluster(name: text, deleted: boolean, operational: boolean, cluster_units: integer, extra_storage: integer, anchoring_chain: byte_array = x""): cluster {
     rell.test.tx().op(
@@ -113,12 +123,12 @@ function do_staking_deposit_native(
 
 function do_staking_delegate(
     keypair: rell.test.keypair,
-    provider: ft4.accounts.account
+    provider: pubkey
 ) {
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(keypair.priv, staking_delegate(provider.id))
+        ft4.test_utils.evm_auth_operation_for(keypair.priv, staking_delegate(provider))
     ).op(
-        staking_delegate(provider.id)
+        staking_delegate(provider)
     ).run();
 }
 

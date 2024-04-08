@@ -52,46 +52,28 @@ function test_add_remove_providers() {
         .op(mint_to(test_account_dave, 9999999))
     .sign(admin_privkey).run();
 
-    assert_false(staking_is_active_provider(test_account_charlie.id));
-
-    rell.test.tx().op(
-        staking_remove_provider(test_account_charlie.id)
-    ).sign(admin_privkey).run_must_fail("Provider not active.");
-
-    rell.test.tx()
-        .op(staking_add_provider('Charlie', test_account_charlie.id))
-        .op(staking_add_provider('Bob', test_account_bob.id))
-    .sign(admin_privkey).run();
-
-    rell.test.tx().op(
-        staking_add_provider('Charlie Too', test_account_charlie.id)
-    ).sign(admin_privkey).run_must_fail("Provider cannot be active.");
-
-    assert_true(staking_is_active_provider(test_account_charlie.id));
+    add_provider(rell.test.keypairs.charlie.pub);
+    add_provider(rell.test.keypairs.bob.pub);
 
     // Add some delegation
     // Have A deposit and delegate to C
     do_staking_deposit_native(rell.test.keypairs.alice, 9999999);
-    do_staking_delegate(rell.test.keypairs.alice, test_account_charlie);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.charlie.pub);
     // Have D deposit 11 and delagate to B
     do_staking_deposit_native(rell.test.keypairs.dave, 11);
-    do_staking_delegate(rell.test.keypairs.dave, test_account_bob);
+    do_staking_delegate(rell.test.keypairs.dave, rell.test.keypairs.bob.pub);
 
     // Wait for delegation to take effect
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
     rell.test.block().run();
-    assert_equals(staking_get_total_delegation_to(test_account_charlie.id), 9999999);
-    assert_equals(staking_get_total_delegation_to(test_account_bob.id), 11);
+    assert_equals(staking_get_total_delegation_to(rell.test.keypairs.charlie.pub), 9999999);
+    assert_equals(staking_get_total_delegation_to(rell.test.keypairs.bob.pub), 11);
 
-    rell.test.tx().op(
-        staking_remove_provider(test_account_charlie.id)
-    ).sign(admin_privkey).run();
-
-    assert_false(staking_is_active_provider(test_account_charlie.id));
+    remove_provider(rell.test.keypairs.charlie.pub);
 
     // Ensure delegates have been removed
-    assert_equals(staking_get_total_delegation_to(test_account_charlie.id), 0); // <- Removed immediately
-    assert_equals(staking_get_total_delegation_to(test_account_bob.id), 11); // <- Unchanged
+    assert_equals(staking_get_total_delegation_to(rell.test.keypairs.charlie.pub), 0); // <- Removed immediately
+    assert_equals(staking_get_total_delegation_to(rell.test.keypairs.bob.pub), 11); // <- Unchanged
 
     // Should have earned something
     assert_true(staking_rewards_claimable_for(test_account_alice.id) > 0);
@@ -119,22 +101,20 @@ function test_delegation() {
         staking_delegate(test_account_charlie.id)
     ).run_must_fail("Must be active provider.");
 
-    rell.test.tx()
-        .op(staking_add_provider('Charlie', test_account_charlie.id))
-    .sign(admin_privkey).run();
+    add_provider(rell.test.keypairs.charlie.pub);
 
     do_staking_deposit_native(rell.test.keypairs.alice, 8000);
-    do_staking_delegate(rell.test.keypairs.alice, test_account_charlie);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.charlie.pub);
 
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
     rell.test.block().run();
-    assert_equals(staking_get_current_delegate(test_account_alice.id), test_account_charlie);
+    assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.charlie.pub);
 
     assert_true(staking_rewards_claimable_for(test_account_alice.id) > 0);
 
     do_staking_undelegate(rell.test.keypairs.alice);
 
-    assert_equals(staking_get_current_delegate(test_account_alice.id), test_account_charlie); // No change now.
+    assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.charlie.pub); // No change now.
 
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
     rell.test.block().run();
@@ -292,8 +272,8 @@ function test_withdrawal() {
         staking_request_withdrawal()
     ).run();
     assert_false(null == staking_get_withdrawal_time(test_account_alice.id));
-    rell.test.tx().op(staking_add_provider('Bob', test_account_bob.id)).sign(admin_privkey).run();
-    do_staking_delegate(rell.test.keypairs.alice, test_account_bob);
+    add_provider(rell.test.keypairs.bob.pub);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.bob.pub);
     assert_true(null == staking_get_withdrawal_time(test_account_alice.id));
 
     // Only one withdrawal request at a time
@@ -322,23 +302,19 @@ function test_staking_get_total_delegation_to() {
         .op(mint_to(test_account_dave, 9999999))
     .run();
 
-    assert_false(staking_is_active_provider(test_account_bob.id));
-    rell.test.tx()
-        // Add A to the provider list
-        .op(staking_add_provider('Alice', test_account_alice.id))
-        // Add B to the provider list
-        .op(staking_add_provider('Bob', test_account_bob.id))
-    .sign(admin_privkey).run();
+    add_provider(rell.test.keypairs.alice.pub);
+    add_provider(rell.test.keypairs.bob.pub);
+
     // Have C deposit 9 and delegate to A
     do_staking_deposit_native(rell.test.keypairs.charlie, 9);
-    do_staking_delegate(rell.test.keypairs.charlie, test_account_alice);
+    do_staking_delegate(rell.test.keypairs.charlie, rell.test.keypairs.alice.pub);
         // Have D deposit 11 and delagate to B
     do_staking_deposit_native(rell.test.keypairs.dave, 11);
-    do_staking_delegate(rell.test.keypairs.dave, test_account_bob);
+    do_staking_delegate(rell.test.keypairs.dave, rell.test.keypairs.bob.pub);
 
     // Check the that neither A nor B has a balance delegated to them
-    assert_equals(staking_get_total_delegation_to(test_account_alice.id), 0);
-    assert_equals(staking_get_total_delegation_to(test_account_bob.id), 0);
+    assert_equals(staking_get_total_delegation_to(rell.test.keypairs.alice.pub), 0);
+    assert_equals(staking_get_total_delegation_to(rell.test.keypairs.bob.pub), 0);
 
     // Wait a period
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
@@ -346,20 +322,20 @@ function test_staking_get_total_delegation_to() {
 
     // Check that A has 9 delegated to it
     // Check that B has 11 delegated to it
-    assert_equals(staking_get_total_delegation_to(test_account_alice.id), 9);
-    assert_equals(staking_get_total_delegation_to(test_account_bob.id), 11);
+    assert_equals(staking_get_total_delegation_to(rell.test.keypairs.alice.pub), 9);
+    assert_equals(staking_get_total_delegation_to(rell.test.keypairs.bob.pub), 11);
 
     // Have C deposit an additional 7
     do_staking_deposit_native(rell.test.keypairs.charlie, 7);
 
     // Check that A has 16 delegated to it (adding stake is immediate)
-    assert_equals(staking_get_total_delegation_to(test_account_alice.id), 16);
+    assert_equals(staking_get_total_delegation_to(rell.test.keypairs.alice.pub), 16);
 
     // Have D change their their delegation to A
-    do_staking_delegate(rell.test.keypairs.dave, test_account_alice);
+    do_staking_delegate(rell.test.keypairs.dave, rell.test.keypairs.alice.pub);
 
     // Check that A has 16 delegated to it (changing delegation takes time)
-    assert_equals(staking_get_total_delegation_to(test_account_alice.id), 16);
+    assert_equals(staking_get_total_delegation_to(rell.test.keypairs.alice.pub), 16);
 
     // Wait a period
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
@@ -367,8 +343,8 @@ function test_staking_get_total_delegation_to() {
 
     // Check that A has 27 delegated to it
     // Check that B has 0 delegated to it
-    assert_equals(staking_get_total_delegation_to(test_account_alice.id), 27);
-    assert_equals(staking_get_total_delegation_to(test_account_bob.id), 0);
+    assert_equals(staking_get_total_delegation_to(rell.test.keypairs.alice.pub), 27);
+    assert_equals(staking_get_total_delegation_to(rell.test.keypairs.bob.pub), 0);
 
     // Have D undelegate
     do_staking_undelegate(rell.test.keypairs.dave);
@@ -378,28 +354,8 @@ function test_staking_get_total_delegation_to() {
     rell.test.block().run();
 
     // Check that A has 16 delegated to it
-    assert_equals(staking_get_total_delegation_to(test_account_alice.id), 16);
-    assert_equals(staking_get_total_delegation_to(test_account_bob.id), 0);
-}
-
-function test_stake_and_delegate_to_chromaway() {
-    rell.test.tx().op(init()).run();
-    val test_account_alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
-
-    val chromaway = staking_all_active_providers() @ {$.name == 'Chromaway'} ($.provider_account_id);
-
-    rell.test.tx()
-        .op(mint_to(test_account_alice, 9999999))
-    .sign(admin_privkey).run();
-
-    rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(
-            rell.test.keypairs.alice.priv,
-            staking_deposit_native(888, chromaway)
-        )
-    )
-    .op(staking_deposit_native(888, chromaway))
-    .run();
+    assert_equals(staking_get_total_delegation_to(rell.test.keypairs.alice.pub), 16);
+    assert_equals(staking_get_total_delegation_to(rell.test.keypairs.bob.pub), 0);
 }
 
 function test_deposit_and_withdraw_via_evm() {

@@ -65,6 +65,11 @@ function receive_provider_update_message(body: gtv) {
 
     if (exists(provider)) {
         log("Updating provider %s".format(message.pubkey));
+
+        if (provider.active and not message.active) {
+            remove_provider_handler(message.pubkey);
+        }
+
         provider.system = message.system;
         provider.tier = provider_tier.value(message.tier);
         provider.active = message.active;
@@ -79,6 +84,8 @@ function receive_provider_update_message(body: gtv) {
 
     update_system_p_vote_set(provider);
 }
+
+@extendable function remove_provider_handler(pubkey) {}
 
 function update_system_p_vote_set(provider: provider) {
 
