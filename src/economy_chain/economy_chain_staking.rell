@@ -111,7 +111,7 @@ operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
     );
     _staking_apply_staker_state_delta(staker, delta);
 
-    if (null != delegateTo) {
+    if (delegateTo??) {
         // Below check is duplicated, but less overhead than 2 wrapping functions.
         require(_staking_is_active_provider(delegateTo), "Must be active provider.");
         _staking_delegate(staker, delegateTo);
@@ -179,36 +179,28 @@ function _staking_request_withdrawal(staker: ft4.accounts.account, network) {
     create staker_withdrawal_request(network, staker_withdrawal_request_time=_staking_last_known_time(), staker=staker, false);
 }
 
-@extend(ft4.auth.auth_handler)
-function () = ft4.auth.add_auth_handler(
-    scope = "staking_withdraw",
-    flags = ["T"],
-    message = staking_withdraw_auth_message(*)
-);
-
-function staking_withdraw_auth_message(gtv): text {
-    val args = struct<staking_withdraw>.from_gtv(gtv);
-    return "Please sign the message to complete the withdrawal.";
-}
-
-operation staking_withdraw() {
+function _staking_withdraw_all() {
     require_initialized();
-    val staker = ft4.auth.authenticate();
-    val withdrawal_time = _staking_get_withdrawal_time(staker);
-    require(withdrawal_time, "Need a withdrawal request.");
-    require(_staking_last_known_time() >= withdrawal_time, "Need to wait for withdrawal request.");
 
-    // Send the balance back to them through ft4
-    ft4.assets.Unsafe.transfer(get_pool_account(), staker, get_asset(), _staking_get_balance(staker));
+    val open_withdrawals = staker_withdrawal_request @* {
+            not .used
+        and .network == network.CHR
+        and (.staker_withdrawal_request_time + chain_context.args.staking_withdrawal_delay_ms) < _staking_last_known_time()
+    } ( $.to_struct() );
 
-    // Apply change
-    val delta = staker_state_delta(
-        network = network.CHR,
-        cutover_time = staking_get_last_known_time(),
-        balance = 0,
-        new_provider = null, old_provider = null
-    );
-    _staking_apply_staker_state_delta(staker, delta);
+    for (withdrawal in open_withdrawals) {
+        // Send the balance back to them through ft4
+        _pay_to(withdrawal.staker, _staking_get_balance(withdrawal.staker));
+
+        // Apply change
+        val delta = staker_state_delta(
+            network = network.CHR,
+            cutover_time = staking_get_last_known_time(),
+            balance = 0,
+            new_provider = null, old_provider = null
+        );
+        _staking_apply_staker_state_delta(withdrawal.staker, delta);
+    }
 }
 
 query staking_get_withdrawal_time(account_id: byte_array): timestamp? {
@@ -346,6 +338,7 @@ operation staking_delegate(provider: pubkey) {
 }
 
 function _staking_delegate(staker: ft4.accounts.account, provider: pubkey) {
+    require(_staking_get_balance(staker) > 0, "Must have a stake to delegate somewhere.");
     for(n in network.values()) {
         _staking_delegate_by_network(staker, provider, n);
     }
@@ -372,7 +365,6 @@ operation staking_undelegate() {
 }
 
 function _staking_delegate_by_network(delegator: ft4.accounts.account, provider: pubkey, _network: network) : boolean {
-    require(_staking_get_balance(delegator) > 0, "Must have a stake to delegate somewhere.");
 
     // Is there an active withdrawal request for an EVM chain
     if ( [network.ETH, network.BSC].contains(_network)
@@ -448,6 +440,7 @@ function _staking_claim_rewards() {
         val (staker, payout_amount) = payment;
         if(payout_amount > 0) {
             _pay_to(staker, payout_amount);
+            log("Paid out %s to %s", staker, payout_amount);
         }
     }
 
@@ -484,6 +477,7 @@ function __staking_begin_block(height: integer) {
     if(interval_since_last_payout > chain_context.args.staking_payout_interval_ms) {
         _staking_claim_rewards();
     }
+    _staking_withdraw_all();
 }
 
 function _pay_to(staker: ft4.accounts.account, amount: integer) {
