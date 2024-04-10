@@ -59,6 +59,7 @@ function test_add_remove_providers() {
     // Have A deposit and delegate to C
     do_staking_deposit_native(rell.test.keypairs.alice, 9999999);
     do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.charlie.pub);
+
     // Have D deposit 11 and delagate to B
     do_staking_deposit_native(rell.test.keypairs.dave, 11);
     do_staking_delegate(rell.test.keypairs.dave, rell.test.keypairs.bob.pub);
@@ -66,6 +67,7 @@ function test_add_remove_providers() {
     // Wait for delegation to take effect
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
     rell.test.block().run();
+    assert_equals(staking_get_balance(test_account_alice.id), 9999999);
     assert_equals(staking_get_total_delegation_to(rell.test.keypairs.charlie.pub), 9999999);
     assert_equals(staking_get_total_delegation_to(rell.test.keypairs.bob.pub), 11);
 
@@ -368,12 +370,12 @@ function test_deposit_and_withdraw_via_evm() {
 
     assert_equals(staking_get_balance(test_account_alice.id), 5000000);
 
-    // Only one withdrawal request at a time
+    // Can't withdraw on CHR as no balance *there*
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_request_withdrawal())
     )
     .op(staking_request_withdrawal())
-    .run();
+    .run_must_fail("Need something to withdraw.");
 
     // Wait a period
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
@@ -386,12 +388,19 @@ function test_deposit_and_withdraw_via_evm() {
     do_evm_stake_update_bsc(test_account_alice, 10);
     do_staking_deposit_native(rell.test.keypairs.alice, 10);
 
-    // Request withdrawal on native
+    // Request withdrawal on native once (which is fine)
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_request_withdrawal())
     )
     .op(staking_request_withdrawal())
     .run();
+
+    // Request withdrawal on native a second time (which is a dup)
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_request_withdrawal())
+    )
+    .op(staking_request_withdrawal())
+    .run_must_fail("Only one withdrawal request at a time.");
 
     // Request withdrawal again on BSC (which is okay)
     do_evm_withdrawal_request_bsc(test_account_alice);
