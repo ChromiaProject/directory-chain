@@ -1,4 +1,5 @@
 @extend(remove_provider_handler) function(pubkey) = _staking_offboard_provider(pubkey);
+@extend(pay_reward) function(pool: ft4.accounts.account, pool_balance: big_integer, account: ft4.accounts.account, reward_debt:big_integer,  reward: big_integer, identity: text) = _staking_shared_rewards(pool, pool_balance, account, reward_debt,  reward, identity);
 
 // It might be better for this to live in a table
 enum network {
@@ -461,6 +462,19 @@ function _staking_get_current_delegate(staker: ft4.accounts.account, network = n
         if  (empty(current_state)) get_null_account()
     else if ( staking_get_last_known_time() >= current_state.cutover_time ) current_state.new_provider
     else    current_state.old_provider;
+}
+
+function _staking_shared_rewards(pool: ft4.accounts.account, pool_balance: big_integer, account: ft4.accounts.account, reward_debt:big_integer,  reward: big_integer, identity: text) {
+
+    // We ignore reward debt here as it will flow through the reward term after the pool is refreshed
+    val total_shared_reward = chain_context.args.rewards_share * reward;
+
+    // Find provider pubkey
+    val provider_pubkey = provider_account @ {account}.provider.pubkey;
+
+    val delegating_to = 0;// total delegation query
+
+    // Get total and divide through
 }
 
 function __staking_begin_block(height: integer) {
