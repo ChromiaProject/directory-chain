@@ -436,3 +436,29 @@ function test_evm_account_creation() {
         "Cannot find EVM account."
     );
 }
+
+function test_stats() {
+    rell.test.tx().op(init()).run();
+
+    assert_equals(staking_total_stake(), 0);
+    assert_equals(staking_total_accounts(), 0);
+
+    val test_account_alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val test_account_bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
+    val test_account_charlie = require(do_create_account(rell.test.keypairs.charlie, auth_privkey));
+    val test_account_dave = require(do_create_account(rell.test.keypairs.dave, auth_privkey));
+
+    assert_equals(staking_total_accounts(), 0);
+    assert_equals(staking_total_stake(), 0);
+
+    rell.test.tx()
+        .op(mint_to(test_account_charlie, 20))
+        .op(mint_to(test_account_dave, 1))
+    .run();
+
+    do_staking_deposit_native(rell.test.keypairs.charlie, 10);
+    do_staking_deposit_native(rell.test.keypairs.dave, 1);
+
+    assert_equals(staking_total_stake(), 11);
+    assert_equals(staking_total_accounts(), 2);
+}
