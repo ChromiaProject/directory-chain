@@ -1,12 +1,5 @@
 @extend(remove_provider_handler) function(pubkey) = _staking_offboard_provider(pubkey);
 
-namespace ft4 {
-    import lib.ft4.accounts;
-    import lib.ft4.assets;
-    import lib.ft4.auth;
-}
-import lib.auth;
-
 // It might be better for this to live in a table
 enum network {
     BSC, ETH, CHR
@@ -99,9 +92,8 @@ operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
     val staker = ft4.auth.authenticate();
 
     // Pull in the CHR
-    // TODO Make a trust account ???
     require(amount < get_account_balance(staker), "Insufficent funds to deposit.");
-    ft4.assets.Unsafe.transfer(staker, get_pool_account(), get_asset(), amount);
+    ft4.assets.Unsafe.transfer(staker, get_deposit_account(), get_asset(), amount);
 
     val existing = staker_state @? { .staker == staker and .latest and .network == network.CHR };
     val delta = staker_state_delta(
@@ -111,7 +103,7 @@ operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
     );
     _staking_apply_staker_state_delta(staker, delta);
 
-    if (delegateTo??) {
+    if (exists(delegateTo)) {
         // Below check is duplicated, but less overhead than 2 wrapping functions.
         require(_staking_is_active_provider(delegateTo), "Must be active provider.");
         _staking_delegate(staker, delegateTo);
@@ -190,7 +182,7 @@ function _staking_withdraw_all() {
 
     for (withdrawal in open_withdrawals) {
         // Send the balance back to them through ft4
-        _pay_to(withdrawal.staker, _staking_get_balance(withdrawal.staker));
+        ft4.assets.Unsafe.transfer(get_deposit_account(), withdrawal.staker, get_asset(), _staking_get_balance(withdrawal.staker));
 
         // Apply change
         val delta = staker_state_delta(
