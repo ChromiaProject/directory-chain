@@ -41,7 +41,7 @@ operation propose_configuration_at(my_pubkey: pubkey, blockchain_rid: byte_array
     val is_chain0 = blockchain.rid == chain_context.blockchain_rid or
         chain_context.blockchain_rid == x"0000000000000000000000000000000000000000000000000000000000000000"; // for unit tests
     require(is_chain0, "Proposing configuration at a specific height disallowed for chain: " + blockchain_rid);
-    validate_blockchain_configuration(config_data, signers = not is_chain0, header_hash = false);
+    validate_blockchain_configuration(config_data, signers = not is_chain0, header_hash = false, system_chain = blockchain.system);
 
     require(height >= 0, "height must be >= 0");
     require(empty(blockchain_configuration @? { blockchain, height } limit 1) or force, "Configuration at height %d already exists for blockchain %s, need to set force to override".format(height, blockchain.rid));

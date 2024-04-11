@@ -23,7 +23,8 @@ function test_propose_blockchain() {
     val bob = provider @ { rell.test.pubkeys.bob };
     rell.test.tx().op(add_test_member(system_p_voter_set(), bob)).run();
 
-    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv(),
+        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
     // proposing blockchain to a system container will fail
     rell.test.tx().op(
         propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "foo_chain", system_container_name(clusters.system))
@@ -58,7 +59,8 @@ function test_propose_blockchain() {
 function test_propose_configuration_at() {
     setup_module();
 
-    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv(),
+        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
     rell.test.tx().op(
         create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub])
     ).sign(initial_provider).run();
@@ -90,7 +92,8 @@ function test_propose_configuration_at() {
     propose_config_at(directory_chain.rid, conf, -2, false).run_must_fail();
 
     // 2. force == true
-    var conf2 = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    var conf2 = ["config_consensus_strategy": "HEADER_HASH".to_gtv(),
+        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
     conf2["name"] = "conf2".to_gtv();
     propose_config_at(directory_chain.rid, conf2, 8, true).run();
     val actual_config_bytes = blockchain_configuration @ { directory_chain, 8 } (.data);
@@ -117,7 +120,8 @@ function test_forced_configuration() {
     val bob = provider @ { rell.test.pubkeys.bob };
     rell.test.tx().op(add_test_member(system_p_voter_set(), bob)).run();
 
-    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv(),
+        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
     // Proposing blockchain to a non-system container
     rell.test.tx().op(
         create_container(alice.pubkey, container, clusters.system, 0, [alice.pubkey, bob.pubkey]),

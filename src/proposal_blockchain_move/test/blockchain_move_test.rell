@@ -19,7 +19,8 @@ function test_blockchain_moving_within_a_node() {
     // setup
     setup_module(provider_quota_max_containers = 2, cluster_anchoring_config = ["any": "value".to_gtv()]);
     val ip = provider @ { initial_provider.pub };
-    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv(),
+        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
 
     rell.test.tx().op(
         // s1 / c1
@@ -97,7 +98,8 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
     setup_module(provider_quota_max_containers = 3, cluster_anchoring_config = ["any": "value".to_gtv()]);
     val ip = provider @ { initial_provider.pub };
     val node0 = node @ { test_node.pubkey };
-    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv(),
+        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
 
     rell.test.tx().op(
         register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
@@ -176,7 +178,7 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
     // Trying to move blockchain that is already being moved -- must fail
     rell.test.tx().op(
         propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c1") // c2 -> c1
-    ).sign(initial_provider).run_must_fail("Blockchain 0x5c2e022c482853fdf9db276dd37e6235a7d81a679362a2446f468c83387cfef6 is being moved");
+    ).sign(initial_provider).run_must_fail("Blockchain 0xb931c9fd7e0e80af611d77e4035d898f347da0791528f7dd8cc60399f2bf994f is being moved");
 
     // 2. finish blockchain moving
     rell.test.tx().op(
@@ -228,7 +230,8 @@ function test_paused_blockchain_moving_between_containers_running_on_different_n
     setup_module(provider_quota_max_containers = 3);
     val ip = provider @ { initial_provider.pub };
     val node0 = node @ { test_node.pubkey };
-    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv(),
+        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
 
     rell.test.tx().op(
         register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
@@ -297,7 +300,8 @@ function test_paused_blockchain_moving_between_containers_running_on_different_n
 function test_removed_blockchain_moving_is_not_allowed() {
     // setup
     setup_module(provider_quota_max_containers = 2);
-    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv(),
+        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
 
     rell.test.tx().op(
         create_container(initial_provider.pub, "c1", containers.system, 0, [initial_provider.pub]),
@@ -314,7 +318,7 @@ function test_removed_blockchain_moving_is_not_allowed() {
     // asserting that moving of removed blockchain is not allowed
     rell.test.tx().op(
         propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c2")
-    ).sign(initial_provider).run_must_fail("Only blockchains in RUNNING | PAUSED states can be moved; current state of blockchain 0x5c2e022c482853fdf9db276dd37e6235a7d81a679362a2446f468c83387cfef6 is: REMOVED");
+    ).sign(initial_provider).run_must_fail("Only blockchains in RUNNING | PAUSED states can be moved; current state of blockchain 0xb931c9fd7e0e80af611d77e4035d898f347da0791528f7dd8cc60399f2bf994f is: REMOVED");
 }
 
 function test_blockchain_moving_is_not_allowed_due_to_pending_blockchain_action_proposal() {
@@ -326,7 +330,8 @@ function test_blockchain_moving_is_not_allowed_due_to_pending_blockchain_action_
         propose_provider_is_system(initial_provider.pub, rell.test.pubkeys.bob, true)
     ).sign(initial_provider).run();
     // propose blockchain
-    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv(),
+        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
     rell.test.tx().op(
         create_container(initial_provider.pub, "c1", clusters.system, 0, [initial_provider.pub, rell.test.pubkeys.bob]),
         propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
