@@ -18,7 +18,8 @@ function test_add_and_remove_blockchain_replica() {
 
     rell.test.tx().op(
         propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p),
-        propose_blockchain(initial_provider.pub, ["config_consensus_strategy": "HEADER_HASH".to_gtv()].to_gtv().to_bytes(),
+        propose_blockchain(initial_provider.pub, ["config_consensus_strategy": "HEADER_HASH".to_gtv(),
+            "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()].to_gtv().to_bytes(),
             "foo_chain", "container1"),
         register_provider(initial_provider.pub, node_provider1.pub, provider_tier.NODE_PROVIDER),
         propose_provider_state(initial_provider.pub, node_provider1.pub, true)
@@ -74,7 +75,8 @@ function test_add_and_remove_blockchain_replica() {
 function test_blockchain_dependencies() {
     setup_module(provider_quota_max_containers = 2);
 
-    var fooConf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    var fooConf = ["config_consensus_strategy": "HEADER_HASH".to_gtv(),
+        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
     rell.test.tx().op(
         propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p),
         propose_blockchain(initial_provider.pub, fooConf.to_gtv().to_bytes(),
@@ -84,7 +86,8 @@ function test_blockchain_dependencies() {
 
     val list = list<(text, byte_array)>();
     list.add(("", foo_chain.rid));
-    var feeConf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    var feeConf = ["config_consensus_strategy": "HEADER_HASH".to_gtv(),
+        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
     feeConf["dependencies"] = list.to_gtv();
     rell.test.tx().op(
         propose_blockchain(initial_provider.pub, feeConf.to_gtv().to_bytes(), "fee_chain", "container1")
@@ -103,7 +106,8 @@ function test_blockchain_dependencies() {
 function test_blockchain_dependencies_only_allowed_in_same_container() {
     setup_module(provider_quota_max_containers = 3);
 
-    var fooConf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    var fooConf = ["config_consensus_strategy": "HEADER_HASH".to_gtv(),
+        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
     rell.test.tx().op(
         propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p),
         propose_blockchain(initial_provider.pub, fooConf.to_gtv().to_bytes(),
@@ -113,7 +117,8 @@ function test_blockchain_dependencies_only_allowed_in_same_container() {
 
     val list = list<(text, byte_array)>();
     list.add(("", foo_chain.rid));
-    var feeConf = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    var feeConf = ["config_consensus_strategy": "HEADER_HASH".to_gtv(),
+        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
     feeConf["dependencies"] = list.to_gtv();
     rell.test.tx().op(
         propose_container(initial_provider.pub, clusters.system, "container2", voter_sets.system_p),

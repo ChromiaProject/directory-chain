@@ -6,9 +6,14 @@ import common.*;
 struct module_args {
     max_config_path_depth: integer;
     max_config_size: integer;
+    max_block_size: integer;
+    min_fast_revolt_status_timeout: integer;
+    min_inter_block_interval: integer;
+    allowed_dapp_chain_gtx_modules: gtv;
+    allowed_dapp_chain_sync_exts: gtv;
 }
 
-function validate_blockchain_configuration(config_data: byte_array, signers: boolean, header_hash: boolean) {
+function validate_blockchain_configuration(config_data: byte_array, signers: boolean, header_hash: boolean, system_chain: boolean) {
     val config_map = map<text, gtv>.from_gtv(gtv.from_bytes(config_data));
     if (signers) {
         require("signers" not in config_map, "Configuration must not contain \"signers\"");
@@ -19,7 +24,76 @@ function validate_blockchain_configuration(config_data: byte_array, signers: boo
         require(config_map["config_consensus_strategy"] == "HEADER_HASH".to_gtv(),
             "Configuration must contain \"config_consensus_strategy\"=\"HEADER_HASH\"");
     }
+
+    val block_strategy_config = config_map.get_or_null("blockstrategy");
+    require(block_strategy_config, "blockstrategy configuration must not be empty");
+    validate_block_strategy_config(map<text, gtv>.from_gtv(block_strategy_config));
+
+    val revolt_config = config_map.get_or_null("revolt");
+    if (revolt_config != null) {
+        validate_revolt_config(map<text, gtv>.from_gtv(revolt_config));
+    }
+
+    // Check modules and extensions for non system chains
+    if (not system_chain) {
+        val configured_gtx = config_map.get_or_null("gtx");
+        if (configured_gtx != null) {
+            validate_gtx_modules(map<text, gtv>.from_gtv(configured_gtx));
+        }
+
+        validate_sync_exts(config_map);
+    }
+
     validate_compression(config_data);
+}
+
+function validate_block_strategy_config(block_strategy_config: map<text, gtv>) {
+    val config_max_block_size = block_strategy_config.get_or_null("maxblocksize");
+    if (config_max_block_size != null) {
+        require(
+            integer.from_gtv(config_max_block_size) <= chain_context.args.max_block_size,
+            "Configured max block size exceeds maximum allowed size %s".format(chain_context.args.max_block_size)
+        );
+    }
+    val config_min_inter_block_interval = block_strategy_config.get_or_null("mininterblockinterval");
+    require(config_min_inter_block_interval, "mininterblockinterval configuration must be set");
+    require(
+        integer.from_gtv(config_min_inter_block_interval) >= chain_context.args.min_inter_block_interval,
+        "Configured min inter block interval is lower than minimum allowed %s"
+            .format(chain_context.args.min_inter_block_interval)
+    );
+}
+
+function validate_revolt_config(revolt_config: map<text, gtv>) {
+    val config_fast_revolt_status_timeout = revolt_config.get_or_null("fast_revolt_status_timeout");
+    if (config_fast_revolt_status_timeout != null) {
+        val config_fast_revolt_status_timeout_int = integer.from_gtv(config_fast_revolt_status_timeout);
+        if (config_fast_revolt_status_timeout_int != -1) {
+            require(
+                config_fast_revolt_status_timeout_int >= chain_context.args.min_fast_revolt_status_timeout,
+                "Configured fast revolt status timeout is lower than minimum allowed %s"
+                    .format(chain_context.args.min_fast_revolt_status_timeout)
+            );
+        }
+    }
+}
+
+function validate_gtx_modules(gtx_config: map<text, gtv>) {
+    val allowed_gtx_modules = set<text>.from_gtv(chain_context.args.allowed_dapp_chain_gtx_modules);
+    val configured_gtx_modules = gtx_config.get_or_null("modules");
+    require(
+        configured_gtx_modules == null or allowed_gtx_modules.contains_all(list<text>.from_gtv(configured_gtx_modules)),
+        "Some of the configured GTX modules are not in the allowed set %s".format(allowed_gtx_modules)
+    );
+}
+
+function validate_sync_exts(config_map: map<text, gtv>) {
+    val allowed_sync_exts = set<text>.from_gtv(chain_context.args.allowed_dapp_chain_sync_exts);
+    val configured_sync_exts = config_map.get_or_null("sync_ext");
+    require(
+        configured_sync_exts == null or allowed_sync_exts.contains_all(list<text>.from_gtv(configured_sync_exts)),
+        "Some of the configured synchronization infrastructure extensions are not in the allowed set %s".format(allowed_sync_exts)
+    );
 }
 
 function validate_compression(config_data: byte_array) {

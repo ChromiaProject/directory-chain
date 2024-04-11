@@ -16,7 +16,9 @@ function test_propose_import_blockchain() {
     val foreign_chain0 = "foreign_chain0".to_gtv().hash();
 
     val container = system_container_name(clusters.system);
-    val conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv(), "signers": [foreign_node.pub].to_gtv(), "serial": (0).to_gtv()];
+    val conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv(),
+        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv(),
+        "signers": [foreign_node.pub].to_gtv(), "serial": (0).to_gtv()];
     val brid = conf.hash();
 
     // Asserting that blockchain_configuration_options through NM API is null for unknown blockchain
@@ -72,7 +74,8 @@ function test_propose_import_blockchain() {
     ).sign(initial_provider).run_must_fail("Configuration at height 10 already exists for blockchain");
 
     // proposing a new config without signers
-    val conf2 = ["config_consensus_strategy": "HEADER_HASH".to_gtv(), "serial": (100).to_gtv()];
+    val conf2 = ["config_consensus_strategy": "HEADER_HASH".to_gtv(),
+        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv(), "serial": (100).to_gtv()];
     rell.test.tx().op(
         propose_import_configuration(initial_provider.pub, brid, 11, conf2.to_gtv().to_bytes())
     ).sign(initial_provider).run_must_fail("No signers in configuration");
