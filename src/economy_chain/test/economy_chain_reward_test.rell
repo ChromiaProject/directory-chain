@@ -14,10 +14,12 @@ import lib.auth;
 struct module_args {
     auth_privkey: byte_array;
     admin_privkey: byte_array;
+    staking_rate_change_delay_ms: integer;
 }
 
 val auth_privkey = chain_context.args.auth_privkey;
 val admin_privkey = chain_context.args.admin_privkey;
+val staking_rate_change_delay_ms = chain_context.args.staking_rate_change_delay_ms;
 val provider_key = rell.test.keypairs.bob;
 val provider_pubkey = provider_key.pub;
 val node_pubkey = rell.test.pubkeys.charlie;
@@ -474,6 +476,39 @@ function test_receive_evm_transaction_submitter_cost_invalid_sender() {
     assert_true(node_payed_reward @? {} == null);
 }
 
+function test_pay_shared_rewards_dapp_cluster_full_reward_is_payed() {
+
+    val test_account_alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val test_account_bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
+    val test_account_charlie = require(do_create_account(rell.test.keypairs.charlie, auth_privkey));
+
+    rell.test.tx()
+        .op(staking_set_rate(0.5))
+        .op(mint_to_pool(8888888888))
+        .op(mint_to(test_account_alice, 9999999))
+        .op(mint_to(test_account_bob, 9999999))
+    .sign(admin_privkey).run();
+
+    add_provider(rell.test.keypairs.charlie.pub);
+
+    do_staking_deposit_native(rell.test.keypairs.alice, 9999999);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.charlie.pub);
+
+    assert_equals(get_account_balance(test_account_alice), 1000000000);
+
+    // FFWD
+    rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
+    rell.test.block().run(); rell.test.block().run();
+
+    val pa = run_pay_rewards(33090909, false);
+
+    assert_equals(get_account_balance(pa.account), 33090909);
+    assert_equals(pa.reward_debt, 0);
+    assert_equals(get_pool_balance(), 0);
+    assert_equals(node_payed_reward @ {} ( .value), 33090909);
+
+    assert_equals(get_account_balance(test_account_alice), 3309090 + 1000000000);
+}
 
 
 ///////////////////
