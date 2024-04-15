@@ -134,6 +134,7 @@ function test_staking_deposit() {
     .run();
     do_staking_deposit_native(rell.test.keypairs.alice, 7777);
     assert_equals(staking_get_balance(test_account_alice.id), 7777);
+    assert_equals(get_account_balance(get_deposit_account()), 7777);
 }
 
 function test_yield_and_payout_crudely () {
@@ -216,6 +217,7 @@ function test_yield_and_payout_crudely () {
 
 function test_withdrawal() {
     rell.test.tx().op(init()).run();
+    add_provider(rell.test.keypairs.bob.pub);
 
     val test_account_alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val test_account_bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
@@ -232,14 +234,7 @@ function test_withdrawal() {
         staking_request_withdrawal()
     ).run_must_fail("Need something to withdraw.");
 
-
-    // Cannot withdraw without withdrawal request
-    do_staking_deposit_native(rell.test.keypairs.alice, 7777);
-    rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_withdraw())
-    ).op(
-        staking_withdraw()
-    ).run_must_fail("Need a withdrawal request.");
+    do_staking_deposit_native(rell.test.keypairs.alice, 1); // Have something to withdraw
 
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_request_withdrawal())
@@ -247,24 +242,14 @@ function test_withdrawal() {
         staking_request_withdrawal()
     ).run();
 
-    // Cannot withdraw without aged withdrawal request
-    rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_withdraw())
-    ).op(
-        staking_withdraw()
-    ).run_must_fail("Need to wait for withdrawal request.");
-    assert_equals(staking_get_balance(test_account_alice.id), 7777);
-
     // Simple withdraw
     rell.test.set_next_block_time_delta(chain_context.args.staking_withdrawal_delay_ms);
     rell.test.block().run();
+    rell.test.block().run();
 
-    rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_withdraw())
-    ).op(
-        staking_withdraw()
-    ).run();
+    // Automatic withdrawal should have happened here
     assert_equals(staking_get_balance(test_account_alice.id), 0);
+    assert_equals(get_account_balance(get_deposit_account()), 0);
 
     // Ensure that the withdrawal request is cancelled on re-delegation
     do_staking_deposit_native(rell.test.keypairs.alice, 7777);
@@ -273,10 +258,10 @@ function test_withdrawal() {
     ).op(
         staking_request_withdrawal()
     ).run();
-    assert_false(null == staking_get_withdrawal_time(test_account_alice.id));
-    add_provider(rell.test.keypairs.bob.pub);
+    assert_true(staking_get_withdrawal_time(test_account_alice.id)??);
+    assert_equals(staking_get_balance(test_account_alice.id), 7777);
     do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.bob.pub);
-    assert_true(null == staking_get_withdrawal_time(test_account_alice.id));
+    assert_false(staking_get_withdrawal_time(test_account_alice.id)??);
 
     // Only one withdrawal request at a time
     rell.test.tx().op(
