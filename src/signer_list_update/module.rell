@@ -1,0 +1,31 @@
+import messaging.icmf.*;
+import messaging.signer_list_update.*;
+
+val signer_list_update_event_name = "signer_list_update_event";
+
+object signer_list_update {
+    mutable serial: integer = 1;
+}
+
+struct signer_list_update_event {
+    serial: integer;
+    blockchain_rid: byte_array;
+    signers: list<byte_array>;
+}
+
+function signal_signer_list_update(blockchain_rid: byte_array, updated_signers: byte_array) {
+    val update_message = signer_list_update_message(
+        serial = signer_list_update.serial,
+        blockchain_rid = blockchain_rid,
+        signers = updated_signers,
+        confirmed_in_directory_at_height = op_context.block_height
+    ).to_gtv();
+    send_message(signer_list_update_topic, update_message);
+
+    op_context.emit_event(signer_list_update_event_name, signer_list_update_event(
+        signer_list_update.serial,
+        blockchain_rid,
+        list<byte_array>.from_gtv(gtv.from_bytes(updated_signers))
+    ).to_gtv());
+    signer_list_update.serial++;
+}

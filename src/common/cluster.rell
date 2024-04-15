@@ -177,13 +177,8 @@ function update_configuration_signers_chain0(blockchain, signers: list<pubkey>) 
     } else {
         bc_signers.signers = signer_bytes;
     }
-    val update_message = signer_list_update_message(
-        blockchain_rid = chain_context.blockchain_rid,
-        signers = signer_bytes,
-        confirmed_in_directory_at_height = op_context.block_height
-    ).to_gtv();
-    send_message(signer_list_update_topic, update_message);
-    op_context.emit_event(events.signer_list_update, signer_list_update_event(chain_context.blockchain_rid, signers).to_gtv());
+
+    signal_signer_list_update(chain_context.blockchain_rid, signer_bytes);
 }
 
 function update_configuration_signers_regular(blockchain, signers: list<pubkey>, excluded_signer: pubkey?) {
