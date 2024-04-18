@@ -155,32 +155,6 @@ query nm_get_container_for_blockchain(blockchain_rid: byte_array): text {
 }
 
 /**
- * Returns a destination container for node for moving/unarchiving blockchains.
- * Otherwise, returns nm_get_container_for_blockchain() result.
- * NM API Version: 12
- */
-query nm_get_container_for_blockchain_on_node(pubkey, blockchain_rid: byte_array): text {
-    val node = require_node(pubkey);
-    val bc = require_blockchain_entity(blockchain_rid);
-
-    val moving_from = (mb: moving_blockchain, cn: cluster_node) @? {
-        mb.blockchain == bc,
-        cn.cluster == mb.source.cluster,
-        cn.node == node
-    } ( mb.source.name );
-    if (exists(moving_from)) return moving_from;
-
-    val unarchiving_from = (ub: unarchiving_blockchain, cn: cluster_node) @? {
-        ub.blockchain == bc,
-        cn.cluster == ub.source.cluster,
-        cn.node == node
-    } ( ub.source.name );
-    if (exists(unarchiving_from)) return unarchiving_from;
-
-    return nm_get_container_for_blockchain(blockchain_rid);
-}
-
-/**
  * Returns a list of containers running on a node.
  * NM API Version: 14
  */
