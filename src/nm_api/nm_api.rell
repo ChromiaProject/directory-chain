@@ -2,14 +2,7 @@
  * Returns NM API Version
  * NM API Version: 1
  */
-query nm_api_version() = 16;
-
-/**
- * Returns version of peerlist
- * NM API Version: 1
- * @deprecated since version 5, is not relevant for multi-cluster environment
- */
-query nm_get_peer_list_version() = node_list.last_update;
+query nm_api_version() = 17;
 
 /**
  * Returns peer info list
@@ -58,19 +51,6 @@ query nm_get_blockchain_configuration(blockchain_rid: byte_array, height: intege
 query nm_get_blockchain_configuration_v5(blockchain_rid: byte_array, height: integer):
     (base_config: byte_array, signers: list<pubkey>, config_hash: byte_array)?
         = get_blockchain_configuration(blockchain_rid, height);
-
-/**
- * Returns list of blockchains to be launched
- * NM API Version: 1
- * @deprecated use nm_compute_blockchain_info_list
- */
-query nm_compute_blockchain_list(node_id: pubkey): list<byte_array> {
-    val res = list<byte_array>();
-    for (blockchain in compute_blockchain_info_list(node_id)) {
-        res.add(blockchain.rid);
-    }
-    return res;
-}
 
 /**
  * Returns a list of blockchains to be launched or to be initialized on a node (RUNNING, PAUSED, IMPORTING, UNARCHIVING)
@@ -313,18 +293,6 @@ query nm_get_blockchain_signers_in_latest_configuration(blockchain_rid: byte_arr
 }
 
 /**
- * Finds the next height blockchains were removed at and returns found blockchain RIDs and heights.
- * Returns an empty list if there are no blockchains removed after `height`.
- * NM API Version 10
- * @deprecated in NM API Version 11
- */
-query nm_find_next_removed_blockchains(height: integer): list<removed_blockchain_info> {
-    val next_height = removed_blockchain @? { .height > height } (@sort .height) limit 1;
-    return if (empty(next_height)) []
-    else removed_blockchain @* { next_height } ( removed_blockchain_info(.blockchain.rid, .height) );
-}
-
-/**
  * Finds the next height blockchains were deactivated (removed, archived) at and returns found blockchain RIDs and heights.
  * Returns an empty list if there are no blockchains deactivated after `height`.
  * NM API Version 11
@@ -333,29 +301,6 @@ query nm_find_next_inactive_blockchains(height: integer): list<inactive_blockcha
     val next_height = inactive_blockchain @? { .height > height } (@sort .height) limit 1;
     return if (empty(next_height)) []
     else inactive_blockchain @* { next_height } ( inactive_blockchain_info(.blockchain.rid, .blockchain.state, .height) );
-}
-
-/**
- * Returns unarchiving blockchain info.
- * NM API Version 13
- * @deprecated since NM API Version 15, use nm_get_migrating_blockchain_node_info()
- */
-query nm_get_unarchiving_blockchain_node_info(pubkey, blockchain_rid: byte_array): unarchiving_blockchain_node_info? {
-    val node = require_node(pubkey);
-    val bc = require_blockchain_entity(blockchain_rid);
-    if (bc.state != blockchain_state.UNARCHIVING) return null;
-
-    val ubc = unarchiving_blockchain @? { bc } ( $.to_struct() );
-    if (empty(ubc)) return null;
-
-    return unarchiving_blockchain_node_info(
-        rid = [bc.rid.to_gtv(), ubc.transaction.tx_rid.to_gtv()].hash(),
-        source_container = ubc.source.name,
-        destination_container = ubc.destination.name,
-        is_source_node = exists(cluster_node @? { ubc.source.cluster, node }),
-        is_destination_node = exists(cluster_node @? { ubc.destination.cluster, node }),
-        up_to_height = ubc.final_height
-    );
 }
 
 /**
