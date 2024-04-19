@@ -115,7 +115,6 @@ function replace_node_with_node_data_impl(my_pubkey: pubkey, node_data: replace_
         }
     }
 
-    node_list.last_update = op_context.last_block_time;
     log("---------------------------------------");
 }
 
@@ -174,9 +173,6 @@ operation disable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
 
     // blockchain replica nodes
     delete blockchain_replica_node @* { .node.pubkey == node_pubkey };
-
-    // updating node list timestamp
-    node_list.last_update = op_context.last_block_time;
 }
 
 operation remove_node(my_pubkey: pubkey, node_pubkey: pubkey) {
@@ -238,7 +234,6 @@ function update_node_with_node_data_impl(my_pubkey: pubkey, node_data: update_no
         node_data.cluster_units != null or
         node_data.extra_storage != null
     ) node.last_updated = op_context.last_block_time;
-    if (node_data.host != null or node_data.port != null) node_list.last_update = op_context.last_block_time;
     val cluster_units = node_data.cluster_units;
     if (cluster_units != null) {
         require(cluster_units > 0, "Node must have at least 1 cluster_unit");
