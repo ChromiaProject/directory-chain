@@ -21,7 +21,7 @@ function test_precise_configuration_update_config_happy() {
         propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run();
     assert_equals(
-        map<text,gtv>.from_gtv(gtv.from_bytes(require(nm_get_blockchain_configuration_v5(bc_rid, 5)).base_config))["number"],
+        map<text,gtv>.from_gtv(gtv.from_bytes(require(get_blockchain_configuration(bc_rid, 5)).base_config))["number"],
         (0).to_gtv()
     );
     val pending_config1 = nm_get_pending_blockchain_configuration(bc_rid, 5) @ {};
@@ -51,7 +51,7 @@ function test_precise_configuration_update_config_happy() {
             ).to_gtv()
         )
     ).run();
-    val updated_config = require(nm_get_blockchain_configuration_v5(bc_rid, 5));
+    val updated_config = require(get_blockchain_configuration(bc_rid, 5));
     assert_equals(
         map<text,gtv>.from_gtv(gtv.from_bytes(updated_config.base_config))["number"],
         (1).to_gtv()
@@ -139,7 +139,7 @@ function test_precise_configuration_update_signers_happy() {
             ).to_gtv()
         )
     ).run();
-    val updated_config = require(nm_get_blockchain_configuration_v5(bc_rid, 5));
+    val updated_config = require(get_blockchain_configuration(bc_rid, 5));
     assert_equals(
         map<text,gtv>.from_gtv(gtv.from_bytes(updated_config.base_config))["number"],
         (0).to_gtv()
@@ -230,7 +230,7 @@ function test_precise_configuration_update_signers_retry() {
         )
     ).run();
 
-    val updated_config = require(nm_get_blockchain_configuration_v5(bc_rid, 8));
+    val updated_config = require(get_blockchain_configuration(bc_rid, 8));
     assert_equals(
         map<text,gtv>.from_gtv(gtv.from_bytes(updated_config.base_config))["number"],
         (0).to_gtv()
@@ -293,7 +293,7 @@ function test_precise_configuration_update_config_multiple_pending() {
             ).to_gtv()
         )
     ).run();
-    val updated_config1 = require(nm_get_blockchain_configuration_v5(bc_rid, 5));
+    val updated_config1 = require(get_blockchain_configuration(bc_rid, 5));
     assert_equals(
         map<text,gtv>.from_gtv(gtv.from_bytes(updated_config1.base_config))["number"],
         (1).to_gtv()
@@ -316,7 +316,7 @@ function test_precise_configuration_update_config_multiple_pending() {
             ).to_gtv()
         )
     ).run();
-    val updated_config2 = require(nm_get_blockchain_configuration_v5(bc_rid, 7));
+    val updated_config2 = require(get_blockchain_configuration(bc_rid, 7));
     assert_equals(
         map<text,gtv>.from_gtv(gtv.from_bytes(updated_config2.base_config))["number"],
         (2).to_gtv()
@@ -460,7 +460,7 @@ function test_precise_configuration_update_ignored_wrong_topic() {
     ).run();
 
     assert_equals(
-        map<text,gtv>.from_gtv(gtv.from_bytes(require(nm_get_blockchain_configuration_v5(bc_rid, 5)).base_config))["number"],
+        map<text,gtv>.from_gtv(gtv.from_bytes(require(get_blockchain_configuration(bc_rid, 5)).base_config))["number"],
         (0).to_gtv()
     );
     assert_equals(
@@ -496,7 +496,7 @@ function test_precise_configuration_update_ignored_chain0() {
     ).run();
 
     assert_equals(
-        map<text,gtv>.from_gtv(gtv.from_bytes(require(nm_get_blockchain_configuration_v5(bc_rid, 5)).base_config))["number"],
+        map<text,gtv>.from_gtv(gtv.from_bytes(require(get_blockchain_configuration(bc_rid, 5)).base_config))["number"],
         (0).to_gtv()
     );
     assert_equals(
@@ -532,7 +532,7 @@ function test_precise_configuration_update_ignored_unknown_blockchain() {
     ).run();
 
     assert_equals(
-        map<text,gtv>.from_gtv(gtv.from_bytes(require(nm_get_blockchain_configuration_v5(bc_rid, 5)).base_config))["number"],
+        map<text,gtv>.from_gtv(gtv.from_bytes(require(get_blockchain_configuration(bc_rid, 5)).base_config))["number"],
         (0).to_gtv()
     );
     assert_equals(
@@ -568,7 +568,7 @@ function test_precise_configuration_update_rejected_not_from_anchor_chain() {
     ).run();
 
     assert_equals(
-        map<text,gtv>.from_gtv(gtv.from_bytes(require(nm_get_blockchain_configuration_v5(bc_rid, 5)).base_config))["number"],
+        map<text,gtv>.from_gtv(gtv.from_bytes(require(get_blockchain_configuration(bc_rid, 5)).base_config))["number"],
         (0).to_gtv()
     );
     assert_equals(
@@ -604,7 +604,7 @@ function test_precise_configuration_update_rejected_wrong_hash() {
     ).run();
 
     assert_equals(
-        map<text,gtv>.from_gtv(gtv.from_bytes(require(nm_get_blockchain_configuration_v5(bc_rid, 5)).base_config))["number"],
+        map<text,gtv>.from_gtv(gtv.from_bytes(require(get_blockchain_configuration(bc_rid, 5)).base_config))["number"],
         (0).to_gtv()
     );
     assert_false(is_pending_blockchain_configuration_applied(bc_rid, 5, pending_config1_hash));
@@ -628,7 +628,7 @@ function test_precise_configuration_update_rejected_config_already_exists() {
         propose_configuration_at(initial_provider.pub, bc_rid, config2.to_gtv_pretty().to_bytes(), 5, false)
     ).sign(initial_provider).run();
     assert_equals(
-        map<text,gtv>.from_gtv(gtv.from_bytes(require(nm_get_blockchain_configuration_v5(bc_rid, 5)).base_config))["number"],
+        map<text,gtv>.from_gtv(gtv.from_bytes(require(get_blockchain_configuration(bc_rid, 5)).base_config))["number"],
         (2).to_gtv()
     );
 
@@ -645,7 +645,7 @@ function test_precise_configuration_update_rejected_config_already_exists() {
     ).run();
 
     assert_equals(
-        map<text,gtv>.from_gtv(gtv.from_bytes(require(nm_get_blockchain_configuration_v5(bc_rid, 5)).base_config))["number"],
+        map<text,gtv>.from_gtv(gtv.from_bytes(require(get_blockchain_configuration(bc_rid, 5)).base_config))["number"],
         (2).to_gtv()
     );
     assert_equals(
@@ -665,7 +665,7 @@ function test_precise_configuration_update_config_failed() {
         propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run();
     assert_equals(
-        map<text,gtv>.from_gtv(gtv.from_bytes(require(nm_get_blockchain_configuration_v5(bc_rid, 5)).base_config))["number"],
+        map<text,gtv>.from_gtv(gtv.from_bytes(require(get_blockchain_configuration(bc_rid, 5)).base_config))["number"],
         (0).to_gtv()
     );
     val pending_config1 = nm_get_pending_blockchain_configuration(bc_rid, 5) @ {};
@@ -695,7 +695,7 @@ function test_precise_configuration_update_config_failed() {
             ).to_gtv()
         )
     ).run();
-    val not_updated_config = require(nm_get_blockchain_configuration_v5(bc_rid, 5));
+    val not_updated_config = require(get_blockchain_configuration(bc_rid, 5));
     assert_equals(
         map<text,gtv>.from_gtv(gtv.from_bytes(not_updated_config.base_config))["number"],
         (0).to_gtv()
@@ -722,11 +722,11 @@ function setup(): (anchor_chain: blockchain, bc_rid: byte_array) {
     ).sign(initial_provider).run();
     val bc_rid = blockchain @ { "foo_chain" } (.rid);
     assert_equals(
-        map<text,gtv>.from_gtv(gtv.from_bytes(require(nm_get_blockchain_configuration_v5(bc_rid, 1)).base_config))["number"],
+        map<text,gtv>.from_gtv(gtv.from_bytes(require(get_blockchain_configuration(bc_rid, 1)).base_config))["number"],
         (0).to_gtv()
     );
     assert_equals(
-        (require(nm_get_blockchain_configuration_v5(bc_rid, 1))).signers,
+        (require(get_blockchain_configuration(bc_rid, 1))).signers,
         [c.test_node.pubkey]
     );
     assert_true(nm_get_pending_blockchain_configuration(bc_rid, 1).empty());
