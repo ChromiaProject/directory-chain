@@ -200,6 +200,12 @@ query staking_get_withdrawal_time(account_id: byte_array): timestamp? {
     return _staking_get_withdrawal_time(staker);
 }
 
+query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubkey, time: integer)? {
+    val staker = ft4.accounts.Account(account_id);
+    val existing = staker_state @ {.latest and .staker == staker and .network == network.CHR} ( (pubkey = .new_provider, time = .cutover_time) );
+    return if (_staking_last_known_time() <= existing.time) existing else null;
+}
+
 function _staking_get_withdrawal_time(staker: ft4.accounts.account, network = network.CHR): timestamp? {
     val valid_request = staker_withdrawal_request @? {.staker == staker and not .used and .network == network};
     return
@@ -458,9 +464,14 @@ query staking_get_current_rate(): decimal {
     return current_rate;
 }
 
-query staking_get_current_delegate(account_id: byte_array, network = network.CHR): pubkey {
+query staking_get_current_delegate_on_network(account_id: byte_array, network): pubkey {
     val account = ft4.accounts.Account(account_id);
     return _staking_get_current_delegate(account, network);
+}
+
+query staking_get_current_delegate(account_id: byte_array): pubkey {
+    val account = ft4.accounts.Account(account_id);
+    return _staking_get_current_delegate(account, network.CHR);
 }
 
 function _staking_get_current_delegate(staker: ft4.accounts.account, network = network.CHR): pubkey {
