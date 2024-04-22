@@ -2,7 +2,7 @@
  * Returns NM API Version
  * NM API Version: 1
  */
-query nm_api_version() = 17;
+query nm_api_version() = 18;
 
 /**
  * Returns peer info list
@@ -43,6 +43,29 @@ query nm_get_blockchain_configuration(blockchain_rid: byte_array, height: intege
     } else {
         return null;
     }
+}
+
+/**
+ * NM API Version: 5
+ * @deprecated in NM API Version 18, use nm_get_blockchain_configuration_info() instead
+ */
+query nm_get_blockchain_configuration_v5(blockchain_rid: byte_array, height: integer):
+    (base_config: byte_array, signers: list<pubkey>, config_hash: byte_array)?
+        = get_blockchain_configuration(blockchain_rid, height);
+
+/**
+ * Returns blockchain configuration as a struct
+ * NM API Version: 18
+ */
+query nm_get_blockchain_configuration_info(blockchain_rid: byte_array, height: integer): blockchain_configuration_info? {
+    val bc_config = get_blockchain_configuration(blockchain_rid, height);
+    if (bc_config == null) return null;
+
+    return blockchain_configuration_info(
+        base_config = bc_config.base_config,
+        signers = bc_config.signers,
+        config_hash = bc_config.config_hash
+    );
 }
 
 /**
