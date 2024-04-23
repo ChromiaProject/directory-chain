@@ -64,6 +64,7 @@ function _staking_set_rate_at(reward_rate: decimal, time: timestamp) {
 
 operation staking_set_rate(reward_rate: decimal) {
     require_admin();
+    // why is there no require_initialized();
    _staking_set_rate_at(reward_rate, _staking_cannot_change_before());
 }
 
@@ -87,7 +88,7 @@ function staking_deposit_auth_message(gtv): text {
 
 operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
     require_initialized();
-    require(amount > 0, "Can't deposit nothing (or less)!");
+    require(amount > 0, "Can't deposit nothing (or less)!"); // TODO Better error messaging?
 
     val staker = ft4.auth.authenticate();
 
@@ -424,31 +425,16 @@ operation staking_claim_rewards() {
 }
 
 function _staking_claim_rewards() {
-    var payout_list: list<(ft4.accounts.account, integer)> = [];
-    var total_amount = 0;
+    var payout_list = map<ft4.accounts.account, integer>();
 
     // Get a list of payouts
     for(staker in staker_state @* {} (@group .staker) ) {
         // Find the amounts
         val payout_amount = _staking_rewards_claimable_for(staker, network.CHR) + _staking_rewards_claimable_for(staker, network.BSC) + _staking_rewards_claimable_for(staker, network.ETH);
-        payout_list.add((staker, payout_amount));
-        total_amount += payout_amount;
+        payout_list[staker] = payout_amount;
     }
 
-    // Do not start what we cannot finish
-    if (get_account_balance(get_pool_account()) < total_amount) {
-        log("Cannot pay rewards. Insufficient funds.");
-        return;
-    }
-
-    // Do the payouts
-    for(payment in payout_list) {
-        val (staker, payout_amount) = payment;
-        if(payout_amount > 0) {
-            _pay_to(staker, payout_amount);
-            log("Paid out %s to %s", staker, payout_amount);
-        }
-    }
+    _pay_batch(payout_list);
 
     // Record payout
     create staker_payout(staker_payout_time = _staking_last_known_time());
@@ -496,6 +482,48 @@ function _pay_to(staker: ft4.accounts.account, amount: integer) {
     ft4.assets.Unsafe.transfer(get_pool_account(), staker, get_asset(), amount);
 }
 
+function _pay_batch(payout_list: map<ft4.accounts.account,integer>) {
+    val stakers = payout_list.keys();
+    val pay_sum = payout_list.values() @ { } ( @sum $ );
+    ft4.assets.require_zero_exclusive_asset_amount_limits(pay_sum, "Parameter amount");
+    require(get_pool_account() not in stakers, "Sender and receiver have to be different");
+
+    // before_transfer(get_pool_account(), to, asset, amount);
+    ft4.assets.deduct_balance(get_pool_account(), get_asset(), pay_sum);
+    var transfer_history_entries = stakers @* { } (
+        struct<ft4.assets.transfer_history_entry> (
+            account = get_pool_account(),
+            asset = get_asset(),
+            delta = payout_list[$],
+            op_index = op_context.op_index,
+            is_input = true,
+            transaction = op_context.transaction
+        )
+    );
+    create ft4.assets.transfer_history_entry ( transfer_history_entries );
+
+    transfer_history_entries = stakers @* { } (
+        struct<ft4.assets.transfer_history_entry> (
+            account = $,
+            asset = get_asset(),
+            delta = payout_list[$],
+            op_index = op_context.op_index,
+            is_input = false,
+            transaction = op_context.transaction
+        )
+    );
+    create ft4.assets.transfer_history_entry ( transfer_history_entries );
+
+    val balances = ft4.assets.balance @* { .account in stakers, .asset == get_asset() };
+    var balance_structs = list<struct<ft4.assets.balance>>();
+    delete balances;
+    for (b in balances) {
+        balance_structs.add(struct<ft4.assets.balance>(b.account, b.asset, b.amount - payout_list[b.account]));
+    }
+    create ft4.assets.balance ( balance_structs );
+    // after_transfer(from, to, asset, amount);
+}
+
 function _staking_apply_staker_state_delta(staker: ft4.accounts.account, delta: staker_state_delta) {
     // Apply to specified network or to all
     val networks = if (delta.network??) [delta.network!!] else network.values();
@@ -520,7 +548,7 @@ function _staking_apply_staker_state_delta(staker: ft4.accounts.account, delta: 
         }
 
         // Clear flag from any existing state
-        update staker_state @? { .staker == staker and .latest and .network == n and .latest } ( latest = false );
+        update existing ( latest = false );
 
         // Create new from existing state + delta
         create staker_state(
