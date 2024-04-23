@@ -64,6 +64,11 @@ function test_blockchain_unarchiving_within_a_node() {
     // old signers are not replicas
     assert_true(empty(blockchain_replica_node @* { foo_chain }));
 
+    // assert bc actions are not allowed on the unarchiving chain
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, foo_chain.rid, blockchain_action.pause)
+    ).sign(initial_provider).run_must_fail("Unarchiving blockchain can't be paused");
+
     // imitation of ICMF message receiving
     rell.test.tx().op(
         receive_configuration_updated_op(
@@ -84,6 +89,11 @@ function test_blockchain_unarchiving_within_a_node() {
     assert_null(nm_get_migrating_blockchain_node_info(test_node.pubkey, foo_chain.rid));
     // bs state changed from UNARCHIVING to RUNNING
     assert_equals(foo_chain.state, blockchain_state.RUNNING);
+
+    // assert bc actions are allowed again
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, foo_chain.rid, blockchain_action.pause)
+    ).sign(initial_provider).run();
 }
 
 function test_blockchain_archiving_and_unarchiving_to_container_running_on_another_node() {
