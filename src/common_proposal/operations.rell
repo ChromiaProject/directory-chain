@@ -12,9 +12,8 @@ operation make_common_vote(pubkey, proposal_id: rowid, vote: boolean) {
 operation revoke_common_proposal(pubkey, proposal_id: rowid) {
     require_is_signer(pubkey);
     val prop = common_proposal @? { proposal_id };
-    require(exists(prop), "Proposal not found: %d".format(proposal_id));
-    require(prop!!.proposed_by == pubkey, "It is only allowed to revoke own proposals");
+    require(prop, "Proposal not found: %d".format(proposal_id));
+    require(prop.proposed_by == pubkey, "It is only allowed to revoke own proposals");
     prop.state = common_proposal_state.REVOKED;
     delete_common_proposal(prop);
 }
-
