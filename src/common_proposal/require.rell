@@ -1,0 +1,16 @@
+function require_common_proposal(rowid) = require(common_proposal @? { rowid }, "Proposal " + rowid + " not found");
+
+function require_common_voter_set(name) = require(common_voter_set @? { name }, "Voter set %s does not exist".format(name));
+
+function require_common_voter_set_member(common_voter_set, pubkey) {
+    require(exists(common_voter_set_member @* { common_voter_set, pubkey}), "Voter is not a member of voter set " + common_voter_set.name);
+}
+
+function require_common_voter_set_governor(common_voter_set, pubkey) {
+    val governor = common_voter_set_governance @ { .voter_set == common_voter_set } .governor;
+    require_common_voter_set_member(governor, pubkey);
+}
+
+function require_is_signer(pubkey) {
+    require(op_context.is_signer(pubkey), "Operation must be signed by " + pubkey);
+}

@@ -1,0 +1,37 @@
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_constants_update.name: apply_economy_constants(*)];
+
+
+function apply_economy_constants(proposal: common_proposal) {
+
+    val pending_economy_constants = pending_economy_constants @ { proposal };
+
+    log("Updating economy constants after approval of proposal %d".format(proposal.rowid));
+
+    if (pending_economy_constants.min_lease_time_weeks >= 0) {
+        economy_constants.min_lease_time_weeks = pending_economy_constants.min_lease_time_weeks;
+    }
+    if (pending_economy_constants.max_lease_time_weeks >= 0) {
+        economy_constants.max_lease_time_weeks = pending_economy_constants.max_lease_time_weeks;
+    }
+    if (pending_economy_constants.staking_reward_fee_share >= 0) {
+        economy_constants.staking_reward_fee_share = pending_economy_constants.staking_reward_fee_share;
+    }
+    if (pending_economy_constants.chromia_foundation_fee_share >= 0) {
+        economy_constants.chromia_foundation_fee_share = pending_economy_constants.chromia_foundation_fee_share;
+    }
+    if (pending_economy_constants.resource_pool_margin_fee_share >= 0) {
+        economy_constants.resource_pool_margin_fee_share = pending_economy_constants.resource_pool_margin_fee_share;
+    }
+    if (pending_economy_constants.dapp_provider_risk_share >= 0) {
+        economy_constants.dapp_provider_risk_share = pending_economy_constants.dapp_provider_risk_share;
+    }
+}
+
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_constants_update.name: cleanup_pending_economy_constants(*)];
+
+function cleanup_pending_economy_constants(proposal: common_proposal) {
+
+    log("Cleaning up pending_economy_constants");
+
+    delete pending_economy_constants @ { proposal };
+}

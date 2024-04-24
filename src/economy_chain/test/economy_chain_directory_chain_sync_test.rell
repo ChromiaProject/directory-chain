@@ -3,7 +3,7 @@
 import ^^.*;
 import ^.helper_functions.*;
 import ^.helper_operations.*;
-import ^^.ec_proposal.test.helper_functions.*;
+import common_proposal.test.helper_functions.*;
 
 struct module_args {
     auth_privkey: byte_array;
@@ -241,7 +241,7 @@ function test_receive_provider_update_message_create() {
     ).run();
 
     assert_not_null(provider @? { rell.test.pubkeys.alice });
-    assert_not_null(voter_set_member @? { .voter_set.name == voter_sets.system_p, .provider.pubkey == rell.test.pubkeys.alice });
+    assert_not_null(common_voter_set_member @? { .voter_set.name == voter_sets.system_p, .pubkey == rell.test.pubkeys.alice });
 }
 
 function test_receive_provider_update_message_update() {
@@ -261,7 +261,7 @@ function test_receive_provider_update_message_update() {
     val provider = provider @? { rell.test.pubkeys.alice };
     assert_not_null(provider);
     assert_true(provider.system);
-    assert_not_null(voter_set_member @? { .voter_set.name == voter_sets.system_p, .provider.pubkey == rell.test.pubkeys.alice });
+    assert_not_null(common_voter_set_member @? { .voter_set.name == voter_sets.system_p, .pubkey == rell.test.pubkeys.alice });
 }
 
 function test_receive_provider_update_message_update_remove_sp() {
@@ -282,7 +282,7 @@ function test_receive_provider_update_message_update_remove_sp() {
     val provider = provider @? { rell.test.pubkeys.alice };
     assert_not_null(provider);
     assert_true(provider.system);
-    assert_not_null(voter_set_member @? { .voter_set.name == voter_sets.system_p, .provider.pubkey == rell.test.pubkeys.alice });
+    assert_not_null(common_voter_set_member @? { .voter_set.name == voter_sets.system_p, .pubkey == rell.test.pubkeys.alice });
 
     // Update
     rell.test.tx().op(
@@ -295,7 +295,7 @@ function test_receive_provider_update_message_update_remove_sp() {
     ).run();
 
     assert_false(provider.system);
-    assert_null(voter_set_member @? { .voter_set.name == voter_sets.system_p, .provider.pubkey == rell.test.pubkeys.alice });
+    assert_null(common_voter_set_member @? { .voter_set.name == voter_sets.system_p, .pubkey == rell.test.pubkeys.alice });
 }
 
 function test_receive_provider_update_message_update_remove_sp_due_to_inactive() {
@@ -316,7 +316,7 @@ function test_receive_provider_update_message_update_remove_sp_due_to_inactive()
     val provider = provider @? { rell.test.pubkeys.alice };
     assert_not_null(provider);
     assert_true(provider.system);
-    assert_not_null(voter_set_member @? { .voter_set.name == voter_sets.system_p, .provider.pubkey == rell.test.pubkeys.alice });
+    assert_not_null(common_voter_set_member @? { .voter_set.name == voter_sets.system_p, .pubkey == rell.test.pubkeys.alice });
 
     // Update
     rell.test.tx().op(
@@ -330,7 +330,7 @@ function test_receive_provider_update_message_update_remove_sp_due_to_inactive()
 
     assert_true(provider.system);
     assert_false(provider.active);
-    assert_null(voter_set_member @? { .voter_set.name == voter_sets.system_p, .provider.pubkey == rell.test.pubkeys.alice });
+    assert_null(common_voter_set_member @? { .voter_set.name == voter_sets.system_p, .pubkey == rell.test.pubkeys.alice });
 }
 
 
@@ -341,20 +341,20 @@ function test_receive_provider_update_message_revoke_proposals_on_sp_changes() {
     // Add 2 providers and add them to the SYSTEM_P voter set.
     add_provider(rell.test.pubkeys.alice, true, provider_tier.NODE_PROVIDER);
     add_provider(rell.test.pubkeys.bob, true, provider_tier.NODE_PROVIDER);
-    assert_equals(voter_set_member @? { .voter_set.name == voter_sets.system_p } ( @sum 1 ), 2);
+    assert_equals(common_voter_set_member @? { .voter_set.name == voter_sets.system_p } ( @sum 1 ), 2);
 
     // Create a separate voter set that won't be affected - should not be revoked by sp changes
     add_provider(rell.test.pubkeys.charlie, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
-        create_proposal_op(ec_proposal_type.tag_create, voter_set_2_name))
+        create_proposal_op(common_proposal_type.ec_tag_create, voter_set_2_name))
         .run();
 
     val create_tag_1_proposal_id = get_latest_proposal_id();
-    val voter_set_2 = voter_set @ { voter_set_2_name };
+    val voter_set_2 = common_voter_set @ { voter_set_2_name };
     val provider_charlie = provider @ { rell.test.pubkeys.charlie };
 
     rell.test.tx().op(
-        create_voter_set_member_op(voter_set_2, provider_charlie))
+        create_voter_set_member_op(voter_set_2, provider_charlie.pubkey))
         .run();
 
     // Create a proposal to be rejected because is has the SYSTEM_P voter set
@@ -378,10 +378,10 @@ function test_receive_provider_update_message_revoke_proposals_on_sp_changes() {
     ).run();
 
     // The tag create 1 proposal should still be PENDING, but the tag create 2 proposal revoked
-    assert_null(voter_set_member @? { .voter_set.name == voter_sets.system_p, .provider.pubkey == rell.test.pubkeys.alice });
-    assert_not_null(voter_set_member @? { .voter_set.name == voter_sets.system_p, .provider.pubkey == rell.test.pubkeys.bob });
-    assert_equals(proposal @ { create_tag_1_proposal_id } ( .state ), proposal_state.PENDING);
-    assert_equals(proposal @ { create_tag_2_proposal_id } ( .state ), proposal_state.REVOKED);
+    assert_null(common_voter_set_member @? { .voter_set.name == voter_sets.system_p, .pubkey == rell.test.pubkeys.alice });
+    assert_not_null(common_voter_set_member @? { .voter_set.name == voter_sets.system_p, .pubkey == rell.test.pubkeys.bob });
+    assert_equals(common_proposal @ { create_tag_1_proposal_id } ( .state ), common_proposal_state.PENDING);
+    assert_equals(common_proposal @ { create_tag_2_proposal_id } ( .state ), common_proposal_state.REVOKED);
 
     // Lets also test adding a SP
 
@@ -405,7 +405,7 @@ function test_receive_provider_update_message_revoke_proposals_on_sp_changes() {
         .run();
     val create_tag_3_proposal_id = get_latest_proposal_id();
 
-    assert_equals(proposal @ { create_tag_3_proposal_id } ( .state ), proposal_state.PENDING);
+    assert_equals(common_proposal @ { create_tag_3_proposal_id } ( .state ), common_proposal_state.PENDING);
 
     // Add a new SP
     rell.test.tx().op(
@@ -418,7 +418,7 @@ function test_receive_provider_update_message_revoke_proposals_on_sp_changes() {
     ).run();
 
     // Create tag 3 proposal should be revoked, create tag 1 proposal still pending
-    assert_equals(voter_set_member @? { .voter_set.name == voter_sets.system_p } ( @sum 1 ), 3);
-    assert_equals(proposal @ { create_tag_1_proposal_id } ( .state ), proposal_state.PENDING);
-    assert_equals(proposal @ { create_tag_2_proposal_id } ( .state ), proposal_state.REVOKED);
+    assert_equals(common_voter_set_member @? { .voter_set.name == voter_sets.system_p } ( @sum 1 ), 3);
+    assert_equals(common_proposal @ { create_tag_1_proposal_id } ( .state ), common_proposal_state.PENDING);
+    assert_equals(common_proposal @ { create_tag_2_proposal_id } ( .state ), common_proposal_state.REVOKED);
 }

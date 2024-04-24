@@ -60,7 +60,7 @@ operation update_economy_constants(
 ) {
     val provider = require_system_provider_signer_entity();
 
-    val proposal = create_system_p_proposal(ec_proposal_type.economy_constants_update, provider, "Update economy constants");
+    val proposal = create_system_p_proposal(common_proposal_type.ec_constants_update, provider, "Update economy constants");
     create pending_economy_constants(
         proposal,
         min_lease_time_weeks = get_integer_or_default(min_lease_time_weeks, -1)!!,
@@ -71,7 +71,7 @@ operation update_economy_constants(
         dapp_provider_risk_share = get_decimal_or_default(dapp_provider_risk_share, -1)!!
     );
 
-    internal_vote(provider, proposal, true);
+    internal_common_vote(provider.pubkey, proposal, true);
 }
 
 operation create_tag(
@@ -83,10 +83,10 @@ operation create_tag(
     require(tag @? { .name == name } == null, "Tag %s already exists".format(name));
     require(pending_tag_operation @? { .name == name } == null, "A proposal for creating tag %s already exists".format(name));
 
-    val proposal = create_system_p_proposal(ec_proposal_type.tag_create, provider, "Create tag %s".format(name));
+    val proposal = create_system_p_proposal(common_proposal_type.ec_tag_create, provider, "Create tag %s".format(name));
     create pending_tag_operation(name = name, scu_price = scu_price, extra_storage_price = extra_storage_price, proposal);
 
-    internal_vote(provider, proposal, true);
+    internal_common_vote(provider.pubkey, proposal, true);
 }
 
 operation update_tag(
@@ -97,10 +97,10 @@ operation update_tag(
     val provider = require_system_provider_signer_entity();
     val tag = require_tag(name);
 
-    val proposal = create_system_p_proposal(ec_proposal_type.tag_update, provider, "Update tag %s".format(name));
+    val proposal = create_system_p_proposal(common_proposal_type.ec_tag_update, provider, "Update tag %s".format(name));
     create pending_tag_operation(name = name, scu_price = scu_price ?: -1, extra_storage_price = extra_storage_price ?: -1, proposal);
 
-    internal_vote(provider, proposal, true);
+    internal_common_vote(provider.pubkey, proposal, true);
 }
 
 operation remove_tag(
@@ -112,10 +112,10 @@ operation remove_tag(
     val clusters = cluster @* { tag };
     require(clusters.empty(), "Tag with name %s is in use.".format(name));
 
-    val proposal = create_system_p_proposal(ec_proposal_type.tag_remove, provider, "Remove tag %s".format(name));
+    val proposal = create_system_p_proposal(common_proposal_type.ec_tag_remove, provider, "Remove tag %s".format(name));
     create pending_tag_operation(name = name, proposal);
 
-    internal_vote(provider, proposal, true);
+    internal_common_vote(provider.pubkey, proposal, true);
 }
 
 operation create_cluster(
@@ -132,7 +132,7 @@ operation create_cluster(
     require(pending_cluster @? { name } == null, "There is already a pending request to create cluster with name %s".format(name));
     val tag = require_tag(tag_name);
 
-    val proposal = create_system_p_proposal(ec_proposal_type.cluster_create, provider, "Create economy chain cluster %s".format(name));
+    val proposal = create_system_p_proposal(common_proposal_type.ec_cluster_create, provider, "Create economy chain cluster %s".format(name));
 
     create pending_cluster(
         name = name,
@@ -146,7 +146,7 @@ operation create_cluster(
         pending_cluster_status.PENDING_APPROVAL
     );
 
-    internal_vote(provider, proposal, true);
+    internal_common_vote(provider.pubkey, proposal, true);
 }
 
 operation change_cluster_tag(
@@ -157,10 +157,10 @@ operation change_cluster_tag(
     val tag = require_tag(tag_name);
     val cluster = require_cluster(cluster_name);
 
-    val proposal = create_system_p_proposal(ec_proposal_type.cluster_change_tag, provider, "Change tag for cluster %s".format(cluster_name));
+    val proposal = create_system_p_proposal(common_proposal_type.ec_cluster_change_tag, provider, "Change tag for cluster %s".format(cluster_name));
     create pending_cluster_change_tag(cluster, tag, proposal);
 
-    internal_vote(provider, proposal, true);
+    internal_common_vote(provider.pubkey, proposal, true);
 }
 
 operation add_bridge_lease(container_name: text, blockchain_rid: byte_array, evm_network_id: integer, validator_contract: text, bridge_contract: text, initial_signers: list<byte_array>, anomaly_detection: boolean) {
@@ -175,12 +175,12 @@ operation remove_bridge_lease(blockchain_rid: byte_array, evm_network_id: intege
     remove_bridge_lease_impl(blockchain_rid, evm_network_id);
 }
 
-function create_system_p_proposal(ec_proposal_type, provider, description: text): proposal {
+function create_system_p_proposal(common_proposal_type, provider, description: text): common_proposal {
 
-    return create proposal(
+    return create common_proposal(
         op_context.last_block_time,
-        ec_proposal_type,
-        provider,
+        common_proposal_type,
+        provider.pubkey,
         system_p_voter_set(),
         description);
 }
