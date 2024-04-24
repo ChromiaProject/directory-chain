@@ -464,14 +464,16 @@ query staking_get_current_rate(): decimal {
     return current_rate;
 }
 
-query staking_get_current_delegate_on_network(account_id: byte_array, network): pubkey {
+query staking_get_current_delegate_on_network(account_id: byte_array, network): pubkey? {
     val account = ft4.accounts.Account(account_id);
-    return _staking_get_current_delegate(account, network);
+    val current_delegation = _staking_get_current_delegate(account, network);
+    return when(current_delegation) {get_null_account() -> null; else -> current_delegation;};
 }
 
-query staking_get_current_delegate(account_id: byte_array): pubkey {
+query staking_get_current_delegate(account_id: byte_array): pubkey? {
     val account = ft4.accounts.Account(account_id);
-    return _staking_get_current_delegate(account, network.CHR);
+    val current_delegation = _staking_get_current_delegate(account, network.CHR);
+    return when(current_delegation) {get_null_account() -> null; else -> current_delegation;};
 }
 
 function _staking_get_current_delegate(staker: ft4.accounts.account, network = network.CHR): pubkey {
