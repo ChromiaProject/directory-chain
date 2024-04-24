@@ -198,15 +198,15 @@ function get_provider_payed_rewards(provider_nodes: list<pubkey>, start: timesta
 
 query get_tag_proposal(proposal_id: rowid): tag_data {
 
-    val proposal = require_proposal(proposal_id);
-    val pending_tag_operation = require(pending_tag_operation @? { proposal }, "Proposal is of different type: %s".format(proposal.ec_proposal_type));
+    val proposal = require_common_proposal(proposal_id);
+    val pending_tag_operation = require(pending_tag_operation @? { proposal }, "Proposal is of different type: %s".format(proposal.proposal_type));
 
     return tag_data(name = pending_tag_operation.name, scu_price = pending_tag_operation.scu_price, extra_storage_price = pending_tag_operation.extra_storage_price);
 }
 
 query get_cluster_create_proposal(proposal_id: rowid): pending_cluster_data {
 
-    val proposal = require_proposal(proposal_id);
+    val proposal = require_common_proposal(proposal_id);
     val pending_cluster = pending_cluster @ { proposal };
 
     return pending_cluster_data(
@@ -223,7 +223,7 @@ query get_cluster_create_proposal(proposal_id: rowid): pending_cluster_data {
 
 query get_cluster_change_tag_proposal(proposal_id: rowid) {
 
-    val proposal = require_proposal(proposal_id);
+    val proposal = require_common_proposal(proposal_id);
     val pending_cluster_change_tag = pending_cluster_change_tag @ { proposal };
 
     return pending_cluster_change_tag_data(
@@ -235,7 +235,7 @@ query get_cluster_change_tag_proposal(proposal_id: rowid) {
 
 query get_econony_constants_proposal(proposal_id: rowid) {
 
-    val proposal = require_proposal(proposal_id);
+    val proposal = require_common_proposal(proposal_id);
     val pending_economy_constants = pending_economy_constants @ { proposal };
 
     return pending_economy_constants_data(

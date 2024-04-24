@@ -2,7 +2,7 @@
 
 import ^^.*;
 import ^.helper_functions.*;
-import ^^.ec_proposal.test.helper_functions.*;
+import common_proposal.test.helper_functions.*;
 
 val provider_key = rell.test.keypairs.bob;
 val provider_pubkey = provider_key.pub;
@@ -74,11 +74,11 @@ function test_create_cluster_revoke() {
 
     val proposal_id = get_latest_proposal_id();
     rell.test.tx().op(
-        revoke_proposal(provider_pubkey, proposal_id))
+        revoke_common_proposal(provider_pubkey, proposal_id))
         .sign(provider_key)
         .run();
 
-    assert_equals(proposal @ { .rowid == proposal_id } ( .state ), proposal_state.REVOKED);
+    assert_equals(common_proposal @ { .rowid == proposal_id } ( .state ), common_proposal_state.REVOKED);
     assert_null(pending_cluster @? { .name == cluster_name });
 }
 
@@ -95,11 +95,11 @@ function test_create_cluster_revoke_after_creation_failed() {
 
     val proposal_id = get_latest_proposal_id();
     rell.test.tx().op(
-        revoke_proposal(provider_pubkey, proposal_id))
+        revoke_common_proposal(provider_pubkey, proposal_id))
         .sign(provider_key)
         .run();
 
-    assert_equals(proposal @ { .rowid == proposal_id } ( .state ), proposal_state.REVOKED);
+    assert_equals(common_proposal @ { .rowid == proposal_id } ( .state ), common_proposal_state.REVOKED);
     assert_null(pending_cluster @? { .name == cluster_name });
 }
 
@@ -287,7 +287,7 @@ function test_update_tag_with_voting_revoked() {
     assert_equals(tag @ { tag_1_name } ( .extra_storage_price ), 4);
 
     rell.test.tx().op(
-        revoke_proposal(provider_pubkey, get_latest_proposal_id()))
+        revoke_common_proposal(provider_pubkey, get_latest_proposal_id()))
         .sign(provider_key)
         .run();
 

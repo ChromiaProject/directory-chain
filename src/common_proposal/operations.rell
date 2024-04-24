@@ -1,0 +1,20 @@
+
+
+operation make_common_vote(pubkey, proposal_id: rowid, vote: boolean) {
+    require_is_signer(pubkey);
+    val prop = require_common_proposal(proposal_id);
+    require(prop.state == common_proposal_state.PENDING, "The proposal is already closed as %s".format(prop.state));
+    require_common_voter_set_member(prop.voter_set, pubkey);
+    require(empty(common_vote @? {prop, pubkey}), "Only one vote per pubkey is allowed");
+    internal_common_vote(pubkey, prop, vote);
+}
+
+operation revoke_common_proposal(pubkey, proposal_id: rowid) {
+    require_is_signer(pubkey);
+    val prop = common_proposal @? { proposal_id };
+    require(exists(prop), "Proposal not found: %d".format(proposal_id));
+    require(prop!!.proposed_by == pubkey, "It is only allowed to revoke own proposals");
+    prop.state = common_proposal_state.REVOKED;
+    delete_common_proposal(prop);
+}
+

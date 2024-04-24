@@ -1,0 +1,44 @@
+
+enum common_proposal_type {
+
+    // Economy chain
+    ec_cluster_create,
+    ec_cluster_change_tag,
+    ec_tag_create,
+    ec_tag_update,
+    ec_tag_remove,
+    ec_constants_update,
+    ec_voter_set_update,
+}
+
+enum common_proposal_state {
+    PENDING, APPROVED, REJECTED, REVOKED
+}
+
+entity common_proposal {
+    index timestamp, proposal_type: common_proposal_type;
+    proposed_by: pubkey;
+    index voter_set: common_voter_set;
+    description: text = "";
+    transaction = op_context.transaction;
+    mutable state: common_proposal_state = common_proposal_state.PENDING;
+}
+
+entity common_voter_set {
+    key name;
+    mutable threshold: integer = 0;
+}
+
+entity common_voter_set_governance {
+    key voter_set: common_voter_set;
+    mutable governor: common_voter_set;
+}
+
+entity common_voter_set_member {
+    key voter_set: common_voter_set, pubkey;
+}
+
+entity common_vote {
+    key proposal: common_proposal, pubkey;
+    vote: boolean;
+}

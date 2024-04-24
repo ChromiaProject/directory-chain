@@ -1,4 +1,10 @@
-import .ec_proposal.*;
+import common_proposal.*;
+
+namespace voter_sets {
+    val system_p = "SYSTEM_P";
+}
+
+function system_p_voter_set() = common_voter_set @ { voter_sets.system_p };
 
 function receive_cluster_update_message(body: gtv) {
     val message = cluster_update_message.from_gtv(body);
@@ -89,15 +95,15 @@ function receive_provider_update_message(body: gtv) {
 
 function update_system_p_vote_set(provider: provider) {
 
-    var system_p_voter_set = voter_set @? { voter_sets.system_p };
+    var system_p_voter_set = common_voter_set @? { voter_sets.system_p };
     if (system_p_voter_set == null) {
-        system_p_voter_set = create_voter_set_internal(voter_sets.system_p);
+        system_p_voter_set = create_common_voter_set_internal(voter_sets.system_p);
     }
 
-    val voter_set_member = voter_set_member @? { system_p_voter_set, provider };
+    val voter_set_member = common_voter_set_member @? { system_p_voter_set, provider.pubkey };
 
     if (provider.system and provider.active and voter_set_member == null) {
-        create voter_set_member(system_p_voter_set, provider);
+        create common_voter_set_member(system_p_voter_set, provider.pubkey);
         revoke_proposals_for_provider_as_member(provider);
     } else if ((not provider.system or not provider.active) and voter_set_member != null) {
         revoke_proposals_for_provider_as_member(provider);
@@ -107,17 +113,17 @@ function update_system_p_vote_set(provider: provider) {
 
 function revoke_proposals_for_provider_as_member(provider) {
 
-    val results = (voter_set_member, voter_set, proposal) @* {
-        voter_set_member.provider == provider,
+    val results = (voter_set_member: common_voter_set_member, voter_set: common_voter_set, proposal: common_proposal) @* {
+        voter_set_member.pubkey == provider.pubkey,
         voter_set == voter_set_member.voter_set,
         proposal.voter_set == voter_set,
-        proposal.state == proposal_state.PENDING
+        proposal.state == common_proposal_state.PENDING
     };
 
     for (result in results) {
         log("Revoke proposal %s due to system provider changes".format(result.proposal.rowid));
-        result.proposal.state = proposal_state.REVOKED;
-        delete_proposal(result.proposal);
+        result.proposal.state = common_proposal_state.REVOKED;
+        delete_common_proposal(result.proposal);
     }
 }
 

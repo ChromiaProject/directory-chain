@@ -1,0 +1,50 @@
+@test module;
+
+import ^.helper_functions.*;
+import ^.helper_operations.*;
+import common_proposal.test.helper_functions.*;
+
+val alice = rell.test.keypairs.alice;
+val bob = rell.test.keypairs.bob;
+
+function test_make_common_vote() {
+    create_provider_and_proposal(alice, common_proposal_type.ec_cluster_create);
+
+    rell.test.tx().op(
+        make_common_vote(alice.pub, get_latest_proposal_id(), true)
+    ).sign(alice).run();
+}
+
+function test_make_common_vote_fail_due_to_not_member_of_voter_set() {
+
+    create_provider_and_proposal(alice, common_proposal_type.ec_cluster_create);
+    add_provider(bob.pub, true);
+
+    rell.test.tx().op(
+        make_common_vote(bob.pub, get_latest_proposal_id(), true)
+    ).sign(bob).run_must_fail("Voter is not a member of voter set voter-set");
+}
+
+function test_revoke_proposal() {
+
+    create_provider_and_proposal(alice, common_proposal_type.ec_cluster_create);
+
+    rell.test.tx().op(
+        revoke_common_proposal(alice.pub, get_latest_proposal_id()))
+        .sign(alice)
+        .run();
+
+    val proposal = common_proposal @ { .proposed_by == alice.pub };
+    assert_equals(proposal.state, common_proposal_state.REVOKED);
+}
+
+function test_revoke_proposal_fail_due_to_not_my_proposal() {
+
+    create_provider_and_proposal(alice, common_proposal_type.ec_cluster_create);
+    add_provider(bob.pub, true);
+
+    rell.test.tx().op(
+        revoke_common_proposal(bob.pub, get_latest_proposal_id()))
+        .sign(bob)
+        .run_must_fail("It is only allowed to revoke own proposals");
+}
