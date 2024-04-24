@@ -93,8 +93,11 @@ function _add_replica_node_to_cluster_internal(cluster, node) {
 }
 
 function _remove_replica_node_from_cluster_internal(cluster, node) {
-    delete cluster_replica_node @* { node };
-    after_replica_node_removed_from_cluster(node, cluster);
+    val crn = cluster_replica_node @? { cluster, node };
+    if (exists(crn)) {
+        after_replica_node_removed_from_cluster(node, cluster);
+        delete crn;
+    }
 }
 
 /**
