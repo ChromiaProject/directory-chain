@@ -1,0 +1,63 @@
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_tag_create.name: apply_tag_create(*)];
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_tag_update.name: apply_tag_update(*)];
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_tag_remove.name: apply_tag_remove(*)];
+
+function apply_tag_remove(proposal: common_proposal) {
+
+    val pending_tag = pending_tag_operation @ { proposal };
+    val tag = tag @ { pending_tag.name };
+
+    log("Remove tag %s after approval".format(tag.name));
+
+    val clusters = cluster @* { tag };
+    require(clusters.empty(), "Tag with name %s is in use.".format(tag.name));
+
+    delete tag;
+}
+
+function apply_tag_update(proposal: common_proposal) {
+
+    val pending_tag = pending_tag_operation @ { proposal };
+    val tag = tag @ { pending_tag.name };
+
+    log("Update tag %s after approval".format(tag.name));
+
+    if (pending_tag.scu_price != -1) tag.scu_price = pending_tag.scu_price;
+    if (pending_tag.extra_storage_price != -1) tag.extra_storage_price = pending_tag.extra_storage_price;
+}
+
+function apply_tag_create(proposal: common_proposal) {
+
+    val pending_tag = pending_tag_operation @ { proposal };
+
+    log("Create tag %s after approval".format(pending_tag.name));
+
+    create tag(name = pending_tag.name, scu_price = pending_tag.scu_price, extra_storage_price = pending_tag.extra_storage_price);
+}
+
+function apply_cluster_change_tag(proposal: common_proposal) {
+
+    val pending_cluster_change_tag = pending_cluster_change_tag @ { proposal };
+
+    log("Changing tag of cluster %s to %s after approval".format(pending_cluster_change_tag.cluster.name, pending_cluster_change_tag.tag.name));
+
+    pending_cluster_change_tag.cluster.tag = pending_cluster_change_tag.tag;
+}
+
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_tag_create.name: cleanup_pending_tag_operation(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_tag_update.name: cleanup_pending_tag_operation(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_tag_remove.name: cleanup_pending_tag_operation(*)];
+
+function cleanup_pending_tag_operation(proposal: common_proposal) {
+
+    log("Cleaning up pending_tag_operation");
+
+    delete pending_tag_operation @ { proposal };
+}
+
+function cleanup_pending_cluster_change_tag(proposal: common_proposal) {
+
+    log("Cleaning up pending_cluster_change_tag");
+
+    delete pending_cluster_change_tag @ { proposal };
+}
