@@ -1,0 +1,72 @@
+
+struct pending_minting_data {
+    amount: integer;
+    account_id: byte_array;
+}
+
+operation create_chromia_foundation_voter_set() {
+
+    require(empty(common_voter_set @? { voter_sets.chromia_foundation }), "Voter set %s already exists".format(voter_sets.chromia_foundation));
+    require(not(empty(op_context.get_signers())), "Transaction must be signed to set first member of voter set");
+
+    val voter_set = create_common_voter_set_internal(voter_sets.chromia_foundation, 0);
+
+    for (signer in op_context.get_signers()) {
+        create common_voter_set_member(voter_set, signer);
+    }
+}
+
+query get_chromia_foundation_voter_set_info(): (name:text, threshold:integer, governor:text, members:list<pubkey>) {
+    val v = require(common_voter_set @? { voter_sets.chromia_foundation }, "Voter set %s not found".format(voter_sets.chromia_foundation));
+    val governance = common_voter_set_governance @ { .voter_set == v };
+    val members = common_voter_set_member @* { v } ( .pubkey );
+    return (
+        name = v.name,
+        threshold = v.threshold,
+        governor = governance.governor.name,
+        members = members
+    );
+}
+
+operation update_chromia_foundation_voter_set(my_pubkey: pubkey, new_threshold: integer?, new_member: list<pubkey>, remove_member: list<pubkey>) {
+
+    // Can't remove last member
+    if (remove_member.size() > 0) {
+        val voter_set_members = common_voter_set_member @* { require_mint_chr_voter_set() } ( .pubkey );
+        voter_set_members.remove_all(remove_member);
+        require(not(voter_set_members.empty()), "Can't remove last member in voter set");
+    }
+
+    _propose_update_ec_voter_set(my_pubkey, voter_sets.chromia_foundation, new_threshold, new_member, remove_member);
+}
+
+operation propose_minting(proposal_by: byte_array, amount: integer, account_id: byte_array) {
+
+    val mint_chr_voter_set = require_mint_chr_voter_set();
+    require_signer_member_of_voter_set(mint_chr_voter_set);
+    require(amount > 0, "Amount must be greater than 0");
+    ft4.accounts.Account(account_id);
+
+    val proposal = create common_proposal(
+        op_context.last_block_time,
+        common_proposal_type.ec_mint,
+        proposal_by,
+        mint_chr_voter_set,
+        "Minting %d assets to account id %s".format(amount, account_id));
+
+    create pending_minting(
+        proposal,
+        amount,
+        account_id
+    );
+
+    internal_common_vote(proposal.proposed_by, proposal, true);
+}
+
+query get_minting_proposal(proposal_id: rowid) {
+
+    val proposal = require_common_proposal(proposal_id);
+    val pending_minting = require(pending_minting @? { proposal }, "Proposal %s is not of type minting".format(proposal_id));
+
+    return pending_minting_data(pending_minting.amount, pending_minting.account_id);
+}

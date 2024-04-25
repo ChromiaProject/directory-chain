@@ -1,0 +1,26 @@
+entity pending_minting {
+    proposal: common_proposal;
+    amount: integer;
+    account_id: byte_array;
+}
+
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_mint.name: apply_ec_pending_minting(*)];
+
+function apply_ec_pending_minting(proposal: common_proposal) {
+
+    val pending_minting = pending_minting @ { proposal };
+    val account = require(ft4.accounts.account @? { pending_minting.account_id }, "Account not found");
+
+    log("Apply minting proposal %d".format(pending_minting.rowid));
+
+    ft4.assets.Unsafe.mint(account, get_asset(), pending_minting.amount);
+}
+
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_mint.name: cleanup_ec_pending_minting(*)];
+
+function cleanup_ec_pending_minting(proposal: common_proposal) {
+
+    log("Cleaning up pending minting proposal");
+
+    delete pending_minting @ { proposal };
+}
