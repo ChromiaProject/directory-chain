@@ -24,7 +24,6 @@ The Economy Chain has the following module args:
 | `staking_initial_reward_rate`       | Staking initial reward rate.                                                                                                             | decimal | :white_check_mark: |         |
 | `staking_rate_change_delay_ms`      | Amount of time required to pass between staking rate changes.                                                                            | int     | :white_check_mark: |         |
 | `staking_withdrawal_delay_ms`       | Amount of time required to pass between staking withdrawals.                                                                             | int     | :white_check_mark: |         |
-| `staking_delegation_delay_ms`       |                                                                                                                                          | int     | :white_check_mark: |         |
 | `staking_payout_interval_ms`        | Amount of time required to pass between payouts.                                                                                         | int     | :white_check_mark: |         |
 | `test_chr_pool_refill_limit_millis` | Amount of time required to pass between pool refills.                                                                                    | int     | :white_check_mark: |         |
 | `max_bridge_leases_per_container`   | Max amount of bridge leases per container.                                                                                               | int     | :white_check_mark: |         |
@@ -141,7 +140,6 @@ Example:
          staking_initial_reward_rate: 0.15
          staking_rate_change_delay_ms: 604800000
          staking_withdrawal_delay_ms: 1209600000
-         staking_delegation_delay_ms: 604800000
          staking_payout_interval_ms: 31536000000 
          test_chr_pool_refill_limit_millis: 86400000 
          max_bridge_leases_per_container: 10
