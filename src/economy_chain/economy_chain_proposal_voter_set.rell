@@ -1,5 +1,13 @@
 import common_proposal;
 
+namespace voter_sets {
+    val system_p = "SYSTEM_P";
+    val chromia_foundation = "CHROMIA_FOUNDATION";
+}
+
+function system_p_voter_set() = common_voter_set @ { voter_sets.system_p };
+function require_mint_chr_voter_set() = require_common_voter_set(voter_sets.chromia_foundation);
+
 entity pending_ec_voter_set_update {
     key proposal: common_proposal, voter_set: common_voter_set;
 }
@@ -8,11 +16,6 @@ namespace ec_voter_set_update {
     entity threshold {
         key pending_ec_voter_set_update;
         threshold: integer;
-    }
-
-    entity governor {
-        key pending_ec_voter_set_update;
-        governor: common_voter_set;
     }
 
     entity new_member {
@@ -33,8 +36,6 @@ function apply_ec_voter_set_update(proposal: common_proposal) {
     if (vsp == null) return;
     val threshold = ec_voter_set_update.threshold @? { vsp }.threshold;
     if (threshold != null) vsp.voter_set.threshold = threshold;
-    val governor = ec_voter_set_update.governor @? { vsp }.governor;
-    if (governor != null) update common_voter_set_governance @ { .voter_set == vsp.voter_set } (.governor = governor);
     val new_member = ec_voter_set_update.new_member @* { vsp }.pubkey;
     for (m in new_member) {
         create common_voter_set_member(vsp.voter_set, m);
@@ -51,13 +52,16 @@ function delete_pending_ec_voter_set_update(proposal: common_proposal) {
     val p = pending_ec_voter_set_update @? { proposal };
     if (p == null) return;
     delete ec_voter_set_update.threshold @? { p };
-    delete ec_voter_set_update.governor @? { p };
     delete ec_voter_set_update.new_member @* { p };
     delete ec_voter_set_update.remove_member @* { p };
     delete p;
 }
 
-operation propose_update_ec_voter_set(my_pubkey: pubkey, voter_set_name: text, new_threshold: integer?, new_governor: name?, new_member: list<pubkey>, remove_member: list<pubkey>, description: text = "") {
+operation propose_update_ec_voter_set(my_pubkey: pubkey, voter_set_name: text, new_threshold: integer?, new_member: list<pubkey>, remove_member: list<pubkey>) {
+    _propose_update_ec_voter_set(my_pubkey, voter_set_name, new_threshold, new_member, remove_member);
+}
+
+function _propose_update_ec_voter_set(my_pubkey: pubkey, voter_set_name: text, new_threshold: integer?, new_member: list<pubkey>, remove_member: list<pubkey>) {
     require_is_signer(my_pubkey);
     val voter_set = require_common_voter_set(voter_set_name);
     require(voter_set.name != voter_sets.system_p, "Cannot update system voter set. Update this by proposing system provider role");
@@ -68,18 +72,14 @@ operation propose_update_ec_voter_set(my_pubkey: pubkey, voter_set_name: text, n
         op_context.last_block_time,
         common_proposal_type.ec_voter_set_update,
         my_pubkey,
-        common_voter_set_governance @ { voter_set }.governor,
-        description
+        voter_set,
+        "Update %s voter set".format(voter_sets.chromia_foundation)
     );
     val update_prop = create pending_ec_voter_set_update(prop, voter_set);
     if (new_threshold != null) {
         require(new_threshold >= -1 and new_threshold <= (common_voter_set_member @* { voter_set }).size(),
         "Invalid threshold level, must be in range [-1, voter_set.size()]");
         create ec_voter_set_update.threshold(update_prop, new_threshold);
-    }
-    if (new_governor != null) {
-        val g = require_common_voter_set(new_governor);
-        create ec_voter_set_update.governor(update_prop, g);
     }
     for (m in new_member) {
         create ec_voter_set_update.new_member(update_prop, m);
@@ -90,15 +90,14 @@ operation propose_update_ec_voter_set(my_pubkey: pubkey, voter_set_name: text, n
     internal_common_vote(my_pubkey, prop, true);
 }
 
-query get_ec_voter_set_update_proposal(id: integer) {
-    val p = common_proposal @? { rowid(id) };
+query get_ec_voter_set_update_proposal(id: rowid) {
+    val p = common_proposal @? { id };
     if (p == null) return null;
     val pvsu = pending_ec_voter_set_update @? { p };
     if (pvsu == null) return null;
     return (
         voter_set = pvsu.voter_set.name,
         threshold = ec_voter_set_update.threshold @? { pvsu }.threshold,
-        governor = ec_voter_set_update.governor @? { pvsu } .governor.name,
         add_member = ec_voter_set_update.new_member @* { pvsu } .pubkey,
         remove_member = ec_voter_set_update.remove_member @* { pvsu } .pubkey
     );
