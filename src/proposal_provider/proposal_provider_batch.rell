@@ -57,6 +57,8 @@ operation propose_providers(my_pubkey: pubkey, provider_infos: list<provider_inf
     for (p in providers) {
         require_pubkey(p.pubkey);
         require(empty(provider @? { p.pubkey }), "Provider already exists: " + p.pubkey);
+        validate_metadata_text("name", p.name);
+        validate_url(p.url);
     }
 
     val already_proposed = set<pubkey>();
@@ -69,7 +71,7 @@ operation propose_providers(my_pubkey: pubkey, provider_infos: list<provider_inf
         require(not(p.pubkey in already_proposed), "Provider is already proposed: " + p.pubkey);
     }
 
-    val prop = create proposal(op_context.last_block_time, proposal_type.provider_batch, me, system_p_voter_set(), description);
+    val prop = create_proposal(proposal_type.provider_batch, me, system_p_voter_set(), description);
     create pending_provider_batch(prop, providers.to_gtv().to_bytes(), tier, system, active);
     internal_vote(me, prop, true);
 }
