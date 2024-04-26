@@ -1,0 +1,22 @@
+@test module;
+
+import ^^.*;
+import ^.helper_operations.*;
+
+function get_latest_proposal_id(): rowid {
+    return common_proposal @ { } (
+        @sort_desc .rowid
+    ) limit 1;
+}
+
+function vote_yes(keys: rell.test.keypair, proposal_id: rowid) {
+    rell.test.tx().op(
+        make_common_vote(keys.pub, proposal_id, true))
+        .sign(keys)
+        .run();
+}
+
+function vote_yes_on_latest_proposal(keys: rell.test.keypair) {
+    val proposal_id = get_latest_proposal_id();
+    vote_yes(keys, proposal_id);
+}

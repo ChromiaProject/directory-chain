@@ -26,10 +26,14 @@ function test_move_container_blockchains() {
 
     rell.test.tx().op(
         propose_blockchain_action(initial_provider.pub, bc_to_be_moved_rid, blockchain_action.pause),
-        move_container_blockchains_op("c1", "s2", [bc_to_be_moved_rid: 1])
+        move_container_blockchains_op("c1", "s2", [bc_to_be_moved_rid: 1], 2, 0)
     ).sign(initial_provider).run();
 
-    assert_not_null(container @? { .cluster.name == "s2" , .name == "c1_new" });
+    val destination_container = container @ { .cluster.name == "s2" , .name == "c1_new" };
+    assert_equals(container_resource_limit @ {
+        .container == destination_container,
+        .container_resource_limit_type == container_resource_limit_type.container_units
+    }.value, 2);
     assert_not_null(moving_blockchain @? { bc_to_be_moved });
     assert_equals(src_container.state, container_state.MIGRATING);
 
@@ -55,7 +59,7 @@ function test_source_container_removed_if_empty() {
     assert_not_null(container @? { .cluster.name == "s1" , .name == "c1" });
 
     rell.test.tx().op(
-        move_container_blockchains_op("c1", "s2", [:])
+        move_container_blockchains_op("c1", "s2", [:], 1, 0)
     ).sign(initial_provider).run();
 
     assert_null(container @? { .cluster.name == "s1" , .name == "c1" });

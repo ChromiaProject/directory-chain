@@ -1,0 +1,28 @@
+
+function internal_common_vote(pubkey, proposal: common_proposal, vote: boolean) {
+    require(common_voter_set_member @? { proposal.voter_set, pubkey }, pubkey + " must be a member of the voter set");
+    create common_vote(proposal, pubkey, vote);
+    log("vote '%s' added for proposal %s".format(if (vote) "Yes" else "No", proposal_str(proposal)));
+    try_to_apply_proposal(proposal);
+}
+
+function try_to_apply_proposal(prop: common_proposal) {
+    val prop_str = proposal_str(prop);
+    val results = get_common_proposal_voting_results(prop.rowid);
+    when (results.voting_result) {
+        pending -> log("proposal is still under discussion:", prop_str);
+        rejected -> {
+            log("proposal rejected:", prop_str);
+            prop.state = common_proposal_state.REJECTED;
+            delete_common_proposal(prop);
+        }
+        approved -> {
+            log("proposal approved:", prop_str);
+            prop.state = common_proposal_state.APPROVED;
+            apply_common_voting_result(prop);
+            delete_common_proposal(prop);
+        }
+    }
+}
+
+@extendable function proposal_str(prop: common_proposal): text? = "%s:%d".format(prop.proposal_type, prop.rowid);
