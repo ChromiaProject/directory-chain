@@ -1,0 +1,33 @@
+val min_stake_to_create_account = 10 * 1000000; // 10 CHR
+
+operation ras_staking(
+    evm_address: byte_array,
+    main: ft4.accounts.auth_descriptor,
+    disposable: ft4.accounts.auth_descriptor? = null
+) {
+    ft4.auth.verify_signers([evm_address]);
+    require( provisional_stake_balance @? { .address == evm_address, .staked_balance >= min_stake_to_create_account } ,
+        "no stake or insufficient stake");
+}
+
+
+function ras_s_account_details(gtv) {
+    val params = struct<ras_staking>.from_gtv(gtv);
+    val signers = ft4.accounts.get_signers(params.main);
+    return ft4.strategies.account_details(
+        account_id = ft4.accounts.get_account_id_from_signers(signers),
+        main = params.main,
+        disposable = params.disposable
+    );
+}
+
+function apply_stake_action(ft4.accounts.account, strategy_params_gtv: gtv) {
+    flush_provisional_stake_balance(account, struct<ras_staking>.from_gtv(strategy_params_gtv).evm_address);
+}
+
+@extend(ft4.strategies.strategy)
+function () = ft4.strategies.add_strategy(
+    op = rell.meta(ras_staking),
+    account_details = ras_s_account_details(*),
+    action = apply_stake_action(*)
+);
