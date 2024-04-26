@@ -73,6 +73,13 @@ function test_propose_import_blockchain() {
         propose_finish_import_blockchain(initial_provider.pub, brid, final_height, "unique description")
     ).sign(initial_provider).run_must_fail("Blockchain must be in IMPORTING state to finish import");
 
+    // importing blockchain with invalid name
+    conf["serial"] = (25).to_gtv();
+    val brid_invalid_name = conf.hash();
+    rell.test.tx().op(
+        propose_import_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), brid_invalid_name, "bar@chain", container)
+    ).sign(initial_provider).run_must_fail("Entity name can only contain letters, numerals, and underscores");
+
     // importing blockchain to a full container
     val limits = map<container_resource_limit_type, integer>();
     limits[container_resource_limit_type.max_blockchains] = 2;
@@ -81,11 +88,12 @@ function test_propose_import_blockchain() {
     rell.test.tx().op(
         propose_container_limits(initial_provider.pub, container, limits),
         propose_import_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), brid2, "bar_chain", container)
-    ).sign(initial_provider).run_must_fail("Can't add blockchain, container system is full");    
+    ).sign(initial_provider).run_must_fail("Can't add blockchain, container system is full");
 
     // importing blockchain without signers
     conf.remove_or_null("signers");
     rell.test.tx().op(
         propose_import_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), brid2, "bar_chain", container)
     ).sign(initial_provider).run_must_fail("No signers in configuration");
+
 }

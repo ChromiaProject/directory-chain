@@ -82,6 +82,7 @@ operation create_tag(
     val provider = require_system_provider_signer_entity();
     require(tag @? { .name == name } == null, "Tag %s already exists".format(name));
     require(pending_tag_operation @? { .name == name } == null, "A proposal for creating tag %s already exists".format(name));
+    validate_entity_name(name);
 
     val proposal = create_system_p_proposal(common_proposal_type.ec_tag_create, provider, "Create tag %s".format(name));
     create pending_tag_operation(name = name, scu_price = scu_price, extra_storage_price = extra_storage_price, proposal);
@@ -130,6 +131,7 @@ operation create_cluster(
 
     require(empty(cluster @* { .name == name }), "Cluster %s already exists".format(name));
     require(pending_cluster @? { name } == null, "There is already a pending request to create cluster with name %s".format(name));
+    validate_entity_name(name);
     val tag = require_tag(tag_name);
 
     val proposal = create_system_p_proposal(common_proposal_type.ec_cluster_create, provider, "Create economy chain cluster %s".format(name));
