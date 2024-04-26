@@ -11,10 +11,8 @@ import common_proposal.*;
 import constants.*;
 
 namespace eif {
-    import event_receiver: lib.eif_event_receiver_chain.messaging.*;
     import messaging: lib.eif.messaging;
-    import lib.eif.main;
-    import lib.eif.ft4;
+    import lib.hbridge;
 }
 
 import lib.auth;
@@ -64,7 +62,8 @@ operation init() {
     require(state.initialized == false, "Economy chain is already initialized");
     state.initialized = true;
 
-    register_assets();
+    val asset = register_assets();
+    register_and_link_erc20_asset(asset);
 
     create_pool_account();
 
@@ -73,8 +72,6 @@ operation init() {
     create_chromia_foundation_account();
 
     __staking_init();
-
-    create_evm_asset_link();
 
     log("Economy chain was initialized");
 }
