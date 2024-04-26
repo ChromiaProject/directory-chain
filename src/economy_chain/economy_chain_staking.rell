@@ -155,11 +155,15 @@ operation staking_request_withdrawal() {
 
 // This operation needs to be called when an address was created by means others than ras_staking
 // registration strategy.
-operation staking_import_evm_balance(address: byte_array) {
+// note: network_id is important only for smart contract stakers, for EOA stakers it is ignored
+operation staking_import_evm_balance(address: byte_array, network_id: integer) {
     require_initialized();
     val staker = ft4.auth.authenticate();
 
-    // TODO: check hbridge link
+    val account = eif.hbridge.find_ft4_account_for_address(address, network_id);
+    require(exists(account), "No account link established for this address.");
+    require(account == staker, "Address does not belong to the authenticated account.");
+
     flush_provisional_stake_balance(staker, address);
 }
 

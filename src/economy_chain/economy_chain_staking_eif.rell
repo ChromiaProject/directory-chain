@@ -49,11 +49,7 @@ function __staking_evm_block(network_id: integer, evm_block_height: integer, evm
             return;
         }
 
-        // TODO: fetch from hbridge
-        // Get or make an FT4 account on-demand
-        val ft4_account = ft4.accounts.auth_descriptor_signer @?
-            {.id == evm_address} ( @omit @sort .rowid, .account_auth_descriptor.account )
-        limit 1;
+        val ft4_account = eif.hbridge.find_ft4_account_for_address(evm_address, network_id);
 
         if (event.name == "WithdrawRequest") {
             if (exists(ft4_account)) {
