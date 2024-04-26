@@ -125,11 +125,21 @@ function test_propose_import_blockchain() {
     /// 1. Proposing foreign blockchain blocks import for blockchain not being imported / already imported
     /// 2. Proposing foreign blockchain import finishing for blockchain not being imported / already imported
 
+    conf["serial"] = (13).to_gtv();
+    val brid_invalid_name = conf.hash();
+    rell.test.tx().op(
+        propose_foreign_blockchain_import(
+            initial_provider.pub,
+            foreign_node.pub, "node0.foreign", 9870, "http://node0.foreign:7740/", foreign_chain0,
+            "foo@chain", brid_invalid_name, conf.to_gtv().to_bytes(), container
+        )
+    ).sign(initial_provider).run_must_fail("Entity name can only contain letters, numerals, and underscores");
+
     // Asserting that other requirements are honored
     // importing blockchain to a full container
     val limits = map<container_resource_limit_type, integer>();
     limits[container_resource_limit_type.max_blockchains] = 2;
-    conf["serial"] = (13).to_gtv();
+    conf["serial"] = (14).to_gtv();
     val brid2 = conf.hash();
     val foreign_node2 = rell.test.keypairs.charlie;
     rell.test.tx().op(
