@@ -83,6 +83,8 @@ operation create_tag(
     require(tag @? { .name == name } == null, "Tag %s already exists".format(name));
     require(pending_tag_operation @? { .name == name } == null, "A proposal for creating tag %s already exists".format(name));
     validate_entity_name(name);
+    require(scu_price > 0, "Tag must have a positive SCU price");
+    require(extra_storage_price > 0, "Tag must have a positive extra storage price");
 
     val proposal = create_system_p_proposal(common_proposal_type.ec_tag_create, provider, "Create tag %s".format(name));
     create pending_tag_operation(name = name, scu_price = scu_price, extra_storage_price = extra_storage_price, proposal);
@@ -97,6 +99,8 @@ operation update_tag(
 ) {
     val provider = require_system_provider_signer_entity();
     val tag = require_tag(name);
+    require(empty(scu_price) or scu_price > 0, "Tag must have a positive SCU price");
+    require(empty(extra_storage_price) or extra_storage_price > 0, "Tag must have a positive extra storage price");
 
     val proposal = create_system_p_proposal(common_proposal_type.ec_tag_update, provider, "Update tag %s".format(name));
     create pending_tag_operation(name = name, scu_price = scu_price ?: -1, extra_storage_price = extra_storage_price ?: -1, proposal);
