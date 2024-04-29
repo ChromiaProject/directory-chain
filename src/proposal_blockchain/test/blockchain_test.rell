@@ -29,9 +29,16 @@ function test_propose_blockchain() {
     rell.test.tx().op(
         propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "foo_chain", system_container_name(clusters.system))
     ).sign(rell.test.keypairs.alice).run_must_fail("Proposing blockchain to a system container is not allowed");
+
+    rell.test.tx().op(
+        create_container(alice.pubkey, container, clusters.system, 0, [alice.pubkey, bob.pubkey])
+    ).sign(rell.test.keypairs.alice).run();
+    // proposing blockchain with invalid name will fail
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "foo@chain", container)
+    ).sign(rell.test.keypairs.alice).run_must_fail("Entity name can only contain letters, numerals, and underscores");
     // proposing blockchain to a non-system container
     rell.test.tx().op(
-        create_container(alice.pubkey, container, clusters.system, 0, [alice.pubkey, bob.pubkey]),
         propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "foo_chain", container)
     ).sign(rell.test.keypairs.alice).run();
     val tx_rid = transaction @ {} (@sort_desc @omit .rowid, .tx_rid) limit 1;

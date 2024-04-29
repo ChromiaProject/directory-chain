@@ -14,7 +14,7 @@ function register_account_impl(pubkey) {
     val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(pubkey, set(["A", "T"]));
 
     before_account_registration(auth_descriptor);
-    val account = ft4.accounts.Unsafe.create_account_with_auth(auth_descriptor);
+    val account = ft4.accounts.create_account_with_auth(auth_descriptor);
     after_account_registration(account, auth_descriptor);
 }
 
@@ -47,36 +47,49 @@ function get_asset(): ft4.assets.asset {
 }
 
 function create_pool_account(): ft4.accounts.account {
-    return ft4.accounts.Unsafe.create_account_with_auth(get_pool_account_auth_descriptor());
+    return ft4.accounts.create_account_with_auth(get_pool_account_auth_descriptor());
 }
 
-function get_pool_account() = ft4.accounts.account_by_id(get_pool_account_auth_descriptor().hash());
+function get_pool_account() = ft4.accounts.account_by_id(get_pool_account_id());
 
 function get_pool_account_auth_descriptor() = ft4.accounts.single_sig_auth_descriptor(chain_context.args.pool_account_pubkey, set(["A", "T"]));
 
+function get_pool_account_id() = chain_context.args.pool_account_pubkey.hash();
+
 function create_deposit_account(): ft4.accounts.account {
-    return ft4.accounts.Unsafe.create_account_with_auth(get_deposit_account_auth_descriptor());
+    return ft4.accounts.create_account_with_auth(get_deposit_account_auth_descriptor());
 }
 
-function get_deposit_account() = ft4.accounts.account_by_id(get_deposit_account_auth_descriptor().hash());
+function get_deposit_account() = ft4.accounts.account_by_id(get_deposit_account_id());
+
+function get_deposit_account_id() = chain_context.args.deposit_account_pubkey.hash();
 
 function get_deposit_account_auth_descriptor() = ft4.accounts.single_sig_auth_descriptor(chain_context.args.deposit_account_pubkey, set(["A", "T"]));
 
 
 function create_chromia_foundation_account(): ft4.accounts.account {
-    return ft4.accounts.Unsafe.create_account_with_auth(get_chromia_foundation_account_auth_descriptor());
+    return ft4.accounts.create_account_with_auth(get_chromia_foundation_account_auth_descriptor());
 }
 
-function get_chromia_foundation_account() = ft4.accounts.account_by_id(get_chromia_foundation_account_auth_descriptor().hash());
+function get_chromia_foundation_account() = ft4.accounts.account_by_id(get_get_chromia_foundation_account_id());
+
+function get_get_chromia_foundation_account_id() = chain_context.args.chromia_foundation_account_pubkey.hash();
 
 function get_chromia_foundation_account_auth_descriptor() = ft4.accounts.single_sig_auth_descriptor(chain_context.args.chromia_foundation_account_pubkey, set(["A", "T"]));
 
 function register_assets() {
-    ft4.assets.Unsafe.register_asset(
+    return ft4.assets.Unsafe.register_asset(
         chain_context.args.asset_name,
         chain_context.args.asset_symbol,
         chain_context.args.asset_decimals,
         chain_context.blockchain_rid,
         chain_context.args.asset_icon
     );
+}
+
+query get_ft4_account_ids() {
+    return [
+        "pool_account_id": get_pool_account().id,
+        "chromia_foundation_account_id": get_chromia_foundation_account().id
+    ];
 }

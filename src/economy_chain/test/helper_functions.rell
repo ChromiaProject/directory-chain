@@ -2,6 +2,7 @@
 
 import ^^.*;
 import ^.helper_operations.*;
+import common_proposal.test.helper_functions.*;
 
 namespace ft4 {
     import lib.ft4.accounts;
@@ -11,7 +12,7 @@ namespace ft4 {
 }
 import lib.auth;
 
-val ticket_id_after_init = 32;
+val ticket_id_after_init = 33;
 
 function do_create_account(keypair: rell.test.keypair, auth_privkey: byte_array, failure: text? = null): ft4.accounts.account? {
     val eth_address = crypto.eth_privkey_to_address(keypair.priv);
@@ -27,7 +28,8 @@ function do_create_account(keypair: rell.test.keypair, auth_privkey: byte_array,
         return null;
     } else {
         tx.run();
-        return ft4.accounts.account_by_id(auth_descriptor.hash());
+        val account_id = eth_address.hash();
+        return ft4.accounts.account_by_id(account_id);
     }
 }
 
@@ -358,3 +360,47 @@ function do_evm_withdrawal_request_bsc(ft4.accounts.account) {
         )
     ).nop().run();
 }
+
+
+function create_provider_and_proposal(provider_key: rell.test.keypair, common_proposal_type: common_proposal_type) {
+
+    create_provider_and_proposal_and_voterset(provider_key, common_proposal_type, "voter-set");
+}
+
+function create_provider_and_proposal_and_voterset(provider_key: rell.test.keypair, common_proposal_type: common_proposal_type, voter_set_name: text) {
+
+    if (provider @? { provider_key.pub } == null) {
+        rell.test.tx().op(
+            create_or_return_provider_op(provider_key.pub, true))
+            .sign(provider_key)
+            .run();
+    }
+
+    val provider = provider @ { provider_key.pub };
+
+    rell.test.tx().op(
+        create_test_proposal(common_proposal_type, provider.pubkey, voter_set_name))
+        .sign(provider_key)
+        .run();
+}
+
+function add_voter_set_member(voter_set_name: text, provider_keypair: rell.test.keypair) {
+
+    val voter_set = common_voter_set @ { voter_set_name };
+    val provider = provider @ { provider_keypair.pub };
+
+    rell.test.tx().op(
+        create_voter_set_member_op(voter_set, provider.pubkey))
+        .sign(provider_keypair)
+        .run();
+}
+
+
+function create_or_return_provider(pubkey, system: boolean) {
+    var provider = provider @? { pubkey };
+    if (provider == null) {
+        provider = create provider(pubkey, system = system, provider_tier.NODE_PROVIDER, active = true);
+    }
+    return provider;
+}
+

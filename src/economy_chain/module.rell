@@ -7,14 +7,12 @@ import messaging.blockchain_rid.*;
 import messaging.evm_transaction_submitter_cost.*;
 import messaging.icmf.*;
 import messaging.icmf.receiver.*;
-import .ec_proposal.*;
+import common_proposal.*;
 import constants.*;
 
 namespace eif {
-    import event_receiver: lib.eif_event_receiver_chain.messaging.*;
     import messaging: lib.eif.messaging;
-    import lib.eif.main;
-    import lib.eif.ft4;
+    import lib.hbridge;
 }
 
 import lib.auth;
@@ -66,7 +64,8 @@ operation init() {
     require(state.initialized == false, "Economy chain is already initialized");
     state.initialized = true;
 
-    register_assets();
+    val asset = register_assets();
+    register_and_link_erc20_asset(asset);
 
     create_pool_account();
 
@@ -75,8 +74,6 @@ operation init() {
     create_chromia_foundation_account();
 
     __staking_init();
-
-    create_evm_asset_link();
 
     log("Economy chain was initialized");
 }
@@ -104,6 +101,4 @@ function require_pubkey(pubkey) {
     require(pubkey.size() == 33 or pubkey.size() == 65 or pubkey.size() == 1336, "Value is not pubkey: " + pubkey);
 }
 
-function require_is_signer(pubkey) {
-    require(op_context.is_signer(pubkey), "Operation must be signed by " + pubkey);
-}
+

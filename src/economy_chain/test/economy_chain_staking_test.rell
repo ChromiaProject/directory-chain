@@ -107,10 +107,12 @@ function test_delegation() {
 
     do_staking_deposit_native(rell.test.keypairs.alice, 8000);
     do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.charlie.pub);
+    assert_equals(staking_get_next_delegation_change(test_account_alice.id)?.pubkey, rell.test.keypairs.charlie.pub);
 
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
     rell.test.block().run();
     assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.charlie.pub);
+    assert_null(staking_get_next_delegation_change(test_account_alice.id));
 
     assert_true(staking_rewards_claimable_for(test_account_alice.id) > 0);
 
@@ -120,7 +122,7 @@ function test_delegation() {
 
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
     rell.test.block().run();
-    assert_equals(staking_get_current_delegate(test_account_alice.id), get_null_account()); // Change in a week
+    assert_null(staking_get_current_delegate(test_account_alice.id)); // Change in a week
 }
 
 function test_staking_deposit() {

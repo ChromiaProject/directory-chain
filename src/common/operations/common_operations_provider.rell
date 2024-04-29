@@ -46,3 +46,16 @@ operation transfer_action_points(from: pubkey, to: pubkey, amount: integer) {
     update provider_rl_state @ { _from } ( .points -= amount );
     update provider_rl_state @ { _to } ( .points += amount );
 }
+
+operation update_provider(my_pubkey: pubkey, name?, url: text?) {
+    val me = require_provider(my_pubkey);
+    require_provider_auth_with_rate_limit(me);
+    if (exists(name)) {
+        validate_metadata_text("name", name);
+        me.name = name;
+    }
+    if (exists(url)) {
+        validate_url(url);
+        me.url = url;
+    }
+}

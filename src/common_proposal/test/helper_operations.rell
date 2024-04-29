@@ -1,0 +1,34 @@
+module;
+
+import ^^.*;
+
+operation create_test_proposal(
+    proposal_type: common_proposal_type,
+    pubkey,
+    voter_set_name: text
+) {
+    var voter_set = create_or_return_voter_set(voter_set_name);
+    create_voter_set_member(voter_set, pubkey);
+    create common_proposal(op_context.last_block_time, proposal_type, pubkey, voter_set);
+}
+
+function create_or_return_voter_set(voter_set_name: text) {
+    var voter_set = common_voter_set @? { voter_set_name };
+    if (voter_set == null) {
+        voter_set = create common_voter_set(voter_set_name);
+    }
+    return voter_set;
+}
+
+operation create_voter_set_op(name: text) {
+    create_or_return_voter_set(name);
+}
+
+operation create_voter_set_member_op(common_voter_set, pubkey) {
+    create_voter_set_member(common_voter_set, pubkey);
+}
+
+function create_voter_set_member(common_voter_set, pubkey) {
+    create common_voter_set_member(common_voter_set, pubkey);
+}
+
