@@ -29,7 +29,6 @@ entity staker_state {
     old_provider: pubkey;
     balance: integer;
     previous_balance: integer;
-    mutable latest: boolean; // We have no windowing functions, and want to group by other fields
     index staker;
 }
 
@@ -64,11 +63,12 @@ function _staking_set_rate_at(reward_rate: decimal, time: timestamp) {
 
 operation staking_set_rate(reward_rate: decimal) {
     require_admin();
+    // why is there no require_initialized();
    _staking_set_rate_at(reward_rate, _staking_cannot_change_before());
 }
 
-query staking_total_stake() = staker_state @ { .latest } (@sum .balance);
-query staking_total_accounts() = staker_state @ { .latest and .network == network.CHR } (@sum 1);
+// query staking_total_stake() = staker_state @ { .latest } (@sort ,@sum .balance);
+// query staking_total_accounts() = staker_state @ { .latest and .network == network.CHR } (@sum 1);
 
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
@@ -95,7 +95,12 @@ operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
     require(amount < get_account_balance(staker), "Insufficent funds to deposit.");
     ft4.assets.Unsafe.transfer(staker, get_deposit_account(), get_asset(), amount);
 
-    val existing = staker_state @? { .staker == staker and .latest and .network == network.CHR };
+    val existing = staker_state @? {
+        .staker == staker and .network == network.CHR
+    } (
+        @sort_desc .staker_state_time,
+        .balance
+    );
     val delta = staker_state_delta(
         network = network.CHR,
         balance = if (null != existing) existing.balance + amount else amount,
@@ -141,7 +146,16 @@ query staking_get_native_balance(account_id: byte_array) {
 }
 
 function _staking_get_balance(staker: ft4.accounts.account) = _staking_get_balance_by_network(staker, network.CHR) + _staking_get_balance_by_network(staker, network.ETH) + _staking_get_balance_by_network(staker, network.BSC) ;
-function _staking_get_balance_by_network(staker: ft4.accounts.account, network) = staker_state @? { .staker == staker and .latest and .network == network } ( .balance ) ?: 0;
+
+function _staking_get_balance_by_network(
+    staker: ft4.accounts.account,
+    network
+) = staker_state @? { 
+    .staker == staker and .network == network 
+} ( 
+    @omit @sort_desc .staker_state_time,
+    .balance 
+) ?: 0;
 
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
@@ -202,7 +216,13 @@ query staking_get_withdrawal_time(account_id: byte_array): timestamp? {
 
 query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubkey, time: integer)? {
     val staker = ft4.accounts.Account(account_id);
-    val existing = staker_state @ {.latest and .staker == staker and .network == network.CHR} ( (pubkey = .new_provider, time = .cutover_time) );
+    val existing = staker_state @ {
+        .staker == staker and .network == network.CHR
+    } (
+        @omit @sort_desc .staker_state_time,
+        pubkey = .new_provider,
+        time = .cutover_time
+    );
     return if (_staking_last_known_time() <= existing.time) existing else null;
 }
 
@@ -218,27 +238,27 @@ function _staking_get_withdrawal_time(staker: ft4.accounts.account, network = ne
 
 function _staking_is_active_provider(_provider: pubkey) = exists(provider @? {.pubkey == _provider});
 
-query staking_get_total_delegation_to(provider: pubkey) = _staking_get_total_delegation_to(provider, network.CHR) + _staking_get_total_delegation_to(provider, network.BSC) + _staking_get_total_delegation_to(provider, network.ETH);
+// query staking_get_total_delegation_to(provider: pubkey) = _staking_get_total_delegation_to(provider, network.CHR) + _staking_get_total_delegation_to(provider, network.BSC) + _staking_get_total_delegation_to(provider, network.ETH);
 
-function _staking_get_total_delegation_to(provider: pubkey, _network: network): integer {
-    return
-        // Look at the full staker state 
-        (s: staker_state) @ {
-            .network == _network
-            // consider only the latest state
-            and s.latest
-            // restricted to those currently on this provider according to the cut off date
-            and (
-                ( s.new_provider == provider and s.cutover_time <= _staking_last_known_time() )
-                or
-                ( s.old_provider == provider and s.cutover_time > _staking_last_known_time() )
-            )
-        } (
-            // sum the balances
-            @sum s.balance
-        )
-    ;
-}
+// function _staking_get_total_delegation_to(provider: pubkey, _network: network): integer {
+//     return
+//         // Look at the full staker state 
+//         (s: staker_state) @ {
+//             .network == _network
+//             // consider only the latest state
+//             and s.latest
+//             // restricted to those currently on this provider according to the cut off date
+//             and (
+//                 ( s.new_provider == provider and s.cutover_time <= _staking_last_known_time() )
+//                 or
+//                 ( s.old_provider == provider and s.cutover_time > _staking_last_known_time() )
+//             )
+//         } (
+//             // sum the balances
+//             @sum s.balance
+//         )
+//     ;
+// }
 
 query staking_rewards_claimable_for(account_id: byte_array): integer {
     val staker = ft4.accounts.Account(account_id);
@@ -305,21 +325,21 @@ function _staking_offboard_provider(provider: pubkey) {
     // Unwind delegations immediately
     // Find all the latest delegations involving removed provider
     // eg. latest AND new_provider is going
-    val removed_delegations = staker_state @* { .new_provider == provider and .latest } (@group .staker);
-    // then for each :-
-    for (removed_delegation in removed_delegations) {
-        // Apply undelegation to all networks
-        for (n in network.values()) {
-            val delta = staker_state_delta(
-                network = n,
-                cutover_time = staking_get_last_known_time(),
-                new_provider = get_null_account(),
-                old_provider = _staking_get_current_delegate(removed_delegation),
-                balance = null
-            );
-            _staking_apply_staker_state_delta(removed_delegation, delta);
-        }
-    }
+    // val removed_delegations = staker_state @* { .new_provider == provider and .latest } (@group .staker);
+    // // then for each :-
+    // for (removed_delegation in removed_delegations) {
+    //     // Apply undelegation to all networks
+    //     for (n in network.values()) {
+    //         val delta = staker_state_delta(
+    //             network = n,
+    //             cutover_time = staking_get_last_known_time(),
+    //             new_provider = get_null_account(),
+    //             old_provider = _staking_get_current_delegate(removed_delegation),
+    //             balance = null
+    //         );
+    //         _staking_apply_staker_state_delta(removed_delegation, delta);
+    //     }
+    // }
 }
 
 
@@ -475,7 +495,14 @@ query staking_get_current_delegate(account_id: byte_array): pubkey {
 }
 
 function _staking_get_current_delegate(staker: ft4.accounts.account, network = network.CHR): pubkey {
-    val current_state = staker_state @? { .staker == staker and .latest and .network == network };
+    val current_state = staker_state @? {
+        .staker == staker and .network == network
+    } (
+        @omit @sort_desc .rowid,
+        .cutover_time,
+        .old_provider,
+        .new_provider
+    ) limit 1;
     return
         if  (empty(current_state)) get_null_account()
     else if ( staking_get_last_known_time() >= current_state.cutover_time ) current_state.new_provider
@@ -502,9 +529,9 @@ function _staking_apply_staker_state_delta(staker: ft4.accounts.account, delta: 
 
     for(n in networks) {
         // Snapshot existing state and/or initialise
-        var existing = staker_state @? {.latest and .staker == staker and .network == n };
+        var existing = staker_state @? { .staker == staker and .network == n } ( @omit @sort_desc .rowid, $ );
         if (empty(existing)) {
-            create staker_state(
+            existing = create staker_state (
                 network = n,
                 staker_state_time = _staking_last_known_time(),
                 previous_staker_state_time = 0,
@@ -513,14 +540,10 @@ function _staking_apply_staker_state_delta(staker: ft4.accounts.account, delta: 
                 previous_balance = 0,
                 cutover_time = _staking_last_known_time(),
                 new_provider = get_null_account(),
-                old_provider = get_null_account(),
-                latest = true
+                old_provider = get_null_account()
             );
-            existing = staker_state @ {.latest and .staker == staker and .network == n };
         }
 
-        // Clear flag from any existing state
-        update staker_state @? { .staker == staker and .latest and .network == n and .latest } ( latest = false );
 
         // Create new from existing state + delta
         create staker_state(
@@ -532,8 +555,7 @@ function _staking_apply_staker_state_delta(staker: ft4.accounts.account, delta: 
             new_provider = delta.new_provider ?: existing.new_provider,
             old_provider = delta.old_provider ?: existing.old_provider,
             balance = delta.balance ?: existing.balance,
-            previous_balance = existing.balance,
-            latest = true
+            previous_balance = existing.balance
         );
 
         // TODO Handle with extendable functions
