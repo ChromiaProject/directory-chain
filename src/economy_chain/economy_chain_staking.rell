@@ -146,3 +146,21 @@ query staking_get_current_rate(): decimal {
     ) limit 1;
     return current_rate;
 }
+
+function _staking_withdraw_all() {
+    require_initialized();
+
+    val open_withdrawals = staker_withdrawal_request @* {
+        .active and .staker_state.network == network.CHR and .request_finish < _staking_last_known_time()
+    } ( $.to_struct() );
+
+    for (withdrawal in open_withdrawals) {
+        // Send the balance back to them through ft4
+        ft4.assets.Unsafe.transfer(
+                get_deposit_account(),
+                withdrawal.staker_state.account,
+                get_asset(),
+                withdrawal.staker_state.balance
+            );
+    }
+}
