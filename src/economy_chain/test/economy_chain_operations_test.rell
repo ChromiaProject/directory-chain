@@ -373,3 +373,19 @@ function test_name_validation() {
         )
     ).sign(provider_key).run_must_fail("Entity name can only contain letters, numerals, and underscores");
 }
+
+function test_price_validation() {
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op(
+        create_tag(
+            name = "tag_name",
+            scu_price = -1,
+            extra_storage_price = 2)
+    ).sign(provider_key).run_must_fail("Tag must have a positive SCU price");
+    rell.test.tx().op(
+        create_tag(
+            name = "tag_name",
+            scu_price = 1,
+            extra_storage_price = -2)
+    ).sign(provider_key).run_must_fail("Tag must have a positive extra storage price");
+}
