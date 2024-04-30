@@ -98,15 +98,11 @@ operation staking_request_withdrawal() {
     val ss = staker_state @? { .account == staker and .network == network.CHR };
     require(ss, "No staker state for %s".format(staker));
 
-    val active_withdraw_request = staker_withdrawal_request @? { ss, .active }
+    val active_withdraw_request = staker_withdrawal_request @? { ss, .active };
     require(not exists(active_withdraw_request), "Only one withdrawal request allowed at a time");
     require(ss.balance > 0, "Balance must be over 0");
-    _staking_request_withdrawal(staker, network.CHR);
-}
 
-function _staking_request_withdrawal(staker: ft4.accounts.account, network) {
     _staking_delegate(staker, get_null_account());
-    val ss = staker_state @ { .account == staker and .network == network };
 
     // Make a new request
     create staker_withdrawal_request (
