@@ -34,7 +34,7 @@ entity staker_state {
 }
 
 struct staker_state_delta {
-    network: network?; // Null means all networks
+    network: network; // Null means all networks
     cutover_time: timestamp?;
     new_provider: pubkey?;
     old_provider: pubkey?;
@@ -178,21 +178,19 @@ function _staking_withdraw_all() {
             not .used
         and .network == network.CHR
         and (.staker_withdrawal_request_time + chain_context.args.staking_withdrawal_delay_ms) < _staking_last_known_time()
-    } ( $.to_struct() );
+    };
+    var states = ( ss: staker_state, swr: staker_withdrawal_request) @* {
+        not swr.used and swr.network == network.CHR and swr.staker == ss.staker and ss.network == swr.network
+    } ( ss.to_mutable_struct() );
 
-    for (withdrawal in open_withdrawals) {
+    for (state in states) {
         // Send the balance back to them through ft4
-        ft4.assets.Unsafe.transfer(get_deposit_account(), withdrawal.staker, get_asset(), _staking_get_balance(withdrawal.staker));
-
-        // Apply change
-        val delta = staker_state_delta(
-            network = network.CHR,
-            cutover_time = staking_get_last_known_time(),
-            balance = 0,
-            new_provider = null, old_provider = null
-        );
-        _staking_apply_staker_state_delta(withdrawal.staker, delta);
+        ft4.assets.Unsafe.transfer(get_deposit_account(), state.staker, get_asset(), state.balance);
+        state.balance = 0;
+        state.cutover_time = staking_get_last_known_time();
     }
+    _staking_apply_staker_state_delta(states, network.CHR);
+    update open_withdrawals ( used = true );
 }
 
 query staking_get_withdrawal_time(account_id: byte_array): timestamp? {
@@ -505,60 +503,22 @@ function _pay_to(staker: ft4.accounts.account, amount: integer) {
     ft4.assets.Unsafe.transfer(get_pool_account(), staker, get_asset(), amount);
 }
 
-function _staking_apply_staker_state_delta(staker: ft4.accounts.account, delta: staker_state_delta) {
-    // Apply to specified network or to all
-    val networks = if (delta.network??) [delta.network!!] else network.values();
-
-    for(n in networks) {
-        // Snapshot existing state and/or initialise
-        var existing = staker_state @? {.latest and .staker == staker and .network == n };
-        if (empty(existing)) {
-            create staker_state(
-                network = n,
-                staker_state_time = _staking_last_known_time(),
-                previous_staker_state_time = 0,
-                staker = staker,        
-                balance = 0,    
-                previous_balance = 0,
-                cutover_time = _staking_last_known_time(),
-                new_provider = get_null_account(),
-                old_provider = get_null_account(),
-                latest = true
-            );
-            existing = staker_state @ {.latest and .staker == staker and .network == n };
-        }
-
-        // Clear flag from any existing state
-        update staker_state @? { .staker == staker and .latest and .network == n and .latest } ( latest = false );
-
-        // Create new from existing state + delta
-        create staker_state(
-            network = n,
-            staker_state_time = _staking_last_known_time(),
-            previous_staker_state_time = existing.staker_state_time,
-            staker = staker,
-            cutover_time = delta.cutover_time ?: existing.cutover_time,
-            new_provider = delta.new_provider ?: existing.new_provider,
-            old_provider = delta.old_provider ?: existing.old_provider,
-            balance = delta.balance ?: existing.balance,
-            previous_balance = existing.balance,
-            latest = true
-        );
-
-        // TODO Handle with extendable functions
-        // Have we reduced the balance to zero, e.g. a complete withdrawal
-        if (
-            0 != existing.balance
-            and
-            0 == delta.balance ?: 0
-            and
-            delta.balance??
-        ) {
-            // Clear the withdrawal request
-            update staker_withdrawal_request @ {.staker == staker and .network == n} (used = true);
-        }
+function _staking_apply_staker_state_delta(
+    new_states: list<struct<mutable staker_state>>,
+    _network: network
+) {
+    var stakers = list<ft4.accounts.account>();
+    for (new_state in new_states) {
+        stakers.add(new_state.staker);
     }
+    update staker_state @? {
+        .staker in stakers and .latest and .network == _network and .latest
+    } ( latest = false );
+
+    // Create new from existing state + delta
+    create staker_state ( new_states );
 }
+
 
 function _staking_cannot_change_before(): timestamp = _staking_last_known_time() + chain_context.args.staking_rate_change_delay_ms;
 
