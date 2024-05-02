@@ -95,13 +95,25 @@ operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
     require(amount < get_account_balance(staker), "Insufficent funds to deposit.");
     ft4.assets.Unsafe.transfer(staker, get_deposit_account(), get_asset(), amount);
 
-    val existing = staker_state @? { .staker == staker and .latest and .network == network.CHR };
-    val delta = staker_state_delta(
+    var new_state = staker_state @? {
+        .staker == staker and .latest and .network == network.CHR
+    } (
+        $.to_mutable_struct()
+    ) ?: struct<mutable staker_state>(
         network = network.CHR,
-        balance = if (null != existing) existing.balance + amount else amount,
-        cutover_time = null, new_provider = null, old_provider = null
+        staker_state_time = _staking_last_known_time(),
+        previous_staker_state_time = 0,
+        staker = staker,
+        balance = 0,
+        previous_balance = 0,
+        cutover_time = _staking_last_known_time(),
+        new_provider = get_null_account(),
+        old_provider = get_null_account(),
+        latest = true
     );
-    _staking_apply_staker_state_delta(staker, delta);
+    new_state.balance += amount;
+
+    _staking_apply_staker_state_delta([new_state], network.CHR);
 
     if (exists(delegateTo)) {
         // Below check is duplicated, but less overhead than 2 wrapping functions.
