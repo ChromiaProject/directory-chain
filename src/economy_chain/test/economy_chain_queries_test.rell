@@ -567,3 +567,20 @@ function test_get_cluster_change_tag_proposal() {
     assert_equals(cluster_change_tag_propsal.new_tag, "t2");
 }
 
+function test_get_provider_staking_status() {
+
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    val provider_account = provider_account @ { provider };
+
+    rell.test.tx().op(
+        add_staking(provider_account, 9999999999)
+    ).sign(provider_key).run();
+
+    val staking_status = get_provider_staking_status(provider_pubkey);
+    val expected = provider_staking_status(
+        own_staking_usd = 49999999995,
+        total_staking_usd = 49999999995,
+        approved = true
+    );
+    assert_equals(staking_status, expected);
+}

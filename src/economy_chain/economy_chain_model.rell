@@ -25,6 +25,14 @@ object economy_constants {
     mutable resource_pool_margin_fee_share: decimal = 0.1;
     mutable system_provider_risk_share: decimal = 0.1;
     mutable dapp_provider_risk_share: decimal = 0.2;
+
+    // Staking requirements for payout
+    mutable staking_requirements_enabled: boolean = true;
+    mutable staking_requirement_stop_payout_days: integer = 14; // 2 weeks - the time providers can fail to meet the requirements before payouts are stopped
+    mutable staking_requirement_system_provider_own_stake_usd: integer = 20000; // 20k usd
+    mutable staking_requirement_system_provider_total_stake_usd: integer = 200000; // 200k usd
+    mutable staking_requirement_dapp_provider_own_stake_usd: integer = 10000; // 10k usd
+    mutable staking_requirement_dapp_provider_total_stake_usd: integer = 10000; // 100k usd
 }
 
 entity sender_blockchain {
@@ -67,6 +75,12 @@ struct economy_constants_data {
     resource_pool_margin_fee_share: decimal;
     system_provider_risk_share: decimal;
     dapp_provider_risk_share: decimal;
+    staking_requirements_enabled: boolean;
+    staking_requirement_stop_payout_days: integer;
+    staking_requirement_system_provider_own_stake_usd: integer;
+    staking_requirement_system_provider_total_stake_usd: integer;
+    staking_requirement_dapp_provider_own_stake_usd: integer;
+    staking_requirement_dapp_provider_total_stake_usd: integer;
 }
 
 struct economy_metrics {
@@ -160,6 +174,7 @@ entity provider_account {
     key provider, account: ft4.accounts.account;
     mutable last_reward_check: timestamp = 0;
     mutable reward_debt: big_integer = 0;
+    mutable last_approved_stake_requirements: timestamp = 0;
 }
 
 object chromia_foundation {
@@ -271,6 +286,12 @@ struct bridge_anomaly_detector_data {
     blockchain_rid: byte_array;
     evm_network_id: integer;
     bridge_contract: text;
+}
+
+struct provider_staking_status {
+    own_staking_usd: decimal;
+    total_staking_usd: decimal;
+    approved: boolean;
 }
 
 //////////////////////////////////
