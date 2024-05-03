@@ -171,8 +171,12 @@ function get_total_number_of_scus_per_provider(provider_nodes: list<node>): inte
 function get_average_occupancy_rate_of_a_providers_scus(provider_nodes: list<node>): decimal {
     var occupancy_rate = 0.0;
     for (node in provider_nodes) {
-        val cluster = cluster_node @ { node } ( .cluster );
-        occupancy_rate += occupancy_rate(cluster);
+        val clusters = cluster_node @* { node } ( .cluster );
+        var node_occupancy_rate = 0.0;
+        for (cluster in clusters) {
+            node_occupancy_rate += occupancy_rate(cluster);
+        }
+        occupancy_rate += node_occupancy_rate / clusters.size();
     }
     return occupancy_rate / provider_nodes.size();
 }
