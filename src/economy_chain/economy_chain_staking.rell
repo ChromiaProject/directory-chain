@@ -142,6 +142,14 @@ query staking_get_native_balance(account_id: byte_array) {
     return _staking_get_balance_by_network(account, network.CHR);
 }
 
+query staking_get_provider_stake(pubkey) {
+    val provider = _staking_pubkey_to_provider(pubkey);
+    val provider_id = provider.account.id;
+    return if (provider_id == staking_get_current_delegate(provider_id) ?: get_null_provider_account().account.id)
+        staking_get_balance(provider_id)
+        else 0;
+}
+
 function _staking_get_balance(staker: ft4.accounts.account) = _staking_get_balance_by_network(staker, network.CHR) + _staking_get_balance_by_network(staker, network.ETH) + _staking_get_balance_by_network(staker, network.BSC) ;
 function _staking_get_balance_by_network(staker: ft4.accounts.account, network) = staker_state @? { .staker == staker and .latest and .network == network } ( .balance ) ?: 0;
 
