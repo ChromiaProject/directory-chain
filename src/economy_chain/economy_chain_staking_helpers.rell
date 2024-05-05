@@ -1,0 +1,25 @@
+function _staking_cannot_change_before(): timestamp = _staking_last_known_time() + chain_context.args.staking_rate_change_delay_ms;
+
+// As per https://learn.chromia.com/courses/latest-known-time
+function _staking_last_known_time() 
+    = if (op_context.exists) op_context.last_block_time else block @ {} (@max .timestamp) ?: 0;
+
+function _pay_to(staker: ft4.accounts.account, amount: integer) {
+    // We pay from the same pool account as provider rewards
+    ft4.assets.Unsafe.transfer(get_pool_account(), staker, get_asset(), amount);
+}
+
+// As approach suggested by https://chromadev.zulipchat.com/#narrow/stream/316358-Protocols/topic/Little.20questions/near/421469052
+function get_null_provider_account() {
+    val NULL_ACCOUNT_ID = "NULL".hash();
+    val ft4_null = ft4.accounts.account @? { NULL_ACCOUNT_ID } ?: create ft4.accounts.account(NULL_ACCOUNT_ID, type = "");
+    val provider_null = provider @? {.pubkey == NULL_ACCOUNT_ID} ?: create provider(pubkey = NULL_ACCOUNT_ID, tier = provider_tier.COMMUNITY_NODE_PROVIDER, active = false);
+    return provider_account @? { .account == ft4_null } ?: create provider_account(account = ft4_null, provider = provider_null);
+}
+
+function _staking_pubkey_to_provider(pubkey) {
+    val provider_account = provider_account @? {.provider.pubkey == pubkey};
+    require(provider_account, "No provider for this public key.");
+    require(_staking_is_active_provider(provider_account), "Must be active provider.");
+    return provider_account;
+}
