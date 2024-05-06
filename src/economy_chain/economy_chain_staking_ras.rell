@@ -4,12 +4,7 @@ operation ras_staking(
     evm_address: byte_array,
     main: ft4.accounts.auth_descriptor,
     disposable: ft4.accounts.auth_descriptor? = null
-) {
-    ft4.auth.verify_signers([evm_address]);
-    require( provisional_stake_balance @? { .address == evm_address, .staked_balance >= min_stake_to_create_account } ,
-        "no stake or insufficient stake");
-}
-
+) {}
 
 function ras_s_account_details(gtv) {
     val params = struct<ras_staking>.from_gtv(gtv);
@@ -23,6 +18,18 @@ function ras_s_account_details(gtv) {
 
 function apply_stake_action(ft4.accounts.account, strategy_params_gtv: gtv) {
     val evm_address = struct<ras_staking>.from_gtv(strategy_params_gtv).evm_address;
+
+    // this duplicates check in register_account, we do this because evm_address 
+    // might differ from auth descriptor's address
+    // we could instead check if signers match
+    val tx_operations = op_context.get_all_operations();
+    val strategy_op = tx_operations[op_context.op_index-1];
+    val message = ft4.strategies.get_register_account_message(strategy_op, op_context.get_current_operation());
+    ft4.auth.verify_signers_with_message([evm_address], message);
+
+    require( provisional_stake_balance @? { .address == evm_address, .staked_balance >= min_stake_to_create_account } ,
+        "no stake or insufficient stake");
+
     flush_provisional_stake_balance(account, evm_address);
     eif.hbridge._link_evm_eoa_account(evm_address, account);
 }
