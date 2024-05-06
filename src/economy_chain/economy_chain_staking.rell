@@ -394,7 +394,7 @@ function _staking_delegate_by_network(delegator: ft4.accounts.account, provider:
     } (
         $.to_mutable_struct()
     ) ?: struct<mutable staker_state>(
-        network = network.CHR,
+        network = _network,
         staker_state_time = _staking_last_known_time(),
         previous_staker_state_time = 0,
         staker = delegator,
@@ -572,8 +572,8 @@ function _staking_apply_staker_state_delta(
     for (new_state in new_states) {
         stakers.add(new_state.staker);
     }
-    update staker_state @? {
-        .staker in stakers and .latest and .network == _network and .latest
+    update staker_state @* {
+        .staker in stakers and .latest and .network == _network
     } ( latest = false );
 
     // Create new from existing state + delta
