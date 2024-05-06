@@ -1,4 +1,5 @@
 @extend(remove_provider_handler) function(pubkey) = _staking_offboard_provider(pubkey);
+@extend(after_pay_reward) function(pay_reward_result) = _staking_shared_rewards(pay_reward_result);
 
 // It might be better for this to live in a table
 enum s_network {
@@ -486,6 +487,57 @@ function _staking_get_current_delegate(staker: ft4.accounts.account, s_network =
         if  (empty(current_state)) get_null_account()
     else if ( staking_get_last_known_time() >= current_state.cutover_time ) current_state.new_provider
     else    current_state.old_provider;
+}
+
+query staking_get_rewards_paid(account_id: byte_array) {
+    val account = ft4.accounts.Account(account_id);
+    val total_since_zero = _staking_rewards_claimable_since(account, network.CHR, 0) +  _staking_rewards_claimable_since(account, network.ETH, 0) + _staking_rewards_claimable_since(account, network.BSC, 0);
+    val unclaimed = _staking_rewards_claimable_for(account, network.CHR) + _staking_rewards_claimable_for(account, network.BSC) + _staking_rewards_claimable_for(account, network.ETH);
+    return total_since_zero - unclaimed;
+}
+
+function _staking_shared_rewards(pay_reward_result) {
+    // We ignore reward debt here as it will flow through the reward term after the pool is refreshed
+    val total_shared_reward = chain_context.args.rewards_share * pay_reward_result.payed_reward;
+
+    // Find provider pubkey
+    val provider_pubkey = provider_account @? {pay_reward_result.payed_to}.provider.pubkey;
+
+    // In some edge cases during testing a public key may be absent
+    if(empty(provider_pubkey)) {
+        log("Not provider public key for id: %s".format(pay_reward_result.payed_to.id));
+        return;
+    }
+
+    // Find all the delegations
+    val delegating_to =
+        (s: staker_state) @* {
+            // consider only the latest state
+            s.latest
+            // restricted to those currently on this provider according to the cut off date
+            and (
+                ( s.new_provider == provider_pubkey and s.cutover_time <= _staking_last_known_time() )
+                or
+                ( s.old_provider == provider_pubkey and s.cutover_time > _staking_last_known_time() )
+            )
+        } (
+            @group staker = s.staker,
+            @sum balance = s.balance
+        )
+    ;
+
+    // Get total and divide through
+    val total_delegation = delegating_to @ {} (@sum .balance);
+
+    // Zero delegation check (should not occur in normal useage.)
+    if (total_delegation == 0) return;
+
+    // Run through and payout by share of delegation
+    for (reward_share in delegating_to) {
+        val share_amount = integer(total_shared_reward * (reward_share.balance / total_delegation));
+        _pay_to(reward_share.staker, share_amount);
+        log("Paid reward share of %s to %s. Based on a delegation of %s CHR.".format(share_amount, reward_share.staker.id, reward_share.balance));
+    }
 }
 
 function __staking_begin_block(height: integer) {

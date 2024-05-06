@@ -12,7 +12,7 @@ struct module_args {
 
 val auth_privkey = chain_context.args.auth_privkey;
 
-val cluster_name = "Bob's cluster";
+val cluster_name = "bob_cluster";
 val tag_1_name = "t1";
 val tag_2_name = "t2";
 val tag_3_name = "t3";
@@ -230,6 +230,7 @@ function test_remove_cluster_with_lease_refund() {
 function test_receive_provider_update_message_create() {
 
     assert_null(provider @? { rell.test.pubkeys.alice });
+    assert_null(provider_account @? { .provider.pubkey == rell.test.pubkeys.alice });
 
     rell.test.tx().op(
         receive_provider_update_message_op(provider_update_message(
@@ -241,6 +242,7 @@ function test_receive_provider_update_message_create() {
     ).run();
 
     assert_not_null(provider @? { rell.test.pubkeys.alice });
+    assert_not_null(provider_account @? { .provider.pubkey == rell.test.pubkeys.alice });
     assert_not_null(common_voter_set_member @? { .voter_set.name == voter_sets.system_p, .pubkey == rell.test.pubkeys.alice });
 }
 

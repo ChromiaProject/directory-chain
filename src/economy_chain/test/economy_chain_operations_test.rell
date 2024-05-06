@@ -7,9 +7,9 @@ import common_proposal.test.helper_functions.*;
 val provider_key = rell.test.keypairs.bob;
 val provider_pubkey = provider_key.pub;
 
-val cluster_name = "Bob's cluster";
-val tag_1_name = "Bob's tag";
-val tag_2_name = "Bob's second tag";
+val cluster_name = "bob_cluster";
+val tag_1_name = "bob_tag";
+val tag_2_name = "bob_second_tag";
 
 function test_create_cluster() {
     val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
@@ -354,3 +354,38 @@ function test_remove_tag_given_tag_is_used_by_cluster() {
         .run_must_fail("Tag with name %s is in use.".format(tag_1_name));
 }
 
+function test_name_validation() {
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op(
+        create_tag(
+            name = "invalid@name",
+            scu_price = 1,
+            extra_storage_price = 2)
+    ).sign(provider_key).run_must_fail("Entity name can only contain letters, numerals, and underscores");
+    rell.test.tx().op(
+        create_cluster(
+            name = "invalid@name",
+            governor_voter_set_name = "governor_voter_set",
+            voter_set_name = "voter_set",
+            cluster_units = 1,
+            extra_storage = 2,
+            tag_name = tag_1_name
+        )
+    ).sign(provider_key).run_must_fail("Entity name can only contain letters, numerals, and underscores");
+}
+
+function test_price_validation() {
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op(
+        create_tag(
+            name = "tag_name",
+            scu_price = -1,
+            extra_storage_price = 2)
+    ).sign(provider_key).run_must_fail("Tag must have a positive SCU price");
+    rell.test.tx().op(
+        create_tag(
+            name = "tag_name",
+            scu_price = 1,
+            extra_storage_price = -2)
+    ).sign(provider_key).run_must_fail("Tag must have a positive extra storage price");
+}

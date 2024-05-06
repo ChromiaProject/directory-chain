@@ -12,7 +12,7 @@ namespace ft4 {
 }
 import lib.auth;
 
-val ticket_id_after_init = 33;
+val ticket_id_after_init = 34;
 
 function do_create_account(keypair: rell.test.keypair, auth_privkey: byte_array, failure: text? = null): ft4.accounts.account? {
     val eth_address = crypto.eth_privkey_to_address(keypair.priv);
@@ -34,6 +34,8 @@ function do_create_account(keypair: rell.test.keypair, auth_privkey: byte_array,
 }
 
 function add_provider(pubkey: pubkey, system: boolean = false, tier: provider_tier = provider_tier.NODE_PROVIDER): provider {
+    val existing = provider @? { pubkey };
+    if (exists(existing)) { return existing; }
     rell.test.tx().op(
         icmf_message_op(pubkey, provider_update_topic, body = provider_update_message(
             pubkey, system, tier = tier.name, active = true).to_gtv()
