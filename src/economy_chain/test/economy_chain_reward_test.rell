@@ -14,10 +14,12 @@ import lib.auth;
 struct module_args {
     auth_privkey: byte_array;
     admin_privkey: byte_array;
+    staking_rate_change_delay_ms: integer;
 }
 
 val auth_privkey = chain_context.args.auth_privkey;
 val admin_privkey = chain_context.args.admin_privkey;
+val staking_rate_change_delay_ms = chain_context.args.staking_rate_change_delay_ms;
 val provider_key = rell.test.keypairs.bob;
 val provider_pubkey = provider_key.pub;
 val node_pubkey = rell.test.pubkeys.charlie;
@@ -430,7 +432,7 @@ function test_receive_evm_transaction_submitter_cost_message() {
     add_cluster_node(cluster_name, node_pubkey, false);
 
     rell.test.tx().op(
-        register_provider_account(provider_pubkey)
+        register_provider_account_op(provider)
     ).sign(provider_key).run();
 
     rell.test.tx().op(
@@ -474,14 +476,46 @@ function test_receive_evm_transaction_submitter_cost_invalid_sender() {
     assert_true(node_payed_reward @? {} == null);
 }
 
+function test_pay_shared_rewards_dapp_cluster_full_reward_is_payed() {
+    rell.test.tx().op(init()).run();
 
+    val test_account_dave = require(do_create_account(rell.test.keypairs.dave, auth_privkey));
+    val test_account_bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
+    val test_account_charlie = require(do_create_account(rell.test.keypairs.charlie, auth_privkey));
+
+    rell.test.tx()
+        .op(staking_set_rate(0.5))
+        .op(mint_to_pool(8888888888))
+        .op(mint_to(test_account_dave, 9999999))
+        .op(mint_to(test_account_bob, 9999999))
+    .sign(admin_privkey).run();
+
+    add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+
+    do_staking_deposit_native(rell.test.keypairs.dave, 9999999);
+    do_staking_delegate(rell.test.keypairs.dave, provider_pubkey);
+
+    assert_equals(get_account_balance(test_account_dave), 1000000000);
+
+    // FFWD
+    rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
+    rell.test.block().run(); rell.test.block().run();
+
+    assert_equals(staking_get_current_delegate(test_account_dave.id), provider_pubkey);
+
+    val pa = run_pay_rewards(33090909, true);
+
+    assert_equals(get_account_balance(pa.account), 3726650000);
+    assert_equals(pa.reward_debt, 0);
+    assert_equals(get_account_balance(test_account_dave), 1000000000 + (0.1 * 3726650000));
+}
 
 ///////////////////
 // Helper functions
 
 function run_calculate_reward(node_availability_report: node_availability_report, create_lease_number: integer, calculate_system_reward: boolean) {
 
-    rell.test.tx().op(init()).run();
+    if (not state.initialized) rell.test.tx().op(init()).run();
 
     val system_cluster = ensure_system_cluster();
     val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
@@ -508,7 +542,7 @@ function run_calculate_reward(node_availability_report: node_availability_report
 
 function run_pay_rewards(pool_assets: big_integer = 0, calculate_system_reward: boolean, reward_debt: big_integer = 0) {
 
-    rell.test.tx().op(init()).run();
+    if (not state.initialized) rell.test.tx().op(init()).run();
 
     val system_cluster = ensure_system_cluster();
     val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
@@ -529,7 +563,7 @@ function run_pay_rewards(pool_assets: big_integer = 0, calculate_system_reward: 
     }
 
     rell.test.tx().op(
-        register_provider_account(provider_pubkey),
+        register_provider_account_op(provider),
         set_reward_debt_op(provider_pubkey, reward_debt),
         pay_rewards_op(calculate_cluster, node_availability_report)
     ).sign(provider_key).run();
@@ -540,7 +574,8 @@ function run_pay_rewards(pool_assets: big_integer = 0, calculate_system_reward: 
 
 function run_pay_reward(reward: big_integer = 0, refill: boolean) {
 
-    rell.test.tx().op(init()).run();
+    if (not state.initialized) rell.test.tx().op(init()).run();
+ 
     val pool = get_pool_account();
     var pool_balance = get_account_balance(pool);
 

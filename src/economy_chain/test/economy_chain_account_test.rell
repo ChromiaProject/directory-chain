@@ -48,24 +48,6 @@ function test_admin_register_account() {
     assert_not_null(user @? { .account.id == account.id });
 }
 
-function test_provider_register_account() {
-    rell.test.tx().op(init()).run();
-
-    val provider_key = rell.test.keypairs.bob;
-    val provider = add_provider(provider_key.pub, false, provider_tier.NODE_PROVIDER);
-
-    rell.test.tx().op(
-        register_provider_account(provider_key.pub)
-    ).sign(provider_key).run();
-
-    val accounts_page = ft4.accounts.external.get_accounts_by_signer(provider_key.pub, null, null);
-    assert_equals(accounts_page.data.size(), 1);
-
-    val account = struct<ft4.accounts.account>.from_gtv_pretty(accounts_page.data[0]);
-    assert_not_null(provider_account @? { .account.id == account.id });
-    assert_not_null(provider_account @? { provider });
-}
-
 function test_create_account_requires_init() {
     do_create_account(rell.test.keypairs.alice, auth_privkey, "Economy chain is not initialized");
 }

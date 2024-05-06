@@ -1,11 +1,12 @@
-function register_provider_account_impl(provider_pubkey: pubkey) {
-    val provider = require(provider @? { provider_pubkey }, "No provider found with pubkey %s".format(provider_pubkey));
-    require(provider_account @? { provider } == null, "Account already registered. Only one account per provider is allowed");
+function register_provider_account(provider) {
 
-    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(provider_pubkey, set(["A", "T"]));
-    val account = ft4.accounts.create_account_with_auth(auth_descriptor);
+    if (provider_account @? { provider } == null) {
 
-    create provider_account(provider, account);
+        val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(provider.pubkey, set(["A", "T"]));
+        val account = ft4.accounts.create_account_with_auth(auth_descriptor);
+
+        create provider_account(provider, account);
+    }
 }
 
 function register_account_impl(pubkey) {
