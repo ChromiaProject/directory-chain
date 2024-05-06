@@ -320,20 +320,15 @@ function _staking_offboard_provider(provider: pubkey) {
     // Unwind delegations immediately
     // Find all the latest delegations involving removed provider
     // eg. latest AND new_provider is going
-    val removed_delegations = staker_state @* { .new_provider == provider and .latest } (@group .staker);
+    val removed_delegations = staker_state @* { .new_provider == provider and .latest } ( $.to_mutable_struct() );
     // then for each :-
     for (removed_delegation in removed_delegations) {
-        // Apply undelegation to all networks
-        for (n in network.values()) {
-            val delta = staker_state_delta(
-                network = n,
-                cutover_time = staking_get_last_known_time(),
-                new_provider = get_null_account(),
-                old_provider = _staking_get_current_delegate(removed_delegation),
-                balance = null
-            );
-            _staking_apply_staker_state_delta(removed_delegation, delta);
-        }
+        removed_delegation.cutover_time = _staking_last_known_time();
+        removed_delegation.new_provider = get_null_account();
+        removed_delegation.old_provider = _staking_get_current_delegate(removed_delegation.staker);
+    }
+    for (n in network.values()) {
+        _staking_apply_staker_state_delta(removed_delegations @* { .network == n }, n);
     }
 }
 
