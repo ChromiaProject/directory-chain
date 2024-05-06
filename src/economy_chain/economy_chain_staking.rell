@@ -86,6 +86,7 @@ function staking_deposit_auth_message(gtv): text {
         chain_context.args.asset_symbol);
 }
 
+
 operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
     require_initialized();
     require(amount > 0, "Can't deposit nothing (or less)!");
@@ -375,36 +376,40 @@ function staking_undelegate_auth_message(gtv): text {
 operation staking_undelegate() {
     require_initialized();
     val delegator = ft4.auth.authenticate();
+    val withdraw_requests = staker_withdrawal_request @* { not .used and .staker == delegator } ( .network );
     for(n in network.values()) {
+        if (n in withdraw_requests and n != network.CHR) continue;
         _staking_delegate_by_network(delegator, get_null_account(), n);
     }
 }
 
-function _staking_delegate_by_network(delegator: ft4.accounts.account, provider: pubkey, _network: network) : boolean {
-
-    // Is there an active withdrawal request for an EVM chain
-    if ( [network.ETH, network.BSC].contains(_network)
-            and exists (staker_withdrawal_request @? {not .used and .staker == delegator and .network == _network})
-    ) {
-        log("Quietly skip as we cannot cancel the withdrawal request from here.");
-        return false;
-    }
-
+function _staking_delegate_by_network(delegator: ft4.accounts.account, provider: pubkey, _network: network): boolean {
     // Clear any withdrawal request
     update staker_withdrawal_request @? {not .used and .staker == delegator and .network == _network} (used = true);
 
     // Get the values before messing with the flag
     val current_provider = _staking_get_current_delegate(delegator);
-
-    // Apply change
-    val delta = staker_state_delta(
-        network = _network,
+    val new_state = staker_state @? {
+        .staker == delegator and .network == _network and .latest
+    } (
+        $.to_mutable_struct()
+    ) ?: struct<mutable staker_state>(
+        network = network.CHR,
+        staker_state_time = _staking_last_known_time(),
+        previous_staker_state_time = 0,
+        staker = delegator,
+        balance = 0,
+        previous_balance = 0,
         cutover_time = _staking_cannot_change_before(),
-        new_provider = provider,
-        old_provider = current_provider,
-        balance = null
+        new_provider = get_null_account(),
+        old_provider = get_null_account(),
+        latest = true
     );
-    _staking_apply_staker_state_delta(delegator, delta);
+    new_state.new_provider = provider;
+    new_state.old_provider = current_provider;
+    new_state.cutover_time = _staking_cannot_change_before();
+
+    _staking_apply_staker_state_delta([new_state], _network);
 
     return true;
 }
