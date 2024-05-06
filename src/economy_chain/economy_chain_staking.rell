@@ -123,25 +123,29 @@ operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
     }
 }
 
-function _staking_update_bsc(staker: ft4.accounts.account, new_balance: integer) {
+function _staking_update(staker: ft4.accounts.account, new_balance: integer, network) {
     require_initialized();
-    val delta = staker_state_delta(
-        network = network.BSC,
-        balance = new_balance,
-        cutover_time = null, new_provider = null, old_provider = null
+    var new_state = staker_state @? {
+        .staker == staker and .latest and .network == network
+    } (
+        $.to_mutable_struct()
+    ) ?: struct<mutable staker_state>(
+        network = network,
+        staker_state_time = _staking_last_known_time(),
+        previous_staker_state_time = 0,
+        staker = staker,
+        balance = 0,
+        previous_balance = 0,
+        cutover_time = _staking_last_known_time(),
+        new_provider = get_null_account(),
+        old_provider = get_null_account(),
+        latest = true
     );
-    _staking_apply_staker_state_delta(staker, delta);
+    new_state.balance += new_balance;
+
+    _staking_apply_staker_state_delta([new_state], network);
 }
 
-function _staking_update_eth(staker: ft4.accounts.account, new_balance: integer) {
-    require_initialized();
-    val delta = staker_state_delta(
-        network = network.ETH,
-        balance = new_balance,
-        cutover_time = null, new_provider = null, old_provider = null
-    );
-    _staking_apply_staker_state_delta(staker, delta);
-}
 
 query staking_get_balance(account_id: byte_array) {
     val account = ft4.accounts.Account(account_id);
