@@ -1,0 +1,105 @@
+// Global Settings
+
+operation staking_set_rate_at(reward_rate: decimal, provider_rate: decimal, time: timestamp) {
+    _staking_set_rate_at_impl(reward_rate, provider_rate, time);
+}
+
+operation staking_set_rate(reward_rate: decimal) {
+    _staking_set_rate_impl(reward_rate);
+}
+
+
+// Deposit operations
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "staking_deposit_native",
+    flags = ["T"],
+    message = staking_deposit_auth_message(*)
+);
+
+function staking_deposit_auth_message(gtv): text {
+    val args = struct<staking_deposit_native>.from_gtv(gtv);
+
+    return "Please sign the message\nto transfer %s %s from account {account_id} \nto deposit account.".format(
+        ft4.assets.format_amount_with_decimals(args.amount, chain_context.args.asset_decimals),
+        chain_context.args.asset_symbol);
+}
+
+operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
+    _staking_deposit_native_impl(amount, delegateTo);
+}
+
+operation staking_claim_rewards() {
+    _staking_claim_rewards_impl();
+}
+
+// Withdrawals
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "staking_request_withdrawal",
+    flags = [],
+    message = staking_request_withdrawal_auth_message(*)
+);
+
+function staking_request_withdrawal_auth_message(gtv): text {
+    val args = struct<staking_request_withdrawal>.from_gtv(gtv);
+    return "Please sign the message to request a withdrawal.";
+}
+
+operation staking_request_withdrawal() {
+    _staking_request_withdrawal_impl();
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "staking_cancel_withdrawal",
+    flags = [],
+    message = staking_cancel_withdrawal_auth_message(*)
+);
+
+function staking_cancel_withdrawal_auth_message(gtv): text {
+    val args = struct<staking_cancel_withdrawal>.from_gtv(gtv);
+    return "Please sign the message to cancel withdrawal.";
+}
+
+operation staking_cancel_withdrawal() {
+    _staking_cancel_withdrawal_impl();
+}
+
+
+// Staker delegation
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "staking_delegate",
+    flags = [],
+    message = staking_delegate_auth_message(*)
+);
+
+function staking_delegate_auth_message(gtv): text {
+    val args = struct<staking_delegate>.from_gtv(gtv);
+    // TODO Indicate which provider?
+    return "Please sign the message to set the provider.";
+}
+
+operation staking_delegate(pubkey) {
+    _staking_delegate_impl(pubkey);
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "staking_undelegate",
+    flags = [],
+    message = staking_undelegate_auth_message(*)
+);
+
+function staking_undelegate_auth_message(gtv): text {
+    val args = struct<staking_undelegate>.from_gtv(gtv);
+    return "Please sign the message to undelegate.";
+}
+
+operation staking_undelegate() {
+    _staking_undelegate_impl();
+}
