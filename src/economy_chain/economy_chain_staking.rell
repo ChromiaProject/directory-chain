@@ -37,8 +37,8 @@ entity reward_rate {
 function __staking_begin_block(height: integer) {
     val week = integer(_staking_last_known_time() / (604800000));
     if (_staking_state.last_update != week) {
-        _staking_claim_rewards();
-        _staking_withdraw_all();
+        _staking_distribute_rewards();
+        _staking_distribute_withdrawals();
     }
 }
 
@@ -86,7 +86,7 @@ function _update_pending_token_time_all() {
     );
 }
 
-function _staking_claim_rewards() {
+function _staking_distribute_rewards() {
     var payout_list = map<ft4.accounts.account, integer>();
     var total_amount = 0;
     val rate = staking_get_current_rate() / millis_per_year;
@@ -160,7 +160,7 @@ query staking_get_current_rate(): decimal {
     return current_rate;
 }
 
-function _staking_withdraw_all() {
+function _staking_distribute_withdrawals() {
     val open_withdrawals = staker_withdrawal_request @* {
         .active and .staker_state.network == network.CHR and .finish_at < _staking_last_known_time()
     } ( account = .staker_state.account, balance = .staker_state.balance );
