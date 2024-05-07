@@ -10,11 +10,12 @@ function _pay_to(staker: ft4.accounts.account, amount: integer) {
 }
 
 // As approach suggested by https://chromadev.zulipchat.com/#narrow/stream/316358-Protocols/topic/Little.20questions/near/421469052
+val NULL_ACCOUNT_ID = "NULL".hash();
 function get_null_provider_account() {
-    val NULL_ACCOUNT_ID = "NULL".hash();
-    val ft4_null = ft4.accounts.account @? { NULL_ACCOUNT_ID } ?: create ft4.accounts.account(NULL_ACCOUNT_ID, type = "");
-    val provider_null = provider @? {.pubkey == NULL_ACCOUNT_ID} ?: create provider(pubkey = NULL_ACCOUNT_ID, tier = provider_tier.COMMUNITY_NODE_PROVIDER, active = false);
-    return provider_account @? { .account == ft4_null } ?: create provider_account(account = ft4_null, provider = provider_null);
+    // Relies on code that runs at initialisation
+    val ft4_null = ft4.accounts.account @ { NULL_ACCOUNT_ID };
+    val provider_null = provider @ {.pubkey == NULL_ACCOUNT_ID};
+    return provider_account @ { .account == ft4_null };
 }
 
 function _staking_pubkey_to_provider(pubkey) {
