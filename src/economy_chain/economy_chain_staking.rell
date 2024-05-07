@@ -5,6 +5,9 @@ enum network {
     BSC, ETH, CHR
 }
 
+object _staking_state {
+    mutable last_update: integer = 0;
+}
 entity staker_withdrawal_request {
     key request_finish: timestamp, staker_state;
     mutable active: boolean;
@@ -22,6 +25,15 @@ entity staker_state {
 entity reward_rate {
     rate: decimal;
 }
+
+function __staking_begin_block(height: integer) {
+    val week = integer(_staking_last_known_time() / (604800000));
+    if (_staking_state.last_update != week) {
+        _staking_claim_rewards();
+        _staking_withdraw_all();
+    }
+}
+
 
 operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
     require(amount > 0, "Can't deposit nothing (or less)!");
