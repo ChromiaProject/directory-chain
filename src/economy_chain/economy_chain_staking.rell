@@ -10,10 +10,6 @@ entity staker_withdrawal_request {
     mutable active: boolean;
 }
 
-entity staker_payout {
-    key staker_payout_time: timestamp;
-}
-
 entity staker_state {
     key ft4.accounts.account, network;
     mutable provider;
@@ -22,10 +18,9 @@ entity staker_state {
     mutable pending_token_time: integer;
 }
 
-
+@log
 entity reward_rate {
-    key reward_rate_time: timestamp;
-    reward_rate: decimal;
+    rate: decimal;
 }
 
 operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
@@ -134,12 +129,7 @@ function _staking_last_known_time()
     = if (op_context.exists) op_context.last_block_time else block @ { } ( @max .timestamp ) ?: 0;
 
 query staking_get_current_rate(): decimal {
-    val current_rate = reward_rate @ {
-        .reward_rate_time <= _staking_last_known_time()
-    } (
-        .reward_rate,
-        @omit @sort_desc .reward_rate_time
-    ) limit 1;
+    val current_rate = reward_rate @ { } ( .rate, @omit @sort_desc .transaction.block.timestamp ) limit 1;
     return current_rate;
 }
 
