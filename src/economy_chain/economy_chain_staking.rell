@@ -235,10 +235,10 @@ function _staking_is_active_provider(provider_account) = exists(provider @? {.pu
 
 query staking_get_total_delegation_to(pubkey) {
     val provider_account = provider_account @ {.provider.pubkey == pubkey};
-    return _staking_get_total_delegation_to(provider_account, network.CHR) + _staking_get_total_delegation_to(provider_account, network.BSC) + _staking_get_total_delegation_to(provider_account, network.ETH);
+    return _staking_get_total_delegation_to(provider_account, staking_network.CHR) + _staking_get_total_delegation_to(provider_account, staking_network.BSC) + _staking_get_total_delegation_to(provider_account, staking_network.ETH);
 }
 
-function _staking_get_total_delegation_to(provider_account, _network: network): integer {
+function _staking_get_total_delegation_to(provider_account, _network: staking_network): integer {
     return
         // Look at the full staker state 
         (s: staker_state) @ {
@@ -388,7 +388,7 @@ operation staking_undelegate() {
     }
 }
 
-function _staking_delegate_by_network(delegator: ft4.accounts.account, provider: provider_account, _network: network) : boolean {
+function _staking_delegate_by_network(delegator: ft4.accounts.account, provider: provider_account, _network: staking_network) : boolean {
 
     // Is there an active withdrawal request for an EVM chain
     if ( [staking_network.ETH, staking_network.BSC].contains(_network)
@@ -484,18 +484,18 @@ query staking_get_current_rate(): decimal {
 
 query staking_get_current_delegate_on_network(account_id: byte_array, staking_network): pubkey? {
     val account = ft4.accounts.Account(account_id);
-    val current_delegation = _staking_get_current_delegate(account, network);
+    val current_delegation = _staking_get_current_delegate(account, staking_network);
     return when(current_delegation) {get_null_provider_account() -> null; else -> current_delegation.provider.pubkey;};
 }
 
 query staking_get_current_delegate(account_id: byte_array): pubkey? {
     val account = ft4.accounts.Account(account_id);
-    val current_delegation = _staking_get_current_delegate(account, network.CHR);
+    val current_delegation = _staking_get_current_delegate(account, staking_network.CHR);
     return when(current_delegation) {get_null_provider_account() -> null; else -> current_delegation.provider.pubkey;};
 }
 
-function _staking_get_current_delegate(staker: ft4.accounts.account, network = network.CHR) {
-    val current_state = staker_state @? { .staker == staker and .latest and .network == network };
+function _staking_get_current_delegate(staker: ft4.accounts.account, staking_network = staking_network.CHR) {
+    val current_state = staker_state @? { .staker == staker and .latest and .staking_network == staking_network };
     return
         if  (empty(current_state)) get_null_provider_account()
     else if ( staking_get_last_known_time() >= current_state.cutover_time ) current_state.new_provider
