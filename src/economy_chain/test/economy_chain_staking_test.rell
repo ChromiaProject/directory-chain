@@ -356,14 +356,12 @@ function test_staking_get_total_delegation_to() {
     assert_equals(staking_get_total_delegation_to(rell.test.keypairs.bob.pub), 0);
 }
 
-val MILLION = 1000000;
-
 function test_deposit_and_withdraw_via_evm() {
     rell.test.tx().op(init()).run();
 
     val alice_evm_address = crypto.eth_pubkey_to_address(rell.test.keypairs.alice.pub);
 
-    do_evm_stake_update_bsc(alice_evm_address, 50 * MILLION);
+    do_evm_stake_update_bsc(alice_evm_address, 50 * units_per_asset);
 
     //val test_account_alice = do_create_account_using_ras_staking(rell.test.keypairs.alice);
 
@@ -379,6 +377,7 @@ function test_deposit_and_withdraw_via_evm() {
     )
     .op(staking_request_withdrawal())
     .run_must_fail("Need something to withdraw.");
+
 
     // Wait a period
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
@@ -415,21 +414,21 @@ function test_evm_account_creation() {
 
     val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
 
-    do_evm_stake_update_bsc(alice_evm_address, 50 * MILLION);
+    do_evm_stake_update_bsc(alice_evm_address, 50 * units_per_asset);
 
     val test_account_alice = do_create_account_using_ras_staking(rell.test.keypairs.alice)!!;
-
-    val descriptors = ft4.accounts.account_auth_descriptor @* { test_account_alice };
-    print("HELLO");
-    for (d in descriptors) {
-        print("DESCRIPTOR", d.id);
-    }
-
 
     // See that FT4 account is created
     require(
         ft4.accounts.auth_descriptor_signer @? {.id == alice_evm_address} ( @omit @sort .rowid, .account_auth_descriptor.account ),
         "Cannot find EVM account."
+    );
+    require(
+        eif.hbridge.find_ft4_account_for_address(alice_evm_address, 97) == test_account_alice,
+        "EIF Hbridge link is not established"
+    );
+    assert_equals(
+        staking_get_balance(test_account_alice.id), 50 * units_per_asset
     );
 }
 

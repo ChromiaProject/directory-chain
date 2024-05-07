@@ -20,21 +20,21 @@ struct event_data {
 }
 
 function _staking_network_id_to_enum(network_id: integer) = when (network_id) {
-    STAKING_NETWORK_ID_ETH -> s_network.ETH;
-    STAKING_NETWORK_ID_BSC -> s_network.BSC;
-    STAKING_NETWORK_ID_BSC_TEST -> s_network.BSC;
-    else -> s_network.CHR;
+    STAKING_NETWORK_ID_ETH -> staking_network.ETH;
+    STAKING_NETWORK_ID_BSC -> staking_network.BSC;
+    STAKING_NETWORK_ID_BSC_TEST -> staking_network.BSC;
+    else -> staking_network.CHR;
 };
 
 entity provisional_stake_balance {
-    key address: byte_array, s_network;
+    key address: byte_array, staking_network;
     mutable staked_balance: integer;
 }
 
 function flush_provisional_stake_balance(account: ft4.accounts.account, address: byte_array) {
     val provisional = provisional_stake_balance @* { address };
     for (p in provisional) {
-        _staking_update_from_evm(account, p.staked_balance, p.s_network);
+        _staking_update_from_evm(account, p.staked_balance, p.staking_network);
         delete p;
     }
 }
@@ -44,8 +44,8 @@ function __staking_evm_block(network_id: integer, evm_block_height: integer, evm
         val evm_address = byte_array.from_gtv(event.indexed_values[0]);
 
         val current_network = _staking_network_id_to_enum(network_id);
-        if (current_network == s_network.CHR) {
-            log("Unknown staking s_network id: ", network_id);
+        if (current_network == staking_network.CHR) {
+            log("Unknown staking staking_network id: ", network_id);
             return;
         }
 
@@ -69,7 +69,7 @@ function __staking_evm_block(network_id: integer, evm_block_height: integer, evm
                 } else {
                     create provisional_stake_balance (
                         .address = evm_address,
-                        .s_network = current_network,
+                        .staking_network = current_network,
                         .staked_balance = staked_balance
                     );
                 }
