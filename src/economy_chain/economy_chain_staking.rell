@@ -73,8 +73,17 @@ operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
 }
 
 function _update_pending_token_time(staker_state) {
-    staker_state.pending_token_time = staker_state.balance * (_staking_last_known_time() - staker_state.last_update);
-    staker_state.last_update = _staking_last_known_time();
+    update staker_state (
+        pending_token_time = .balance * (_staking_last_known_time() - .last_update),
+        last_update = _staking_last_known_time()
+    );
+}
+
+function _update_pending_token_time_all() {
+    update staker_state @* { } (
+        pending_token_time = .balance * (_staking_last_known_time() - .last_update),
+        last_update = _staking_last_known_time()
+    );
 }
 
 function _staking_claim_rewards() {
@@ -83,12 +92,10 @@ function _staking_claim_rewards() {
     val rate = staking_get_current_rate() / millis_per_year;
 
     // Get a list of payouts
-    for (staker in staker_state @* {}) {
-        _update_pending_token_time(staker);
-        val token_reward = integer(staker.pending_token_time * rate);
-        staker.pending_token_time = 0;
-        payout_list.put(staker.account, token_reward + (payout_list.get_or_null(staker.account) ?: 0));
-        total_amount += token_reward;
+    _update_pending_token_time_all();
+    val rewards = staker_state @* { } ( account = .account, amount = integer (.pending_token_time * rate) );
+    for (reward in rewards) {
+        total_amount += reward.amount;
     }
 
     // Do not start what we cannot finish
@@ -96,12 +103,12 @@ function _staking_claim_rewards() {
         log("Cannot pay rewards. Insufficient funds.");
         return;
     }
+    update staker_state @* { } ( .pending_token_time = 0 );
 
     // Do the payouts
-    for (staker in payout_list.keys()) {
-        val amount = payout_list.get(staker);
-        ft4.assets.Unsafe.transfer(get_pool_account(), staker, get_asset(), amount);
-        log("Paid out %s to %s", staker, amount);
+    for ((account,amount) in rewards) {
+        ft4.assets.Unsafe.transfer(get_pool_account(), account, get_asset(), amount);
+        log("Paid out %s to %s", account, amount);
     }
 }
 
