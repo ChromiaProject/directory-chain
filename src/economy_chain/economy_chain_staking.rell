@@ -24,7 +24,6 @@ entity reward_rate {
 }
 
 operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
-    require_initialized();
     require(amount > 0, "Can't deposit nothing (or less)!");
 
     val staker = ft4.auth.authenticate();
@@ -86,9 +85,7 @@ function _staking_claim_rewards() {
     }
 }
 
-
 operation staking_request_withdrawal() {
-    require_initialized();
     val staker = ft4.auth.authenticate();
     val ss = staker_state @? { .account == staker and .network == network.CHR };
     require(ss, "No staker state for %s".format(staker));
@@ -111,12 +108,15 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
     val staker_states = staker_state @* { .account == staker };
     val withdraw_requests = staker_withdrawal_request @* { .active and .staker_state in staker_states };
 
+    // deactivate chromia withdraw requests
     val withdraw_requests_chr = withdraw_requests @ { .staker_state.network == network.CHR };
     update withdraw_requests_chr ( .active = false );
 
     val staker_states_to_exclude = withdraw_requests @* { .staker_state.network != network.CHR } ( .staker_state );
 
     val new_provider = provider @ { provider_pubkey };
+
+    // Update appropriate staker states with new provider
     val staker_states_to_update = staker_states @* { $ not in staker_states_to_exclude };
     update staker_states_to_update ( .provider = new_provider );
 }
@@ -134,20 +134,18 @@ query staking_get_current_rate(): decimal {
 }
 
 function _staking_withdraw_all() {
-    require_initialized();
-
     val open_withdrawals = staker_withdrawal_request @* {
         .active and .staker_state.network == network.CHR and .request_finish < _staking_last_known_time()
-    } ( $.to_struct() );
+    } ( ss = .staker_state, account = .staker_state.account, balance = .staker_state.balance );
 
     for (withdrawal in open_withdrawals) {
         // Send the balance back to them through ft4
         ft4.assets.Unsafe.transfer(
                 get_deposit_account(),
-                withdrawal.staker_state.account,
+                withdrawal.account,
                 get_asset(),
-                withdrawal.staker_state.balance
+                withdrawal.balance
             );
-        withdrawal.staker_state.balance = 0;
+        withdrawal.ss.balance = 0;
     }
 }
