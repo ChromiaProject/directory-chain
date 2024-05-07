@@ -1,4 +1,4 @@
-@extend(remove_provider_handler) function(pubkey) = _staking_offboard_provider(pubkey);
+@extend(remove_provider_handler) function(provider_account) = _staking_offboard_provider(provider_account);
 @extend(after_pay_reward) function(pay_reward_result) = _staking_shared_rewards(pay_reward_result);
 
 // It might be better for this to live in a table
@@ -26,8 +26,8 @@ entity staker_state {
     previous_staker_state_time: timestamp; // We have no look-back windowing functions
     staker: ft4.accounts.account;
     cutover_time: timestamp;
-    new_provider: pubkey;
-    old_provider: pubkey;
+    new_provider: provider_account;
+    old_provider: provider_account;
     balance: integer;
     previous_balance: integer;
     mutable latest: boolean; // We have no windowing functions, and want to group by other fields
@@ -37,8 +37,8 @@ entity staker_state {
 struct staker_state_delta {
     network: network?; // Null means all networks
     cutover_time: timestamp?;
-    new_provider: pubkey?;
-    old_provider: pubkey?;
+    new_provider: provider_account?;
+    old_provider: provider_account?;
     balance: integer?;
 }
 
@@ -105,9 +105,10 @@ operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
     _staking_apply_staker_state_delta(staker, delta);
 
     if (exists(delegateTo)) {
+        val delegateToAccount = provider_account @ {.provider.pubkey == delegateTo};
+        require(_staking_is_active_provider(delegateToAccount), "Must be active provider.");
         // Below check is duplicated, but less overhead than 2 wrapping functions.
-        require(_staking_is_active_provider(delegateTo), "Must be active provider.");
-        _staking_delegate(staker, delegateTo);
+        _staking_delegate(staker, delegateToAccount);
     }
 }
 
@@ -141,6 +142,14 @@ query staking_get_native_balance(account_id: byte_array) {
     return _staking_get_balance_by_network(account, network.CHR);
 }
 
+query staking_get_provider_stake(pubkey) {
+    val provider = _staking_pubkey_to_provider(pubkey);
+    val provider_id = provider.account.id;
+    return if (provider_id == staking_get_current_delegate(provider_id) ?: get_null_provider_account().account.id)
+        staking_get_balance(provider_id)
+        else 0;
+}
+
 function _staking_get_balance(staker: ft4.accounts.account) = _staking_get_balance_by_network(staker, network.CHR) + _staking_get_balance_by_network(staker, network.ETH) + _staking_get_balance_by_network(staker, network.BSC) ;
 function _staking_get_balance_by_network(staker: ft4.accounts.account, network) = staker_state @? { .staker == staker and .latest and .network == network } ( .balance ) ?: 0;
 
@@ -165,7 +174,7 @@ operation staking_request_withdrawal() {
 }
 
 function _staking_request_withdrawal(staker: ft4.accounts.account, network) {
-    _staking_delegate(staker, get_null_account());
+    _staking_delegate(staker, get_null_provider_account());
 
     // Make a new request
     require(_staking_last_known_time() > 0, "Require an actual time");
@@ -203,7 +212,7 @@ query staking_get_withdrawal_time(account_id: byte_array): timestamp? {
 
 query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubkey, time: integer)? {
     val staker = ft4.accounts.Account(account_id);
-    val existing = staker_state @ {.latest and .staker == staker and .network == network.CHR} ( (pubkey = .new_provider, time = .cutover_time) );
+    val existing = staker_state @ {.latest and .staker == staker and .network == network.CHR} ( (pubkey = .new_provider.provider.pubkey, time = .cutover_time) );
     return if (_staking_last_known_time() <= existing.time) existing else null;
 }
 
@@ -217,11 +226,14 @@ function _staking_get_withdrawal_time(staker: ft4.accounts.account, network = ne
         ;
 }
 
-function _staking_is_active_provider(_provider: pubkey) = exists(provider @? {.pubkey == _provider});
+function _staking_is_active_provider(provider_account) = exists(provider @? {.pubkey == provider_account.provider.pubkey and .active});
 
-query staking_get_total_delegation_to(provider: pubkey) = _staking_get_total_delegation_to(provider, network.CHR) + _staking_get_total_delegation_to(provider, network.BSC) + _staking_get_total_delegation_to(provider, network.ETH);
+query staking_get_total_delegation_to(pubkey) {
+    val provider_account = provider_account @ {.provider.pubkey == pubkey};
+    return _staking_get_total_delegation_to(provider_account, network.CHR) + _staking_get_total_delegation_to(provider_account, network.BSC) + _staking_get_total_delegation_to(provider_account, network.ETH);
+}
 
-function _staking_get_total_delegation_to(provider: pubkey, _network: network): integer {
+function _staking_get_total_delegation_to(provider_account, _network: network): integer {
     return
         // Look at the full staker state 
         (s: staker_state) @ {
@@ -230,9 +242,9 @@ function _staking_get_total_delegation_to(provider: pubkey, _network: network): 
             and s.latest
             // restricted to those currently on this provider according to the cut off date
             and (
-                ( s.new_provider == provider and s.cutover_time <= _staking_last_known_time() )
+                ( s.new_provider == provider_account and s.cutover_time <= _staking_last_known_time() )
                 or
-                ( s.old_provider == provider and s.cutover_time > _staking_last_known_time() )
+                ( s.old_provider == provider_account and s.cutover_time > _staking_last_known_time() )
             )
         } (
             // sum the balances
@@ -302,11 +314,11 @@ function _staking_rewards_claimable_since(staker: ft4.accounts.account, network,
     return integer(token_reward); // Can only transfer whole minor units
 }
 
-function _staking_offboard_provider(provider: pubkey) {
+function _staking_offboard_provider(provider_account) {
     // Unwind delegations immediately
     // Find all the latest delegations involving removed provider
     // eg. latest AND new_provider is going
-    val removed_delegations = staker_state @* { .new_provider == provider and .latest } (@group .staker);
+    val removed_delegations = staker_state @* { .new_provider == provider_account and .latest } (@group .staker);
     // then for each :-
     for (removed_delegation in removed_delegations) {
         // Apply undelegation to all networks
@@ -314,7 +326,7 @@ function _staking_offboard_provider(provider: pubkey) {
             val delta = staker_state_delta(
                 network = n,
                 cutover_time = staking_get_last_known_time(),
-                new_provider = get_null_account(),
+                new_provider = get_null_provider_account(),
                 old_provider = _staking_get_current_delegate(removed_delegation),
                 balance = null
             );
@@ -337,17 +349,17 @@ function staking_delegate_auth_message(gtv): text {
     return "Please sign the message to set the provider.";
 }
 
-operation staking_delegate(provider: pubkey) {
+operation staking_delegate(pubkey) {
     require_initialized();
-    require(_staking_is_active_provider(provider), "Must be active provider.");
+    val provider_account = _staking_pubkey_to_provider(pubkey);
     val staker = ft4.auth.authenticate();
-    _staking_delegate(staker, provider);
+    _staking_delegate(staker, provider_account);
 }
 
-function _staking_delegate(staker: ft4.accounts.account, provider: pubkey) {
+function _staking_delegate(staker: ft4.accounts.account, provider_account) {
     require(_staking_get_balance(staker) > 0, "Must have a stake to delegate somewhere.");
     for(n in network.values()) {
-        _staking_delegate_by_network(staker, provider, n);
+        _staking_delegate_by_network(staker, provider_account, n);
     }
 }
 
@@ -367,11 +379,11 @@ operation staking_undelegate() {
     require_initialized();
     val delegator = ft4.auth.authenticate();
     for(n in network.values()) {
-        _staking_delegate_by_network(delegator, get_null_account(), n);
+        _staking_delegate_by_network(delegator, get_null_provider_account(), n);
     }
 }
 
-function _staking_delegate_by_network(delegator: ft4.accounts.account, provider: pubkey, _network: network) : boolean {
+function _staking_delegate_by_network(delegator: ft4.accounts.account, provider: provider_account, _network: network) : boolean {
 
     // Is there an active withdrawal request for an EVM chain
     if ( [network.ETH, network.BSC].contains(_network)
@@ -468,19 +480,19 @@ query staking_get_current_rate(): decimal {
 query staking_get_current_delegate_on_network(account_id: byte_array, network): pubkey? {
     val account = ft4.accounts.Account(account_id);
     val current_delegation = _staking_get_current_delegate(account, network);
-    return when(current_delegation) {get_null_account() -> null; else -> current_delegation;};
+    return when(current_delegation) {get_null_provider_account() -> null; else -> current_delegation.provider.pubkey;};
 }
 
 query staking_get_current_delegate(account_id: byte_array): pubkey? {
     val account = ft4.accounts.Account(account_id);
     val current_delegation = _staking_get_current_delegate(account, network.CHR);
-    return when(current_delegation) {get_null_account() -> null; else -> current_delegation;};
+    return when(current_delegation) {get_null_provider_account() -> null; else -> current_delegation.provider.pubkey;};
 }
 
-function _staking_get_current_delegate(staker: ft4.accounts.account, network = network.CHR): pubkey {
+function _staking_get_current_delegate(staker: ft4.accounts.account, network = network.CHR) {
     val current_state = staker_state @? { .staker == staker and .latest and .network == network };
     return
-        if  (empty(current_state)) get_null_account()
+        if  (empty(current_state)) get_null_provider_account()
     else if ( staking_get_last_known_time() >= current_state.cutover_time ) current_state.new_provider
     else    current_state.old_provider;
 }
@@ -497,10 +509,10 @@ function _staking_shared_rewards(pay_reward_result) {
     val total_shared_reward = chain_context.args.rewards_share * pay_reward_result.payed_reward;
 
     // Find provider pubkey
-    val provider_pubkey = provider_account @? {pay_reward_result.payed_to}.provider.pubkey;
+    val provider_account = provider_account @? {pay_reward_result.payed_to};
 
     // In some edge cases during testing a public key may be absent
-    if(empty(provider_pubkey)) {
+    if(empty(provider_account)) {
         log("Not provider public key for id: %s".format(pay_reward_result.payed_to.id));
         return;
     }
@@ -512,9 +524,9 @@ function _staking_shared_rewards(pay_reward_result) {
             s.latest
             // restricted to those currently on this provider according to the cut off date
             and (
-                ( s.new_provider == provider_pubkey and s.cutover_time <= _staking_last_known_time() )
+                ( s.new_provider == provider_account and s.cutover_time <= _staking_last_known_time() )
                 or
-                ( s.old_provider == provider_pubkey and s.cutover_time > _staking_last_known_time() )
+                ( s.old_provider == provider_account and s.cutover_time > _staking_last_known_time() )
             )
         } (
             @group staker = s.staker,
@@ -566,8 +578,8 @@ function _staking_apply_staker_state_delta(staker: ft4.accounts.account, delta: 
                 balance = 0,    
                 previous_balance = 0,
                 cutover_time = _staking_last_known_time(),
-                new_provider = get_null_account(),
-                old_provider = get_null_account(),
+                new_provider = get_null_provider_account(),
+                old_provider = get_null_provider_account(),
                 latest = true
             );
             existing = staker_state @ {.latest and .staker == staker and .network == n };
@@ -605,6 +617,13 @@ function _staking_apply_staker_state_delta(staker: ft4.accounts.account, delta: 
     }
 }
 
+function _staking_pubkey_to_provider(pubkey) {
+    val provider_account = provider_account @? {.provider.pubkey == pubkey};
+    require(provider_account, "No provider for this public key.");
+    require(_staking_is_active_provider(provider_account), "Must be active provider.");
+    return provider_account;
+}
+
 function _staking_cannot_change_before(): timestamp = _staking_last_known_time() + chain_context.args.staking_rate_change_delay_ms;
 
 query staking_get_cannot_change_before(): timestamp = _staking_cannot_change_before();
@@ -615,5 +634,10 @@ function _staking_last_known_time()
 
 query staking_get_last_known_time() = _staking_last_known_time();
 
-// As suggested by https://chromadev.zulipchat.com/#narrow/stream/316358-Protocols/topic/Little.20questions/near/421469052
-function get_null_account() : pubkey { return "NULL".hash(); }
+// As approach suggested by https://chromadev.zulipchat.com/#narrow/stream/316358-Protocols/topic/Little.20questions/near/421469052
+function get_null_provider_account() {
+    val NULL_ACCOUNT_ID = "NULL".hash();
+    val ft4_null = ft4.accounts.account @? { NULL_ACCOUNT_ID } ?: create ft4.accounts.account(NULL_ACCOUNT_ID, type = "");
+    val provider_null = provider @? {.pubkey == NULL_ACCOUNT_ID} ?: create provider(pubkey = NULL_ACCOUNT_ID, tier = provider_tier.COMMUNITY_NODE_PROVIDER, active = false);
+    return provider_account @? { .account == ft4_null } ?: create provider_account(account = ft4_null, provider = provider_null);
+}
