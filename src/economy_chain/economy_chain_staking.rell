@@ -118,7 +118,7 @@ operation staking_request_withdrawal() {
 
     // Make a new request
     create staker_withdrawal_request (
-        request_finish = _staking_last_known_time()+86400*7,
+        finish_at = _staking_last_known_time()+86400*7,
         ss,
         true
     );
@@ -155,8 +155,8 @@ query staking_get_current_rate(): decimal {
 
 function _staking_withdraw_all() {
     val open_withdrawals = staker_withdrawal_request @* {
-        .active and .staker_state.network == network.CHR and .request_finish < _staking_last_known_time()
-    } ( ss = .staker_state, account = .staker_state.account, balance = .staker_state.balance );
+        .active and .staker_state.network == network.CHR and .finish_at < _staking_last_known_time()
+    } ( account = .staker_state.account, balance = .staker_state.balance );
 
     for (withdrawal in open_withdrawals) {
         // Send the balance back to them through ft4
@@ -166,6 +166,8 @@ function _staking_withdraw_all() {
                 get_asset(),
                 withdrawal.balance
             );
-        withdrawal.ss.balance = 0;
     }
+    update staker_withdrawal_request @* {
+        .active and .staker_state.network == network.CHR and .finish_at < _staking_last_known_time()
+    } ( .active = false );
 }
