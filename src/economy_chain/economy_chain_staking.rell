@@ -117,13 +117,19 @@ function _update_pending_token_time_all() {
 }
 
 function _staking_distribute_rewards() {
-    var payout_list = map<ft4.accounts.account, integer>();
     var total_amount = 0;
     val rate = staking_get_current_rate() / millis_per_year;
 
     // Get a list of payouts
     _update_pending_token_time_all();
-    val rewards = staker_state @* { } ( account = .account, amount = integer (.pending_token_time * rate) );
+    val rewards = staker_state @* { } (
+        @group account = .account,
+        @sum amount = integer (
+            (
+            .pending_token_time
+        ) * rate
+        )
+    );
     for (reward in rewards) {
         total_amount += reward.amount;
     }
