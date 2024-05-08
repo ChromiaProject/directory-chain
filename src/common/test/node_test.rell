@@ -38,7 +38,7 @@ function test_register_node() {
     setup_module();
 
     rell.test.tx().op(
-        register_provider(initial_provider.pub, dapp_provider1.pub, provider_tier.COMMUNITY_NODE_PROVIDER),
+        register_provider(initial_provider.pub, dapp_provider1.pub, provider_tier.DAPP_PROVIDER),
         register_provider(initial_provider.pub, node_provider1.pub, provider_tier.NODE_PROVIDER),
         propose_provider_state(initial_provider.pub, node_provider1.pub, true),
         register_provider(initial_provider.pub, system_provider.pub, provider_tier.NODE_PROVIDER),
@@ -78,11 +78,11 @@ function test_register_node() {
         register_node_with_node_data(node_provider1.pub, register_node_data(x"aaaaaaaaaaaaaaaaaaa8E845F81ABAB2A2D28F558DE9DBBF4296E35AD23BF7E2C8", host = "host", port = 7777, api_url = "http://host/api_url"))
     ).sign(node_provider1).run();
 
-    // DP/CNP's node is added by IP and fails
+    // DP's node is added by IP and fails
     rell.test.tx().op(
         register_node_with_node_data(dapp_provider1.pub, register_node_data(dp1_node_key, host = "host", port = 7777, api_url = "http://host/api_url"))
     ).sign(initial_provider).run_must_fail();
-    // DP/CNP adds a node, node will be added as cluster replica mode
+    // DP adds a node, node will be added as cluster replica mode
     rell.test.tx().op(
         register_node_with_node_data(dapp_provider1.pub, register_node_data(dp1_node_key, host = "host", port = 7777, api_url = "http://host/api_url", clusters = list([clusters.system])))
     ).sign(dapp_provider1).run();
@@ -99,8 +99,8 @@ function test_disable_and_enable_node() {
     setup_module(system_anchoring_config = ["any": "value".to_gtv()], cluster_anchoring_config = ["any": "value".to_gtv()]);
 
     rell.test.tx().op(
-        register_provider(initial_provider.pub, dapp_provider1.pub, provider_tier.COMMUNITY_NODE_PROVIDER),
-        register_provider(initial_provider.pub, dapp_provider2.pub, provider_tier.COMMUNITY_NODE_PROVIDER),
+        register_provider(initial_provider.pub, dapp_provider1.pub, provider_tier.DAPP_PROVIDER),
+        register_provider(initial_provider.pub, dapp_provider2.pub, provider_tier.DAPP_PROVIDER),
         register_provider(initial_provider.pub, node_provider1.pub, provider_tier.NODE_PROVIDER),
         register_provider(initial_provider.pub, node_provider2.pub, provider_tier.NODE_PROVIDER),
         propose_provider_state(initial_provider.pub, node_provider1.pub, true),
