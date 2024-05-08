@@ -23,10 +23,15 @@ entity provider_change_request {
 
 entity staker_state {
     key ft4.accounts.account, network;
-    mutable provider;
     mutable balance: integer;
     mutable last_update: timestamp;
     mutable pending_token_time: integer;
+}
+
+entity staker_state_to_provider {
+    timestamp;
+    index staker_state;
+    provider;
 }
 
 @log
@@ -54,39 +59,44 @@ operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
 
     val _provider = provider @? { .pubkey == delegateTo };
 
-    val ss = staker_state @? { .account == staker and .network == network.CHR };
+    var ss = staker_state @? { .account == staker and .network == network.CHR };
     if (exists(ss)) {
         _update_pending_token_time(ss);
         ss.balance += amount;
-        if (exists(_provider)) ss.provider = _provider;
+        if (exists(_provider))
+            create staker_state_to_provider (
+                timestamp = _staking_last_known_time(),
+                ss,
+                _provider
+            );
     } else {
         require(_provider, "Must delegate to a provider");
-        create staker_state (
+        ss = create staker_state (
             staker,
             network.CHR,
-            _provider,
             balance = amount,
             last_update = _staking_last_known_time(),
             pending_token_time = 0
         );
+        create staker_state_to_provider ( timestamp = _staking_last_known_time(), ss, _provider );
     }
 }
 
 function _staking_update_evm_state(staker: ft4.accounts.account, network, new_balance: integer) {
-    val ss = staker_state @? { .account == staker and .network == network };
+    var ss = staker_state @? { .account == staker and .network == network };
     if (exists(ss)) {
         _update_pending_token_time(ss);
         ss.balance = new_balance;
     } else {
         val _provider = provider @ { .pubkey == get_null_account() };
-        create staker_state (
+        ss = create staker_state (
             staker,
             network,
-            _provider,
             balance = new_balance,
             last_update = _staking_last_known_time(),
             pending_token_time = 0
         );
+        create staker_state_to_provider ( timestamp = _staking_last_known_time(), ss, _provider );
     }
 }
 
@@ -144,13 +154,14 @@ operation staking_request_withdrawal() {
 
     // Make a new request
     create staker_withdrawal_request (
-        finish_at = _staking_last_known_time()+86400*7*1000,
+        finish_at = _staking_last_known_time() + chain_context.args.staking_rate_change_delay_ms,
         ss,
         true
     );
 }
 
 function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey) {
+    // get all staker states of user, and all related withdraw requests
     val staker_states = staker_state @* { .account == staker };
     val withdraw_requests = staker_withdrawal_request @* { .active and .staker_state in staker_states };
 
@@ -163,8 +174,17 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
     val new_provider = provider @ { provider_pubkey };
 
     // Update appropriate staker states with new provider
-    val staker_states_to_update = staker_states @* { $ not in staker_states_to_exclude };
-    update staker_states_to_update ( .provider = new_provider );
+    val staker_states_to_update = staker_states @* {
+        $ not in staker_states_to_exclude
+    } (
+        struct<staker_state_to_provider> (
+            timestamp = _staking_last_known_time(),
+            staker_state = $,
+            provider = new_provider
+        )
+    );
+
+    create staker_state_to_provider ( staker_states_to_update );
 }
 
 function get_null_account(): pubkey {
@@ -173,6 +193,7 @@ function get_null_account(): pubkey {
 
 function _staking_last_known_time() 
     = if (op_context.exists) op_context.last_block_time else block @ { } ( @max .timestamp ) ?: 0;
+
 
 query staking_get_current_rate(): decimal {
     val current_rate = reward_rate @ { } ( .rate, @omit @sort_desc .transaction.block.timestamp ) limit 1;
@@ -200,5 +221,32 @@ function _staking_distribute_withdrawals() {
 
 function _staking_offboard_provider(pubkey) {
     val null_provider = provider @ { get_null_account() };
-    update staker_state @* { .provider.pubkey == pubkey } ( .provider = null_provider );
+
+    // Update appropriate staker states with new provider
+    val updated_relationships = staker_state_to_provider @* { .provider.pubkey == pubkey } (
+        struct<staker_state_to_provider> (
+            timestamp = _staking_last_known_time(),
+            staker_state = .staker_state,
+            provider = null_provider
+        )
+    );
+
+    create staker_state_to_provider ( updated_relationships );
 }
+
+operation staking_delegate(pubkey) {
+    val staker = ft4.auth.authenticate();
+    _staking_delegate(staker, pubkey);
+}
+
+query staking_get_current_delegate_on_network(account_id: byte_array, network) {
+    val _provider_pubkey = staker_state_to_provider @ {
+        .staker_state.account.id == account_id and .staker_state.network == network and  
+        (_staking_last_known_time() - chain_context.args.staking_rate_change_delay_ms) > .timestamp
+    } ( @omit @sort_desc .timestamp, .provider.pubkey ) limit 1;
+    return _provider_pubkey;
+}
+
+query staking_get_current_delegate(
+    account_id: byte_array
+) = staking_get_current_delegate_on_network(account_id, network.CHR);
