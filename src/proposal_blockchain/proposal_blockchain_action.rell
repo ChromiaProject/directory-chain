@@ -42,23 +42,14 @@ function delete_pending_blockchain_action(proposal) {
     delete pending_blockchain_action @? { proposal };
 }
 
-// Stop block production by inactivating bc, and keep replicas.
+// Stop block production by pausing
 function _apply_pause_blockchain(action: pending_blockchain_action, proposal) {
     action.blockchain.state = blockchain_state.PAUSED;
-    // Keep replicas
-    for (signer in get_blockchain_signer_nodes(action.blockchain)) {
-        create blockchain_replica_node(action.blockchain, signer);
-    }
 }
 
-// Restart block production; block builders will be the ones in cluster_node.
+// Restart block production
 function _apply_resume_blockchain(action: pending_blockchain_action, proposal) {
     action.blockchain.state = blockchain_state.RUNNING;
-    // Removing replicas if they are cluster nodes
-    val nodes = get_blockchain_signer_nodes(action.blockchain);
-    for (node_info in nodes) {
-        delete blockchain_replica_node @? { action.blockchain, node_info };
-    }
 }
 
 // Delete everything about this bc except D1 information
