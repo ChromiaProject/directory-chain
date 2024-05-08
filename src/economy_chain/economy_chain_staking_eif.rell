@@ -9,6 +9,11 @@ val STAKING_NETWORK_ID_BSC = 56;
 val STAKING_NETWORK_ID_ETH = 1;
 val STAKING_NETWORK_ID_BSC_TEST = 97;
 
+entity provisional_stake_balance {
+    key address: byte_array, network;
+    mutable staked_balance: integer;
+}
+
 struct event_data {
     tnx_hash: byte_array;
     log_index: integer;
@@ -19,17 +24,22 @@ struct event_data {
     non_indexed_values: list<gtv>;
 }
 
+function _staking_import_evm_balance_impl(address: byte_array, network_id: integer) {
+    require_initialized();
+
+    val staker = ft4.auth.authenticate();
+    val account = require(eif.hbridge.find_ft4_account_for_address(address, network_id), "No account link established for this address.");
+    require(account == staker, "Address does not belong to the authenticated account.");
+
+    flush_provisional_stake_balance(staker, address);
+}
+
 function _staking_network_id_to_enum(network_id: integer) = when (network_id) {
     STAKING_NETWORK_ID_ETH -> network.ETH;
     STAKING_NETWORK_ID_BSC -> network.BSC;
     STAKING_NETWORK_ID_BSC_TEST -> network.BSC;
     else -> network.CHR;
 };
-
-entity provisional_stake_balance {
-    key address: byte_array, network;
-    mutable staked_balance: integer;
-}
 
 function flush_provisional_stake_balance(account: ft4.accounts.account, address: byte_array) {
     val provisional = provisional_stake_balance @* { address };

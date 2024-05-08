@@ -103,3 +103,26 @@ function staking_undelegate_auth_message(gtv): text {
 operation staking_undelegate() {
     _staking_undelegate_impl();
 }
+
+
+// EVM Bridge
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "staking_import_evm_balance",
+    flags = [],
+    message = staking_import_evm_balance_auth_message(*)
+);
+
+function staking_import_evm_balance_auth_message(gtv): text {
+    val args = struct<staking_import_evm_balance>.from_gtv(gtv);
+    return "Please sign the message to bridge from EVM.";
+}
+
+// This operation needs to be called when an address was created by means others than ras_staking
+// registration strategy.
+// note: network_id is important only for smart contract stakers, for EOA stakers it is ignored
+// should become irrelevant once we have hooks in eif hbridge
+operation staking_import_evm_balance(address: byte_array, network_id: integer) {
+    _staking_import_evm_balance_impl(address, network_id);
+}
