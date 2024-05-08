@@ -8,6 +8,7 @@ namespace ft4 {
     import lib.ft4.accounts;
     import lib.ft4.assets;
     import lib.ft4.auth;
+    import lib.ft4.accounts.strategies;
     import test_utils: lib.ft4.test.utils;
 }
 import lib.auth;
@@ -302,10 +303,41 @@ function create_multi_provider_cluster_proposal(cluster_name: text, tag_name: te
         .run();
 }
 
-function _do_evm_stake_update(ft4.accounts.account, balance: integer, network_id: integer, contract_address: byte_array) {
-    // Derive the EVM address of the FT4 account
-    val evm_address = ft4.accounts.auth_descriptor_signer @ {.account_auth_descriptor.account == account} ( @omit @sort .rowid, .id );
 
+function do_create_account_using_ras_staking(keypair: rell.test.keypair, failure: text? = null): ft4.accounts.account? {
+    val eth_address = crypto.eth_privkey_to_address(keypair.priv);
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(eth_address, set(["A", "T"]));
+    val staking_strategy_op = ras_staking(eth_address, auth_descriptor);
+    
+    val message = ft4.strategies.get_register_account_message(
+        staking_strategy_op.to_gtx_operation(),
+        ft4.strategies.external.register_account().to_gtx_operation()
+    );
+    val signature = ft4.test_utils.evm_sign(message, keypair.priv);
+
+    val tx = rell.test.tx().op([
+        ft4.auth.evm_signatures([eth_address], [signature]),
+        staking_strategy_op,
+        ft4.strategies.external.register_account()
+    ]).nop();
+
+    if (failure != null) {
+        tx.run_must_fail(failure);
+        return null;
+    } else {
+        tx.run();
+        val account_id = eth_address.hash();
+        return ft4.accounts.account_by_id(account_id);
+    }
+}
+
+
+function evm_address_for_ft4_account(ft4.accounts.account) {
+    // MAYBE: check size
+    return ft4.accounts.auth_descriptor_signer @ {.account_auth_descriptor.account == account} ( @omit @sort .rowid, .id );
+}
+
+function _do_evm_stake_update(evm_address: byte_array, balance: integer, network_id: integer, contract_address: byte_array) {
     // Create an EVM event
     val evm_event = event_data(
         tnx_hash = "NULL".hash(),
@@ -328,8 +360,10 @@ function _do_evm_stake_update(ft4.accounts.account, balance: integer, network_id
     ).run();
 }
 
-function do_evm_stake_update_bsc(ft4.accounts.account, balance: integer) {
-    _do_evm_stake_update(account, balance, 97, x"753218363422002DF74F3D0D8d67f6CB38bE32D0");
+
+
+function do_evm_stake_update_bsc(evm_address: byte_array, balance: integer) {
+    _do_evm_stake_update(evm_address, balance, 97, x"753218363422002DF74F3D0D8d67f6CB38bE32D0");
 }
 
 struct auth_data {

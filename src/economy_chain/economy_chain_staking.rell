@@ -85,25 +85,16 @@ function _staking_get_balance_by_network(staker: ft4.accounts.account, network) 
 
 // Legacy EVM events imports
 
-function _staking_update_bsc(staker: ft4.accounts.account, new_balance: integer) {
+function _staking_update_from_evm(staker: ft4.accounts.account, new_balance: integer, network) {
     require_initialized();
     val delta = staker_state_delta(
-        network = network.BSC,
+        network,
         balance = new_balance,
         cutover_time = null, new_provider = null, old_provider = null
     );
     _staking_apply_staker_state_delta(staker, delta);
 }
 
-function _staking_update_eth(staker: ft4.accounts.account, new_balance: integer) {
-    require_initialized();
-    val delta = staker_state_delta(
-        network = network.ETH,
-        balance = new_balance,
-        cutover_time = null, new_provider = null, old_provider = null
-    );
-    _staking_apply_staker_state_delta(staker, delta);
-}
 
 
 // Withdrawals
@@ -114,6 +105,21 @@ function _staking_request_withdrawal_impl() {
     require(null == _staking_get_withdrawal_time(staker, network.CHR), "Only one withdrawal request at a time.");
     require(_staking_get_balance_by_network(staker, network.CHR) > 0, "Need something to withdraw.");
     _staking_request_withdrawal(staker, network.CHR);
+}
+
+// This operation needs to be called when an address was created by means others than ras_staking
+// registration strategy.
+// note: network_id is important only for smart contract stakers, for EOA stakers it is ignored
+// should become irrelevant once we have hooks in eif hbridge
+operation staking_import_evm_balance(address: byte_array, network_id: integer) {
+    require_initialized();
+    val staker = ft4.auth.authenticate();
+
+    val account = eif.hbridge.find_ft4_account_for_address(address, network_id);
+    require(exists(account), "No account link established for this address.");
+    require(account == staker, "Address does not belong to the authenticated account.");
+
+    flush_provisional_stake_balance(staker, address);
 }
 
 function _staking_request_withdrawal(staker: ft4.accounts.account, network) {

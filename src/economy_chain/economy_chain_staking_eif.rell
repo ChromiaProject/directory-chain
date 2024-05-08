@@ -26,34 +26,53 @@ function _staking_network_id_to_enum(network_id: integer) = when (network_id) {
     else -> network.CHR;
 };
 
+entity provisional_stake_balance {
+    key address: byte_array, network;
+    mutable staked_balance: integer;
+}
+
+function flush_provisional_stake_balance(account: ft4.accounts.account, address: byte_array) {
+    val provisional = provisional_stake_balance @* { address };
+    for (p in provisional) {
+        _staking_update_from_evm(account, p.staked_balance, p.network);
+        delete p;
+    }
+}
+
 function __staking_evm_block(network_id: integer, evm_block_height: integer, evm_block_hash: byte_array, events: list<event_data>) {
     for (event in events) {
         val evm_address = byte_array.from_gtv(event.indexed_values[0]);
 
-        // Get or make an FT4 account on-demand
-        val ft4_account_existing = ft4.accounts.auth_descriptor_signer @?
-            {.id == evm_address} ( @omit @sort .rowid, .account_auth_descriptor.account )
-        limit 1;
-
-        val ft4_account = when ( ft4_account_existing ) {
-            null -> ft4.accounts.create_account_with_auth(
-                        ft4.accounts.single_sig_auth_descriptor(evm_address, set(["A", "T"]))
-                );
-            else -> ft4_account_existing;
-        };
-
         val current_network = _staking_network_id_to_enum(network_id);
+        if (current_network == network.CHR) {
+            log("Unknown staking network id: ", network_id);
+            return;
+        }
+
+        val ft4_account = eif.hbridge.find_ft4_account_for_address(evm_address, network_id);
 
         if (event.name == "WithdrawRequest") {
-            _staking_request_withdrawal(ft4_account, current_network);
+            if (exists(ft4_account)) {
+                _staking_request_withdrawal(ft4_account, current_network);
+            } else {
+                delete provisional_stake_balance @? { evm_address, current_network };
+            }
         } else if (event.name == "StakeUpdate") {
             val staked_balance = integer.from_gtv(event.non_indexed_values[0]);
-            if (current_network == network.BSC) {
-                _staking_update_bsc(ft4_account, staked_balance);
-            } else if (current_network == network.ETH) {
-                _staking_update_eth(ft4_account, staked_balance);
+
+            if (exists(ft4_account)) {
+                _staking_update_from_evm(ft4_account, staked_balance, current_network);
             } else {
-                log("Unknown staking network id: ", network_id);
+                val provisional = provisional_stake_balance @? { evm_address, current_network };
+                if (exists(provisional)) {
+                    provisional.staked_balance = staked_balance;
+                } else {
+                    create provisional_stake_balance (
+                        .address = evm_address,
+                        .network = current_network,
+                        .staked_balance = staked_balance
+                    );
+                }
             }
         } else {
             log("Unknown EIF event: ", event.name);
