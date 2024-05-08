@@ -45,6 +45,25 @@ function test_update_system_provider_economy_constants() {
     assert_equals(updated_constants.system_provider_risk_share, 0.3);
 }
 
+function test_update_staking_requirements_economy_constants() {
+
+    rell.test.tx().op(
+        update_staking_requirements_economy_constants(false, 1, 2, 3, 4, 5)
+    ).run_must_fail("Expected admin signature");
+
+    rell.test.tx().op(
+        update_staking_requirements_economy_constants(false, 1, 2, 3, 4, 5)
+    ).sign(admin_privkey).run();
+
+    val updated_constants: economy_constants_data = get_economy_constants();
+    assert_equals(updated_constants.staking_requirements_enabled, false);
+    assert_equals(updated_constants.staking_requirement_stop_payout_days, 1);
+    assert_equals(updated_constants.staking_requirement_system_provider_own_stake_usd, 2);
+    assert_equals(updated_constants.staking_requirement_system_provider_total_stake_usd, 3);
+    assert_equals(updated_constants.staking_requirement_dapp_provider_own_stake_usd, 4);
+    assert_equals(updated_constants.staking_requirement_dapp_provider_total_stake_usd, 5);
+}
+
 function test_update_economy_constants() {
     val constants: economy_constants_data = get_economy_constants();
     assert_equals(constants.min_lease_time_weeks, 1);

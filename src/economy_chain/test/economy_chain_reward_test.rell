@@ -111,7 +111,7 @@ function test_calculate_system_cluster_rewards_with_system_provider_fee_share_05
     val reward = run_calculate_reward(node_availability_report, 12, true);
 
     // 12 scu priced 1 plus 1 gb extra storage priced 1
-    assert_equals(reward, 10000000 * 13 * 0.5 );//todo
+    assert_equals(reward, 10000000 * 13 * 0.5 );
 }
 
 function test_calculate_dapp_cluster_rewards_with_constants_0() {
@@ -423,6 +423,7 @@ function test_calculate_evm_transactions_submitters_rewards() {
 
 function test_receive_evm_transaction_submitter_cost_message() {
     rell.test.tx().op(init()).run();
+    update_staking_requirements_constants(staking_requirements_enabled = false);
 
     val evm_transaction_submitter_bc_rid = x"1111";
 
@@ -510,8 +511,151 @@ function test_pay_shared_rewards_dapp_cluster_full_reward_is_payed() {
     assert_equals(get_account_balance(test_account_dave), 1000000000 + (0.1 * 3726650000));
 }
 
+function test_staking_req_reward_fail_due_to_low_own() {
+
+    update_staking_requirements_constants(
+        staking_requirement_system_provider_own_stake_usd = 100000000000
+    );
+
+    val pa = run_staking_pay_out();
+
+    assert_equals(get_account_balance(pa.account), 0);
+    assert_equals(pa.reward_debt, 0);
+    assert_equals(pa.last_approved_stake_requirements, 0);
+}
+
+function test_staking_req_reward_fail_due_to_low_total() {
+
+    update_staking_requirements_constants(
+        staking_requirement_system_provider_total_stake_usd = 100000000000
+    );
+
+    val pa = run_staking_pay_out();
+
+    assert_equals(get_account_balance(pa.account), 0);
+    assert_equals(pa.reward_debt, 0);
+    assert_equals(pa.last_approved_stake_requirements, 0);
+}
+
+function test_staking_req_reward_successful() {
+
+    val pa = run_staking_pay_out(
+        reward = 10,
+        staking_amount = (economy_constants.staking_requirement_system_provider_total_stake_usd / economy_constants.chr_per_usd).to_integer() + 100
+    );
+
+    assert_equals(get_account_balance(pa.account), 11);
+    assert_equals(pa.reward_debt, 0);
+    assert_gt(pa.last_approved_stake_requirements, 0);
+}
+
+function test_staking_req_reward_successful_due_to_disabled() {
+
+    update_staking_requirements_constants(staking_requirements_enabled = false);
+
+    val pa = run_staking_pay_out(
+        staking_amount = 0
+    );
+
+    assert_equals(get_account_balance(pa.account), 10);
+    assert_equals(pa.reward_debt, 0);
+    assert_equals(pa.last_approved_stake_requirements, 0);
+}
+
+function test_staking_req_reward_successful_followed_by_stopped() {
+
+    // Staking OK - pay reward
+    update_staking_requirements_constants(
+        staking_requirements_enabled = true,
+        staking_requirement_system_provider_own_stake_usd = 0,
+        staking_requirement_system_provider_total_stake_usd = 0,
+        staking_requirement_dapp_provider_own_stake_usd = 1,
+        staking_requirement_dapp_provider_total_stake_usd = 0
+    );
+
+    var pa = run_staking_pay_out(
+        reward = 10,
+        staking_amount = 10
+    );
+
+    assert_equals(get_account_balance(pa.account), 11);
+    assert_equals(pa.reward_debt, 0);
+    assert_gt(pa.last_approved_stake_requirements, 0);
+
+    val node = node @ { node_pubkey };
+    var last_approved_stake_requirements = pa.last_approved_stake_requirements;
+    val node_reward = map<node, big_integer>();
+    node_reward[node] = 10;
+
+    // Staking not OK - pay reward since number of days not yet reached for a stop
+    update_staking_requirements_constants(
+        staking_requirement_dapp_provider_total_stake_usd = 1000000
+    );
+    rell.test.set_next_block_time_delta((economy_constants.staking_requirement_stop_payout_days - 1) * DAY_MS); // Time is limit-1 day
+    rell.test.block().run();
+
+    rell.test.tx().op(
+        pay_out_node_rewards_op(node_reward)
+    ).sign(provider_key).run();
+
+    pa = provider_account @ { provider @ { provider_pubkey } };
+
+    assert_equals(get_account_balance(pa.account), 22);
+    assert_equals(pa.reward_debt, 0);
+    assert_equals(pa.last_approved_stake_requirements, last_approved_stake_requirements);
+
+    // Staking not OK - do not pay reward since number of days passed
+    rell.test.set_next_block_time_delta(2 * DAY_MS); // + 2 days (days limit passed)
+    rell.test.block().run();
+
+    node_reward[node] = 20;
+    rell.test.tx().op(
+        pay_out_node_rewards_op(node_reward)
+    ).sign(provider_key).run();
+
+    pa = provider_account @ { provider @ { provider_pubkey } };
+
+    assert_equals(get_account_balance(pa.account), 22);
+    assert_equals(pa.reward_debt, 0);
+    assert_equals(pa.last_approved_stake_requirements, last_approved_stake_requirements);
+}
+
 ///////////////////
 // Helper functions
+
+function run_staking_pay_out(
+    reward: integer = 10,
+    staking_amount: integer = 0
+) {
+
+    if (not state.initialized) rell.test.tx().op(init()).run();
+
+    val system_cluster = ensure_system_cluster();
+    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
+    add_cluster_node(cluster_name, node_pubkey, false);
+    val system_node = ensure_node(provider_pubkey, system_node_pubkey, true, "SE", 1, 1024, false);
+    add_cluster_node(system_cluster_name, system_node_pubkey, false);
+
+    rell.test.tx().op(
+        register_provider_account_op(provider)
+    ).sign(provider_key).run();
+
+    val pa = provider_account @ { provider @ { provider_pubkey } };
+    assert_equals(get_account_balance(pa.account), 0);
+    assert_equals(pa.reward_debt, 0);
+    assert_equals(pa.last_approved_stake_requirements, 0);
+
+    val node_reward = map<node, big_integer>();
+    node_reward[node] = reward;
+    rell.test.tx().op(
+        add_staking(pa, staking_amount),
+        pay_out_node_rewards_op(node_reward)
+    ).sign(provider_key).run();
+
+    return provider_account @ { provider @ { provider_pubkey } };
+}
 
 function run_calculate_reward(node_availability_report: node_availability_report, create_lease_number: integer, calculate_system_reward: boolean) {
 
@@ -544,6 +688,8 @@ function run_pay_rewards(pool_assets: big_integer = 0, calculate_system_reward: 
 
     if (not state.initialized) rell.test.tx().op(init()).run();
 
+    update_staking_requirements_constants(staking_requirements_enabled = false);
+
     val system_cluster = ensure_system_cluster();
     val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
     val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
@@ -575,7 +721,7 @@ function run_pay_rewards(pool_assets: big_integer = 0, calculate_system_reward: 
 function run_pay_reward(reward: big_integer = 0, refill: boolean) {
 
     if (not state.initialized) rell.test.tx().op(init()).run();
- 
+
     val pool = get_pool_account();
     var pool_balance = get_account_balance(pool);
 
@@ -592,4 +738,25 @@ function run_pay_reward(reward: big_integer = 0, refill: boolean) {
     ).run();
 
     return alice;
+}
+
+function update_staking_requirements_constants(
+    staking_requirements_enabled: boolean? = null,
+    staking_requirement_stop_payout_days: integer? = null,
+    staking_requirement_system_provider_own_stake_usd: integer? = null,
+    staking_requirement_system_provider_total_stake_usd: integer? = null,
+    staking_requirement_dapp_provider_own_stake_usd: integer? = null,
+    staking_requirement_dapp_provider_total_stake_usd: integer? = null
+) {
+
+    rell.test.tx().op(
+        update_staking_requirements_economy_constants(
+            staking_requirements_enabled,
+            staking_requirement_stop_payout_days,
+            staking_requirement_system_provider_own_stake_usd,
+            staking_requirement_system_provider_total_stake_usd,
+            staking_requirement_dapp_provider_own_stake_usd,
+            staking_requirement_dapp_provider_total_stake_usd
+        )
+    ).sign(admin_privkey).run();
 }
