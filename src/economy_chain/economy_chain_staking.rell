@@ -113,10 +113,9 @@ function _staking_request_withdrawal_impl() {
 // should become irrelevant once we have hooks in eif hbridge
 operation staking_import_evm_balance(address: byte_array, network_id: integer) {
     require_initialized();
-    val staker = ft4.auth.authenticate();
 
-    val account = eif.hbridge.find_ft4_account_for_address(address, network_id);
-    require(exists(account), "No account link established for this address.");
+    val staker = ft4.auth.authenticate();
+    val account = require(eif.hbridge.find_ft4_account_for_address(address, network_id), "No account link established for this address.");
     require(account == staker, "Address does not belong to the authenticated account.");
 
     flush_provisional_stake_balance(staker, address);
