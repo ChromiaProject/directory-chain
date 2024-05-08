@@ -72,6 +72,25 @@ operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
     }
 }
 
+function _staking_update_evm_state(staker: ft4.accounts.account, network, new_balance: integer) {
+    val ss = staker_state @? { .account == staker and .network == network };
+    if (exists(ss)) {
+        _update_pending_token_time(ss);
+        ss.balance = new_balance;
+    } else {
+        val _provider = provider @ { .pubkey == get_null_account() };
+        create staker_state (
+            staker,
+            network,
+            _provider,
+            balance = new_balance,
+            last_update = _staking_last_known_time(),
+            pending_token_time = 0
+        );
+    }
+}
+
+
 function _update_pending_token_time(staker_state) {
     update staker_state (
         pending_token_time = .balance * (_staking_last_known_time() - .last_update),
