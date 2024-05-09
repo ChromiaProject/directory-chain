@@ -360,16 +360,13 @@ function test_deposit_and_withdraw_via_evm() {
     rell.test.tx().op(init()).run();
 
     val alice_evm_address = crypto.eth_pubkey_to_address(rell.test.keypairs.alice.pub);
-
     do_evm_stake_update_bsc(alice_evm_address, 50 * units_per_asset);
 
-    //val test_account_alice = do_create_account_using_ras_staking(rell.test.keypairs.alice);
+    val test_account_alice = require(do_create_account_using_ras_staking(rell.test.keypairs.alice));
 
-    //do_evm_withdrawal_request_bsc(test_account_alice);
+    do_evm_withdrawal_request_bsc(test_account_alice);
 
-    /*
-
-    assert_equals(staking_get_balance(test_account_alice.id), 5000000);
+    assert_equals(staking_get_balance(test_account_alice.id), 50 * units_per_asset);
 
     // Can't withdraw on CHR as no balance *there*
     rell.test.tx().op(
@@ -378,16 +375,16 @@ function test_deposit_and_withdraw_via_evm() {
     .op(staking_request_withdrawal())
     .run_must_fail("Need something to withdraw.");
 
-
     // Wait a period
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
     rell.test.block().run();
 
     // Withdraw
-    do_evm_stake_update_bsc(test_account_alice, 0);
+    do_evm_stake_update_bsc(test_account_alice.id, 0);
 
     // Reload
-    do_evm_stake_update_bsc(test_account_alice, 10);
+    do_evm_stake_update_bsc(test_account_alice.id, 10);
+    rell.test.tx().op(mint_to(test_account_alice, 9999999)).run();
     do_staking_deposit_native(rell.test.keypairs.alice, 10);
 
     // Request withdrawal on native once (which is fine)
@@ -406,7 +403,6 @@ function test_deposit_and_withdraw_via_evm() {
 
     // Request withdrawal again on BSC (which is okay)
     do_evm_withdrawal_request_bsc(test_account_alice);
-    */
 }
 
 function test_evm_account_creation() {
@@ -424,7 +420,7 @@ function test_evm_account_creation() {
         "Cannot find EVM account."
     );
     require(
-        eif.hbridge.find_ft4_account_for_address(alice_evm_address, 97) == test_account_alice,
+        require(eif.hbridge.find_ft4_account_for_address(alice_evm_address, 97)) == test_account_alice,
         "EIF Hbridge link is not established"
     );
     assert_equals(
