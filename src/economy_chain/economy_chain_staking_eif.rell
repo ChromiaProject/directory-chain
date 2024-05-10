@@ -48,10 +48,8 @@ function __staking_evm_block(network_id: integer, evm_block_height: integer, evm
             _staking_request_withdrawal(ft4_account, current_network);
         } else if (event.name == "StakeUpdate") {
             val staked_balance = integer.from_gtv(event.non_indexed_values[0]);
-            if (current_network == network.BSC) {
-                _staking_update_bsc(ft4_account, staked_balance);
-            } else if (current_network == network.ETH) {
-                _staking_update_eth(ft4_account, staked_balance);
+            if ([network.BSC, network.ETH].contains(current_network)) {
+                _staking_update_evm_state(ft4_account, current_network, staked_balance);
             } else {
                 log("Unknown staking network id: ", network_id);
             }
