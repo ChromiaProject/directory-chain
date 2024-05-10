@@ -1,9 +1,9 @@
 /*
     The provider with type in line can (+) / can not (-) register a provider with the type in the column:
 
-         | CNP | NP
+         | DP | NP
     -----|-----|-----
-     CNP |  +  |  -
+     DP |  +  |  -
      NP  |  +  |  -
      SP  |  +  |  +
 */
@@ -45,4 +45,17 @@ operation transfer_action_points(from: pubkey, to: pubkey, amount: integer) {
     require(provider_rl_state @ { _from } .points >= amount, "Not enough action points to transfer from.");
     update provider_rl_state @ { _from } ( .points -= amount );
     update provider_rl_state @ { _to } ( .points += amount );
+}
+
+operation update_provider(my_pubkey: pubkey, name?, url: text?) {
+    val me = require_provider(my_pubkey);
+    require_provider_auth_with_rate_limit(me);
+    if (exists(name)) {
+        validate_metadata_text("name", name);
+        me.name = name;
+    }
+    if (exists(url)) {
+        validate_url(url);
+        me.url = url;
+    }
 }

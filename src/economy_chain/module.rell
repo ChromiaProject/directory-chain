@@ -5,16 +5,14 @@ import messaging.bridge_mapping.*;
 import messaging.node_availability_reporting.*;
 import messaging.blockchain_rid.*;
 import messaging.evm_transaction_submitter_cost.*;
-import messaging.icmf.*;
-import messaging.icmf.receiver.*;
-import .ec_proposal.*;
+import lib.icmf.*;
+import lib.icmf.receiver.*;
+import common_proposal.*;
 import constants.*;
 
 namespace eif {
-    import event_receiver: lib.eif_event_receiver_chain.messaging.*;
     import messaging: lib.eif.messaging;
-    import lib.eif.main;
-    import lib.eif.ft4;
+    import lib.hbridge;
 }
 
 import lib.auth;
@@ -24,6 +22,7 @@ namespace ft4 {
     import lib.ft4.assets;
     import lib.ft4.auth;
     import lib.ft4.version;
+    import lib.ft4.accounts.strategies;
 }
 
 struct module_args {
@@ -35,11 +34,10 @@ struct module_args {
     pool_amount_to_mint: big_integer;
     pool_account_pubkey: pubkey;
     deposit_account_pubkey: pubkey;
-    evm_asset_network_id: integer;
-    evm_asset_address: byte_array;
-    evm_asset_name: text;
-    evm_asset_symbol: text;
-    evm_asset_decimals: integer;
+    bsc_asset_network_id: integer;
+    bsc_asset_address: byte_array;
+    eth_asset_network_id: integer;
+    eth_asset_address: byte_array;
     chromia_foundation_account_pubkey: pubkey;
     admin_pubkey: pubkey;
     staking_initial_reward_rate: decimal;
@@ -47,6 +45,7 @@ struct module_args {
     staking_withdrawal_delay_ms: integer;
     staking_delegation_delay_ms: integer;
     staking_payout_interval_ms: integer;
+    rewards_share: decimal;
     test_chr_pool_refill_limit_millis: integer;
     max_bridge_leases_per_container: integer;
     evm_transaction_submitters_bonus: decimal;
@@ -64,7 +63,8 @@ operation init() {
     require(state.initialized == false, "Economy chain is already initialized");
     state.initialized = true;
 
-    register_assets();
+    val asset = register_assets();
+    register_and_link_erc20_asset(asset);
 
     create_pool_account();
 
@@ -73,8 +73,6 @@ operation init() {
     create_chromia_foundation_account();
 
     __staking_init();
-
-    create_evm_asset_link();
 
     log("Economy chain was initialized");
 }
@@ -102,6 +100,4 @@ function require_pubkey(pubkey) {
     require(pubkey.size() == 33 or pubkey.size() == 65 or pubkey.size() == 1336, "Value is not pubkey: " + pubkey);
 }
 
-function require_is_signer(pubkey) {
-    require(op_context.is_signer(pubkey), "Operation must be signed by " + pubkey);
-}
+

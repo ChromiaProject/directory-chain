@@ -1,5 +1,6 @@
 function create_cluster_impl(me: provider, name, governor: voter_set, providers: list<pubkey>, cluster_creation_data) {
     require(empty(cluster @* { name }), "Cluster with name %s already exists".format(name));
+    validate_entity_name(name);
     require(cluster_creation_data.cluster_units > 0, "Cluster must have at least 1 cluster unit");
     require(cluster_creation_data.extra_storage >= 0, "Extra storage must not be negative");
     val c = create cluster(
@@ -93,8 +94,11 @@ function _add_replica_node_to_cluster_internal(cluster, node) {
 }
 
 function _remove_replica_node_from_cluster_internal(cluster, node) {
-    delete cluster_replica_node @* { node };
-    after_replica_node_removed_from_cluster(node, cluster);
+    val crn = cluster_replica_node @? { cluster, node };
+    if (exists(crn)) {
+        after_replica_node_removed_from_cluster(node, cluster);
+        delete crn;
+    }
 }
 
 /**

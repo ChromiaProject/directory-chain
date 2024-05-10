@@ -1,0 +1,46 @@
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_cluster_create.name: apply_cluster_create(*)];
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_cluster_change_tag.name: apply_cluster_change_tag(*)];
+
+function apply_cluster_create(proposal: common_proposal) {
+
+    val pending_cluster = pending_cluster @? { proposal };
+
+    if (pending_cluster == null) {
+        log("Received accepted cluster creation proposal with no pending_cluster. Proposal: %s".format(proposal));
+    } else {
+
+        val create_cluster_message = create_cluster_message(
+            name = pending_cluster.name,
+            governor_voter_set_name = pending_cluster.governor_voter_set_name,
+            voter_set_name = pending_cluster.voter_set_name,
+            cluster_units = pending_cluster.cluster_units,
+            extra_storage = pending_cluster.extra_storage,
+            proposer_pubkey = pending_cluster.proposer_pubkey);
+
+        send_message(create_cluster_topic, create_cluster_message.to_gtv());
+
+        pending_cluster.status = pending_cluster_status.PENDING_CREATION;
+
+        log("Message sent to create cluster %s".format(pending_cluster.name));
+    }
+}
+
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_cluster_create.name: cleanup_pending_cluster_create(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_cluster_change_tag.name: cleanup_pending_cluster_change_tag(*)];
+
+function cleanup_pending_cluster_create(proposal: common_proposal) {
+
+    val pending_cluster = pending_cluster @? { proposal };
+
+    // Only cleanup if this was a revoke or a failed cluster creation
+    if (pending_cluster != null and
+    (pending_cluster.status == pending_cluster_status.PENDING_APPROVAL or
+    pending_cluster.status == pending_cluster_status.FAILURE)
+    ) {
+
+        log("Revoked and removed pending cluster %s".format(pending_cluster.name));
+
+        delete pending_cluster @ { proposal };
+    }
+}
+

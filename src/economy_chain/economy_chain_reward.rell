@@ -1,3 +1,5 @@
+val DAY_MS = 86400000; // 1000 * 60 * 60 * 24 - 1 day
+
 function pay_evm_transaction_submitter_rewards(evm_transaction_submitter_cost: evm_transaction_submitter_cost) {
     pay_out_node_rewards(calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost));
 }
@@ -101,12 +103,37 @@ function pay_out_node_rewards(node_reward: map<node, big_integer>) {
         val provider = node.provider;
         val pa = provider_account @ { provider };
 
-        val pay_reward_result = pay_reward(pool, pool_balance, pa.account, pa.reward_debt, reward, "provider %s".format(pa.provider.pubkey));
+        if (is_staking_approved(provider, pa, reward)) {
+            val pay_reward_result = pay_reward(pool, pool_balance, pa.account, pa.reward_debt, reward, "provider %s".format(pa.provider.pubkey));
 
-        save_node_payed_reward(node.pubkey, pay_reward_result.payed_reward, op_context.last_block_time);
-        pa.reward_debt = pay_reward_result.reward_debt;
-        pool_balance = pay_reward_result.pool_balance;
+            save_node_payed_reward(node.pubkey, pay_reward_result.payed_reward, op_context.last_block_time);
+            pa.reward_debt = pay_reward_result.reward_debt;
+            pool_balance = pay_reward_result.pool_balance;
+        }
     }
+}
+
+function is_staking_approved(provider, provider_account, reward: big_integer): boolean {
+
+    if (economy_constants.staking_requirements_enabled) {
+        if (provider_meets_staking_requirements(provider, provider_account)) {
+
+            provider_account.last_approved_stake_requirements = op_context.last_block_time;
+        } else {
+            val (days_since_approved_staking, pay_out_reward) = get_staking_requirement_payout_stop(provider_account);
+
+            if (pay_out_reward) {
+                log("Provider %s do not meet staking requirements - payouts will be stopped in %d days".format(
+                    provider.pubkey, economy_constants.staking_requirement_stop_payout_days - days_since_approved_staking));
+            } else {
+                log("Provider %s lost reward of %s due to low levels of staking for too long (%s days)".format(
+                    provider.pubkey, reward, days_since_approved_staking));
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 function pay_reward(pool: ft4.accounts.account, pool_balance: big_integer, account: ft4.accounts.account, reward_debt:big_integer,  reward: big_integer, identity: text): pay_reward_result {
@@ -147,9 +174,13 @@ function pay_reward(pool: ft4.accounts.account, pool_balance: big_integer, accou
             }
         }
     }
-    return pay_reward_result(payed_reward = amount_to_transfer, pool_balance = total_pool_balance, reward_debt = total_reward_debt);
+
+    val pay_reward_result = pay_reward_result(payed_reward = amount_to_transfer, payed_to = account, pool_balance = total_pool_balance, reward_debt = total_reward_debt);
+    after_pay_reward(pay_reward_result);
+    return pay_reward_result;
 }
 
+@extendable function after_pay_reward(pay_reward_result: pay_reward_result) {}
 
 function sum_total_max_revenue_per_dapp_cluster(): decimal {
     var sum_total_max_revenue_per_dapp_cluster = 0.0;
@@ -209,3 +240,43 @@ function transfer_to_pool_impl(amount: big_integer) {
 function save_node_payed_reward(node: byte_array, value: big_integer, time: timestamp){
     create node_payed_reward(node, value, time);
 }
+
+function get_days_since(time: timestamp): integer {
+    return (op_context.last_block_time - time) / DAY_MS;
+}
+
+function get_staking_requirement_payout_stop(provider_account): (integer, boolean) {
+    val days_since_approved_staking = get_days_since(provider_account.last_approved_stake_requirements);
+    return (days_since_approved_staking, days_since_approved_staking < economy_constants.staking_requirement_stop_payout_days);
+}
+
+function provider_meets_staking_requirements(provider, provider_account): boolean {
+
+    val required_own = if (provider.system)
+        economy_constants.staking_requirement_system_provider_own_stake_usd
+    else
+        economy_constants.staking_requirement_dapp_provider_own_stake_usd;
+
+    val required_total = if (provider.system)
+            economy_constants.staking_requirement_system_provider_total_stake_usd
+        else
+            economy_constants.staking_requirement_dapp_provider_total_stake_usd;
+
+    val own_usd = get_chr_in_usd(staking_get_balance(provider_account.account.id));
+    val total_usd = get_chr_in_usd(staking_get_total_delegation_to(provider.pubkey));
+
+    if (own_usd < required_own) {
+        log("Provider %s has not enough own staking (%s < %s)".format(provider.pubkey, own_usd, required_own));
+        return false;
+    }
+
+    if (total_usd < required_total) {
+        log("Provider %s has not enough total staking (%s < %s)".format(provider.pubkey, total_usd, required_total));
+        return false;
+    }
+
+    return true;
+}
+
+function get_chr_in_usd(chr: integer): decimal =
+    chr * economy_constants.chr_per_usd;

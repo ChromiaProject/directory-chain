@@ -13,11 +13,11 @@ function test_propose_and_remove_container() {
     setup_module();
 
     // 0. governance
-    val cnp = rell.test.keypairs.bob;
+    val dp = rell.test.keypairs.bob;
     val sp = rell.test.keypairs.trudy;
 
     rell.test.tx().op(
-        register_provider(initial_provider.pub, cnp.pub, provider_tier.COMMUNITY_NODE_PROVIDER),
+        register_provider(initial_provider.pub, dp.pub, provider_tier.DAPP_PROVIDER),
         register_provider(initial_provider.pub, sp.pub, provider_tier.NODE_PROVIDER),
         propose_provider_is_system(initial_provider.pub, sp.pub, true)
     ).sign(initial_provider).run();
@@ -34,10 +34,15 @@ function test_propose_and_remove_container() {
 
     // 3. Proposing container by provider that is not a member of cluster's governance
     rell.test.tx().op(
-        propose_container(cnp.pub, clusters.system, "container1", voter_sets.system_p)
-    ).sign(cnp).run_must_fail();
+        propose_container(dp.pub, clusters.system, "container1", voter_sets.system_p)
+    ).sign(dp).run_must_fail();
 
-    // 4. Adding a new container
+    // 4. Proposing a container with an invalid name
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container@1", voter_sets.system_p)
+    ).sign(initial_provider).run_must_fail("Entity name can only contain letters, numerals, and underscores");
+
+    // 5. Adding a new container
     rell.test.tx().op(
         propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p)
     ).sign(initial_provider).run();

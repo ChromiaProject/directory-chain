@@ -1,7 +1,7 @@
 module;
 
 import ^^.*;
-import ^^.ec_proposal.test.helper_operations.*;
+import common_proposal.test.helper_operations.*;
 
 operation icmf_message_op(sender: byte_array, topic: text, body: gtv) {
     handle_icmf_message(sender, topic, body);
@@ -23,7 +23,7 @@ operation mint_to_pool(amount: big_integer) {
 operation create_pending_cluster(cluster_name: text, tag_name: text, status: pending_cluster_status = pending_cluster_status.PENDING_APPROVAL) {
 
     val tag = create_or_return_tag(tag_name);
-    val proposal = create_proposal(ec_proposal_type.cluster_create);
+    val proposal = create_proposal(common_proposal_type.ec_cluster_create);
 
     create pending_cluster(
         name = cluster_name,
@@ -40,7 +40,7 @@ operation create_pending_cluster(cluster_name: text, tag_name: text, status: pen
 
 operation create_pending_tag_operation(name: text, scu_price: integer = -1, extra_storage_price: integer = -1) {
 
-    val proposal = create_proposal(ec_proposal_type.tag_create);
+    val proposal = create_proposal(common_proposal_type.ec_tag_create);
     create pending_tag_operation(
         name,
         proposal,
@@ -53,7 +53,7 @@ operation create_pending_cluster_change_tag(cluster_name: text, current_tag_name
 
     val current_tag = create_or_return_tag(current_tag_name);
     val new_tag = create_or_return_tag(new_tag_name);
-    val proposal = create_proposal(ec_proposal_type.cluster_create);
+    val proposal = create_proposal(common_proposal_type.ec_cluster_create);
 
     val cluster = create cluster(cluster_name, true, cluster_units = 1, extra_storage = 1, anchoring_chain = x"", current_tag);
     create pending_cluster_change_tag(cluster, proposal, new_tag);
@@ -120,7 +120,7 @@ operation receive_provider_update_message_op(provider_update_message) {
 }
 
 operation create_tag_removal_proposal_with_voter_set(voter_set_name: text) {
-    create_proposal(ec_proposal_type.tag_remove, voter_set_name);
+    create_proposal(common_proposal_type.ec_tag_remove, voter_set_name);
 }
 
 function create_or_return_tag(tag_name: text) {
@@ -147,3 +147,64 @@ operation do_test_evm_block(network_id: integer, evm_block_height: integer, evm_
     _fn_evm_block(network_id, evm_block_height, evm_block_hash, events);
 }
 
+
+operation create_or_return_provider_op(pubkey, system: boolean) {
+    create_or_return_provider(pubkey, system);
+}
+
+operation create_proposal_op(proposal_type: common_proposal_type, voter_set_name: text) {
+
+    val voter_set = create_or_return_voter_set(voter_set_name);
+    val provider = create_or_return_provider(x"", true);
+
+    create common_proposal(op_context.last_block_time, proposal_type, provider.pubkey, voter_set);
+}
+
+function create_proposal(proposal_type: common_proposal_type, voter_set_name: text = "voter-set") {
+
+    val voter_set = create_or_return_voter_set(voter_set_name);
+    val provider = create_or_return_provider(x"", true);
+
+    return create common_proposal(op_context.last_block_time, proposal_type, provider.pubkey, voter_set);
+}
+
+operation create_test_voter_set_with_member(name: text, pubkey) {
+
+    val voter_set = create common_voter_set(name, 0);
+    create common_voter_set_member(voter_set, pubkey);
+    create common_voter_set_governance(voter_set = voter_set, governor = voter_set);
+}
+
+operation create_test_voter_set_with_members(name: text, members: list<pubkey>) {
+
+    val voter_set = create common_voter_set(name, 0);
+    for (m in members) {
+        create common_voter_set_member(voter_set, m);
+    }
+    create common_voter_set_governance(voter_set = voter_set, governor = voter_set);
+}
+
+operation register_provider_account_op(provider) {
+
+    register_provider_account(provider);
+}
+
+operation pay_out_node_rewards_op(node_reward: map<node, big_integer>) {
+    pay_out_node_rewards(node_reward);
+}
+
+operation add_staking(provider_account, amount: integer) {
+
+    create staker_state(
+        network = network.CHR,
+        staker_state_time = _staking_last_known_time(),
+        previous_staker_state_time = 0,
+        staker = provider_account.account,
+        balance = amount,
+        previous_balance = 0,
+        cutover_time = _staking_last_known_time(),
+        new_provider = provider_account,
+        old_provider = provider_account,
+        latest = true
+    );
+}

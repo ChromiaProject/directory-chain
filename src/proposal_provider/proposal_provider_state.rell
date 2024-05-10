@@ -24,9 +24,9 @@ function delete_pending_provider_state(proposal) {
 /*
     The provider with type in line can (+) / can not (-) change the state of the other one in the column:
 
-         | CNP | NP  | SP
+         | DP | NP  | SP
     -----|-----|-----|-----
-     CNP |  -  |  -  |  -
+     DP |  -  |  -  |  -
      NP  |  +  |  -  |  -
      SP  |  +  |  +  |  +
 */
@@ -39,12 +39,12 @@ operation propose_provider_state(my_pubkey: pubkey, provider_pubkey: pubkey, act
     // Only SP and NP can enable/disable providers
     require_node_access(me);
 
-    if (roles.has_node_access(me) and other_prov.tier == provider_tier.COMMUNITY_NODE_PROVIDER) {
+    if (roles.has_node_access(me) and other_prov.tier == provider_tier.DAPP_PROVIDER) {
         update_provider_state(other_prov, active);
     } else {
         require_system_access(me);
         require(empty(pending_provider_state @* { .provider == other_prov, .active == active, .proposal.state == proposal_state.PENDING } limit 1), "Already proposed");
-        val prop = create proposal(op_context.last_block_time, proposal_type.provider_state, me, system_p_voter_set(), description);
+        val prop = create_proposal(proposal_type.provider_state, me, system_p_voter_set(), description);
         create pending_provider_state(prop, other_prov, .active = active);
         internal_vote(me, prop, true);
     }

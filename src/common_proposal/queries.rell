@@ -1,0 +1,69 @@
+
+struct common_proposal_voting_results {
+    positive_votes: integer;
+    negative_votes: integer;
+    max_votes: integer;
+    threshold: integer;
+    voting_result: common_voting_result;
+}
+
+struct common_proposal_voter {
+    pubkey: byte_array;
+    vote: boolean;
+}
+
+query get_common_proposals_range(from: timestamp, until: timestamp, only_pending: boolean) {
+    return common_proposal @* {
+        .timestamp >= from,
+        .timestamp <= until,
+        not(only_pending) or .state == common_proposal_state.PENDING
+    } (.rowid, proposal_type = .proposal_type, .state);
+}
+
+query get_relevant_common_proposals(from: timestamp, until: timestamp, only_pending: boolean, my_pubkey: pubkey) {
+    return (common_proposal, common_voter_set_member) @* {
+        common_voter_set_member.voter_set == common_proposal.voter_set,
+        common_voter_set_member.pubkey == my_pubkey,
+        common_proposal.timestamp >= from,
+        common_proposal.timestamp <= until,
+        not(only_pending) or common_proposal.state == common_proposal_state.PENDING
+    } (common_proposal.rowid, proposal_type = common_proposal.proposal_type, common_proposal.state);
+}
+
+query get_common_proposal(id: rowid?): (id: rowid, timestamp: integer, type: common_proposal_type, proposed_by: pubkey, description: text, state: common_proposal_state)? {
+    val result = if (id == null) common_proposal @? {} (@sort_desc @omit .rowid, $) limit 1 else common_proposal @? { id };
+    if (result == null) return null;
+    return (
+        id = result.rowid,
+        timestamp = result.timestamp,
+        type = result.proposal_type,
+        proposed_by = result.proposed_by,
+        description = result.description,
+        state = result.state
+    );
+}
+
+query get_common_proposal_voting_results(rowid): common_proposal_voting_results {
+    val proposal = require_common_proposal(rowid);
+    require(proposal.state == common_proposal_state.PENDING, "This proposal is closed as %s. For info about voting use get_proposal_voter_info query.".format(proposal.state));
+    val positive_votes = positive_common_votes(proposal);
+    val negative_votes = negative_common_votes(proposal);
+    val max_votes = max_common_votes(proposal.voter_set);
+    val threshold = proposal.voter_set.threshold;
+    val status = _compute_common_voting_result(positive_votes, negative_votes, max_votes, threshold);
+    return common_proposal_voting_results(positive_votes, negative_votes, max_votes, threshold, status);
+}
+
+query get_common_proposal_voter_info(rowid): list<common_proposal_voter> {
+    val proposal = require_common_proposal(rowid);
+    return common_vote @* { .proposal.rowid == rowid } (common_proposal_voter(.pubkey, .vote));
+}
+
+query get_common_pubkey_votes(from: timestamp, until: timestamp, pubkey) {
+    return (common_proposal, common_vote) @* {
+        common_vote.pubkey == pubkey,
+        common_vote.proposal == common_proposal,
+        common_proposal.timestamp >= from,
+        common_proposal.timestamp <= until
+    } ( .proposal, .vote );
+}

@@ -42,23 +42,14 @@ function delete_pending_blockchain_action(proposal) {
     delete pending_blockchain_action @? { proposal };
 }
 
-// Stop block production by inactivating bc, and keep replicas.
+// Stop block production by pausing
 function _apply_pause_blockchain(action: pending_blockchain_action, proposal) {
     action.blockchain.state = blockchain_state.PAUSED;
-    // Keep replicas
-    for (signer in get_blockchain_signer_nodes(action.blockchain)) {
-        create blockchain_replica_node(action.blockchain, signer);
-    }
 }
 
-// Restart block production; block builders will be the ones in cluster_node.
+// Restart block production
 function _apply_resume_blockchain(action: pending_blockchain_action, proposal) {
     action.blockchain.state = blockchain_state.RUNNING;
-    // Removing replicas if they are cluster nodes
-    val nodes = get_blockchain_signer_nodes(action.blockchain);
-    for (node_info in nodes) {
-        delete blockchain_replica_node @? { action.blockchain, node_info };
-    }
 }
 
 // Delete everything about this bc except D1 information
@@ -168,6 +159,11 @@ function propose_blockchain_action_impl(my_pubkey: pubkey, blockchain_rid: byte_
         require(false, "Moving blockchain can't be %sd: %s".format(action.name, blockchain.rid));
     }
 
+    // complex state: unarchiving
+    if (exists(unarchiving_blockchain @? { blockchain })) {
+        require(false, "Unarchiving blockchain can't be %sd: %s".format(action.name, blockchain.rid));
+    }
+
     // container requirements
     val container = container_blockchain @ { blockchain } .container;
     require_container_deployer(container, me);
@@ -187,7 +183,7 @@ function propose_blockchain_action_impl(my_pubkey: pubkey, blockchain_rid: byte_
         require_container_is_not_full(dst_container);
     }
 
-    val prop = create proposal(op_context.last_block_time, proposal_type.blockchain_action, me, deployer, description);
+    val prop = create_proposal(proposal_type.blockchain_action, me, deployer, description);
     create pending_blockchain_action(prop, blockchain, action, args);
     internal_vote(me, prop, true);
 }

@@ -10,6 +10,9 @@ namespace ft4 {
     import lib.ft4.auth;
     import test_utils: lib.ft4.test.utils;
 }
+
+import lib.hbridge;
+
 import lib.auth;
 
 struct module_args {
@@ -101,7 +104,7 @@ function test_delegation() {
 
     rell.test.tx().op(
         staking_delegate(test_account_charlie.id)
-    ).run_must_fail("Must be active provider.");
+    ).run_must_fail("No provider for this public key.");
 
     add_provider(rell.test.keypairs.charlie.pub);
 
@@ -122,7 +125,7 @@ function test_delegation() {
 
     rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
     rell.test.block().run();
-    assert_equals(staking_get_current_delegate(test_account_alice.id), get_null_account()); // Change in a week
+    assert_null(staking_get_current_delegate(test_account_alice.id)); // Change in a week
 }
 
 function test_staking_deposit() {
@@ -218,6 +221,9 @@ function test_yield_and_payout_crudely () {
 
     // However the total amount ever earned is not going to be 
     assert_true(staking_rewards_for(test_account_bob.id) > 100);
+
+    // Everything paid up
+    assert_equals(staking_rewards_for(test_account_bob.id), staking_get_rewards_paid(test_account_bob.id));
 }
 
 function test_withdrawal() {
@@ -353,12 +359,14 @@ function test_staking_get_total_delegation_to() {
 function test_deposit_and_withdraw_via_evm() {
     rell.test.tx().op(init()).run();
 
-    val test_account_alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val alice_evm_address = crypto.eth_pubkey_to_address(rell.test.keypairs.alice.pub);
+    do_evm_stake_update_bsc(alice_evm_address, 50 * units_per_asset);
 
-    do_evm_stake_update_bsc(test_account_alice, 5000000);
+    val test_account_alice = require(do_create_account_using_ras_staking(rell.test.keypairs.alice));
+
     do_evm_withdrawal_request_bsc(test_account_alice);
 
-    assert_equals(staking_get_balance(test_account_alice.id), 5000000);
+    assert_equals(staking_get_balance(test_account_alice.id), 50 * units_per_asset);
 
     // Can't withdraw on CHR as no balance *there*
     rell.test.tx().op(
@@ -372,10 +380,11 @@ function test_deposit_and_withdraw_via_evm() {
     rell.test.block().run();
 
     // Withdraw
-    do_evm_stake_update_bsc(test_account_alice, 0);
+    do_evm_stake_update_bsc(test_account_alice.id, 0);
 
     // Reload
-    do_evm_stake_update_bsc(test_account_alice, 10);
+    do_evm_stake_update_bsc(test_account_alice.id, 10);
+    rell.test.tx().op(mint_to(test_account_alice, 9999999)).run();
     do_staking_deposit_native(rell.test.keypairs.alice, 10);
 
     // Request withdrawal on native once (which is fine)
@@ -399,31 +408,23 @@ function test_deposit_and_withdraw_via_evm() {
 function test_evm_account_creation() {
     rell.test.tx().op(init()).run();
 
-    val evm_address: byte_array = x"753218363422002DF74F3D0D8d67f6CB38bE32D0";
-    val evm_event = event_data(
-        tnx_hash = "NULL".hash(),
-        log_index = 0,
-        signature = "NULL".hash(),
-        contract_address = x"753218363422002DF74F3D0D8d67f6CB38bE32D0",
-        name = "StakeUpdate",
-        indexed_values = [evm_address.to_gtv()],
-        non_indexed_values = [(100).to_gtv()]
-    );
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
 
-    // Submit mock EVM block
-    rell.test.tx().op(
-        do_test_evm_block(
-            1, // ETH network id
-            1,
-            "NULL".hash(),
-            [evm_event]
-        )
-    ).run();
+    do_evm_stake_update_bsc(alice_evm_address, 50 * units_per_asset);
+
+    val test_account_alice = do_create_account_using_ras_staking(rell.test.keypairs.alice)!!;
 
     // See that FT4 account is created
     require(
-        ft4.accounts.auth_descriptor_signer @? {.id == evm_address} ( @omit @sort .rowid, .account_auth_descriptor.account ),
+        ft4.accounts.auth_descriptor_signer @? {.id == alice_evm_address} ( @omit @sort .rowid, .account_auth_descriptor.account ),
         "Cannot find EVM account."
+    );
+    require(
+        require(eif.hbridge.find_ft4_account_for_address(alice_evm_address, 97)) == test_account_alice,
+        "EIF Hbridge link is not established"
+    );
+    assert_equals(
+        staking_get_balance(test_account_alice.id), 50 * units_per_asset
     );
 }
 

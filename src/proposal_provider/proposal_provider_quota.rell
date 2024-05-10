@@ -31,11 +31,11 @@ operation propose_provider_quota(my_pubkey: pubkey, tier: provider_tier, provide
         }
         max_containers -> {
             require(value >= -1, "Proposed max_containers quota value must be >= -1: " + value);
-            require(tier != provider_tier.COMMUNITY_NODE_PROVIDER, "Proposing max_containers quota is not allowed for COMMUNITY_NODE_PROVIDER");
+            require(tier != provider_tier.DAPP_PROVIDER, "Proposing max_containers quota is not allowed for DAPP_PROVIDER");
         }
     }
 
-    val prop = create proposal(op_context.last_block_time, proposal_type.provider_quota, me, system_p_voter_set(), description);
+    val prop = create_proposal(proposal_type.provider_quota, me, system_p_voter_set(), description);
     create pending_provider_quota(prop, tier, provider_quota_type, value);
     internal_vote(me, prop, true);
 }

@@ -2,7 +2,7 @@
 
 import ^^.*;
 import ^.helper_functions.*;
-import ^^.ec_proposal.test.helper_functions.*;
+import common_proposal.test.helper_functions.*;
 
 namespace ft4 {
     import lib.ft4.accounts;
@@ -22,9 +22,9 @@ val auth_privkey = chain_context.args.auth_privkey;
 val provider_key = rell.test.keypairs.bob;
 val provider_pubkey = provider_key.pub;
 val provider_alice_pubkey = rell.test.pubkeys.alice;
-val cluster_name = "Bob's cluster";
-val cluster_bob = "Bob's cluster";
-val cluster_charlie = "Charlie's cluster";
+val cluster_name = "bob_cluster";
+val cluster_bob = "bob_cluster";
+val cluster_charlie = "charlie_cluster";
 val node_pubkey_bob = rell.test.pubkeys.bob;
 val node_pubkey_charlie = rell.test.pubkeys.charlie;
 val node_pubkey_alice = rell.test.pubkeys.alice;
@@ -567,3 +567,20 @@ function test_get_cluster_change_tag_proposal() {
     assert_equals(cluster_change_tag_propsal.new_tag, "t2");
 }
 
+function test_get_provider_staking_status() {
+
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    val provider_account = provider_account @ { provider };
+
+    rell.test.tx().op(
+        add_staking(provider_account, 9999999999)
+    ).sign(provider_key).run();
+
+    val staking_status = get_provider_staking_status(provider_pubkey);
+    val expected = provider_staking_status(
+        own_staking_usd = 49999999995,
+        total_staking_usd = 49999999995,
+        approved = true
+    );
+    assert_equals(staking_status, expected);
+}

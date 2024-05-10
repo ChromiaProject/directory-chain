@@ -4,6 +4,7 @@ import common.*;
 import common.init.*;
 import common.operations.*;
 import common.queries.*;
+import management_chain_common.*;
 import direct_cluster.*;
 import direct_container.*;
 import nm_api.*;
@@ -17,35 +18,3 @@ import proposal_container.proposal_container_limits.*;
 import proposal_provider.*;
 import proposal_voter_set.*;
 import version;
-
-/*
- * Directory1 is an enterprise dapp where the d1 dapp manages and controls creating and deleting clusters, containers and blockchains.
- * To run this dapp postchain must be started in managed mode and preferably using master/subnode configuration.
- */
-operation update_provider(my_pubkey: pubkey, name?, url: text?) {
-    val me = require_provider(my_pubkey);
-    require_provider_auth_with_rate_limit(me);
-    if (exists(name)) me.name = name;
-    if (exists(url)) me.url = url;
-}
-
-operation __begin_block(height: integer) {
-    before_begin_block(height);
-
-    // bc == null until chain0 is initialized
-    // if bc != null, and since it is __begin_block operation, then height > 0
-    val bc = blockchain @? { chain_context.blockchain_rid };
-    if (empty(bc)) return;
-    val expected_config = get_blockchain_configuration(chain_context.blockchain_rid, height);
-    if (expected_config == null or expected_config.config_hash == chain_context.raw_config.hash()) return;
-
-    log("Chain0 config for height %d changed from %s to %s and will be stored".format(
-        height, expected_config.config_hash, chain_context.raw_config.hash()));
-    val config_map = map<text, gtv>.from_gtv(chain_context.raw_config);
-    config_map.remove_or_null("signers");
-    val base_config = config_map.to_gtv().to_bytes();
-    compress_and_store_configuration(bc, height, base_config, true);
-    add_dependencies(base_config, chain_context.blockchain_rid, height);
-}
-
-@extendable function before_begin_block(height: integer) {}

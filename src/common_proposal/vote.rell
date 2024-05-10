@@ -1,0 +1,47 @@
+enum common_voting_result {
+    pending,
+    approved,
+    rejected
+}
+
+namespace consensus_threshold {
+    val majority = -1;
+    val super_majority = 0;
+}
+
+function positive_common_votes(common_proposal) = common_vote @? { common_proposal, .vote == true } (@sum 1) ?: 0;
+function negative_common_votes(common_proposal) = common_vote @? { common_proposal, .vote == false } (@sum 1) ?: 0;
+function max_common_votes(common_voter_set) = common_voter_set_member @ { common_voter_set } (@sum 1);
+
+function _compute_common_voting_result(yes: integer, no: integer, max: integer, threshold: integer): common_voting_result {
+    require (threshold >= -1 and threshold <= max, "Invalid threshold, must be in range [%d, %d] but was: %d".format(-1, max, threshold));
+    require (yes + no <= max, "Too many votes");
+    when (threshold) {
+        -1 -> return _compute_common_voting_result_majority(yes, no, max);
+        0 -> return _compute_common_voting_result_super_majority(yes, no, max);
+        else -> return _compute_common_voting_result_custom(yes, no, max, threshold);
+    }
+}
+
+function _compute_common_voting_result_custom(yes: integer, no: integer, max: integer, threshold: integer): common_voting_result {
+    return _common_voting_result(yes, no, max, threshold);
+}
+
+function _compute_common_voting_result_majority(yes: integer, no: integer, max: integer): common_voting_result {
+    val required = max / 2 + 1;
+    return _common_voting_result(yes, no, max, required);
+}
+
+function _compute_common_voting_result_super_majority(yes: integer, no: integer, max: integer): common_voting_result {
+    val required = max - (max - 1) / 3;
+    return _common_voting_result(yes, no, max, required);
+}
+
+function _common_voting_result(yes: integer, no: integer, max: integer, required: integer): common_voting_result {
+    log("Votes - positive: %d, negative: %d, required: %d, maximum: %d".format(yes, no, required, max));
+    return when {
+        yes >= required -> common_voting_result.approved;
+        no > max - required -> common_voting_result.rejected;
+        else -> common_voting_result.pending;
+    };
+}

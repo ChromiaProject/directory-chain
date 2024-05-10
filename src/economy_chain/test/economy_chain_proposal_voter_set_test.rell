@@ -1,0 +1,80 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import ^.helper_operations.*;
+
+val test_set = "test";
+val test_set2 = "test-2";
+
+function test_propose_update_ec_voter_set() {
+
+    rell.test.tx()
+        .op(
+            propose_update_ec_voter_set(rell.test.keypairs.alice.pub, test_set, null, [], [])
+        )
+        .run_must_fail("Operation must be signed by");
+
+    rell.test.tx()
+        .op(
+            propose_update_ec_voter_set(rell.test.keypairs.alice.pub, test_set, null, [], [])
+        )
+        .sign(rell.test.keypairs.alice)
+        .run_must_fail("Voter set test does not exist");
+
+    rell.test.tx()
+        .op(
+            create_voter_set_op(voter_sets.system_p),
+            propose_update_ec_voter_set(rell.test.keypairs.alice.pub, voter_sets.system_p, null, [], [])
+        )
+        .sign(rell.test.keypairs.alice)
+        .run_must_fail("Cannot update system voter set. Update this by proposing system provider role");
+
+    rell.test.tx()
+        .op(
+            create_test_voter_set_with_member(test_set, rell.test.keypairs.alice.pub)
+        )
+        .sign(rell.test.keypairs.alice)
+        .run();
+
+    rell.test.tx()
+        .op(
+            propose_update_ec_voter_set(rell.test.keypairs.bob.pub, test_set, null, [], [])
+        )
+        .sign(rell.test.keypairs.bob)
+        .run_must_fail("Voter is not a member of voter set test");
+
+    rell.test.tx()
+        .op(
+            propose_update_ec_voter_set(rell.test.keypairs.alice.pub, test_set, null, [], [])
+        )
+        .sign(rell.test.keypairs.alice)
+        .run();
+
+    rell.test.tx()
+        .op(
+            create_test_voter_set_with_members(test_set2, [rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub]),
+            propose_update_ec_voter_set(rell.test.keypairs.alice.pub, test_set2, 1, [], []),
+            propose_update_ec_voter_set(rell.test.keypairs.bob.pub, test_set2, 1, [], [])
+        )
+        .sign(rell.test.keypairs.alice, rell.test.keypairs.bob)
+        .run_must_fail("Cannot have more than one pending proposal involving this voter set");
+}
+
+function test_apply_ec_voter_set_update() {
+
+    // Replace member alice by bob
+    rell.test.tx()
+        .op(
+            create_test_voter_set_with_member(test_set, rell.test.keypairs.alice.pub),
+            propose_update_ec_voter_set(rell.test.keypairs.alice.pub, test_set, 1, [rell.test.keypairs.bob.pub], [rell.test.keypairs.alice.pub])
+        )
+        .sign(rell.test.keypairs.alice)
+        .run();
+
+    val voter_set = common_voter_set @ { test_set };
+    val voter_set_members = common_voter_set_member @* { voter_set } ( .pubkey );
+
+    assert_equals(voter_set_members.size(), 1);
+    assert_equals(voter_set_members[0], rell.test.keypairs.bob.pub);
+}

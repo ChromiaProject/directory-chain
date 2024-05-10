@@ -91,6 +91,16 @@ function replace_node_with_node_data_impl(my_pubkey: pubkey, node_data: replace_
     val blockchains_replicated_by_node = blockchain_replica_node @* { old_node } (.blockchain);
     delete blockchain_replica_node @* { old_node };
 
+    if (exists(node_data.new_host)) {
+        validate_host(node_data.new_host!!);
+    }
+    if (exists(node_data.new_api_url)) {
+        validate_url(node_data.new_api_url!!);
+    }
+    if (exists(node_data.new_territory)) {
+        validate_territory_code(node_data.new_territory!!);
+    }
+
     val register_node_data = register_node_data(
         node_data.new_node_key, 
         host = node_data.new_host ?: old_node.host, 
@@ -222,10 +232,19 @@ operation update_node_with_node_data(my_pubkey: pubkey, node_data: update_node_d
 
 function update_node_with_node_data_impl(my_pubkey: pubkey, node_data: update_node_data) {
     val node = require_node_provider(node_data.pubkey, my_pubkey);
-    if (node_data.host != null) node.host = node_data.host!!;
+    if (node_data.host != null) {
+        validate_host(node_data.host!!);
+        node.host = node_data.host!!;
+    }
     if (node_data.port != null) node.port = node_data.port!!;
-    if (node_data.api_url != null) node.api_url = node_data.api_url!!;
-    if (node_data.territory != null) node.territory = node_data.territory!!;
+    if (node_data.api_url != null) {
+        validate_url(node_data.api_url!!);
+        node.api_url = node_data.api_url!!;
+    }
+    if (node_data.territory != null) {
+        validate_territory_code(node_data.territory!!);
+        node.territory = node_data.territory!!;
+    }
     if (
         node_data.host != null or
         node_data.port != null or

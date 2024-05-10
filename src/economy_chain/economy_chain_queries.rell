@@ -33,7 +33,7 @@ query get_max_lease_duration(): integer = economy_constants.max_lease_time_weeks
 query get_chr_asset() = ft4.assets.map_asset(get_asset());
 
 query get_balance(account_id: byte_array): big_integer {
-    val account = require(ft4.accounts.account @? { account_id }, "Account %s not found".format(account_id));
+    val account = ft4.accounts.Account(account_id);
     return get_account_balance(account);
 }
 
@@ -53,7 +53,13 @@ query get_economy_constants(): economy_constants_data = economy_constants_data(
     chromia_foundation_fee_share = economy_constants.chromia_foundation_fee_share,
     resource_pool_margin_fee_share = economy_constants.resource_pool_margin_fee_share,
     system_provider_risk_share = economy_constants.system_provider_risk_share,
-    dapp_provider_risk_share = economy_constants.dapp_provider_risk_share
+    dapp_provider_risk_share = economy_constants.dapp_provider_risk_share,
+    staking_requirements_enabled = economy_constants.staking_requirements_enabled,
+    staking_requirement_stop_payout_days = economy_constants.staking_requirement_stop_payout_days,
+    staking_requirement_system_provider_own_stake_usd = economy_constants.staking_requirement_system_provider_own_stake_usd,
+    staking_requirement_system_provider_total_stake_usd = economy_constants.staking_requirement_system_provider_total_stake_usd,
+    staking_requirement_dapp_provider_own_stake_usd = economy_constants.staking_requirement_dapp_provider_own_stake_usd,
+    staking_requirement_dapp_provider_total_stake_usd = economy_constants.staking_requirement_dapp_provider_total_stake_usd
 );
 
 query get_clusters(): list<cluster_data> {
@@ -171,10 +177,14 @@ function get_total_number_of_scus_per_provider(provider_nodes: list<node>): inte
 function get_average_occupancy_rate_of_a_providers_scus(provider_nodes: list<node>): decimal {
     var occupancy_rate = 0.0;
     for (node in provider_nodes) {
-        val cluster = cluster_node @ { node } ( .cluster );
-        occupancy_rate += occupancy_rate(cluster);
+        val clusters = cluster_node @* { node } ( .cluster );
+        var node_occupancy_rate = 0.0;
+        for (cluster in clusters) {
+            node_occupancy_rate += occupancy_rate(cluster);
+        }
+        occupancy_rate += if (clusters.empty()) 0.0 else node_occupancy_rate / clusters.size();
     }
-    return occupancy_rate / provider_nodes.size();
+    return if (provider_nodes.empty()) 0.0 else occupancy_rate / provider_nodes.size();
 }
 
 function get_total_reward_payed_in_the_last_24h(provider_nodes: list<pubkey>) {
@@ -198,15 +208,15 @@ function get_provider_payed_rewards(provider_nodes: list<pubkey>, start: timesta
 
 query get_tag_proposal(proposal_id: rowid): tag_data {
 
-    val proposal = require_proposal(proposal_id);
-    val pending_tag_operation = require(pending_tag_operation @? { proposal }, "Proposal is of different type: %s".format(proposal.ec_proposal_type));
+    val proposal = require_common_proposal(proposal_id);
+    val pending_tag_operation = require(pending_tag_operation @? { proposal }, "Proposal is of different type: %s".format(proposal.proposal_type));
 
     return tag_data(name = pending_tag_operation.name, scu_price = pending_tag_operation.scu_price, extra_storage_price = pending_tag_operation.extra_storage_price);
 }
 
 query get_cluster_create_proposal(proposal_id: rowid): pending_cluster_data {
 
-    val proposal = require_proposal(proposal_id);
+    val proposal = require_common_proposal(proposal_id);
     val pending_cluster = pending_cluster @ { proposal };
 
     return pending_cluster_data(
@@ -223,7 +233,7 @@ query get_cluster_create_proposal(proposal_id: rowid): pending_cluster_data {
 
 query get_cluster_change_tag_proposal(proposal_id: rowid) {
 
-    val proposal = require_proposal(proposal_id);
+    val proposal = require_common_proposal(proposal_id);
     val pending_cluster_change_tag = pending_cluster_change_tag @ { proposal };
 
     return pending_cluster_change_tag_data(
@@ -235,7 +245,7 @@ query get_cluster_change_tag_proposal(proposal_id: rowid) {
 
 query get_econony_constants_proposal(proposal_id: rowid) {
 
-    val proposal = require_proposal(proposal_id);
+    val proposal = require_common_proposal(proposal_id);
     val pending_economy_constants = pending_economy_constants @ { proposal };
 
     return pending_economy_constants_data(
@@ -288,6 +298,16 @@ query get_blockchains_with_bridge_and_anomaly_detection() = bridge_lease @* { .a
         bridge_contract = .bridge_contract
     )
 );
+
+query get_provider_staking_status(pubkey) {
+    val provider = require_provider(pubkey);
+    val provider_account = provider_account @ { provider };
+    return provider_staking_status(
+        own_staking_usd = get_chr_in_usd(staking_get_balance(provider_account.account.id)),
+        total_staking_usd = get_chr_in_usd(staking_get_total_delegation_to(provider.pubkey)),
+        approved = provider_meets_staking_requirements(provider, provider_account)
+    );
+}
 
 function get_integer_or_default(value: integer?, default: integer?): integer? {
     if (value != null and value >= 0) {

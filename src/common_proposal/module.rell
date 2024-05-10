@@ -1,0 +1,27 @@
+// This is a generic proposal and voting module using pubkeys instead of provider entities
+
+module;
+
+function create_common_voter_set_internal(name, threshold: integer = 0, governor: common_voter_set? = null) {
+    val vs = create common_voter_set(name, threshold);
+    if (exists(governor)) {
+        create common_voter_set_governance(voter_set = vs, governor = governor);
+    } else {
+        create common_voter_set_governance(voter_set = vs, governor = vs);
+    }
+    return vs;
+}
+
+@extendable function delete_common_proposal_handlers(): map<text, (common_proposal) -> unit>;
+
+@extendable function apply_common_voting_result_handlers(): map<text, (common_proposal) -> unit>;
+
+function delete_common_proposal(common_proposal) = run_common_proposal_event(delete_common_proposal_handlers(), common_proposal);
+
+function apply_common_voting_result(common_proposal) = run_common_proposal_event(apply_common_voting_result_handlers(), common_proposal);
+
+function run_common_proposal_event(handlers: map<text, (common_proposal) -> unit>, proposal: common_proposal) {
+    if (handlers.contains(proposal.proposal_type.name)) {
+        handlers[proposal.proposal_type.name](proposal);
+    }
+}
