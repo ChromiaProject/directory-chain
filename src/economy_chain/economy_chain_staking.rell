@@ -76,19 +76,23 @@ operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
     require(amount < get_account_balance(staker), "Insufficent funds to deposit.");
     ft4.assets.Unsafe.transfer(staker, get_deposit_account(), get_asset(), amount);
 
-    val _provider = provider @? { .pubkey == delegateTo };
 
     var ss = staker_state @? { .account == staker and .network == network.CHR };
     if (exists(ss)) {
         _update_pending_token_time(ss);
         ss.balance += amount;
-        if (exists(_provider))
+        if (delegateTo != null) {
+            val _provider = provider @ { .pubkey == delegateTo };
+
             create staker_state_to_provider (
                 timestamp = _staking_last_known_time(),
                 ss,
                 _provider
             );
+        }
     } else {
+        require(delegateTo != null, "Must delegate to a provider");
+        val _provider = provider @? { .pubkey == delegateTo };
         require(_provider, "Must delegate to a provider");
         ss = create staker_state (
             staker,
