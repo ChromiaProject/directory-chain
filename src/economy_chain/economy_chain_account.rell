@@ -47,15 +47,14 @@ function get_asset(): ft4.assets.asset {
     return ft4.assets.asset @ { .id == asset_id };
 }
 
-function create_pool_account(): ft4.accounts.account {
-    return ft4.accounts.create_account_with_auth(get_pool_account_auth_descriptor());
-}
+function create_pool_account() =
+    ft4.accounts.create_account_without_auth(get_pool_account_id(), pool_account_type);
 
 function get_pool_account() = ft4.accounts.account_by_id(get_pool_account_id());
 
-function get_pool_account_auth_descriptor() = ft4.accounts.single_sig_auth_descriptor(chain_context.args.pool_account_pubkey, set(["A", "T"]));
+function get_pool_account_id() = (pool_account_type + chain_context.blockchain_rid).hash();
 
-function get_pool_account_id() = chain_context.args.pool_account_pubkey.hash();
+val pool_account_type = "REWARD_POOL";
 
 function create_deposit_account(): ft4.accounts.account {
     return ft4.accounts.create_account_with_auth(get_deposit_account_auth_descriptor());
