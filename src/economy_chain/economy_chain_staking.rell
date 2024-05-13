@@ -1,4 +1,11 @@
-@extend(remove_provider_handler) function(pubkey) = _staking_offboard_provider(pubkey);
+@extend(remove_provider_handler)
+function(
+    provider_account
+) = _staking_offboard_provider(
+    provider_account
+        .provider
+        .pubkey
+);
 
 // It might be better for this to live in a table
 enum network {
@@ -233,7 +240,7 @@ function _staking_distribute_withdrawals() {
 function _staking_offboard_provider(pubkey) {
     val null_provider = provider @ { get_null_account() };
 
-    // Update appropriate staker states with new provider
+    // Update appropriate staker states with new provider TODO FIX THIS
     val updated_relationships = staker_state_to_provider @* { .provider.pubkey == pubkey } (
         struct<staker_state_to_provider> (
             timestamp = _staking_last_known_time(),
