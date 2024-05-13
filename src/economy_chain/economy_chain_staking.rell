@@ -63,6 +63,10 @@ function _staking_set_rate_at(rate: decimal, timestamp: timestamp) {
     create reward_rate ( rate = rate, timestamp = timestamp );
 }
 
+operation staking_set_rate(rate: decimal) {
+    _staking_set_rate_at(rate, _staking_last_known_time());
+}
+
 operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
     require(amount > 0, "Can't deposit nothing (or less)!");
 
@@ -269,8 +273,13 @@ operation staking_delegate(pubkey) {
     _staking_delegate(staker, pubkey);
 }
 
-query staking_get_current_delegate_on_network(account_id: byte_array, network) {
-    val _provider_pubkey = staker_state_to_provider @ {
+operation staking_undelegate() {
+    val staker = ft4.auth.authenticate();
+    _staking_delegate(staker, get_null_account());
+}
+
+query staking_get_current_delegate_on_network(account_id: byte_array, network): byte_array? {
+    val _provider_pubkey = staker_state_to_provider @? {
         .staker_state.account.id == account_id and .staker_state.network == network and  
         (_staking_last_known_time() - chain_context.args.staking_rate_change_delay_ms) > .timestamp
     } ( @omit @sort_desc .timestamp, .provider.pubkey ) limit 1;
