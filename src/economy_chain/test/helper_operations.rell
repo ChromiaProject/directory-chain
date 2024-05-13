@@ -192,19 +192,17 @@ operation register_provider_account_op(provider) {
 operation pay_out_node_rewards_op(node_reward: map<node, big_integer>) {
     pay_out_node_rewards(node_reward);
 }
-
 operation add_staking(provider_account, amount: integer) {
-
-    create staker_state(
+    val ss = create staker_state (
+        account = provider_account.account,
         network = network.CHR,
-        staker_state_time = _staking_last_known_time(),
-        previous_staker_state_time = 0,
-        staker = provider_account.account,
         balance = amount,
-        previous_balance = 0,
-        cutover_time = _staking_last_known_time(),
-        new_provider = provider_account,
-        old_provider = provider_account,
-        latest = true
+        last_update = 0,
+        pending_token_time = 0
+    );
+    create staker_state_to_provider (
+        _staking_last_known_time(),
+        ss,
+        provider_account.provider
     );
 }
