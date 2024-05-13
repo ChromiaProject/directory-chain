@@ -41,8 +41,8 @@ entity staker_state_to_provider {
     provider;
 }
 
-@log
 entity reward_rate {
+    index timestamp;
     rate: decimal;
 }
 
@@ -55,6 +55,13 @@ function __staking_begin_block(height: integer) {
     }
 }
 
+function __staking_init() {
+    _staking_set_rate_at(chain_context.args.staking_initial_reward_rate, _staking_last_known_time());
+}
+
+function _staking_set_rate_at(rate: decimal, timestamp: timestamp) {
+    create reward_rate ( rate = rate, timestamp = timestamp );
+}
 
 operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
     require(amount > 0, "Can't deposit nothing (or less)!");
@@ -214,8 +221,13 @@ function _staking_last_known_time()
 
 
 query staking_get_current_rate(): decimal {
-    val current_rate = reward_rate @ { } ( .rate, @omit @sort_desc .transaction.block.timestamp ) limit 1;
-    return current_rate;
+    val current_rate = reward_rate @* {
+        .timestamp<_staking_last_known_time()
+    } (
+        .rate,
+        @omit @sort_desc .timestamp
+    ) limit 1;
+    return current_rate[0];
 }
 
 function _staking_distribute_withdrawals() {
