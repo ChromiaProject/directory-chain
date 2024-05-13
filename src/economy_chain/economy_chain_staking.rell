@@ -320,3 +320,40 @@ query staking_get_total_delegation_to(pubkey, network? = null) {
         } ( @sum .staker_state.balance )[0];
     };
 }
+
+query staking_get_cannot_change_before(): timestamp = _staking_last_known_time() + chain_context
+    .args
+    .staking_rate_change_delay_ms;
+
+query staking_rewards_claimable_for(account_id: byte_array) {
+    val rate = staking_get_current_rate() / millis_per_year;
+    val staker = ft4.accounts.Account(account_id);
+    val ss = staker_state @* { .account == staker } ( .balance, .last_update, .pending_token_time );
+    var total_pending_token_time = 0;
+    for (s in ss) {
+        total_pending_token_time += s.pending_token_time + s.balance * (_staking_last_known_time() - s.last_update);
+    }
+    return integer(total_pending_token_time * rate);
+}
+
+query staking_get_next_delegation_change(account_id: byte_array): (pubkey: pubkey, time: integer)? {
+    val staker = ft4.accounts.Account(account_id);
+    val upcoming_delegations = staker_state_to_provider @* {
+        .staker_state.account == staker and .timestamp > (_staking_last_known_time()-chain_context.args.staking_rate_change_delay_ms)
+    } (
+        @omit @sort_desc .timestamp,
+        pubkey = .provider.pubkey,
+        time = .timestamp + chain_context.args.staking_rate_change_delay_ms
+    ) limit 1;
+    return if (exists(
+        upcoming_delegations
+    )) (upcoming_delegations[0]) else null;
+}
+
+query staking_get_withdrawal_time(account_id: byte_array, network = network.CHR): timestamp? {
+    return staker_withdrawal_request @? {
+        .staker_state.account.id == account_id and .active and .staker_state.network == network
+    } (
+        .finish_at
+    );
+}
