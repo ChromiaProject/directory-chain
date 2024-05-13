@@ -13,8 +13,7 @@ function test_move_container_blockchains() {
     // setup
     setup_migratable_container();
 
-    var conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv(), "dummy": "1".to_gtv()];
+    var conf = apply_required_configuration_properties(["dummy": "1".to_gtv()]);
 
     rell.test.tx().op(
         propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
@@ -38,8 +37,7 @@ function test_move_container_blockchains() {
     assert_equals(src_container.state, container_state.MIGRATING);
 
     // Assert that new bcs can't be added to the migrating container
-    var conf2 = ["config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv(), "dummy": "2".to_gtv()];
+    var conf2 = apply_required_configuration_properties(["dummy": "2".to_gtv()]);
     rell.test.tx().op(
         propose_blockchain(initial_provider.pub, conf2.to_gtv().to_bytes(), "foo_chain", "c1")
     ).sign(initial_provider).run_must_fail("Container c1 not found or is not running");
