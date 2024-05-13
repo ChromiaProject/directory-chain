@@ -67,6 +67,21 @@ operation staking_set_rate(rate: decimal) {
     _staking_set_rate_at(rate, _staking_last_known_time());
 }
 
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+        scope = "staking_deposit_native",
+        flags = ["T"],
+        message = staking_deposit_auth_message(*)
+    );
+
+function staking_deposit_auth_message(gtv): text {
+    val args = struct<staking_deposit_native>.from_gtv(gtv);
+
+    return "Please sign the message\nto transfer %s %s from account {account_id} \nto deposit account.".format(
+        ft4.assets.format_amount_with_decimals(args.amount, chain_context.args.asset_decimals),
+        chain_context.args.asset_symbol
+    );
+}
 operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
     require(amount > 0, "Can't deposit nothing (or less)!");
 
@@ -168,6 +183,18 @@ function _staking_distribute_rewards() {
         ft4.assets.Unsafe.transfer(get_pool_account(), account, get_asset(), amount);
         log("Paid out %s to %s", account, amount);
     }
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+        scope = "staking_request_withdrawal",
+        flags = [],
+        message = staking_request_withdrawal_auth_message(*)
+    );
+
+function staking_request_withdrawal_auth_message(gtv): text {
+    val args = struct<staking_request_withdrawal>.from_gtv(gtv);
+    return "Please sign the message to request a withdrawal.";
 }
 
 operation staking_request_withdrawal() {
@@ -272,9 +299,33 @@ function _staking_offboard_provider(pubkey) {
     create staker_state_to_provider ( updated_relationships );
 }
 
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+        scope = "staking_delegate",
+        flags = [],
+        message = staking_delegate_auth_message(*)
+    );
+
+function staking_delegate_auth_message(gtv): text {
+    val args = struct<staking_delegate>.from_gtv(gtv);
+    // TODO Indicate which provider?
+    return "Please sign the message to set the provider.";
+}
 operation staking_delegate(pubkey) {
     val staker = ft4.auth.authenticate();
     _staking_delegate(staker, pubkey);
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+        scope = "staking_undelegate",
+        flags = [],
+        message = staking_undelegate_auth_message(*)
+    );
+
+function staking_undelegate_auth_message(gtv): text {
+    val args = struct<staking_undelegate>.from_gtv(gtv);
+    return "Please sign the message to undelegate.";
 }
 
 operation staking_undelegate() {
@@ -324,6 +375,19 @@ query staking_get_total_delegation_to(pubkey, network? = null) {
         } ( @sum .staker_state.balance )[0];
     };
 }
+
+// TODO Canncel withdrawal
+// @extend(ft4.auth.auth_handler)
+// function () = ft4.auth.add_auth_handler(
+//     scope = "staking_cancel_withdrawal",
+//     flags = [],
+//     message = staking_cancel_withdrawal_auth_message(*)
+// );
+
+// function staking_cancel_withdrawal_auth_message(gtv): text {
+//     val args = struct<staking_cancel_withdrawal>.from_gtv(gtv);
+//     return "Please sign the message to cancel withdrawal.";
+// }
 
 query staking_get_cannot_change_before(): timestamp = _staking_last_known_time() + chain_context
     .args
