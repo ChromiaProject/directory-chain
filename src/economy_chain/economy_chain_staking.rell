@@ -261,3 +261,23 @@ query staking_get_current_delegate_on_network(account_id: byte_array, network) {
 query staking_get_current_delegate(
     account_id: byte_array
 ) = staking_get_current_delegate_on_network(account_id, network.CHR);
+
+query staking_get_balance(
+    account_id: byte_array
+) = staker_state @ { 
+    .account.id == account_id 
+} ( 
+    @sum .balance 
+) limit 1;
+
+query staking_get_total_delegation_to(pubkey, network) {
+    return ( s1: staker_state_to_provider) @* {
+        .provider.pubkey == pubkey and not exists(
+            (s2:staker_state_to_provider) @* { 
+                s2.staker_state ==s1.staker_state,
+                (s2.timestamp>s1.timestamp) or 
+                (s2.timestamp==s1.timestamp and s2 < s1) 
+            }
+        )
+    } ( @sum .staker_state.balance );
+}
