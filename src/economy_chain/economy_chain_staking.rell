@@ -277,8 +277,18 @@ query staking_get_balance(
     @sum .balance 
 ) limit 1;
 
-query staking_get_total_delegation_to(pubkey, network) {
-    return ( s1: staker_state_to_provider) @* {
+query staking_get_total_delegation_to(pubkey, network? = null) {
+    return when (exists(network)) {
+        true -> ( s1: staker_state_to_provider) @* {
+            .provider.pubkey == pubkey and .staker_state.network == network and not exists(
+            (s2:staker_state_to_provider) @* { 
+                s2.staker_state ==s1.staker_state,
+                (s2.timestamp>s1.timestamp) or 
+                (s2.timestamp==s1.timestamp and s2 < s1) 
+            }
+        )
+        } ( @sum .staker_state.balance )[0];
+        else -> ( s1: staker_state_to_provider) @* {
         .provider.pubkey == pubkey and not exists(
             (s2:staker_state_to_provider) @* { 
                 s2.staker_state ==s1.staker_state,
@@ -286,5 +296,6 @@ query staking_get_total_delegation_to(pubkey, network) {
                 (s2.timestamp==s1.timestamp and s2 < s1) 
             }
         )
-    } ( @sum .staker_state.balance );
+        } ( @sum .staker_state.balance )[0];
+    };
 }
