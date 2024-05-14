@@ -278,7 +278,7 @@ query staking_get_current_rate(): decimal {
 
 function _staking_distribute_withdrawals() {
     val open_withdrawals = staker_withdrawal_request @* {
-        .active and .staker_state.network == network.CHR and .finish_at < _staking_last_known_time()
+        .active and .staker_state.network == network.CHR and .finish_at <= _staking_last_known_time()
     } ( account = .staker_state.account, balance = .staker_state.balance );
 
     for (withdrawal in open_withdrawals) {
@@ -290,9 +290,15 @@ function _staking_distribute_withdrawals() {
                 withdrawal.balance
             );
     }
+
+    var staker_states = staker_withdrawal_request @* {
+        .active and .staker_state.network == network.CHR and .finish_at <= _staking_last_known_time( )
+    } ( .staker_state );
+    update staker_states ( .balance = 0 );
     update staker_withdrawal_request @* {
-        .active and .staker_state.network == network.CHR and .finish_at < _staking_last_known_time()
-    } ( .active = false );
+        .active and .staker_state.network == network.CHR and .finish_at <= _staking_last_known_time( )
+    } ( .active = false);
+    
 }
 
 function _staking_offboard_provider(pubkey) {
