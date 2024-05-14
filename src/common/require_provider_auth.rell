@@ -1,0 +1,19 @@
+function require_provider_auth (provider) {
+    val threshold = provider_auth_threshold @? { provider };
+    if (exists(threshold)) {
+        require_provider_auth_using_threshold(provider, threshold);
+    } else {
+        require_is_signer(provider.pubkey);
+    }
+}
+
+function require_provider_auth_using_threshold (provider, threshold: provider_auth_threshold) {
+    var count = 0;
+    for (a_key in provider_auth_keys @? { provider }) {
+        if (a_key.provider_key_type == provider_key_type.gtx and
+            op_context.is_signer(a_key.pubkey))
+            count++;
+    }
+
+    require(count >= threshold.threshold, "provider auth threshold not met");
+}

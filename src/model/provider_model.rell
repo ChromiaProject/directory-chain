@@ -60,3 +60,21 @@ struct provider_info {
 	name = "";
 	url: text = "";
 }
+
+enum provider_key_type {
+    gtx // normal key - delegate signature checks to gtx
+}
+
+// we use single-signature model by default.
+// providers might opt into multi-signature model, which is signified by this record
+// if this record exists provider's main pubkey is no longer used for auth - it is only used as
+// an identifier. it can still be used if it's added as provider_auth_key
+entity provider_auth_threshold {
+    key provider;
+    mutable threshold: integer;
+}
+
+entity provider_auth_key {
+    key provider, pubkey;
+    provider_key_type;
+}
