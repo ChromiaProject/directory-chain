@@ -32,7 +32,7 @@ entity staker_state {
 }
 
 entity staker_state_to_provider {
-    timestamp;
+    index timestamp;
     index staker_state;
     provider;
 }
@@ -53,6 +53,7 @@ function __staking_begin_block(height: integer) {
 
 function __staking_init() {
     _staking_set_rate_at(chain_context.args.staking_initial_reward_rate, _staking_last_known_time());
+    create provider ( get_null_account(), system = true, provider_tier.NODE_PROVIDER, active = true );
 }
 
 operation staking_set_rate(rate: decimal) {
@@ -203,7 +204,7 @@ operation staking_request_withdrawal() {
 
 function _staking_request_withdrawal(user: ft4.accounts.account, network) {
     val ss = staker_state @? { .account == user and .network == network };
-    require(ss, "No staker state for %s".format(user));
+    require(ss, "No staker state for %s".format(user.id));
 
     val active_withdraw_request = staker_withdrawal_request @? { ss, .active };
     require(not exists(active_withdraw_request), "Only one withdrawal request allowed at a time");
@@ -230,7 +231,7 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
 
     val staker_states_to_exclude = withdraw_requests @* { .staker_state.network != network.CHR } ( .staker_state );
 
-    val new_provider = provider @ { provider_pubkey };
+    val new_provider = require(provider @? { provider_pubkey }, "No provider for this public key.");
 
     // Update appropriate staker states with new provider
     val staker_states_to_update = staker_states @* {
@@ -311,6 +312,7 @@ function staking_delegate_auth_message(gtv): text {
     return "Please sign the message to set the provider.";
 }
 operation staking_delegate(pubkey) {
+    val new_provider = require(provider @? { pubkey }, "No provider for this public key.");
     val staker = ft4.auth.authenticate();
     _staking_delegate(staker, pubkey);
 }
@@ -331,13 +333,12 @@ operation staking_undelegate() {
     val staker = ft4.auth.authenticate();
     _staking_delegate(staker, get_null_account());
 }
-
 query staking_get_current_delegate_on_network(account_id: byte_array, network): byte_array? {
     val _provider_pubkey = staker_state_to_provider @? {
         .staker_state.account.id == account_id and .staker_state.network == network and  
-        (_staking_last_known_time() - chain_context.args.staking_rate_change_delay_ms) > .timestamp
+        (_staking_last_known_time() - chain_context.args.staking_rate_change_delay_ms) >= .timestamp
     } ( @omit @sort_desc .timestamp, .provider.pubkey ) limit 1;
-    return _provider_pubkey;
+    return if (_provider_pubkey == get_null_account()) null else _provider_pubkey;
 }
 
 query staking_get_current_delegate(
