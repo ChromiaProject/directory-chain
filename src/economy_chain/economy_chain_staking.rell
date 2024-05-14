@@ -213,12 +213,18 @@ operation staking_request_withdrawal() {
     _staking_request_withdrawal(user, network.CHR);
 }
 
-function _staking_request_withdrawal(user: ft4.accounts.account, network) {
-    val ss = staker_state @? { .account == user and .network == network };
+function _staking_request_withdrawal(user: ft4.accounts.account, _network: network) {
+    val ss = staker_state @? { .account == user and .network == _network };
     require(ss, "No staker state for %s".format(user.id));
 
-    val active_withdraw_request = staker_withdrawal_request @? { ss, .active };
-    require(not exists(active_withdraw_request), "Only one withdrawal request allowed at a time");
+    val active_withdraw_request = staker_withdrawal_request @? {
+        ss,
+        .active
+    };
+
+    if (_network == network.CHR) {
+        require(not exists(active_withdraw_request), "Only one withdrawal request allowed at a time");
+    }
     require(ss.balance > 0, "Balance must be over 0");
 
     _staking_delegate(user, get_null_account());
