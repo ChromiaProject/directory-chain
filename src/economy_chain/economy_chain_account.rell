@@ -66,16 +66,14 @@ function get_deposit_account_id() = chain_context.args.deposit_account_pubkey.ha
 
 function get_deposit_account_auth_descriptor() = ft4.accounts.single_sig_auth_descriptor(chain_context.args.deposit_account_pubkey, set(["A", "T"]));
 
+function create_chromia_foundation_account() =
+    ft4.accounts.create_account_without_auth(get_chromia_foundation_account_id(), foundation_account_type);
 
-function create_chromia_foundation_account(): ft4.accounts.account {
-    return ft4.accounts.create_account_with_auth(get_chromia_foundation_account_auth_descriptor());
-}
+function get_chromia_foundation_account() = ft4.accounts.account_by_id(get_chromia_foundation_account_id());
 
-function get_chromia_foundation_account() = ft4.accounts.account_by_id(get_get_chromia_foundation_account_id());
+function get_chromia_foundation_account_id() = (foundation_account_type + chain_context.blockchain_rid).hash();
 
-function get_get_chromia_foundation_account_id() = chain_context.args.chromia_foundation_account_pubkey.hash();
-
-function get_chromia_foundation_account_auth_descriptor() = ft4.accounts.single_sig_auth_descriptor(chain_context.args.chromia_foundation_account_pubkey, set(["A", "T"]));
+val foundation_account_type = "FOUNDATION";
 
 function register_assets() {
     return ft4.assets.Unsafe.register_asset(
