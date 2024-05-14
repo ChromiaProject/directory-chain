@@ -62,13 +62,20 @@ function __staking_init() {
     _staking_set_rate_at(chain_context.args.staking_initial_reward_rate, _staking_last_known_time());
 }
 
+operation staking_set_rate(rate: decimal) {
+    _staking_set_rate_at(rate, _staking_last_known_time() + chain_context.args.staking_rate_change_delay_ms);
+}
+
+operation staking_set_rate_at(rate: decimal, timestamp: timestamp) {
+    val change_at = _staking_last_known_time() + chain_context.args.staking_rate_change_delay_ms;
+    require(timestamp >= change_at, "Cannot change rate before " + change_at);
+    _staking_set_rate_at(rate, timestamp);
+}
+
 function _staking_set_rate_at(rate: decimal, timestamp: timestamp) {
     create reward_rate ( rate = rate, timestamp = timestamp );
 }
 
-operation staking_set_rate(rate: decimal) {
-    _staking_set_rate_at(rate, _staking_last_known_time());
-}
 
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
@@ -256,7 +263,7 @@ function _staking_last_known_time()
 
 query staking_get_current_rate(): decimal {
     val current_rate = reward_rate @* {
-        .timestamp<_staking_last_known_time()
+        .timestamp<=_staking_last_known_time()
     } (
         .rate,
         @omit @sort_desc .timestamp
