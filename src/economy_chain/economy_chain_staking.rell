@@ -96,19 +96,7 @@ operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
     if (exists(ss)) {
         _update_pending_token_time(ss);
         ss.balance += amount;
-        if (delegateTo != null) {
-            val _provider = provider @ { .pubkey == delegateTo };
-
-            create staker_state_to_provider (
-                timestamp = _staking_last_known_time(),
-                ss,
-                _provider
-            );
-        }
     } else {
-        require(delegateTo != null, "Must delegate to a provider");
-        val _provider = provider @? { .pubkey == delegateTo };
-        require(_provider, "Must delegate to a provider");
         ss = create staker_state (
             staker,
             network.CHR,
@@ -116,7 +104,15 @@ operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
             last_update = _staking_last_known_time(),
             pending_token_time = 0
         );
-        create staker_state_to_provider ( timestamp = _staking_last_known_time(), ss, _provider );
+    }
+    if (delegateTo != null) {
+        val _provider = provider @ { .pubkey == delegateTo };
+
+        create staker_state_to_provider (
+            timestamp = _staking_last_known_time(),
+            ss,
+            _provider
+        );
     }
 }
 
@@ -226,7 +222,7 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
     val withdraw_requests = staker_withdrawal_request @* { .active and .staker_state in staker_states };
 
     // deactivate chromia withdraw requests
-    val withdraw_requests_chr = withdraw_requests @ { .staker_state.network == network.CHR };
+    val withdraw_requests_chr = withdraw_requests @* { .staker_state.network == network.CHR };
     update withdraw_requests_chr ( .active = false );
 
     val staker_states_to_exclude = withdraw_requests @* { .staker_state.network != network.CHR } ( .staker_state );
