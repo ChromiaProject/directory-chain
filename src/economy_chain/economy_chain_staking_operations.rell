@@ -1,4 +1,4 @@
-// Global Settings
+
 
 operation staking_set_rate_at(reward_rate: decimal, provider_rate: decimal, time: timestamp) {
     _staking_set_rate_at_impl(reward_rate, provider_rate, time);
@@ -26,13 +26,26 @@ function staking_deposit_auth_message(gtv): text {
         chain_context.args.asset_symbol);
 }
 
+/**
+/* Draws FT4 CHR tokens from the user's account on the Economy Chain into the staking deposit account
+/* controlled by the staking logic. It can only be withdrawn later after a delay.
+/* @param amount CHR in minor tokens
+/* @param pubkey Optional public key of the active provider to delegate immediately on deposit
+**/
 operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
     _staking_deposit_native_impl(amount, delegateTo);
 }
 
+
+// Rewards
+
+/**
+/* Manually claim user rewards
+**/
 operation staking_claim_rewards() {
     _staking_claim_rewards_impl();
 }
+
 
 // Withdrawals
 
@@ -48,6 +61,11 @@ function staking_request_withdrawal_auth_message(gtv): text {
     return "Please sign the message to request a withdrawal.";
 }
 
+/**
+/* Requests the return of any of the user's FT4 CHR tokens from the staking account to their account.
+/* This will happen automatically after the withdrawal delay time. No staking reward will be earned
+/* waiting for a withdrawal.
+*/
 operation staking_request_withdrawal() {
     _staking_request_withdrawal_impl();
 }
@@ -64,6 +82,9 @@ function staking_cancel_withdrawal_auth_message(gtv): text {
     return "Please sign the message to cancel withdrawal.";
 }
 
+/**
+/* Cancel any unaction withdrawal request. This cancellation will allow rewards to continue accumulating.
+*/
 operation staking_cancel_withdrawal() {
     _staking_cancel_withdrawal_impl();
 }
@@ -84,6 +105,11 @@ function staking_delegate_auth_message(gtv): text {
     return "Please sign the message to set the provider.";
 }
 
+/**
+/* Delegate the user's stake to a provider identified by public key.
+/*
+/* @param pubkey Public key of a provider registered and active in the Directory Chain.
+*/
 operation staking_delegate(pubkey) {
     _staking_delegate_impl(pubkey);
 }
@@ -100,6 +126,10 @@ function staking_undelegate_auth_message(gtv): text {
     return "Please sign the message to undelegate.";
 }
 
+/**
+/* Remove delegation from the user's stake. This will not withdraw their stake.
+/* Undelegated stakes do not earn rewards.
+*/
 operation staking_undelegate() {
     _staking_undelegate_impl();
 }
@@ -119,10 +149,13 @@ function staking_import_evm_balance_auth_message(gtv): text {
     return "Please sign the message to bridge from EVM.";
 }
 
-// This operation needs to be called when an address was created by means others than ras_staking
-// registration strategy.
-// note: network_id is important only for smart contract stakers, for EOA stakers it is ignored
-// should become irrelevant once we have hooks in eif hbridge
+/**
+/* This operation needs to be called when an address was created by means others than ras_staking
+/* registration strategy.
+/*
+/* @param address EVM address to import
+/* @param network_id Important only for smart contract stakers, for EOA stakers it is ignored. Should become irrelevant once we have hooks in eif hbridge.
+*/
 operation staking_import_evm_balance(address: byte_array, network_id: integer) {
     _staking_import_evm_balance_impl(address, network_id);
 }
