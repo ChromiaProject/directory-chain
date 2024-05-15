@@ -1,0 +1,34 @@
+
+// It might be better for this to live in a table
+enum network {
+    BSC, ETH, CHR
+}
+
+object _staking_state {
+    mutable last_reward_distribution: integer = 0;
+    mutable last_withdrawal_distribution: integer = 0;
+}
+
+entity staker_withdrawal_request {
+    index finish_at: timestamp;
+    index staker_state;
+    index mutable active: boolean;
+}
+
+entity staker_state {
+    key ft4.accounts.account, network;
+    mutable balance: integer;
+    mutable last_update: timestamp;
+    mutable pending_token_time: integer;
+}
+
+entity staker_state_to_provider {
+    index timestamp;
+    index staker_state;
+    provider;
+}
+
+entity reward_rate {
+    index timestamp;
+    rate: decimal;
+}

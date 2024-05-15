@@ -1,0 +1,65 @@
+operation staking_undelegate() {
+    val staker = ft4.auth.authenticate();
+    _staking_delegate(staker, get_null_account());
+}
+
+operation staking_set_rate(rate: decimal) {
+    require_admin();
+    _staking_set_rate_at(rate, _staking_last_known_time() + chain_context.args.staking_rate_change_delay_ms);
+}
+
+operation staking_set_rate_at(rate: decimal, timestamp: timestamp) {
+    require_admin();
+    val change_at = _staking_last_known_time() + chain_context.args.staking_rate_change_delay_ms;
+    require(timestamp >= change_at, "Cannot change rate before " + change_at);
+    _staking_set_rate_at(rate, timestamp);
+}
+
+operation staking_claim_rewards() {
+    require_admin();
+    _staking_distribute_rewards();
+}
+
+operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
+    require(amount > 0, "Can't deposit nothing (or less)!");
+
+    val staker = ft4.auth.authenticate();
+
+    // Pull in the CHR
+    require(amount < get_account_balance(staker), "Insufficent funds to deposit.");
+    ft4.assets.Unsafe.transfer(staker, get_deposit_account(), get_asset(), amount);
+
+    var ss = staker_state @? { .account == staker and .network == network.CHR };
+    if (exists(ss)) {
+        _update_pending_token_time(ss);
+        ss.balance += amount;
+    } else {
+        ss = create staker_state (
+            staker,
+            network.CHR,
+            balance = amount,
+            last_update = _staking_last_known_time(),
+            pending_token_time = 0
+        );
+    }
+    if (delegateTo != null) {
+        val _provider = provider @ { .pubkey == delegateTo };
+
+        create staker_state_to_provider (
+            timestamp = _staking_last_known_time(),
+            ss,
+            _provider
+        );
+    }
+}
+
+operation staking_request_withdrawal() {
+    val user = ft4.auth.authenticate();
+    _staking_request_withdrawal(user, network.CHR);
+}
+
+operation staking_delegate(pubkey) {
+    val new_provider = require(provider @? { pubkey }, "No provider for this public key.");
+    val staker = ft4.auth.authenticate();
+    _staking_delegate(staker, pubkey);
+}

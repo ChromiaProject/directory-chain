@@ -10,40 +10,6 @@ function(
 @extend(after_pay_reward)
 function(pay_reward_result) = _staking_shared_rewards(pay_reward_result);
 
-// It might be better for this to live in a table
-enum network {
-    BSC, ETH, CHR
-}
-
-object _staking_state {
-    mutable last_reward_distribution: integer = 0;
-    mutable last_withdrawal_distribution: integer = 0;
-}
-
-entity staker_withdrawal_request {
-    index finish_at: timestamp;
-    index staker_state;
-    index mutable active: boolean;
-}
-
-entity staker_state {
-    key ft4.accounts.account, network;
-    mutable balance: integer;
-    mutable last_update: timestamp;
-    mutable pending_token_time: integer;
-}
-
-entity staker_state_to_provider {
-    index timestamp;
-    index staker_state;
-    provider;
-}
-
-entity reward_rate {
-    index timestamp;
-    rate: decimal;
-}
-
 function __staking_begin_block(height: integer) {
     if (
         (_staking_last_known_time() - _staking_state.last_reward_distribution) > chain_context.args.staking_payout_interval_ms
@@ -59,25 +25,9 @@ function __staking_begin_block(height: integer) {
     }
 }
 
-operation staking_claim_rewards() {
-    require_admin();
-    _staking_distribute_rewards();
-}
 function __staking_init() {
     _staking_set_rate_at(chain_context.args.staking_initial_reward_rate, _staking_last_known_time());
     create provider ( get_null_account(), system = true, provider_tier.NODE_PROVIDER, active = true );
-}
-
-operation staking_set_rate(rate: decimal) {
-    require_admin();
-    _staking_set_rate_at(rate, _staking_last_known_time() + chain_context.args.staking_rate_change_delay_ms);
-}
-
-operation staking_set_rate_at(rate: decimal, timestamp: timestamp) {
-    require_admin();
-    val change_at = _staking_last_known_time() + chain_context.args.staking_rate_change_delay_ms;
-    require(timestamp >= change_at, "Cannot change rate before " + change_at);
-    _staking_set_rate_at(rate, timestamp);
 }
 
 function _staking_set_rate_at(rate: decimal, timestamp: timestamp) {
@@ -99,39 +49,6 @@ function staking_deposit_auth_message(gtv): text {
         ft4.assets.format_amount_with_decimals(args.amount, chain_context.args.asset_decimals),
         chain_context.args.asset_symbol
     );
-}
-operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
-    require(amount > 0, "Can't deposit nothing (or less)!");
-
-    val staker = ft4.auth.authenticate();
-
-    // Pull in the CHR
-    require(amount < get_account_balance(staker), "Insufficent funds to deposit.");
-    ft4.assets.Unsafe.transfer(staker, get_deposit_account(), get_asset(), amount);
-
-
-    var ss = staker_state @? { .account == staker and .network == network.CHR };
-    if (exists(ss)) {
-        _update_pending_token_time(ss);
-        ss.balance += amount;
-    } else {
-        ss = create staker_state (
-            staker,
-            network.CHR,
-            balance = amount,
-            last_update = _staking_last_known_time(),
-            pending_token_time = 0
-        );
-    }
-    if (delegateTo != null) {
-        val _provider = provider @ { .pubkey == delegateTo };
-
-        create staker_state_to_provider (
-            timestamp = _staking_last_known_time(),
-            ss,
-            _provider
-        );
-    }
 }
 
 function _staking_update_evm_state(staker: ft4.accounts.account, network, new_balance: integer) {
@@ -211,10 +128,6 @@ function staking_request_withdrawal_auth_message(gtv): text {
     return "Please sign the message to request a withdrawal.";
 }
 
-operation staking_request_withdrawal() {
-    val user = ft4.auth.authenticate();
-    _staking_request_withdrawal(user, network.CHR);
-}
 
 function _staking_request_withdrawal(user: ft4.accounts.account, _network: network) {
     val ss = staker_state @? { .account == user and .network == _network };
@@ -275,16 +188,6 @@ function _staking_last_known_time()
     = if (op_context.exists) op_context.last_block_time else block @ { } ( @max .timestamp ) ?: 0;
 
 
-query staking_get_current_rate(): decimal {
-    val current_rate = reward_rate @* {
-        .timestamp<=_staking_last_known_time()
-    } (
-        .rate,
-        @omit @sort_desc .timestamp
-    ) limit 1;
-    return current_rate[0];
-}
-
 function _staking_distribute_withdrawals() {
     val open_withdrawals = staker_withdrawal_request @* {
         .active and .staker_state.network == network.CHR and .finish_at <= _staking_last_known_time()
@@ -336,12 +239,6 @@ function staking_delegate_auth_message(gtv): text {
     // TODO Indicate which provider?
     return "Please sign the message to set the provider.";
 }
-operation staking_delegate(pubkey) {
-    val new_provider = require(provider @? { pubkey }, "No provider for this public key.");
-    val staker = ft4.auth.authenticate();
-    _staking_delegate(staker, pubkey);
-}
-
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
         scope = "staking_undelegate",
@@ -354,42 +251,6 @@ function staking_undelegate_auth_message(gtv): text {
     return "Please sign the message to undelegate.";
 }
 
-operation staking_undelegate() {
-    val staker = ft4.auth.authenticate();
-    _staking_delegate(staker, get_null_account());
-}
-query staking_get_current_delegate_on_network(account_id: byte_array, network): byte_array? {
-    val _provider_pubkey = staker_state_to_provider @? {
-        .staker_state.account.id == account_id and .staker_state.network == network and  
-        (_staking_last_known_time() - chain_context.args.staking_rate_change_delay_ms) >= .timestamp
-    } ( @omit @sort_desc .timestamp, .provider.pubkey ) limit 1;
-    return if (_provider_pubkey == get_null_account()) null else _provider_pubkey;
-}
-
-query staking_get_current_delegate(
-    account_id: byte_array
-) = staking_get_current_delegate_on_network(account_id, network.CHR);
-
-query staking_get_balance(
-    account_id: byte_array
-) = staker_state @ { 
-    .account.id == account_id 
-} ( 
-    @sum .balance 
-) limit 1;
-
-query staking_get_total_delegation_to(pubkey, network? = null) {
-    return ( s1: staker_state_to_provider) @* {
-        .provider.pubkey == pubkey and (s1.timestamp<=(_staking_last_known_time()-chain_context.args.staking_rate_change_delay_ms)) and 
-            (not exists(network) or .staker_state.network == network) and 
-            not exists((s2:staker_state_to_provider) @* { 
-                s2.staker_state ==s1.staker_state,
-                ((s2.timestamp<=(_staking_last_known_time()-chain_context.args.staking_rate_change_delay_ms)) and (s2.timestamp>s1.timestamp)) 
-                or (s2.timestamp==s1.timestamp and s2 < s1) 
-            }
-        )
-    } ( @sum .staker_state.balance )[0];
-}
 
 // TODO Canncel withdrawal
 // @extend(ft4.auth.auth_handler)
@@ -404,42 +265,6 @@ query staking_get_total_delegation_to(pubkey, network? = null) {
 //     return "Please sign the message to cancel withdrawal.";
 // }
 
-query staking_get_cannot_change_before(): timestamp = _staking_last_known_time() + chain_context
-    .args
-    .staking_rate_change_delay_ms;
-
-query staking_rewards_claimable_for(account_id: byte_array) {
-    val rate = staking_get_current_rate() / millis_per_year;
-    val staker = ft4.accounts.Account(account_id);
-    val ss = staker_state @* { .account == staker } ( .balance, .last_update, .pending_token_time );
-    var total_pending_token_time = 0;
-    for (s in ss) {
-        total_pending_token_time += s.pending_token_time + s.balance * (_staking_last_known_time() - s.last_update);
-    }
-    return integer(total_pending_token_time * rate);
-}
-
-query staking_get_next_delegation_change(account_id: byte_array): (pubkey: pubkey, time: integer)? {
-    val staker = ft4.accounts.Account(account_id);
-    val upcoming_delegations = staker_state_to_provider @* {
-        .staker_state.account == staker and .timestamp > (_staking_last_known_time()-chain_context.args.staking_rate_change_delay_ms)
-    } (
-        @omit @sort_desc .timestamp,
-        pubkey = .provider.pubkey,
-        time = .timestamp + chain_context.args.staking_rate_change_delay_ms
-    ) limit 1;
-    return if (exists(
-        upcoming_delegations
-    )) (upcoming_delegations[0]) else null;
-}
-
-query staking_get_withdrawal_time(account_id: byte_array, network = network.CHR): timestamp? {
-    return staker_withdrawal_request @? {
-        .staker_state.account.id == account_id and .active and .staker_state.network == network
-    } (
-        .finish_at
-    );
-}
 
 function _staking_shared_rewards(pay_reward_result) {
     // We ignore reward debt here as it will flow through the reward term after the pool is refreshed
@@ -484,7 +309,3 @@ function _staking_shared_rewards(pay_reward_result) {
         );
     }
 }
-
-query staking_total_stake() = staker_state @* { } ( @sum .balance )[0];
-
-query staking_total_accounts() = staker_state @* { } ( @sum 1 )[0];
