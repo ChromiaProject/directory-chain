@@ -17,8 +17,6 @@ The Economy Chain has the following module args:
 | `asset_icon`                        | The Chromia Network asset icon url.                                                                                                      | text    | :white_check_mark: |         |
 | `amount_to_mint`                    | Amount of asset to be minted for new registered accounts.                                                                                | int     | :white_check_mark: |         |
 | `pool_amount_to_mint`               | Maximum amount of asset that can be minted to the pool account over the interval of time defined by `test_chr_pool_refill_limit_millis`. | int     | :white_check_mark: |         |
-| `deposit_account_pubkey`            | Pubkey used to create FT4 deposit account.                                                                                               | pubkey  | :white_check_mark: |         |
-| `chromia_foundation_account_pubkey` | Pubkey used to create FT4 Chromia Foundation Account.                                                                                    | pubkey  | :white_check_mark: |         |
 | `admin_pubkey`                      | Admin pubkey.                                                                                                                            | pubkey  | :white_check_mark: |         |
 | `staking_initial_reward_rate`       | Staking initial reward rate.                                                                                                             | decimal | :white_check_mark: |         |
 | `staking_rate_change_delay_ms`      | Amount of time required to pass between staking rate changes.                                                                            | int     | :white_check_mark: |         |
@@ -132,8 +130,6 @@ Example:
          asset_icon: "https://s3.eu-central-1.amazonaws.com/www.chromiadev.net/assets/tCHR.png"
          amount_to_mint: 1000000000
          pool_amount_to_mint: 1000000000
-         deposit_account_pubkey: x""  # Replace this with FT4 deposit account key
-         chromia_foundation_account_pubkey: x"" # Replace this with FT4 chromia foundation account key
          admin_pubkey: x"" # Replace this admin key
          staking_initial_reward_rate: 0.15
          staking_rate_change_delay_ms: 604800000
