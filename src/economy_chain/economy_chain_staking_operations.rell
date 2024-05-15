@@ -15,42 +15,41 @@ operation staking_set_rate_at(rate: decimal, timestamp: timestamp) {
     _staking_set_rate_at(rate, timestamp);
 }
 
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+        scope = "staking_deposit_native",
+        flags = ["T"],
+        message = staking_deposit_auth_message(*)
+    );
+
+function staking_deposit_auth_message(gtv): text {
+    val args = struct<staking_deposit_native>.from_gtv(gtv);
+
+    return "Please sign the message\nto transfer %s %s from account {account_id} \nto deposit account.".format(
+        ft4.assets.format_amount_with_decimals(args.amount, chain_context.args.asset_decimals),
+        chain_context.args.asset_symbol
+    );
+}
+
+operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
+    _staking_deposit_native_impl(amount, delegateTo);
+}
+
 operation staking_claim_rewards() {
     require_admin();
     _staking_distribute_rewards();
 }
 
-operation staking_deposit_native(amount: integer, delegateTo: pubkey? = null) {
-    require(amount > 0, "Can't deposit nothing (or less)!");
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+        scope = "staking_request_withdrawal",
+        flags = [],
+        message = staking_request_withdrawal_auth_message(*)
+    );
 
-    val staker = ft4.auth.authenticate();
-
-    // Pull in the CHR
-    require(amount < get_account_balance(staker), "Insufficent funds to deposit.");
-    ft4.assets.Unsafe.transfer(staker, get_deposit_account(), get_asset(), amount);
-
-    var ss = staker_state @? { .account == staker and .network == network.CHR };
-    if (exists(ss)) {
-        _update_pending_token_time(ss);
-        ss.balance += amount;
-    } else {
-        ss = create staker_state (
-            staker,
-            network.CHR,
-            balance = amount,
-            last_update = _staking_last_known_time(),
-            pending_token_time = 0
-        );
-    }
-    if (delegateTo != null) {
-        val _provider = provider @ { .pubkey == delegateTo };
-
-        create staker_state_to_provider (
-            timestamp = _staking_last_known_time(),
-            ss,
-            _provider
-        );
-    }
+function staking_request_withdrawal_auth_message(gtv): text {
+    val args = struct<staking_request_withdrawal>.from_gtv(gtv);
+    return "Please sign the message to request a withdrawal.";
 }
 
 operation staking_request_withdrawal() {
@@ -58,8 +57,35 @@ operation staking_request_withdrawal() {
     _staking_request_withdrawal(user, network.CHR);
 }
 
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+        scope = "staking_delegate",
+        flags = [],
+        message = staking_delegate_auth_message(*)
+    );
+
+function staking_delegate_auth_message(gtv): text {
+    val args = struct<staking_delegate>.from_gtv(gtv);
+    // TODO Indicate which provider?
+    return "Please sign the message to set the provider.";
+}
+
 operation staking_delegate(pubkey) {
     val new_provider = require(provider @? { pubkey }, "No provider for this public key.");
     val staker = ft4.auth.authenticate();
     _staking_delegate(staker, pubkey);
 }
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+        scope = "staking_undelegate",
+        flags = [],
+        message = staking_undelegate_auth_message(*)
+    );
+
+function staking_undelegate_auth_message(gtv): text {
+    val args = struct<staking_undelegate>.from_gtv(gtv);
+    return "Please sign the message to undelegate.";
+}
+
+// TODO staking_undelegate

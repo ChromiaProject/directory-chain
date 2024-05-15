@@ -32,3 +32,17 @@ entity reward_rate {
     index timestamp;
     rate: decimal;
 }
+
+function _update_pending_token_time(staker_state) {
+    update staker_state (
+        pending_token_time = .balance * (_staking_last_known_time() - .last_update),
+        last_update = _staking_last_known_time()
+    );
+}
+
+function _update_pending_token_time_all() {
+    update staker_state @* { } (
+        pending_token_time = .balance * (_staking_last_known_time() - .last_update),
+        last_update = _staking_last_known_time()
+    );
+}
