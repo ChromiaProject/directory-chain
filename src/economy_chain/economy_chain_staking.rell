@@ -380,26 +380,17 @@ query staking_get_balance(
 ) limit 1;
 
 query staking_get_total_delegation_to(pubkey, network? = null) {
-    return when (exists(network)) {
-        true -> ( s1: staker_state_to_provider) @* {
-            .provider.pubkey == pubkey and (s1.timestamp<=_staking_last_known_time()-chain_context.args.staking_rate_change_delay_ms) and .staker_state.network == network and not exists(
+    return ( s1: staker_state_to_provider) @* {
+        .provider.pubkey == pubkey and (s1.timestamp<=_staking_last_known_time()-chain_context.args.staking_rate_change_delay_ms) and 
+            (not exists(network) or .staker_state.network == network) and 
+            not exists(
             (s2:staker_state_to_provider) @* { 
                 s2.staker_state ==s1.staker_state,
                 (s2.timestamp>s1.timestamp) or 
                 (s2.timestamp==s1.timestamp and s2 < s1) 
             }
         )
-        } ( @sum .staker_state.balance )[0];
-        else -> ( s1: staker_state_to_provider) @* {
-            .provider.pubkey == pubkey and (s1.timestamp<=_staking_last_known_time()-chain_context.args.staking_rate_change_delay_ms) and not exists(
-            (s2:staker_state_to_provider) @* { 
-                s2.staker_state ==s1.staker_state,
-                (s2.timestamp>s1.timestamp) or 
-                (s2.timestamp==s1.timestamp and s2 < s1) 
-            }
-        )
-        } ( @sum .staker_state.balance )[0];
-    };
+    } ( @sum .staker_state.balance )[0];
 }
 
 // TODO Canncel withdrawal
