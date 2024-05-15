@@ -28,15 +28,13 @@ The Economy Chain has the following module args:
 
 Module args for FT4 configuration:
 
-| Name                         | Description                                                                             | Type   | Required           | Default |
-|------------------------------|-----------------------------------------------------------------------------------------|--------|--------------------|---------|
-| `admin_pubkey`               | FT4 admin pubkey. Configured under `lib.ft4.admin` parameter.                           | pubkey | :white_check_mark: |         |
-| `active`                     | FT4 rate limit configuration. Configured under `lib.ft4.accounts.rate_limit` parameter. | int    | :white_check_mark: |         |
-| `max_points`                 | FT4 rate limit configuration. Configured under `lib.ft4.accounts.rate_limit` parameter. | int    | :white_check_mark: |         |
-| `recovery_time`              | FT4 rate limit configuration. Configured under `lib.ft4.accounts.rate_limit` parameter. | int    | :white_check_mark: |         |
-| `points_at_account_creation` | FT4 rate limit configuration. Configured under `lib.ft4.accounts.rate_limit` parameter. | int    | :white_check_mark: |         |
-| `auth_pubkey`                | FT4 authorization server private key. Configured under `lib.auth` parameter.            | int    | :white_check_mark: |         |
-
+| Name                         | Description                                                                                  | Type | Required           | Default |
+|------------------------------|----------------------------------------------------------------------------------------------|------|--------------------|---------|
+| `active`                     | FT4 rate limit configuration. Configured under `lib.ft4.core.accounts.rate_limit` parameter. | int  | :white_check_mark: |         |
+| `max_points`                 | FT4 rate limit configuration. Configured under `lib.ft4.core.accounts.rate_limit` parameter. | int  | :white_check_mark: |         |
+| `recovery_time`              | FT4 rate limit configuration. Configured under `lib.ft4.core.accounts.rate_limit` parameter. | int  | :white_check_mark: |         |
+| `points_at_account_creation` | FT4 rate limit configuration. Configured under `lib.ft4.core.accounts.rate_limit` parameter. | int  | :white_check_mark: |         |
+| `auth_pubkey`                | FT4 authorization server private key. Configured under `lib.auth` parameter.                 | int  | :white_check_mark: |         |
 
 ### ICMF configuration
 
@@ -108,9 +106,7 @@ Example:
             read_offset: 3
             events: !include config/events.yaml
     moduleArgs:
-      lib.ft4.admin:
-         admin_pubkey: x"" # Replace this with FT4 admin pubkey
-      lib.ft4.accounts:
+      lib.ft4.core.accounts:
          rate_limit:
             active: 1
             max_points: 20
@@ -143,14 +139,14 @@ libs:
   ft4:
      registry: https://bitbucket.org/chromawallet/ft3-lib
      path: rell/src/lib/ft4
-     tagOrBranch: v0.5.0r
-     rid: x"125809B57980D6E36C07210D0541E7BCAD86A66F324FC1C0DA9CA7D1F8D5A720"
+     tagOrBranch: v0.7.0r
+     rid: x"F7C207AA595ABD25FDE5C2C2E32ECD3768B480AD03D1F2341548FF4F37D9B7AF"
      insecure: false
   auth:
      registry: https://bitbucket.org/chromawallet/auth-server-ft4.git
      path: rell/src/auth
-     tagOrBranch: v2.0.0r
-     rid: x"85C0F206DE187AB84197AE2ADD721AE5DE7B4A495ADF7FA84244329A320CC92A"
+     tagOrBranch: v2.1.0r
+     rid: x"7EC77529149B510F7863BA19CE2A8798AD8492A98A79F8B350FE8D774996F268"
      insecure: false
   priceoracle:
      registry: https://bitbucket.org/chromawallet/priceoracle.git
@@ -177,5 +173,3 @@ libs:
 Deploy Economy chain via PMC
 
 `pmc network initialize-economy-chain --economy-chain-config={PATH_TO_ECONOMY_CHAIN_CONFIG}`
-
-
