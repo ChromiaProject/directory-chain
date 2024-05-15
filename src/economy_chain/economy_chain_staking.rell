@@ -313,10 +313,9 @@ function _staking_distribute_withdrawals() {
 function _staking_offboard_provider(pubkey) {
     val null_provider = provider @ { get_null_account() };
 
-    // Update appropriate staker states with new provider TODO FIX THIS
     val updated_relationships = staker_state_to_provider @* { .provider.pubkey == pubkey } (
         struct<staker_state_to_provider> (
-            timestamp = _staking_last_known_time(),
+            timestamp = _staking_last_known_time()-chain_context.args.staking_rate_change_delay_ms,
             staker_state = .staker_state,
             provider = null_provider
         )
