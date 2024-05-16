@@ -1,6 +1,11 @@
+// Rate management
+
 function _staking_set_rate_at(rate: decimal, timestamp: timestamp) {
     create reward_rate ( rate = rate, timestamp = timestamp );
 }
+
+
+// Provider management
 
 function _staking_offboard_provider(pubkey) {
     val null_provider = provider @ { get_null_account() };
@@ -15,7 +20,10 @@ function _staking_offboard_provider(pubkey) {
 
     create staker_state_to_provider ( updated_relationships );
 }
- 
+
+
+// Deposits and balances
+
 function _staking_deposit_native_impl(amount: integer, delegateTo: pubkey? = null) {
     require(amount > 0, "Can't deposit nothing (or less)!");
 
@@ -49,6 +57,9 @@ function _staking_deposit_native_impl(amount: integer, delegateTo: pubkey? = nul
     }
 }
 
+
+// Legacy EVM events imports
+
 function _staking_update_evm_state(staker: ft4.accounts.account, network, new_balance: integer) {
     var ss = staker_state @? { .account == staker and .network == network };
     if (exists(ss)) {
@@ -66,6 +77,9 @@ function _staking_update_evm_state(staker: ft4.accounts.account, network, new_ba
         create staker_state_to_provider ( timestamp = _staking_last_known_time(), ss, _provider );
     }
 }
+
+
+// Withdrawals
 
 function _staking_request_withdrawal(user: ft4.accounts.account, _network: network) {
     val ss = staker_state @? { .account == user and .network == _network };
@@ -90,6 +104,34 @@ function _staking_request_withdrawal(user: ft4.accounts.account, _network: netwo
         true
     );
 }
+
+function _staking_distribute_withdrawals() {
+    val open_withdrawals = staker_withdrawal_request @* {
+        .active and .staker_state.network == network.CHR and .finish_at <= _staking_last_known_time()
+    } ( account = .staker_state.account, balance = .staker_state.balance );
+
+    for (withdrawal in open_withdrawals) {
+        // Send the balance back to them through ft4
+        ft4.assets.Unsafe.transfer(
+                get_deposit_account(),
+                withdrawal.account,
+                get_asset(),
+                withdrawal.balance
+            );
+    }
+
+    var staker_states = staker_withdrawal_request @* {
+        .active and .staker_state.network == network.CHR and .finish_at <= _staking_last_known_time( )
+    } ( .staker_state );
+    update staker_states ( .balance = 0 );
+    update staker_withdrawal_request @* {
+        .active and .staker_state.network == network.CHR and .finish_at <= _staking_last_known_time( )
+    } ( .active = false);
+    
+}
+
+
+// Delegation
 
 function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey) {
     // get all staker states of user, and all related withdraw requests
@@ -118,31 +160,8 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
     create staker_state_to_provider ( staker_states_to_update );
 }
 
-function _staking_distribute_withdrawals() {
-    val open_withdrawals = staker_withdrawal_request @* {
-        .active and .staker_state.network == network.CHR and .finish_at <= _staking_last_known_time()
-    } ( account = .staker_state.account, balance = .staker_state.balance );
 
-    for (withdrawal in open_withdrawals) {
-        // Send the balance back to them through ft4
-        ft4.assets.Unsafe.transfer(
-                get_deposit_account(),
-                withdrawal.account,
-                get_asset(),
-                withdrawal.balance
-            );
-    }
-
-    var staker_states = staker_withdrawal_request @* {
-        .active and .staker_state.network == network.CHR and .finish_at <= _staking_last_known_time( )
-    } ( .staker_state );
-    update staker_states ( .balance = 0 );
-    update staker_withdrawal_request @* {
-        .active and .staker_state.network == network.CHR and .finish_at <= _staking_last_known_time( )
-    } ( .active = false);
-    
-}
-
+// Rewards
 
 function _staking_distribute_rewards() {
     var total_amount = 0;
@@ -178,6 +197,9 @@ function _staking_distribute_rewards() {
     }
     create staking_payment ( payments );
 }
+
+
+// Shared rewards (triggered by a hook in the rewards logic)
 
 function _staking_shared_rewards(pay_reward_result) {
     // We ignore reward debt here as it will flow through the reward term after the pool is refreshed
