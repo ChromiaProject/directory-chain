@@ -52,7 +52,7 @@ query staking_get_current_delegate(
 query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubkey, time: integer)? {
     val staker = ft4.accounts.Account(account_id);
     val upcoming_delegations = staker_state_to_provider @* {
-        .staker_state.account == staker and .timestamp > (_staking_last_known_time()-chain_context.args.staking_rate_change_delay_ms)
+        .staker_state.account == staker and .timestamp > (_staking_last_known_time() - chain_context.args.staking_rate_change_delay_ms)
     } (
         @omit @sort_desc .timestamp,
         pubkey = .provider.pubkey,
@@ -71,11 +71,11 @@ query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubk
 */
 query staking_get_total_delegation_to(pubkey, network? = null) {
     return ( s1: staker_state_to_provider) @* {
-        .provider.pubkey == pubkey and (s1.timestamp<=(_staking_last_known_time()-chain_context.args.staking_rate_change_delay_ms)) and 
+        .provider.pubkey == pubkey and (s1.timestamp <= (_staking_last_known_time() - chain_context.args.staking_rate_change_delay_ms)) and 
             (not exists(network) or .staker_state.network == network) and 
             not exists((s2:staker_state_to_provider) @* { 
                 s2.staker_state ==s1.staker_state,
-                ((s2.timestamp<=(_staking_last_known_time()-chain_context.args.staking_rate_change_delay_ms)) and (s2.timestamp>s1.timestamp)) 
+                ((s2.timestamp <= (_staking_last_known_time() - chain_context.args.staking_rate_change_delay_ms)) and (s2.timestamp>s1.timestamp)) 
                 or (s2.timestamp==s1.timestamp and s2 < s1) 
             }
         )
