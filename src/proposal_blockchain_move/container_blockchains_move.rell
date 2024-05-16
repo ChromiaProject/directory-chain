@@ -57,16 +57,13 @@ function move_container_blockchains_impl(
     );
 
     // moving
+    val src_nodes = cluster_node @* { .cluster == src_cluster }.node;
     for (bc in bcs) {
         val final_height = anchored_blockchains[bc.rid];
         create moving_blockchain(bc, source = src_container, destination = dst_container, final_height/*, remove_on_nodes*/);
 
-        val src_nodes_to_replicate_on = (cn: cluster_node, rn: blockchain_replica_node) @* {
-            cn.cluster == src_cluster,
-            empty(blockchain_replica_node @* { bc, cn.node })
-        } ( cn.node );
-        for (node in src_nodes_to_replicate_on) {
-            create blockchain_replica_node(bc, node);
+        for (node in src_nodes) {
+            if (not exists(blockchain_replica_node @? { bc, node })) create blockchain_replica_node(bc, node);
         }
         // remove bc from src_container
         delete container_blockchain @* { bc };

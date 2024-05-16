@@ -1,3 +1,8 @@
+// Rates
+
+/** Current annualised reward rate
+/*  @return as a decimal fraction, eg. 0.1 is 10%
+*/
 query staking_get_current_rate(): decimal {
     val current_rate = reward_rate @* {
         .timestamp<=_staking_last_known_time()
@@ -8,6 +13,17 @@ query staking_get_current_rate(): decimal {
     return current_rate[0];
 }
 
+
+// Delegations
+
+/**
+/* The current delegation of the user's stake on one of the three blockchain networks.
+/* Ordinarily the user would be staked (or unstaked) identitically across the networks.
+/*
+/* @param account_id User account ID (bytes32)
+/* @param network Network using the enum
+/* @return Public key of the delegated to provider, or null if currently undelegated
+*/
 query staking_get_current_delegate_on_network(account_id: byte_array, network): byte_array? {
     val _provider_pubkey = staker_state_to_provider @? {
         .staker_state.account.id == account_id and .staker_state.network == network and  
@@ -16,11 +32,24 @@ query staking_get_current_delegate_on_network(account_id: byte_array, network): 
     if (not exists(_provider_pubkey)) return null;
     return if (_provider_pubkey == get_null_account()) null else _provider_pubkey;
 }
+
+/**
+/* Gets the user's stake delegation for the native Chromia network. Any other stakes should be identical.
+/*
+/* @param account_id Given user
+/* @return Public key of the delegated to provider on Chromia mainet, or null if currently undelegated 
+*/
 query staking_get_current_delegate(
     account_id: byte_array
 ) = staking_get_current_delegate_on_network(account_id, network.CHR);
 
-query staking_get_next_delegation_change(account_id: byte_array): (pubkey: pubkey, time: integer)? {
+/**
+/* Delegation changes do not take place immediately. This will return the next delegation change, or null if there is none.
+/*
+/* @param account_id Given user
+/* @return A tuple of the next to be delegated to provider and the timestamp the delegation will take effect. Or null if no re-delegation is scheduled.
+*/
+query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubkey, time: integer)? {
     val staker = ft4.accounts.Account(account_id);
     val upcoming_delegations = staker_state_to_provider @* {
         .staker_state.account == staker and .timestamp > (_staking_last_known_time()-chain_context.args.staking_rate_change_delay_ms)
@@ -34,6 +63,12 @@ query staking_get_next_delegation_change(account_id: byte_array): (pubkey: pubke
     )) (upcoming_delegations[0]) else null;
 }
 
+/**
+/* Total staked CHR across all networks and all users that had been delegated to the provider with that public key.
+/*
+/* @param pubkey Public key of the given provider
+/* @return Total CHR staked to the given provider in  minor units
+*/
 query staking_get_total_delegation_to(pubkey, network? = null) {
     return ( s1: staker_state_to_provider) @* {
         .provider.pubkey == pubkey and (s1.timestamp<=(_staking_last_known_time()-chain_context.args.staking_rate_change_delay_ms)) and 
@@ -47,8 +82,27 @@ query staking_get_total_delegation_to(pubkey, network? = null) {
     } ( @sum .staker_state.balance )[0];
 }
 
-// TODO staking_get_provider_stake
+/**
+/* Total stake the provider has delegated to themselves
+/*
+/* @param pubkey Public key of the given provider
+/* @return Total self staked CHR in  minor units
+*/
+query staking_get_provider_stake(pubkey) {
+    // TODO staking_get_provider_stake
+    require(false, "Not implemented yet.");
+    return 0;
+}
 
+
+// Withdrawals
+
+/**
+/* Expected timestamp of the next withdrawal.
+/*
+/* @param account_id Given account's id
+/* @return Timestamp of the expected withdrawal time or null if not withdrawal has been requested
+*/
 query staking_get_withdrawal_time(account_id: byte_array, network = network.CHR): timestamp? {
     return staker_withdrawal_request @? {
         .staker_state.account.id == account_id and .active and .staker_state.network == network
@@ -57,6 +111,15 @@ query staking_get_withdrawal_time(account_id: byte_array, network = network.CHR)
     );
 }
 
+
+// Rewards
+
+/**
+/* Reward that would be paid to the user if rewards were distributed now
+/*
+/* @param account_id Account ID
+/* @return Amount of CHR in minor units
+*/
 query staking_rewards_claimable_for(account_id: byte_array) {
     val rate = staking_get_current_rate() / millis_per_year;
     val staker = ft4.accounts.Account(account_id);
@@ -68,6 +131,12 @@ query staking_rewards_claimable_for(account_id: byte_array) {
     return integer(total_pending_token_time * rate);
 }
 
+/**
+/* All staking rewards earned for an account, including both distributed and undistributed rewards.
+/*
+/* @param account_id Account ID
+/* @return Amount of CHR in minor units
+*/
 query staking_rewards_for(
     account_id: byte_array
 ) = staking_rewards_claimable_for(
@@ -76,16 +145,27 @@ query staking_rewards_for(
     account_id
 );
 
+/**
+/* Staking rewards that have already been distributed to the user
+/*
+/* @param account_id Account ID
+/* @return Amount of CHR in minor units
+*/
 query staking_get_rewards_paid(account_id: byte_array): integer {
     val account = ft4.accounts.Account(account_id);
     return staking_payment @* { .account == account } ( @sum .amount )[0];
 }
-query staking_get_native_balance(account_id: byte_array) {
-    val account = ft4.accounts.Account(account_id);
-    return staker_state @ { .account == account and .network ==network.CHR } ( .balance );
-}
 
 
+
+// Balances
+
+/**
+/* Balance staked by the user
+/*
+/* @param account_id Account ID
+/* @return Total balance of CHR in minor units
+*/
 query staking_get_balance(
     account_id: byte_array
 ) = staker_state @ { 
@@ -94,10 +174,36 @@ query staking_get_balance(
     @sum .balance 
 ) limit 1;
 
+/**
+/* Native Ft4 Chromia balance of CHR (in minor units) staked by the user
+/*
+/* @param account_id Account ID
+/* @return Total balance of CHR in minor units
+*/
+query staking_get_native_balance(account_id: byte_array) {
+    val account = ft4.accounts.Account(account_id);
+    return staker_state @ { .account == account and .network ==network.CHR } ( .balance );
+}
 
+
+// Statistics
+
+/**
+/* Total staked by all users (including undelegated stakes)
+/*
+/* @return Total staked of CHR in minor units
+*/
 query staking_total_stake() = staker_state @* { } ( @sum .balance )[0];
 
+/**
+/* Total staked by all users (including undelegated stakes)
+/*
+/* @return User count
+*/
 query staking_total_accounts() = staker_state @* { } ( @sum 1 )[0];
+
+
+// Date utilites
 
 query staking_get_cannot_change_before(): timestamp = _staking_last_known_time() + chain_context
     .args

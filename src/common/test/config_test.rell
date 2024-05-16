@@ -15,8 +15,7 @@ import direct_container.*;
 function test_precise_configuration_update_config_happy() {
     val (anchor_chain, bc_rid) = setup();
 
-    val config1 = ["number": (1).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
+    val config1 = apply_required_configuration_properties(["number": (1).to_gtv()]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run();
@@ -70,8 +69,7 @@ function test_precise_configuration_update_config_happy() {
 function test_precise_configuration_update_config_happy_unique_config() {
     val (anchor_chain, bc_rid) = setup();
 
-    val config = ["number": (1).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
+    val config = apply_required_configuration_properties(["number": (1).to_gtv()]);
 
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config.to_gtv_pretty().to_bytes(), "first")
@@ -119,8 +117,7 @@ function test_precise_configuration_update_signers_happy() {
     assert_false(is_pending_blockchain_configuration_applied(bc_rid, 1, pending_config1_hash));
 
     // Assert new pending configs are "invisible"
-    val new_config = ["number": (1).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
+    val new_config = apply_required_configuration_properties(["number": (1).to_gtv()]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, new_config.to_gtv_pretty().to_bytes(), "first")
     ).sign(initial_provider).run();
@@ -247,8 +244,7 @@ function test_precise_configuration_update_signers_retry() {
 function test_precise_configuration_update_config_multiple_pending() {
     val (anchor_chain, bc_rid) = setup();
 
-    val config1 = ["number": (1).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
+    val config1 = apply_required_configuration_properties(["number": (1).to_gtv()]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run();
@@ -261,8 +257,7 @@ function test_precise_configuration_update_config_multiple_pending() {
         (1).to_gtv()
     );
 
-    val config2 = ["number": (2).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
+    val config2 = apply_required_configuration_properties(["number": (2).to_gtv()]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config2.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run();
@@ -342,7 +337,7 @@ function test_precise_configuration_update_rejected_invalid_config_no_config_con
 function test_precise_configuration_update_rejected_invalid_config_wrong_config_consensus_strategy() {
     val (anchor_chain, bc_rid) = setup();
 
-    val config1 = ["number": (1).to_gtv(), "config_consensus_strategy": "bogus".to_gtv()];
+    val config1 = apply_required_configuration_properties(["number": (1).to_gtv(), "config_consensus_strategy": "bogus".to_gtv()]);
     val failure = rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run_must_fail();
@@ -352,9 +347,7 @@ function test_precise_configuration_update_rejected_invalid_config_wrong_config_
 function test_precise_configuration_update_rejected_invalid_config_has_signers() {
     val (anchor_chain, bc_rid) = setup();
 
-    val config1 = ["number": (1).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv(),
-        "signers": [x"1111".to_gtv(), x"2222".to_gtv()].to_gtv()];
+    val config1 = apply_required_configuration_properties(["number": (1).to_gtv(), "signers": [x"1111".to_gtv(), x"2222".to_gtv()].to_gtv()]);
     val failure = rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run_must_fail();
@@ -369,27 +362,23 @@ function test_precise_configuration_update_rejected_invalid_block_strategy_confi
         propose_configuration(initial_provider.pub, bc_rid, config_without_blockstrategy.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run_must_fail("blockstrategy configuration must not be empty");
 
-    val config_without_maxinterblockinterval = [
-        "config_consensus_strategy": "HEADER_HASH".to_gtv(),
+    val config_without_maxinterblockinterval = apply_required_configuration_properties([
         "blockstrategy": map<text,gtv>().to_gtv()
-    ];
+    ]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config_without_maxinterblockinterval.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run_must_fail("mininterblockinterval configuration must be set");
 
-    val config_with_too_low_maxinterblockinterval = [
-        "config_consensus_strategy": "HEADER_HASH".to_gtv(),
+    val config_with_too_low_maxinterblockinterval = apply_required_configuration_properties([
         "blockstrategy": ["mininterblockinterval": (100).to_gtv()].to_gtv()
-    ];
+    ]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config_with_too_low_maxinterblockinterval.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run_must_fail("Configured min inter block interval is lower than minimum allowed 1000");
 
-    val config_with_too_big_block_size = [
-        "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (100).to_gtv(),
-        "maxblocksize": (27262977).to_gtv()].to_gtv()
-    ];
+    val config_with_too_big_block_size = apply_required_configuration_properties([
+        "blockstrategy": ["mininterblockinterval": (100).to_gtv(), "maxblocksize": (27262977).to_gtv()].to_gtv()
+    ]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config_with_too_big_block_size.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run_must_fail("Configured max block size exceeds maximum allowed size 27262976");
@@ -398,24 +387,42 @@ function test_precise_configuration_update_rejected_invalid_block_strategy_confi
 function test_precise_configuration_update_rejected_invalid_revolt_config() {
     val (anchor_chain, bc_rid) = setup();
 
-    val config_with_too_low_fast_revolt_timeout = [
+    val empty_revolt_config = [
         "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "revolt": ["fast_revolt_status_timeout": (1000).to_gtv()].to_gtv(),
         "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()
     ];
     rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, empty_revolt_config.to_gtv_pretty().to_bytes(), "")
+    ).sign(initial_provider).run_must_fail("revolt configuration must not be empty");
+
+    val config_with_too_low_fast_revolt_timeout = apply_required_configuration_properties([
+        "revolt": ["fast_revolt_status_timeout": (1000).to_gtv()].to_gtv()
+    ]);
+    rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config_with_too_low_fast_revolt_timeout.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run_must_fail("Configured fast revolt status timeout is lower than minimum allowed 2000");
+
+    val config_with_unset_revolt_when_should_build_block = apply_required_configuration_properties([
+        "revolt": ["fast_revolt_status_timeout": (2000).to_gtv()].to_gtv()
+    ]);
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config_with_unset_revolt_when_should_build_block.to_gtv_pretty().to_bytes(), "")
+    ).sign(initial_provider).run_must_fail("'revolt_when_should_build_block' must be configured");
+
+    val config_with_false_revolt_when_should_build_block = apply_required_configuration_properties([
+        "revolt": ["revolt_when_should_build_block": (false).to_gtv()].to_gtv()
+    ]);
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config_with_false_revolt_when_should_build_block.to_gtv_pretty().to_bytes(), "")
+    ).sign(initial_provider).run_must_fail("Configured value 'false' is not allowed for 'revolt_when_should_build_block' property");
 }
 
 function test_precise_configuration_update_rejected_invalid_gtx_modules() {
     val (anchor_chain, bc_rid) = setup();
 
-    val config_with_invalid_gtx_modules = [
-        "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "gtx": ["modules": ["net.postchain.UnknownModule"].to_gtv()].to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()
-    ];
+    val config_with_invalid_gtx_modules = apply_required_configuration_properties([
+        "gtx": ["modules": ["net.postchain.UnknownModule"].to_gtv()].to_gtv()
+    ]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config_with_invalid_gtx_modules.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run_must_fail("Some of the configured GTX modules are not in the allowed set");
@@ -424,11 +431,9 @@ function test_precise_configuration_update_rejected_invalid_gtx_modules() {
 function test_precise_configuration_update_rejected_invalid_sync_exts() {
     val (anchor_chain, bc_rid) = setup();
 
-    val config_with_invalid_sync_exts = [
-        "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "sync_ext": ["net.postchain.UnknownSynchronizationInfrastructureExtension"].to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()
-    ];
+    val config_with_invalid_sync_exts = apply_required_configuration_properties([
+        "sync_ext": ["net.postchain.UnknownSynchronizationInfrastructureExtension"].to_gtv()
+    ]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config_with_invalid_sync_exts.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run_must_fail("Some of the configured synchronization infrastructure extensions are not in the allowed set");
@@ -437,8 +442,7 @@ function test_precise_configuration_update_rejected_invalid_sync_exts() {
 function test_precise_configuration_update_ignored_wrong_topic() {
     val (anchor_chain, bc_rid) = setup();
 
-    val config1 = ["number": (1).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
+    val config1 = apply_required_configuration_properties(["number": (1).to_gtv()]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run();
@@ -473,8 +477,7 @@ function test_precise_configuration_update_ignored_wrong_topic() {
 function test_precise_configuration_update_ignored_chain0() {
     val (anchor_chain, bc_rid) = setup();
 
-    val config1 = ["number": (1).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
+    val config1 = apply_required_configuration_properties(["number": (1).to_gtv()]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run();
@@ -509,8 +512,7 @@ function test_precise_configuration_update_ignored_chain0() {
 function test_precise_configuration_update_ignored_unknown_blockchain() {
     val (anchor_chain, bc_rid) = setup();
 
-    val config1 = ["number": (1).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
+    val config1 = apply_required_configuration_properties(["number": (1).to_gtv()]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run();
@@ -545,8 +547,7 @@ function test_precise_configuration_update_ignored_unknown_blockchain() {
 function test_precise_configuration_update_rejected_not_from_anchor_chain() {
     val (anchor_chain, bc_rid) = setup();
 
-    val config1 = ["number": (1).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
+    val config1 = apply_required_configuration_properties(["number": (1).to_gtv()]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run();
@@ -581,8 +582,7 @@ function test_precise_configuration_update_rejected_not_from_anchor_chain() {
 function test_precise_configuration_update_rejected_wrong_hash() {
     val (anchor_chain, bc_rid) = setup();
 
-    val config1 = ["number": (1).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
+    val config1 = apply_required_configuration_properties(["number": (1).to_gtv()]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run();
@@ -613,8 +613,7 @@ function test_precise_configuration_update_rejected_wrong_hash() {
 function test_precise_configuration_update_rejected_config_already_exists() {
     val (anchor_chain, bc_rid) = setup();
 
-    val config1 = ["number": (1).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
+    val config1 = apply_required_configuration_properties(["number": (1).to_gtv()]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run();
@@ -623,7 +622,7 @@ function test_precise_configuration_update_rejected_config_already_exists() {
     full_config1["signers"] = pending_config1.signers.to_gtv();
     val pending_config1_hash = full_config1.to_gtv().hash();
 
-    val config2 = ["blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv(), "number": (2).to_gtv()];
+    val config2 = apply_required_configuration_properties(["number": (2).to_gtv()]);
     rell.test.tx().op(
         propose_configuration_at(initial_provider.pub, bc_rid, config2.to_gtv_pretty().to_bytes(), 5, false)
     ).sign(initial_provider).run();
@@ -658,9 +657,7 @@ function test_precise_configuration_update_rejected_config_already_exists() {
 function test_precise_configuration_update_config_failed() {
     val (anchor_chain, bc_rid) = setup();
 
-    val config1 = ["number": (1).to_gtv(), "txqueuecapacity": "bogus".to_gtv(),
-        "config_consensus_strategy": "HEADER_HASH".to_gtv(), "blockstrategy": ["mininterblockinterval": (1000).to_gtv()
-    ].to_gtv()];
+    val config1 = apply_required_configuration_properties(["number": (1).to_gtv(), "txqueuecapacity": "bogus".to_gtv()]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run();
@@ -715,7 +712,7 @@ function setup(): (anchor_chain: blockchain, bc_rid: byte_array) {
     val cluster = require_cluster(clusters.system);
     val anchor_chain = cluster_anchoring_chain @ { cluster } (.blockchain);
 
-    val config0 = ["number": (0).to_gtv(), "config_consensus_strategy": "HEADER_HASH".to_gtv(), "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()];
+    val config0 = apply_required_configuration_properties(["number": (0).to_gtv()]);
     rell.test.tx().op(
         create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
         propose_blockchain(initial_provider.pub, config0.to_gtv_pretty().to_bytes(), "foo_chain", "container", "")

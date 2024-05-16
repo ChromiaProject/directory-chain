@@ -30,9 +30,8 @@ function validate_blockchain_configuration(config_data: byte_array, signers: boo
     validate_block_strategy_config(map<text, gtv>.from_gtv(block_strategy_config));
 
     val revolt_config = config_map.get_or_null("revolt");
-    if (revolt_config != null) {
-        validate_revolt_config(map<text, gtv>.from_gtv(revolt_config));
-    }
+    require(revolt_config, "revolt configuration must not be empty");
+    validate_revolt_config(map<text, gtv>.from_gtv(revolt_config));
 
     // Check modules and extensions for non system chains
     if (not system_chain) {
@@ -76,6 +75,12 @@ function validate_revolt_config(revolt_config: map<text, gtv>) {
             );
         }
     }
+    val config_revolt_when_should_build_block = revolt_config.get_or_null("revolt_when_should_build_block");
+    require(config_revolt_when_should_build_block, "'revolt_when_should_build_block' must be configured");
+    require(
+        boolean.from_gtv(config_revolt_when_should_build_block),
+        "Configured value 'false' is not allowed for 'revolt_when_should_build_block' property"
+    );
 }
 
 function validate_gtx_modules(gtx_config: map<text, gtv>) {

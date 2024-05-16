@@ -3,7 +3,7 @@
 import ^.config_test_helpers.*;
 import ^^.*;
 import ^^.test.setup.*;
-import ^^.test.util.constants.*;
+import ^^.test.util.*;
 import proposal_blockchain.*;
 import direct_container.*;
 
@@ -13,17 +13,15 @@ function test_configuration_is_compressed_on_creation_and_update() {
     val anchor_chain = cluster_anchoring_chain @ { cluster } (.blockchain);
 
     val content_to_compress = "Compress me!".to_gtv();
-    val config0 = [
+    val config0 = apply_required_configuration_properties([
         "compressed_roots": [compressed_root(
             path = ["compression_content"],
             compressed_keys = []
         )].to_gtv_pretty(),
         "compression_content": [
             "some_content": content_to_compress
-        ].to_gtv_pretty(),
-        "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()
-    ];
+        ].to_gtv_pretty()
+    ]);
 
     rell.test.tx().op(
         create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
@@ -45,7 +43,7 @@ function test_configuration_is_compressed_on_creation_and_update() {
 
     // Attempt update
     val new_content_to_compress = "Compress me as well!".to_gtv();
-    val config1 = [
+    val config1 = apply_required_configuration_properties([
         "compressed_roots": [compressed_root(
             path = ["compression_content"],
             compressed_keys = [compressed_key(
@@ -55,10 +53,8 @@ function test_configuration_is_compressed_on_creation_and_update() {
         )].to_gtv_pretty(),
         "compression_content": [
             "some_new_content": new_content_to_compress
-        ].to_gtv_pretty(),
-        "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()
-    ];
+        ].to_gtv_pretty()
+    ]);
 
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
@@ -99,17 +95,15 @@ function test_configuration_compression_path_restriction() {
     setup_module();
 
     val content_to_compress = "Compress me!".to_gtv();
-    val config_invalid_depth = [
+    val config_invalid_depth = apply_required_configuration_properties([
         "compressed_roots": [compressed_root(
             path = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"],
             compressed_keys = []
         )].to_gtv_pretty(),
         "compression_content": [
             "some_content": content_to_compress
-        ].to_gtv_pretty(),
-        "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()
-    ];
+        ].to_gtv_pretty()
+    ]);
 
     rell.test.tx().op(
         create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
@@ -123,17 +117,15 @@ function test_configuration_compression_size_restriction() {
     val anchor_chain = cluster_anchoring_chain @ { cluster } (.blockchain);
 
     val content_to_compress = "A".repeat(1000).to_gtv();
-    val config0 = [
+    val config0 = apply_required_configuration_properties([
         "compressed_roots": [compressed_root(
             path = ["compression_content"],
             compressed_keys = []
         )].to_gtv_pretty(),
         "compression_content": [
             "some_content": content_to_compress
-        ].to_gtv_pretty(),
-        "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()
-    ];
+        ].to_gtv_pretty()
+    ]);
 
     rell.test.tx().op(
         create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
@@ -152,15 +144,13 @@ function test_configuration_compression_size_restriction() {
         ));
     }
 
-    val config_invalid_size = [
+    val config_invalid_size = apply_required_configuration_properties([
         "compressed_roots": [compressed_root(
             path = ["compression_content"],
             compressed_keys
         )].to_gtv_pretty(),
-        "compression_content": map<text, gtv>().to_gtv(),
-        "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()
-    ];
+        "compression_content": map<text, gtv>().to_gtv()
+    ]);
 
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config_invalid_size.to_gtv_pretty().to_bytes(), "")
@@ -173,17 +163,15 @@ function test_ambiguous_compressed_configuration() {
     val anchor_chain = cluster_anchoring_chain @ { cluster } (.blockchain);
 
     val content_to_compress = "Compress me!".to_gtv();
-    val config0 = [
+    val config0 = apply_required_configuration_properties([
         "compressed_roots": [compressed_root(
             path = ["compression_content"],
             compressed_keys = []
         )].to_gtv_pretty(),
         "compression_content": [
             "some_content": content_to_compress
-        ].to_gtv_pretty(),
-        "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()
-    ];
+        ].to_gtv_pretty()
+    ]);
 
     rell.test.tx().op(
         create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
@@ -194,7 +182,7 @@ function test_ambiguous_compressed_configuration() {
     val bc_rid = blockchain.rid;
 
     val new_content = "Something new".to_gtv();
-    val ambiguous_config = [
+    val ambiguous_config = apply_required_configuration_properties([
         "compressed_roots": [compressed_root(
             path = ["compression_content"],
             compressed_keys = [compressed_key(
@@ -204,10 +192,8 @@ function test_ambiguous_compressed_configuration() {
         )].to_gtv_pretty(),
         "compression_content": [
             "some_content": new_content
-        ].to_gtv_pretty(),
-        "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()
-    ];
+        ].to_gtv_pretty()
+    ]);
 
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, ambiguous_config.to_gtv_pretty().to_bytes(), "")

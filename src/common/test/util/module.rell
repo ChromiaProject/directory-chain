@@ -6,3 +6,13 @@ import proposal.*;
 
 function get_signers_of_cluster_name(name) = get_signers_of_cluster(cluster @ { name });
 function get_signers_of_cluster(cluster) = cluster_node @* { cluster }.node.pubkey;
+
+function apply_required_configuration_properties(original_config: map<text, gtv> = map()): map<text, gtv> {
+    val config_with_required_defaults = [
+        "config_consensus_strategy": "HEADER_HASH".to_gtv(),
+        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv(),
+        "revolt": ["revolt_when_should_build_block": (true).to_gtv()].to_gtv()
+    ];
+    config_with_required_defaults.put_all(original_config); // Original config has precedence
+    return config_with_required_defaults;
+}

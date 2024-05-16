@@ -17,9 +17,6 @@ The Economy Chain has the following module args:
 | `asset_icon`                        | The Chromia Network asset icon url.                                                                                                      | text    | :white_check_mark: |         |
 | `amount_to_mint`                    | Amount of asset to be minted for new registered accounts.                                                                                | int     | :white_check_mark: |         |
 | `pool_amount_to_mint`               | Maximum amount of asset that can be minted to the pool account over the interval of time defined by `test_chr_pool_refill_limit_millis`. | int     | :white_check_mark: |         |
-| `pool_account_pubkey`               | Pubkey used to create FT4 pool account.                                                                                                  | pubkey  | :white_check_mark: |         |
-| `deposit_account_pubkey`            | Pubkey used to create FT4 deposit account.                                                                                               | pubkey  | :white_check_mark: |         |
-| `chromia_foundation_account_pubkey` | Pubkey used to create FT4 Chromia Foundation Account.                                                                                    | pubkey  | :white_check_mark: |         |
 | `admin_pubkey`                      | Admin pubkey.                                                                                                                            | pubkey  | :white_check_mark: |         |
 | `staking_initial_reward_rate`       | Staking initial reward rate.                                                                                                             | decimal | :white_check_mark: |         |
 | `staking_rate_change_delay_ms`      | Amount of time required to pass between staking rate changes.                                                                            | int     | :white_check_mark: |         |
@@ -31,15 +28,13 @@ The Economy Chain has the following module args:
 
 Module args for FT4 configuration:
 
-| Name                         | Description                                                                             | Type   | Required           | Default |
-|------------------------------|-----------------------------------------------------------------------------------------|--------|--------------------|---------|
-| `admin_pubkey`               | FT4 admin pubkey. Configured under `lib.ft4.admin` parameter.                           | pubkey | :white_check_mark: |         |
-| `active`                     | FT4 rate limit configuration. Configured under `lib.ft4.accounts.rate_limit` parameter. | int    | :white_check_mark: |         |
-| `max_points`                 | FT4 rate limit configuration. Configured under `lib.ft4.accounts.rate_limit` parameter. | int    | :white_check_mark: |         |
-| `recovery_time`              | FT4 rate limit configuration. Configured under `lib.ft4.accounts.rate_limit` parameter. | int    | :white_check_mark: |         |
-| `points_at_account_creation` | FT4 rate limit configuration. Configured under `lib.ft4.accounts.rate_limit` parameter. | int    | :white_check_mark: |         |
-| `auth_pubkey`                | FT4 authorization server private key. Configured under `lib.auth` parameter.            | int    | :white_check_mark: |         |
-
+| Name                         | Description                                                                                  | Type | Required           | Default |
+|------------------------------|----------------------------------------------------------------------------------------------|------|--------------------|---------|
+| `active`                     | FT4 rate limit configuration. Configured under `lib.ft4.core.accounts.rate_limit` parameter. | int  | :white_check_mark: |         |
+| `max_points`                 | FT4 rate limit configuration. Configured under `lib.ft4.core.accounts.rate_limit` parameter. | int  | :white_check_mark: |         |
+| `recovery_time`              | FT4 rate limit configuration. Configured under `lib.ft4.core.accounts.rate_limit` parameter. | int  | :white_check_mark: |         |
+| `points_at_account_creation` | FT4 rate limit configuration. Configured under `lib.ft4.core.accounts.rate_limit` parameter. | int  | :white_check_mark: |         |
+| `auth_pubkey`                | FT4 authorization server private key. Configured under `lib.auth` parameter.                 | int  | :white_check_mark: |         |
 
 ### ICMF configuration
 
@@ -111,9 +106,7 @@ Example:
             read_offset: 3
             events: !include config/events.yaml
     moduleArgs:
-      lib.ft4.admin:
-         admin_pubkey: x"" # Replace this with FT4 admin pubkey
-      lib.ft4.accounts:
+      lib.ft4.core.accounts:
          rate_limit:
             active: 1
             max_points: 20
@@ -133,9 +126,6 @@ Example:
          asset_icon: "https://s3.eu-central-1.amazonaws.com/www.chromiadev.net/assets/tCHR.png"
          amount_to_mint: 1000000000
          pool_amount_to_mint: 1000000000
-         pool_account_pubkey: x"" # Replace this with FT4 fool account key
-         deposit_account_pubkey: x""  # Replace this with FT4 deposit account key
-         chromia_foundation_account_pubkey: x"" # Replace this with FT4 chromia foundation account key
          admin_pubkey: x"" # Replace this admin key
          staking_initial_reward_rate: 0.15
          staking_rate_change_delay_ms: 604800000
@@ -149,14 +139,14 @@ libs:
   ft4:
      registry: https://bitbucket.org/chromawallet/ft3-lib
      path: rell/src/lib/ft4
-     tagOrBranch: v0.5.0r
-     rid: x"125809B57980D6E36C07210D0541E7BCAD86A66F324FC1C0DA9CA7D1F8D5A720"
+     tagOrBranch: v0.7.0r
+     rid: x"F7C207AA595ABD25FDE5C2C2E32ECD3768B480AD03D1F2341548FF4F37D9B7AF"
      insecure: false
   auth:
      registry: https://bitbucket.org/chromawallet/auth-server-ft4.git
      path: rell/src/auth
-     tagOrBranch: v2.0.0r
-     rid: x"85C0F206DE187AB84197AE2ADD721AE5DE7B4A495ADF7FA84244329A320CC92A"
+     tagOrBranch: v2.1.0r
+     rid: x"7EC77529149B510F7863BA19CE2A8798AD8492A98A79F8B350FE8D774996F268"
      insecure: false
   priceoracle:
      registry: https://bitbucket.org/chromawallet/priceoracle.git
@@ -183,5 +173,3 @@ libs:
 Deploy Economy chain via PMC
 
 `pmc network initialize-economy-chain --economy-chain-config={PATH_TO_ECONOMY_CHAIN_CONFIG}`
-
-

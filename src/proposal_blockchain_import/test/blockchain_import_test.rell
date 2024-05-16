@@ -13,9 +13,7 @@ function test_propose_import_blockchain() {
     setup_module();
 
     val container = system_container_name(clusters.system);
-    val conf = ["config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv(),
-        "signers": [initial_provider.pub].to_gtv(), "serial": (0).to_gtv()];
+    val conf = apply_required_configuration_properties(["signers": [initial_provider.pub].to_gtv(), "serial": (0).to_gtv()]);
     val brid = conf.hash();
 
     // proposing import, blockchain will be created in IMPORTING state
@@ -43,8 +41,7 @@ function test_propose_import_blockchain() {
     ).sign(initial_provider).run_must_fail("Configuration at height 10 already exists for blockchain");
 
     // proposing a new config without signers
-    val conf_no_signers = ["config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv(), "serial": (100).to_gtv()];
+    val conf_no_signers = apply_required_configuration_properties(["serial": (100).to_gtv()]);
     rell.test.tx().op(
         propose_import_configuration(initial_provider.pub, brid, 15, conf_no_signers.to_gtv().to_bytes())
     ).sign(initial_provider).run_must_fail("No signers in configuration");
