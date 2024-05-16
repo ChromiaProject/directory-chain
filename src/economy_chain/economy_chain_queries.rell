@@ -302,9 +302,15 @@ query get_blockchains_with_bridge_and_anomaly_detection() = bridge_lease @* { .a
 query get_provider_staking_status(pubkey) {
     val provider = require_provider(pubkey);
     val provider_account = provider_account @ { provider };
+
+    val own_staking_chr = staking_get_provider_stake(provider.pubkey);
+    val total_staking_chr = staking_get_total_delegation_to(provider.pubkey);
+
     return provider_staking_status(
-        own_staking_usd = get_chr_in_usd(staking_get_provider_stake(provider.pubkey)),
-        total_staking_usd = get_chr_in_usd(staking_get_total_delegation_to(provider.pubkey)),
+        own_staking_chr = own_staking_chr,
+        total_staking_chr = total_staking_chr,
+        own_staking_usd = get_chr_in_usd(own_staking_chr),
+        total_staking_usd = get_chr_in_usd(total_staking_chr),
         approved = provider_meets_staking_requirements(provider, provider_account)
     );
 }
