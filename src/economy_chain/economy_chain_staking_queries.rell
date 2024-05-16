@@ -68,9 +68,18 @@ query staking_rewards_claimable_for(account_id: byte_array) {
     return integer(total_pending_token_time * rate);
 }
 
-// TODO staking_rewards_for
+query staking_rewards_for(
+    account_id: byte_array
+) = staking_rewards_claimable_for(
+    account_id
+) + staking_get_rewards_paid(
+    account_id
+);
 
-// TODO staking_get_rewards_paid
+query staking_get_rewards_paid(account_id: byte_array): integer {
+    val account = ft4.accounts.Account(account_id);
+    return staking_payment @* { .account == account } ( @sum .amount )[0];
+}
 query staking_get_native_balance(account_id: byte_array) {
     val account = ft4.accounts.Account(account_id);
     return staker_state @ { .account == account and .network ==network.CHR } ( .balance );

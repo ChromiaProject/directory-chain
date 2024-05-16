@@ -182,11 +182,14 @@ function _staking_distribute_rewards() {
     }
     update staker_state @* { } ( .pending_token_time = 0 );
 
+    var payments = list<struct<staking_payment>>();
     // Do the payouts
     for ((account,amount) in rewards) {
         ft4.assets.Unsafe.transfer(get_pool_account(), account, get_asset(), amount);
         log("Paid out %s to %s", account, amount);
+        payments.add(struct<staking_payment>(timestamp = _staking_last_known_time(), amount, account));
     }
+    create staking_payment ( payments );
 }
 
 function _staking_shared_rewards(pay_reward_result) {
