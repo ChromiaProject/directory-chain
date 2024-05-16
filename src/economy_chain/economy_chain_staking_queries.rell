@@ -89,9 +89,10 @@ query staking_get_total_delegation_to(pubkey, network? = null) {
 /* @return Total self staked CHR in  minor units
 */
 query staking_get_provider_stake(pubkey) {
-    // TODO staking_get_provider_stake
-    require(false, "Not implemented yet.");
-    return 0;
+    val provider_id = provider_account @ {pubkey == .provider.pubkey} (.account.id);
+    return if (pubkey == staking_get_current_delegate(provider_id) ?: get_null_account())
+        staking_get_balance(provider_id)
+        else 0;
 }
 
 
