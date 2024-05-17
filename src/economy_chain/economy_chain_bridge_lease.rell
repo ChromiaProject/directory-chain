@@ -18,7 +18,7 @@ function add_bridge_lease_auth_message(gtv) {
 }
 
 // We don't really know if this chain belongs to the container but it should not really matter
-function add_bridge_lease_impl(container_name: text, blockchain_rid: byte_array, evm_network_id: integer, validator_contract: text, bridge_contract: text, initial_signers: list<byte_array>, anomaly_detection: boolean) {
+function add_bridge_lease_impl(container_name: text, blockchain_rid: byte_array, evm_network_id: integer, validator_contract: text, bridge_contract: text, anomaly_detection: boolean) {
     val lease = require_lease(container_name);
     require(not lease.expired, "Container lease is expired");
 
@@ -34,8 +34,7 @@ function add_bridge_lease_impl(container_name: text, blockchain_rid: byte_array,
         validator_contract = validator_contract,
         bridge_contract = bridge_contract,
         evm_network_id = evm_network_id,
-        deleted = false,
-        signers = initial_signers.to_gtv().to_bytes()
+        deleted = false
     ).to_gtv());
 }
 
@@ -54,12 +53,12 @@ function update_bridge_lease_auth_message(gtv) {
     );
 }
 
-function update_bridge_lease_impl(blockchain_rid: byte_array, evm_network_id: integer, updated_validator_contract: text?, updated_bridge_contract: text?, updated_signers: list<byte_array>?, anomaly_detection: boolean?) {
+function update_bridge_lease_impl(blockchain_rid: byte_array, evm_network_id: integer, updated_validator_contract: text?, updated_bridge_contract: text?, anomaly_detection: boolean?) {
     val bridge_lease = bridge_lease @? { .blockchain_rid == blockchain_rid, .evm_network_id == evm_network_id};
     require(bridge_lease, "No bridge lease found");
     require(not bridge_lease.lease.expired, "Container lease is expired");
 
-    require(updated_validator_contract != null or updated_signers != null or updated_bridge_contract != null, "Must update contract or signers");
+    require(updated_validator_contract != null or updated_bridge_contract != null, "Must update contract or signers");
 
     val account = ft4.auth.authenticate();
     require(user @? { account }, "No user for account %s".format(account.id));
@@ -74,8 +73,7 @@ function update_bridge_lease_impl(blockchain_rid: byte_array, evm_network_id: in
         validator_contract = bridge_lease.validator_contract,
         bridge_contract = bridge_lease.bridge_contract,
         evm_network_id = evm_network_id,
-        deleted = false,
-        signers = updated_signers?.to_gtv()?.to_bytes()
+        deleted = false
     ).to_gtv());
 }
 
@@ -137,8 +135,7 @@ function delete_bridge_leases(lease): list<struct<bridge_lease>> {
             validator_contract = bridge_lease.validator_contract,
             bridge_contract = bridge_lease.bridge_contract,
             evm_network_id = bridge_lease.evm_network_id,
-            deleted = false,
-            signers = null
+            deleted = false
         ).to_gtv());
     }
 }
@@ -162,7 +159,6 @@ function send_bridge_lease_deleted_message(bridge_lease) {
         validator_contract = bridge_lease.validator_contract,
         bridge_contract = bridge_lease.bridge_contract,
         evm_network_id = bridge_lease.evm_network_id,
-        deleted = true,
-        signers = null
+        deleted = true
     ).to_gtv());
 }

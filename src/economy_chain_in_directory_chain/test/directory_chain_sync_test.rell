@@ -12,6 +12,7 @@ import proposal_provider.*;
 function test_init_events() {
     setup_module();
 
+    val directory_chain_brid = blockchain @ { blockchains.directory_chain } (.rid);
     assert_events(
         ("icmf_message", (
             topic = provider_update_topic,
@@ -39,6 +40,19 @@ function test_init_events() {
                 tier = provider_tier.NODE_PROVIDER.name,
                 active = true).to_gtv()).to_gtv_pretty()
         ),
+        ("icmf_message", (
+            topic = signer_list_update_topic,
+            body = signer_list_update_message(
+                serial = 1,
+                blockchain_rid = directory_chain_brid,
+                signers = [test_node.pubkey].to_gtv().to_bytes(),
+                confirmed_in_directory_at_height = 0).to_gtv()).to_gtv_pretty()
+        ),
+        ("signer_list_update_event", signer_list_update_event(
+            1,
+            directory_chain_brid,
+            [test_node.pubkey]
+        ).to_gtv()),
         ("icmf_message", (
             topic = node_update_topic,
             body = node_update_message(

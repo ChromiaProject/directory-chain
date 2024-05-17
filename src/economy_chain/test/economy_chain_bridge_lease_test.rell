@@ -28,8 +28,8 @@ function test_bridge_lease_add_update_and_remove() {
     val container_lease = lease @ { container_name };
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 1, "validator", "bridge", [x""], false)),
-        add_bridge_lease(container_name, x"", 1, "validator", "bridge", [x""], false)
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)),
+        add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)
     ).sign(rell.test.keypairs.alice).run();
 
     assert_not_null(bridge_lease @? { .lease == container_lease });
@@ -40,16 +40,15 @@ function test_bridge_lease_add_update_and_remove() {
             validator_contract = "validator",
             bridge_contract = "bridge",
             evm_network_id = 1,
-            deleted = false,
-            signers = [x""].to_gtv().to_bytes()
+            deleted = false
         ).to_gtv()
     ).to_gtv_pretty()));
     assert_equals(bridge_lease @? { .lease == container_lease } ( .anomaly_detection ), false);
     assert_true(empty(get_blockchains_with_bridge_and_anomaly_detection()));
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, update_bridge_lease(x"", 1, "validator2", "bridge2", null, true)),
-        update_bridge_lease(x"", 1, "validator2", "bridge2", null, true)
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, update_bridge_lease(x"", 1, "validator2", "bridge2", true)),
+        update_bridge_lease(x"", 1, "validator2", "bridge2", true)
     ).sign(rell.test.keypairs.alice).run();
     assert_equals(bridge_lease @? { .lease == container_lease } ( .anomaly_detection ), true);
     assert_equals(get_blockchains_with_bridge_and_anomaly_detection(), [bridge_anomaly_detector_data(
@@ -69,8 +68,7 @@ function test_bridge_lease_add_update_and_remove() {
             validator_contract = "validator2",
             bridge_contract = "bridge2",
             evm_network_id = 1,
-            deleted = false,
-            signers = null
+            deleted = false
         ).to_gtv()
     ).to_gtv_pretty()));
 
@@ -90,8 +88,8 @@ function test_expired_container_lease_removes_bridge_leases() {
     val container_lease = lease @ { container_name };
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 1, "validator", "bridge", [x""], false)),
-        add_bridge_lease(container_name, x"", 1, "validator", "bridge", [x""], false)
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)),
+        add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)
     ).sign(rell.test.keypairs.alice).run();
 
     assert_not_null(bridge_lease @? { .lease == container_lease });
@@ -112,19 +110,18 @@ function test_expired_container_lease_removes_bridge_leases() {
             validator_contract = "validator",
             bridge_contract = "bridge",
             evm_network_id = 1,
-            deleted = true,
-            signers = null
+            deleted = true
         ).to_gtv()
     ).to_gtv_pretty()));
 
     // Assert no mappings can be added/updated when lease is expired
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 2, "validator", "bridge", [x""], false)),
-        add_bridge_lease(container_name, x"", 1, "validator", "bridge", [x""], false)
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 2, "validator", "bridge", false)),
+        add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)
     ).sign(rell.test.keypairs.alice).run_must_fail("Container lease is expired");
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, update_bridge_lease(x"", 1, "validator2", "bridge2", null, false)),
-        update_bridge_lease(x"", 1, "validator2", "bridge2", null, false)
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, update_bridge_lease(x"", 1, "validator2", "bridge2", false)),
+        update_bridge_lease(x"", 1, "validator2", "bridge2", false)
     ).sign(rell.test.keypairs.alice).run_must_fail("Container lease is expired");
 }
 
@@ -135,8 +132,8 @@ function test_bridge_leases_are_transferred_on_container_upgrade() {
 
     val container_lease = lease @ { container_name };
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 1, "validator", "bridge", [x""], false)),
-        add_bridge_lease(container_name, x"", 1, "validator", "bridge", [x""], false)
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)),
+        add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)
     ).sign(rell.test.keypairs.alice).run();
 
     assert_not_null(bridge_lease @? { .lease == container_lease });

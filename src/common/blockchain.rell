@@ -11,11 +11,13 @@ function add_blockchain(
     state: blockchain_state = blockchain_state.RUNNING
 ): blockchain {
     val blockchain_rid = calculate_configuration_hash(base_configuration, signers);
+    val signer_bytes = signers.to_gtv().to_bytes();
     val blockchain = create blockchain(blockchain_rid, name, system, state);
     compress_and_store_configuration(blockchain, 0, base_configuration);
-    create blockchain_configuration_signers(blockchain, 0, signers.to_gtv().to_bytes());
+    create blockchain_configuration_signers(blockchain, 0, signer_bytes);
     create container_blockchain(container, blockchain);
     add_dependencies(base_configuration, blockchain_rid, 0);
+    signal_signer_list_update(blockchain_rid, signer_bytes);
     return blockchain;
 }
 
