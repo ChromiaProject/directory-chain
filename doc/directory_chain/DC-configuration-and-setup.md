@@ -52,7 +52,6 @@ Config type
 |-----------|:---------------------------------------------------------------------------------|
 | node_info | pubkey<br>host: text<br>port: integer<br>api_url: text<br>territory: text?       |
 
-
 ### ICMF configuration
 
 In addition, you also need to set up ICMF configuration so that it listens to.
