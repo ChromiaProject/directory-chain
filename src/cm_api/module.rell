@@ -50,7 +50,7 @@ query cm_get_cluster_blockchains(name): list<byte_array> {
 // Returns signers of blockchain at specific height
 // NB: doesn't take into account pending configurations
 query cm_get_peer_info(brid: byte_array, height: integer): set<pubkey> {
-    val bc = require_blockchain(brid, include_removed=true);
+    val bc = require_blockchain(brid);
     return set<pubkey>.from_gtv(
         get_signers_for_configuration(bc, height)
     );
@@ -59,7 +59,7 @@ query cm_get_peer_info(brid: byte_array, height: integer): set<pubkey> {
 query cm_get_blockchain_cluster(brid: byte_array): text {
     if (brid == chain_context.blockchain_rid) return clusters.system; // I am chain0
 
-    val bc = require_blockchain(brid, include_removed=true);    
+    val bc = require_blockchain(brid);
     return container_blockchain @ { bc } ( .container.cluster.name );
 }
 

@@ -185,7 +185,7 @@ query nm_get_blockchains_for_container(container_name: text): list<byte_array> {
  * NM API Version: 3
  */
 query nm_get_container_for_blockchain(blockchain_rid: byte_array): text {
-    val bc = require_blockchain_entity(blockchain_rid);
+    val bc = require_blockchain(blockchain_rid);
     require(bc.state != blockchain_state.REMOVED, "Blockchain is removed: " + bc.rid);
     return container_blockchain @ { bc } .container.name;
 }
@@ -196,7 +196,7 @@ query nm_get_container_for_blockchain(blockchain_rid: byte_array): text {
  */
 query nm_get_blockchain_containers_for_node(node_id: pubkey, blockchain_rid: byte_array): list<text> {
     val node = require_node(node_id);
-    val bc = require_blockchain_entity(blockchain_rid);
+    val bc = require_blockchain(blockchain_rid);
 
     val mbc = moving_blockchain @? { bc };
     if (exists(mbc)) {
@@ -239,7 +239,7 @@ query nm_get_blockchain_dependencies(blockchain, height: integer): list<(byte_ar
  */
 query nm_get_pending_blockchain_configuration(blockchain_rid: byte_array, height: integer):
         list<(base_config: byte_array, signers: list<pubkey>, minimum_height: integer)> {
-    val bc = require_blockchain(blockchain_rid, include_removed = true);
+    val bc = require_blockchain(blockchain_rid);
     return get_pending_blockchain_configuration(bc, height);
 }
 
@@ -249,7 +249,7 @@ query nm_get_pending_blockchain_configuration(blockchain_rid: byte_array, height
  */
 query nm_get_pending_blockchain_configuration_by_hash(blockchain_rid: byte_array, config_hash: byte_array):
         (base_config: byte_array, signers: list<pubkey>, minimum_height: integer)? {
-    val bc = require_blockchain(blockchain_rid, include_removed = true);
+    val bc = require_blockchain(blockchain_rid);
     return get_pending_blockchain_configuration_by_hash(bc, config_hash);
 }
 
@@ -258,7 +258,7 @@ query nm_get_pending_blockchain_configuration_by_hash(blockchain_rid: byte_array
  * NM API Version: 5
  */
 query nm_get_faulty_blockchain_configuration(blockchain_rid: byte_array, height: integer): byte_array? {
-    val bc = require_blockchain(blockchain_rid, include_removed = true);
+    val bc = require_blockchain(blockchain_rid);
     return faulty_blockchain_configuration @? { bc, .reported_at_height == height }.config_hash;
 }
 
@@ -267,7 +267,7 @@ query nm_get_faulty_blockchain_configuration(blockchain_rid: byte_array, height:
  * NM API Version: 6
  */
 query nm_get_blockchain_state(blockchain_rid: byte_array): text {
-    val bc = require_blockchain(blockchain_rid, false, true);
+    val bc = require_blockchain(blockchain_rid);
     return bc.state.name;
 }
 
@@ -290,7 +290,7 @@ query nm_get_blockchain_configuration_options(blockchain_rid: byte_array, height
  * NM API Version 9
  */
 query nm_get_blockchain_signers_in_latest_configuration(blockchain_rid: byte_array): list<byte_array> {
-    val bc = require_blockchain(blockchain_rid, false, true);
+    val bc = require_blockchain(blockchain_rid);
     val signers_bytes = blockchain_configuration_signers @ { bc } (@omit @sort_desc .height, .signers) limit 1;
     return list<byte_array>.from_gtv(gtv.from_bytes(signers_bytes));
 }

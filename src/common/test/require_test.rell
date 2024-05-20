@@ -1,6 +1,7 @@
 @test module;
 
 import ^^.*;
+import ^.helper_operations.*;
 
 function test_require_pubkey() {
     // success
@@ -13,4 +14,28 @@ function test_require_pubkey() {
     assert_fails(require_pubkey(x"", *));
     assert_fails(require_pubkey(x"ff", *));
     assert_fails(require_pubkey(x"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", *));
+}
+
+function test_require_active_blockchain() {
+    rell.test.tx().op(
+        create_blockchain(x"00", "BC1", false, blockchain_state.RUNNING),
+        create_blockchain(x"01", "BC3", false, blockchain_state.REMOVED),
+    ).run();
+
+    assert_fails(require_active_blockchain(x"AA", *));
+    require_active_blockchain(x"00");
+    assert_fails(require_active_blockchain(x"01", *));
+}
+
+function test_require_blockchain() {
+    rell.test.tx().op(
+        create_blockchain(x"00", "BC1", false, blockchain_state.RUNNING),
+        create_blockchain(x"01", "BC3", false, blockchain_state.REMOVED),
+    ).run();
+
+    assert_fails(require_blockchain(x"AA", *));
+    require_blockchain(x"00");
+    require_blockchain(x"01");
+    require_blockchain(x"00", [blockchain_state.RUNNING]);
+    assert_fails(require_blockchain(x"00", [blockchain_state.ARCHIVED], *));
 }

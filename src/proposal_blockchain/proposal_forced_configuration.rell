@@ -13,7 +13,7 @@ entity forced_configuration {
 
 operation propose_forced_configuration(my_pubkey: pubkey, blockchain_rid: byte_array, config_data: byte_array, height: integer, description: text = "") {
     val provider = require_is_provider_with_rate_limit(my_pubkey);
-    val blockchain = require_blockchain(blockchain_rid);
+    val blockchain = require_active_blockchain(blockchain_rid);
     val container = container_blockchain @ { blockchain }.container;
     require_container_deployer(container, provider);
 
@@ -33,7 +33,7 @@ function apply_proposed_forced_configuration(proposal) {
     val pfc = proposed_forced_configuration @? { proposal };
     if (pfc == null) return;
 
-    val blockchain = require_blockchain(pfc.blockchain.rid);
+    val blockchain = require_active_blockchain(pfc.blockchain.rid);
     require(blockchain.state == blockchain_state.PAUSED, "Forcing configuration only allowed on PAUSED blockchains. Blockchain rid: %s, state: %s".format(blockchain.rid, blockchain.state));
 
     val cluster = container_blockchain @ { blockchain }  ( .container ) .cluster;
@@ -94,7 +94,7 @@ query get_proposed_forced_configuration(rowid?): (
 }
 
 query get_forced_configuration(blockchain_rid: byte_array): list<forced_configuration_data> {
-    val blockchain = require_blockchain(blockchain_rid, include_removed = true);
+    val blockchain = require_blockchain(blockchain_rid);
     return forced_configuration @* { blockchain } (
         forced_configuration_data(
             .blockchain,
