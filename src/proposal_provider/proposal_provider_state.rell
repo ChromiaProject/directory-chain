@@ -11,8 +11,7 @@ entity pending_provider_state {
 function apply_provider_state(proposal) {
     val pps = pending_provider_state @? { proposal };
     if (pps == null) return;
-    update_provider_state(pps.provider, pps.active, proposal);
-    after_provider_updated(pps.provider);
+    update_provider_state(pps.provider, pps.active);
 }
 
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.provider_state.name: delete_pending_provider_state(*)];
@@ -50,7 +49,7 @@ operation propose_provider_state(my_pubkey: pubkey, provider_pubkey: pubkey, act
     }
 }
 
-function update_provider_state(provider, active: boolean, proposal: proposal? = null) {
+function update_provider_state(provider, active: boolean) {
     provider.active = active;
     if (active == false) {
         update node @* { provider } ( .active = false );
@@ -88,6 +87,7 @@ function update_provider_state(provider, active: boolean, proposal: proposal? = 
             create voter_set_member(voter_set @ { voter_sets.system_p }, provider);
         }
     }
+    after_provider_updated(provider);
 }
 
 query get_provider_state_proposal(rowid) {
