@@ -11,7 +11,7 @@ function require_clusters(names: list<text>): list<cluster> {
         for (name in names) {
             val cl = clusters @? { name };
             if (cl == null) missing_clusters.add(name);
-        }    
+        }
         require(missing_clusters.empty(), "Clusters %s not found".format(missing_clusters.to_text()));
     }
     return clusters;
@@ -21,17 +21,23 @@ function require_node(pubkey, include_disabled: boolean = true) = require(node @
 function require_container(name) = require(container @? { name }, "Container %s not found".format(name));
 function require_running_container(name) = require(container @? { name, .state == container_state.RUNNING }, "Container %s not found or is not running".format(name));
 function require_voter_set(name) = require(voter_set @? { name }, "Voter set %s does not exist".format(name));
-function require_blockchain_entity(blockchain_rid: byte_array) = require(blockchain @? { blockchain_rid }, "Unknown blockchain " + blockchain_rid);
+function require_active_blockchain(blockchain_rid: byte_array) =
+    require_blockchain(
+        blockchain_rid,
+        allowed_states = [
+            blockchain_state.RUNNING,
+            blockchain_state.PAUSED,
+            blockchain_state.IMPORTING,
+            blockchain_state.UNARCHIVING,
+        ]
+    );
 function require_blockchain(
     blockchain_rid: byte_array,
-    require_running: boolean = false,
-    include_removed: boolean = false
+    allowed_states: list<blockchain_state>? = null
 ) = require(
     blockchain @? {
         blockchain_rid,
-        include_removed or
-        (require_running and .state == blockchain_state.RUNNING) or
-        .state in [blockchain_state.RUNNING, blockchain_state.PAUSED]
+        allowed_states == null or allowed_states.size() == 0 or .state in allowed_states
     }, "Unknown blockchain " + blockchain_rid
 );
 

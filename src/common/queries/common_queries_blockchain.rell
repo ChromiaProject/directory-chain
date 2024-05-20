@@ -1,7 +1,7 @@
 query get_blockchain(rid: byte_array) = blockchain @ { rid };
 
 query get_blockchain_signers(blockchain_rid: byte_array): list<(byte_array, text, integer, boolean, integer)> {
-    val blockchain = require_blockchain(blockchain_rid, true);
+    val blockchain = require_active_blockchain(blockchain_rid);
     return get_blockchain_signer_nodes(blockchain) @* {} (
         @sort _ = .pubkey,
         _ = .host,
@@ -110,7 +110,7 @@ struct blockchain_signers_info {
 }
 
 query get_blockchain_signer_updates(blockchain_rid: byte_array, from_height: integer): list<blockchain_signers_info> {
-    val blockchain = require_blockchain(blockchain_rid, false, true);
+    val blockchain = require_blockchain(blockchain_rid);
     return blockchain_configuration_signers @* { blockchain, .height >= from_height }
         (@omit @sort .height, blockchain_signers_info(.height, list<pubkey>.from_gtv(gtv.from_bytes(.signers))));
 }
