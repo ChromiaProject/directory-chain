@@ -1,101 +1,54 @@
+
 // It might be better for this to live in a table
 enum network {
     BSC, ETH, CHR
 }
 
-entity staker_withdrawal_request {
-    network: network;
-    staker_withdrawal_request_time: timestamp;
-    staker: ft4.accounts.account;
-    mutable used: boolean;
-    index staker;
-    key staker_withdrawal_request_time, staker;
+object _staking_state {
+    mutable last_reward_distribution: integer = 0;
+    mutable last_withdrawal_distribution: integer = 0;
 }
 
-entity staker_payout {
-    staker_payout_time: timestamp;
-    key staker_payout_time;
+entity staker_withdrawal_request {
+    index finish_at: timestamp;
+    index staker_state;
+    index mutable active: boolean;
 }
 
 entity staker_state {
-    network: network;
-    staker_state_time: timestamp;
-    previous_staker_state_time: timestamp; // We have no look-back windowing functions
-    staker: ft4.accounts.account;
-    cutover_time: timestamp;
-    new_provider: provider_account;
-    old_provider: provider_account;
-    balance: integer;
-    previous_balance: integer;
-    mutable latest: boolean; // We have no windowing functions, and want to group by other fields
-    index staker;
+    key ft4.accounts.account, network;
+    mutable balance: integer;
+    mutable last_update: timestamp;
+    mutable pending_token_time: integer;
 }
 
-struct staker_state_delta {
-    network: network?; // Null means all networks
-    cutover_time: timestamp?;
-    new_provider: provider_account?;
-    old_provider: provider_account?;
-    balance: integer?;
+entity staker_state_to_provider {
+    index timestamp;
+    index staker_state;
+    provider;
 }
 
 entity reward_rate {
-    reward_rate_time: timestamp;
-    reward_rate: decimal;
-    key reward_rate_time;
+    index timestamp;
+    rate: decimal;
 }
 
-function _staking_apply_staker_state_delta(staker: ft4.accounts.account, delta: staker_state_delta) {
-    // Apply to specified network or to all
-    val networks = if (delta.network??) [delta.network!!] else network.values();
+entity staking_payment {
+    index timestamp;
+    amount: integer;
+    ft4.accounts.account;
+}
 
-    for(n in networks) {
-        // Snapshot existing state and/or initialise
-        var existing = staker_state @? {.latest and .staker == staker and .network == n };
-        if (empty(existing)) {
-            create staker_state(
-                network = n,
-                staker_state_time = _staking_last_known_time(),
-                previous_staker_state_time = 0,
-                staker = staker,        
-                balance = 0,    
-                previous_balance = 0,
-                cutover_time = _staking_last_known_time(),
-                new_provider = get_null_provider_account(),
-                old_provider = get_null_provider_account(),
-                latest = true
-            );
-            existing = staker_state @ {.latest and .staker == staker and .network == n };
-        }
+function _update_pending_token_time(staker_state) {
+    update staker_state (
+        pending_token_time = .balance * (_staking_last_known_time() - .last_update),
+        last_update = _staking_last_known_time()
+    );
+}
 
-        // Clear flag from any existing state
-        update staker_state @? { .staker == staker and .latest and .network == n and .latest } ( latest = false );
-
-        // Create new from existing state + delta
-        create staker_state(
-            network = n,
-            staker_state_time = _staking_last_known_time(),
-            previous_staker_state_time = existing.staker_state_time,
-            staker = staker,
-            cutover_time = delta.cutover_time ?: existing.cutover_time,
-            new_provider = delta.new_provider ?: existing.new_provider,
-            old_provider = delta.old_provider ?: existing.old_provider,
-            balance = delta.balance ?: existing.balance,
-            previous_balance = existing.balance,
-            latest = true
-        );
-
-        // TODO Handle with extendable functions
-        // Have we reduced the balance to zero, e.g. a complete withdrawal
-        if (
-            0 != existing.balance
-            and
-            0 == delta.balance ?: 0
-            and
-            delta.balance??
-        ) {
-            // Clear the withdrawal request
-            update staker_withdrawal_request @ {.staker == staker and .network == n} (used = true);
-        }
-    }
+function _update_pending_token_time_all() {
+    update staker_state @* { } (
+        pending_token_time = .balance * (_staking_last_known_time() - .last_update),
+        last_update = _staking_last_known_time()
+    );
 }

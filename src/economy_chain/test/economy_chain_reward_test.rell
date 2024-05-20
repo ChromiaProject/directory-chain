@@ -596,7 +596,7 @@ function test_staking_req_reward_successful_followed_by_stopped() {
 
     rell.test.tx().op(
         pay_out_node_rewards_op(node_reward)
-    ).sign(provider_key).run();
+    ).nop().sign(provider_key).run();
 
     pa = provider_account @ { provider @ { provider_pubkey } };
 
@@ -650,7 +650,13 @@ function run_staking_pay_out(
     val node_reward = map<node, big_integer>();
     node_reward[node] = reward;
     rell.test.tx().op(
-        add_staking(pa, staking_amount),
+        add_staking(pa, staking_amount)
+    ).sign(provider_key).run();
+
+    rell.test.set_next_block_time_delta(chain_context.args.staking_rate_change_delay_ms);
+    rell.test.block().run();
+
+    rell.test.tx().op(
         pay_out_node_rewards_op(node_reward)
     ).sign(provider_key).run();
 

@@ -3,7 +3,15 @@
 /** Current annualised reward rate
 /*  @return as a decimal fraction, eg. 0.1 is 10%
 */
-query staking_get_current_rate(): decimal = _staking_get_current_rate();
+query staking_get_current_rate(): decimal {
+    val current_rate = reward_rate @* {
+        .timestamp<=_staking_last_known_time()
+    } (
+        .rate,
+        @omit @sort_desc .timestamp
+    ) limit 1;
+    return current_rate[0];
+}
 
 
 // Delegations
@@ -16,10 +24,13 @@ query staking_get_current_rate(): decimal = _staking_get_current_rate();
 /* @param network Network using the enum
 /* @return Public key of the delegated to provider, or null if currently undelegated
 */
-query staking_get_current_delegate_on_network(account_id: byte_array, network): pubkey? {
-    val account = ft4.accounts.Account(account_id);
-    val current_delegation = _staking_get_current_delegate(account, network);
-    return when(current_delegation) {get_null_provider_account() -> null; else -> current_delegation.provider.pubkey;};
+query staking_get_current_delegate_on_network(account_id: byte_array, network): byte_array? {
+    val _provider_pubkey = staker_state_to_provider @? {
+        .staker_state.account.id == account_id and .staker_state.network == network and  
+        (_staking_last_known_time() - chain_context.args.staking_rate_change_delay_ms) >= .timestamp
+    } ( @omit @sort_desc .timestamp, .provider.pubkey ) limit 1;
+    if (not exists(_provider_pubkey)) return null;
+    return if (_provider_pubkey == get_null_account()) null else _provider_pubkey;
 }
 
 /**
@@ -28,11 +39,9 @@ query staking_get_current_delegate_on_network(account_id: byte_array, network): 
 /* @param account_id Given user
 /* @return Public key of the delegated to provider on Chromia mainet, or null if currently undelegated 
 */
-query staking_get_current_delegate(account_id: byte_array): pubkey? {
-    val account = ft4.accounts.Account(account_id);
-    val current_delegation = _staking_get_current_delegate(account, network.CHR);
-    return when(current_delegation) {get_null_provider_account() -> null; else -> current_delegation.provider.pubkey;};
-}
+query staking_get_current_delegate(
+    account_id: byte_array
+) = staking_get_current_delegate_on_network(account_id, network.CHR);
 
 /**
 /* Delegation changes do not take place immediately. This will return the next delegation change, or null if there is none.
@@ -42,8 +51,16 @@ query staking_get_current_delegate(account_id: byte_array): pubkey? {
 */
 query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubkey, time: integer)? {
     val staker = ft4.accounts.Account(account_id);
-    val existing = staker_state @ {.latest and .staker == staker and .network == network.CHR} ( (pubkey = .new_provider.provider.pubkey, time = .cutover_time) );
-    return if (_staking_last_known_time() <= existing.time) existing else null;
+    val upcoming_delegations = staker_state_to_provider @* {
+        .staker_state.account == staker and .timestamp > (_staking_last_known_time() - chain_context.args.staking_rate_change_delay_ms)
+    } (
+        @omit @sort_desc .timestamp,
+        pubkey = .provider.pubkey,
+        time = .timestamp + chain_context.args.staking_rate_change_delay_ms
+    ) limit 1;
+    return if (exists(
+        upcoming_delegations
+    )) (upcoming_delegations[0]) else null;
 }
 
 /**
@@ -52,9 +69,17 @@ query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubk
 /* @param pubkey Public key of the given provider
 /* @return Total CHR staked to the given provider in  minor units
 */
-query staking_get_total_delegation_to(pubkey) {
-    val provider_account = provider_account @ {.provider.pubkey == pubkey};
-    return _staking_get_total_delegation_to(provider_account, network.CHR) + _staking_get_total_delegation_to(provider_account, network.BSC) + _staking_get_total_delegation_to(provider_account, network.ETH);
+query staking_get_total_delegation_to(pubkey, network? = null) {
+    return ( s1: staker_state_to_provider) @* {
+        .provider.pubkey == pubkey and (s1.timestamp <= (_staking_last_known_time() - chain_context.args.staking_rate_change_delay_ms)) and 
+            (not exists(network) or .staker_state.network == network) and 
+            not exists((s2:staker_state_to_provider) @* { 
+                s2.staker_state ==s1.staker_state,
+                ((s2.timestamp <= (_staking_last_known_time() - chain_context.args.staking_rate_change_delay_ms)) and (s2.timestamp>s1.timestamp)) 
+                or (s2.timestamp==s1.timestamp and s2 < s1) 
+            }
+        )
+    } ( @sum .staker_state.balance )[0];
 }
 
 /**
@@ -64,9 +89,8 @@ query staking_get_total_delegation_to(pubkey) {
 /* @return Total self staked CHR in  minor units
 */
 query staking_get_provider_stake(pubkey) {
-    val provider = _staking_pubkey_to_provider(pubkey);
-    val provider_id = provider.account.id;
-    return if (pubkey == staking_get_current_delegate(provider_id) ?: get_null_provider_account().provider.pubkey)
+    val provider_id = provider_account @ {pubkey == .provider.pubkey} (.account.id);
+    return if (pubkey == staking_get_current_delegate(provider_id) ?: get_null_account())
         staking_get_balance(provider_id)
         else 0;
 }
@@ -80,9 +104,12 @@ query staking_get_provider_stake(pubkey) {
 /* @param account_id Given account's id
 /* @return Timestamp of the expected withdrawal time or null if not withdrawal has been requested
 */
-query staking_get_withdrawal_time(account_id: byte_array): timestamp? {
-    val staker = ft4.accounts.Account(account_id);
-    return _staking_get_withdrawal_time(staker);
+query staking_get_withdrawal_time(account_id: byte_array, network = network.CHR): timestamp? {
+    return staker_withdrawal_request @? {
+        .staker_state.account.id == account_id and .active and .staker_state.network == network
+    } (
+        .finish_at
+    );
 }
 
 
@@ -94,9 +121,15 @@ query staking_get_withdrawal_time(account_id: byte_array): timestamp? {
 /* @param account_id Account ID
 /* @return Amount of CHR in minor units
 */
-query staking_rewards_claimable_for(account_id: byte_array): integer {
+query staking_rewards_claimable_for(account_id: byte_array) {
+    val rate = staking_get_current_rate() / millis_per_year;
     val staker = ft4.accounts.Account(account_id);
-    return _staking_rewards_claimable_for(staker, network.CHR) + _staking_rewards_claimable_for(staker, network.BSC) + _staking_rewards_claimable_for(staker, network.ETH);
+    val ss = staker_state @* { .account == staker } ( .balance, .last_update, .pending_token_time );
+    var total_pending_token_time = 0;
+    for (s in ss) {
+        total_pending_token_time += s.pending_token_time + s.balance * (_staking_last_known_time() - s.last_update);
+    }
+    return integer(total_pending_token_time * rate);
 }
 
 /**
@@ -105,10 +138,13 @@ query staking_rewards_claimable_for(account_id: byte_array): integer {
 /* @param account_id Account ID
 /* @return Amount of CHR in minor units
 */
-query staking_rewards_for(account_id: byte_array) {
-    val staker = ft4.accounts.Account(account_id);
-    return _staking_rewards_claimable_since(staker, network.CHR, 0) + _staking_rewards_claimable_since(staker, network.BSC, 0) + _staking_rewards_claimable_since(staker, network.ETH, 0);
-}
+query staking_rewards_for(
+    account_id: byte_array
+) = staking_rewards_claimable_for(
+    account_id
+) + staking_get_rewards_paid(
+    account_id
+);
 
 /**
 /* Staking rewards that have already been distributed to the user
@@ -116,12 +152,11 @@ query staking_rewards_for(account_id: byte_array) {
 /* @param account_id Account ID
 /* @return Amount of CHR in minor units
 */
-query staking_get_rewards_paid(account_id: byte_array) {
+query staking_get_rewards_paid(account_id: byte_array): integer {
     val account = ft4.accounts.Account(account_id);
-    val total_since_zero = _staking_rewards_claimable_since(account, network.CHR, 0) +  _staking_rewards_claimable_since(account, network.ETH, 0) + _staking_rewards_claimable_since(account, network.BSC, 0);
-    val unclaimed = _staking_rewards_claimable_for(account, network.CHR) + _staking_rewards_claimable_for(account, network.BSC) + _staking_rewards_claimable_for(account, network.ETH);
-    return total_since_zero - unclaimed;
+    return staking_payment @* { .account == account } ( @sum .amount )[0];
 }
+
 
 
 // Balances
@@ -132,10 +167,13 @@ query staking_get_rewards_paid(account_id: byte_array) {
 /* @param account_id Account ID
 /* @return Total balance of CHR in minor units
 */
-query staking_get_balance(account_id: byte_array) {
-    val account = ft4.accounts.Account(account_id);
-    return _staking_get_balance(account);
-}
+query staking_get_balance(
+    account_id: byte_array
+) = staker_state @ { 
+    .account.id == account_id 
+} ( 
+    @sum .balance 
+) limit 1;
 
 /**
 /* Native Ft4 Chromia balance of CHR (in minor units) staked by the user
@@ -145,7 +183,7 @@ query staking_get_balance(account_id: byte_array) {
 */
 query staking_get_native_balance(account_id: byte_array) {
     val account = ft4.accounts.Account(account_id);
-    return _staking_get_balance_by_network(account, network.CHR);
+    return staker_state @ { .account == account and .network ==network.CHR } ( .balance );
 }
 
 
@@ -156,17 +194,18 @@ query staking_get_native_balance(account_id: byte_array) {
 /*
 /* @return Total staked of CHR in minor units
 */
-query staking_total_stake() = staker_state @ { .latest } (@sum .balance);
+query staking_total_stake() = staker_state @* { } ( @sum .balance )[0];
 
 /**
 /* Total staked by all users (including undelegated stakes)
 /*
 /* @return User count
 */
-query staking_total_accounts() = staker_state @ { .latest and .network == network.CHR } (@sum 1);
+query staking_total_accounts() = staker_state @* { } ( @sum 1 )[0];
 
 
 // Date utilites
 
-query staking_get_cannot_change_before(): timestamp = _staking_cannot_change_before();
-query staking_get_last_known_time() = _staking_last_known_time();
+query staking_get_cannot_change_before(): timestamp = _staking_last_known_time() + chain_context
+    .args
+    .staking_rate_change_delay_ms;

@@ -1,20 +1,31 @@
-@extend(remove_provider_handler) function(provider_account) = _staking_offboard_provider(provider_account);
-@extend(after_pay_reward) function(pay_reward_result) = _staking_shared_rewards(pay_reward_result);
+@extend(remove_provider_handler)
+function(
+    provider_account
+) = _staking_offboard_provider(
+    provider_account
+        .provider
+        .pubkey
+);
+
+@extend(after_pay_reward)
+function(pay_reward_result) = _staking_shared_rewards(pay_reward_result);
+
+function __staking_begin_block(height: integer) {
+    if (
+        (_staking_last_known_time() - _staking_state.last_reward_distribution) > chain_context.args.staking_payout_interval_ms
+    ) {
+        _staking_distribute_rewards();
+        _staking_state.last_reward_distribution = _staking_last_known_time();
+    }
+    if (
+        (_staking_last_known_time() - _staking_state.last_withdrawal_distribution) > chain_context.args.staking_withdrawal_delay_ms
+    ) {
+        _staking_distribute_withdrawals();
+        _staking_state.last_withdrawal_distribution = _staking_last_known_time();
+    }
+}
 
 function __staking_init() {
     _staking_set_rate_at(chain_context.args.staking_initial_reward_rate, _staking_last_known_time());
-
-    // Create a sentinel value for null provider
-    val ft4_null = create ft4.accounts.account(NULL_ACCOUNT_ID, type = "");
-    val provider_null = create provider(pubkey = NULL_ACCOUNT_ID, tier = provider_tier.DAPP_PROVIDER, active = false);
-    create provider_account(account = ft4_null, provider = provider_null);
-}
-
-function __staking_begin_block(height: integer) {
-    val last_payout_time = (staker_payout @? {} (@max .staker_payout_time)) ?: 0;
-    val interval_since_last_payout = _staking_last_known_time() - last_payout_time;
-    if(interval_since_last_payout > chain_context.args.staking_payout_interval_ms) {
-        _staking_claim_rewards();
-    }
-    _staking_withdraw_all();
+    create provider ( get_null_account(), system = true, provider_tier.NODE_PROVIDER, active = true );
 }

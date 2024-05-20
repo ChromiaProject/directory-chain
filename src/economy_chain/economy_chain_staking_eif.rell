@@ -21,7 +21,15 @@ function _staking_import_evm_balance_impl(address: byte_array, network_id: integ
     require_initialized();
 
     val staker = ft4.auth.authenticate();
-    val account = require(eif.hbridge.find_ft4_account_for_address(address, network_id), "No account link established for this address.");
+    val account = require(
+        eif
+            .hbridge
+            .find_ft4_account_for_address(
+                address,
+                network_id
+            ),
+        "No account link established for this address."
+    );
     require(account == staker, "Address does not belong to the authenticated account.");
 
     flush_provisional_stake_balance(staker, address);
@@ -37,7 +45,7 @@ function _staking_network_id_to_enum(network_id: integer) = when (network_id) {
 function flush_provisional_stake_balance(account: ft4.accounts.account, address: byte_array) {
     val provisional = provisional_stake_balance @* { address };
     for (p in provisional) {
-        _staking_update_from_evm(account, p.staked_balance, p.network);
+        _staking_update_evm_state(account, p.network, p.staked_balance);
         delete p;
     }
 }
@@ -64,7 +72,7 @@ function __staking_evm_block(network_id: integer, evm_block_height: integer, evm
             val staked_balance = integer.from_gtv(event.non_indexed_values[0]);
 
             if (exists(ft4_account)) {
-                _staking_update_from_evm(ft4_account, staked_balance, current_network);
+                _staking_update_evm_state(ft4_account, current_network, staked_balance);
             } else {
                 val provisional = provisional_stake_balance @? { evm_address, current_network };
                 if (exists(provisional)) {
