@@ -319,8 +319,8 @@ function test_blockchain_rid() {
 
     val blockchain_info_list = nm_compute_blockchain_info_list(test_node.pubkey);
     assert_true(blockchain_info_list.contains(blockchain_info(
-        calculate_configuration_hash(conf.to_gtv().to_bytes(), [test_node.pubkey]), 
-        false, 
+        calculate_configuration_hash(conf.to_gtv().to_bytes(), [test_node.pubkey]),
+        false,
         blockchain_state.RUNNING
     )));
 }
@@ -381,4 +381,24 @@ function test_nm_find_next_inactive_blockchains() {
     ).sign(initial_provider).run();
     assert_equals(nm_find_next_inactive_blockchains(3), [inactive_blockchain_info(foo_bar, blockchain_state.REMOVED, 4)]);
     assert_true(nm_find_next_inactive_blockchains(4).empty());
+}
+
+function test_nm_is_blockchain_provider() {
+
+    setup_module();
+
+    var conf = apply_required_configuration_properties();
+    rell.test.tx().op(
+        create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "container"),
+        register_provider(initial_provider.pub, rell.test.keypairs.bob.pub, provider_tier.NODE_PROVIDER)
+    ).sign(initial_provider).run();
+
+    val chains = nm_get_blockchains_for_container("container");
+    assert_equals(chains.size(), 1);
+    val blockchain_rid = chains[0];
+
+    assert_true(nm_is_blockchain_provider(initial_provider.pub, blockchain_rid));
+    assert_false(nm_is_blockchain_provider(rell.test.keypairs.bob.pub, blockchain_rid));
+    assert_fails(nm_is_blockchain_provider(rell.test.keypairs.charlie.pub, blockchain_rid, *));
 }
