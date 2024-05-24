@@ -18,28 +18,13 @@ import lib.auth;
 struct module_args {
     auth_privkey: byte_array;
     admin_privkey: byte_array;
-    staking_rate_change_delay_ms: integer;
+    staking_delegation_delay_ms: integer;
     staking_withdrawal_delay_ms: integer;
 }
 
 val auth_privkey = chain_context.args.auth_privkey;
 val admin_privkey = chain_context.args.admin_privkey;
-val staking_rate_change_delay_ms = chain_context.args.staking_rate_change_delay_ms;
-
-function test_set_rates() {
-    rell.test.tx().op(init()).sign(admin_privkey).run();
-
-    rell.test.set_next_block_time_delta(staking_get_cannot_change_before());
-    rell.test.tx().op(staking_set_rate(0.1)).sign(admin_privkey).run();
-    assert_equals(staking_get_current_rate(), 0.1);
-
-    rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
-    rell.test.tx().op(staking_set_rate(0.5)).sign(admin_privkey).run();
-    assert_equals(staking_get_current_rate(), 0.5);
-
-    rell.test.tx().op(staking_set_rate(0.05)).sign(admin_privkey).run(); // Won't take effect
-    assert_equals(staking_get_current_rate(), 0.5);
-}
+val staking_delegation_delay_ms = chain_context.args.staking_delegation_delay_ms;
 
 function test_add_remove_providers() {
     rell.test.tx().op(init()).run();
@@ -50,7 +35,6 @@ function test_add_remove_providers() {
     val test_account_dave = require(do_create_account(rell.test.keypairs.dave, auth_privkey));
 
     rell.test.tx()
-        .op(staking_set_rate(0.5))
         .op(mint_to(test_account_alice, 9999999))
         .op(mint_to(test_account_dave, 9999999))
     .sign(admin_privkey).run();
@@ -68,7 +52,7 @@ function test_add_remove_providers() {
     do_staking_delegate(rell.test.keypairs.dave, rell.test.keypairs.bob.pub);
 
     // Wait for delegation to take effect
-    rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
+    rell.test.set_next_block_time_delta(staking_delegation_delay_ms);
     rell.test.block().run();
     assert_equals(staking_get_balance(test_account_alice.id), 9999999);
     assert_equals(staking_get_total_delegation_to(rell.test.keypairs.charlie.pub), 9999999);
@@ -92,11 +76,10 @@ function test_delegation() {
     val test_account_charlie = require(do_create_account(rell.test.keypairs.charlie, auth_privkey));
 
     rell.test.tx()
-        .op(staking_set_rate(0.5))
         .op(mint_to(test_account_alice, 9999999))
     .sign(admin_privkey).run();
 
-    rell.test.set_next_block_time_delta(staking_rate_change_delay_ms + 1);
+    rell.test.set_next_block_time_delta(staking_delegation_delay_ms + 1);
     rell.test.block().run();
 
     assert_equals(staking_rewards_claimable_for(test_account_alice.id), 0);
@@ -112,7 +95,7 @@ function test_delegation() {
     do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.charlie.pub);
     assert_equals(staking_get_next_delegation_change(test_account_alice.id)?.pubkey, rell.test.keypairs.charlie.pub);
 
-    rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
+    rell.test.set_next_block_time_delta(staking_delegation_delay_ms);
     rell.test.block().run();
     assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.charlie.pub);
     assert_null(staking_get_next_delegation_change(test_account_alice.id));
@@ -123,7 +106,7 @@ function test_delegation() {
 
     assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.charlie.pub); // No change now.
 
-    rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
+    rell.test.set_next_block_time_delta(staking_delegation_delay_ms);
     rell.test.block().run();
     assert_null(staking_get_current_delegate(test_account_alice.id)); // Change in a week
 }
@@ -146,7 +129,6 @@ function test_yield_and_payout_crudely () {
     // Basic intialisation
     rell.test.tx()
         .op(init())
-        .op(staking_set_rate(0.5))
         .op(mint_to_pool(8888888888))
     .sign(admin_privkey).run();
 
@@ -165,7 +147,7 @@ function test_yield_and_payout_crudely () {
     assert_equals(staking_rewards_claimable_for(test_account_charlie.id), 0);
 
     // FFWD
-    rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
+    rell.test.set_next_block_time_delta(staking_delegation_delay_ms);
     rell.test.block().run(); rell.test.block().run();
 
     // Check no yield
@@ -179,7 +161,7 @@ function test_yield_and_payout_crudely () {
     do_staking_deposit_native(rell.test.keypairs.bob, 2000000);
 
     // FFWD
-    rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
+    rell.test.set_next_block_time_delta(staking_delegation_delay_ms);
     rell.test.block().run(); rell.test.block().run();
 
     // Check that there is a yield and that B is twice of A (allow for rounding)
@@ -191,7 +173,7 @@ function test_yield_and_payout_crudely () {
     assert_true(1 >= abs(2 * alice_amount - bob_amount));
 
     // FFWD
-    rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
+    rell.test.set_next_block_time_delta(staking_delegation_delay_ms);
     rell.test.block().run(); rell.test.block().run();
 
     // Check both numbers have doubled (allow for rounding)
@@ -315,7 +297,7 @@ function test_staking_get_total_delegation_to() {
     assert_equals(staking_get_total_delegation_to(rell.test.keypairs.bob.pub), 0);
 
     // Wait a period
-    rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
+    rell.test.set_next_block_time_delta(staking_delegation_delay_ms);
     rell.test.block().run();
 
     // Check that A has 9 delegated to it
@@ -336,7 +318,7 @@ function test_staking_get_total_delegation_to() {
     assert_equals(staking_get_total_delegation_to(rell.test.keypairs.alice.pub), 16);
 
     // Wait a period
-    rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
+    rell.test.set_next_block_time_delta(staking_delegation_delay_ms);
     rell.test.block().run();
 
     // Check that A has 27 delegated to it
@@ -348,7 +330,7 @@ function test_staking_get_total_delegation_to() {
     do_staking_undelegate(rell.test.keypairs.dave);
 
     // Wait a period
-    rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
+    rell.test.set_next_block_time_delta(staking_delegation_delay_ms);
     rell.test.block().run();
 
     // Check that A has 16 delegated to it
@@ -376,7 +358,7 @@ function test_deposit_and_withdraw_via_evm() {
         .run_must_fail("No staker state for %s".format(test_account_alice.id));
 
     // Wait a period
-    rell.test.set_next_block_time_delta(staking_rate_change_delay_ms);
+    rell.test.set_next_block_time_delta(staking_delegation_delay_ms);
     rell.test.block().run();
 
     // Withdraw

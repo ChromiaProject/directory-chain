@@ -3,15 +3,7 @@
 /** Current annualised reward rate
 /*  @return as a decimal fraction, eg. 0.1 is 10%
 */
-query staking_get_current_rate(): decimal {
-    val current_rate = reward_rate @* {
-        .timestamp<=_staking_last_known_time()
-    } (
-        .rate,
-        @omit @sort_desc .timestamp
-    ) limit 1;
-    return current_rate[0];
-}
+query staking_get_current_rate(): decimal = chain_context.args.staking_reward_rate;
 
 
 // Delegations
@@ -27,7 +19,7 @@ query staking_get_current_rate(): decimal {
 query staking_get_current_delegate_on_network(account_id: byte_array, network): byte_array? {
     val _provider_pubkey = staker_state_to_provider @? {
         .staker_state.account.id == account_id and .staker_state.network == network and  
-        (_staking_last_known_time() - chain_context.args.staking_rate_change_delay_ms) >= .timestamp
+        (_staking_last_known_time() - chain_context.args.staking_delegation_delay_ms) >= .timestamp
     } ( @omit @sort_desc .timestamp, .provider.pubkey ) limit 1;
     if (not exists(_provider_pubkey)) return null;
     return if (_provider_pubkey == get_null_account()) null else _provider_pubkey;
@@ -52,11 +44,11 @@ query staking_get_current_delegate(
 query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubkey, time: integer)? {
     val staker = ft4.accounts.Account(account_id);
     val upcoming_delegations = staker_state_to_provider @* {
-        .staker_state.account == staker and .timestamp > (_staking_last_known_time() - chain_context.args.staking_rate_change_delay_ms)
+        .staker_state.account == staker and .timestamp > (_staking_last_known_time() - chain_context.args.staking_delegation_delay_ms)
     } (
         @omit @sort_desc .timestamp,
         pubkey = .provider.pubkey,
-        time = .timestamp + chain_context.args.staking_rate_change_delay_ms
+        time = .timestamp + chain_context.args.staking_delegation_delay_ms
     ) limit 1;
     return if (exists(
         upcoming_delegations
@@ -71,11 +63,11 @@ query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubk
 */
 query staking_get_total_delegation_to(pubkey, network? = null) {
     return ( s1: staker_state_to_provider) @* {
-        .provider.pubkey == pubkey and (s1.timestamp <= (_staking_last_known_time() - chain_context.args.staking_rate_change_delay_ms)) and 
+        .provider.pubkey == pubkey and (s1.timestamp <= (_staking_last_known_time() - chain_context.args.staking_delegation_delay_ms)) and 
             (not exists(network) or .staker_state.network == network) and 
             not exists((s2:staker_state_to_provider) @* { 
                 s2.staker_state ==s1.staker_state,
-                ((s2.timestamp <= (_staking_last_known_time() - chain_context.args.staking_rate_change_delay_ms)) and (s2.timestamp>s1.timestamp)) 
+                ((s2.timestamp <= (_staking_last_known_time() - chain_context.args.staking_delegation_delay_ms)) and (s2.timestamp>s1.timestamp)) 
                 or (s2.timestamp==s1.timestamp and s2 < s1) 
             }
         )
@@ -208,7 +200,7 @@ query staking_total_accounts() = staker_state @* { } ( @sum 1 )[0];
 
 query staking_get_cannot_change_before(): timestamp = _staking_last_known_time() + chain_context
     .args
-    .staking_rate_change_delay_ms;
+    .staking_delegation_delay_ms;
 
 query get_provisional_stake_balances(): list<struct<provisional_stake_balance>> {
     return provisional_stake_balance @* {} ($.to_struct());
