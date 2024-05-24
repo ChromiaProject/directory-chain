@@ -67,7 +67,7 @@ definitions:
       snapshot:
         levels_per_page: 2
         snapshots_to_keep: 2
-  economy_chain_module_args: &economy_chain_module_args
+  economy_chain_ft4_module_args: &economy_chain_ft4_module_args
     lib.ft4.core.accounts:
       rate_limit:
         active: 1
@@ -86,28 +86,33 @@ definitions:
     lib.auth:
       # TODO set proper pubkey for auth-server-ft4
       auth_pubkey: x"0317FF1ECF25B04026B6F9FA1960BA58070FB1CFC98519F7BC02D71ED1B00B1997"
-    economy_chain:
-      bsc_asset_network_id: 97
-      bsc_asset_address: "B2ee8499B5e73795F28287A0603d66db6843a0f0"
-      eth_asset_network_id: 11155111
-      eth_asset_address: "Aa1ae68ABcd32804132370B9f73c3160dbbfC593"
-      asset_name: "Chromia Test"
-      asset_symbol: "tCHR"
-      asset_decimals: 6
-      asset_icon: "https://s3.eu-central-1.amazonaws.com/www.chromiadev.net/assets/tCHR.png"
-      amount_to_mint: 1000000000
-      pool_amount_to_mint: 1000000000
-      # TODO set proper pubkey for admin
-      admin_pubkey: x"0317AC5B309A05B81A68F1A64321A3C6E6799E037C12892838682EBB9A620316A6"
-      staking_initial_reward_rate: 0.15
-      staking_rate_change_delay_ms: 604800000
-      staking_withdrawal_delay_ms: 1209600000
-      staking_delegation_delay_ms: 604800000
-      staking_payout_interval_ms: 31536000000 # Good for testing
-      rewards_share: 0.1
-      test_chr_pool_refill_limit_millis: 86400000 # 1 day
-      max_bridge_leases_per_container: 10
-      evm_transaction_submitters_bonus: 0.1
+  economy_chain_module_args: &economy_chain_module_args
+    bsc_asset_network_id: 97
+    bsc_asset_address: "B2ee8499B5e73795F28287A0603d66db6843a0f0"
+    eth_asset_network_id: 11155111
+    eth_asset_address: "Aa1ae68ABcd32804132370B9f73c3160dbbfC593"
+    asset_name: "Chromia Test"
+    asset_symbol: "tCHR"
+    asset_decimals: 6
+    asset_icon: "https://s3.eu-central-1.amazonaws.com/www.chromiadev.net/assets/tCHR.png"
+    amount_to_mint: 1000000000
+    pool_amount_to_mint: 1000000000
+    # TODO set proper pubkey for admin
+    admin_pubkey: x"0317AC5B309A05B81A68F1A64321A3C6E6799E037C12892838682EBB9A620316A6"
+    staking_initial_reward_rate: 0.15
+    staking_rate_change_delay_ms: 604800000
+    staking_withdrawal_delay_ms: 1209600000
+    staking_delegation_delay_ms: 604800000
+    staking_payout_interval_ms: 31536000000 # Good for testing
+    rewards_share: 0.1
+    test_chr_pool_refill_limit_millis: 86400000 # 1 day
+    max_bridge_leases_per_container: 10
+    evm_transaction_submitters_bonus: 0.1
+  economy_chain_test_module_args: &economy_chain_test_module_args
+    staking_rate_change_delay_ms: 60000 # 1 min
+    staking_withdrawal_delay_ms: 60000 # 1 min
+    staking_delegation_delay_ms: 60000 # 1 min
+    staking_payout_interval_ms: 10000 # 10 seconds - Good for testing
   proposal_blockchain.util: &proposal_blockchain_util
     max_config_path_depth: 10
     max_config_size: 5242880 # 5 MiB
@@ -261,9 +266,15 @@ blockchains:
   economy_chain_test:
     module: economy_chain_test
     config:
-      << : *common_economy_chain
+      <<: *common_economy_chain
     moduleArgs:
-      << : *economy_chain_module_args
+      <<: *economy_chain_ft4_module_args
+      economy_chain:
+        <<: *economy_chain_module_args
+        staking_rate_change_delay_ms: 60000 # 1 min
+        staking_withdrawal_delay_ms: 60000 # 1 min
+        staking_delegation_delay_ms: 60000 # 1 min
+        staking_payout_interval_ms: 10000 # 10 seconds - Good for testing
       economy_chain_claim_tchr:
         asset_name: "Chromia Test"
         asset_symbol: "tCHR"
@@ -320,7 +331,9 @@ blockchains:
     config:
       << : *common_economy_chain
     moduleArgs:
-      << : *economy_chain_module_args
+      << : *economy_chain_ft4_module_args
+      economy_chain:
+        <<: *economy_chain_module_args
 
 database: # Used for running tests
   logSqlErrors: true
