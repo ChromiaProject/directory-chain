@@ -82,12 +82,8 @@ operation __begin_block(height: integer) {
     }
 }
 
-operation __evm_block(network_id: integer, evm_block_height: integer, evm_block_hash: byte_array, events: list<event_data>) {
-    _fn_evm_block(network_id, evm_block_height, evm_block_hash, events);
-}
-
-function _fn_evm_block(network_id: integer, evm_block_height: integer, evm_block_hash: byte_array, events: list<event_data>) {
-    __staking_evm_block(network_id, evm_block_height, evm_block_hash, events);
+function _fn_evm_block(network_id: integer, evm_block_height: integer, evm_block_hash: byte_array, events: list<eif.messaging.event_data>) {
+    __handle_staking_events(network_id, events);
 }
 
 function require_initialized() {
@@ -98,4 +94,8 @@ function require_pubkey(pubkey) {
     require(pubkey.size() == 33 or pubkey.size() == 65 or pubkey.size() == 1336, "Value is not pubkey: " + pubkey);
 }
 
+@extend(eif.messaging.handle_evm_block)
+function (evm_block: eif.messaging.evm_block_message) {
+    __handle_staking_events(evm_block.network_id, evm_block.events);
+}
 

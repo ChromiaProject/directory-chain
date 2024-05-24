@@ -7,16 +7,6 @@ entity provisional_stake_balance {
     mutable staked_balance: integer;
 }
 
-struct event_data {
-    tnx_hash: byte_array;
-    log_index: integer;
-    signature: byte_array;
-    contract_address: byte_array;
-    name: text;
-    indexed_values: list<gtv>;
-    non_indexed_values: list<gtv>;
-}
-
 function _staking_import_evm_balance_impl(address: byte_array, network_id: integer) {
     require_initialized();
 
@@ -50,7 +40,7 @@ function flush_provisional_stake_balance(account: ft4.accounts.account, address:
     }
 }
 
-function __staking_evm_block(network_id: integer, evm_block_height: integer, evm_block_hash: byte_array, events: list<event_data>) {
+function __handle_staking_events(network_id: integer, events: list<eif.messaging.event_data>) {
     for (event in events) {
         val evm_address = byte_array.from_gtv(event.indexed_values[0]);
 
@@ -85,8 +75,6 @@ function __staking_evm_block(network_id: integer, evm_block_height: integer, evm
                     );
                 }
             }
-        } else {
-            log("Unknown EIF event: ", event.name);
         }
     }
 }
