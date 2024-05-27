@@ -2,7 +2,7 @@
  * Returns NM API Version
  * NM API Version: 1
  */
-query nm_api_version() = 18;
+query nm_api_version() = 19;
 
 /**
  * Returns peer info list
@@ -342,4 +342,17 @@ query nm_get_migrating_blockchain_node_info(node_id: pubkey, blockchain_rid: byt
     }
 
     return null;
+}
+
+/**
+ * Returns true if pubkey is allowed to deploy to blockchain, otherwise false.
+ * NM API Version 19
+ */
+query nm_is_blockchain_provider(provider_pubkey: pubkey, blockchain_rid: byte_array): boolean {
+
+    val provider = require_provider(provider_pubkey);
+    val blockchain = require_blockchain(blockchain_rid);
+    val container = container_blockchain @ { blockchain } .container;
+
+    return roles.has_deploy_access(provider, container);
 }
