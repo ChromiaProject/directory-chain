@@ -118,3 +118,18 @@ function test_update_voter_set_treshold_invalid() {
         .run_must_fail("Invalid threshold level");
 }
 
+function test_update_voter_set_remove_member_fails_due_to_too_low_threshold() {
+
+    setup_module();
+    rell.test.tx().op(
+        create_test_provider("bob", rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER)
+    ).run();
+
+    rell.test.tx()
+        .op(
+        create_voter_set(rell.test.keypairs.alice.pub, test_set, 2, [rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub], null),
+        propose_update_voter_set(rell.test.keypairs.alice.pub, test_set, null, null, [], [rell.test.keypairs.bob.pub]),
+    )
+        .sign(rell.test.keypairs.alice, rell.test.keypairs.bob)
+        .run_must_fail("Invalid threshold level");
+}
