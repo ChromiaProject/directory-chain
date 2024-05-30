@@ -43,6 +43,7 @@ operation propose_provider_state(my_pubkey: pubkey, provider_pubkey: pubkey, act
     } else {
         require_system_access(me);
         require(empty(pending_provider_state @* { .provider == other_prov, .active == active, .proposal.state == proposal_state.PENDING } limit 1), "Already proposed");
+        require(other_prov.active != active, "Provider is already %s".format(if (active) "active" else "not active"));
         val prop = create_proposal(proposal_type.provider_state, me, system_p_voter_set(), description);
         create pending_provider_state(prop, other_prov, .active = active);
         internal_vote(me, prop, true);
@@ -84,7 +85,10 @@ function update_provider_state(provider, active: boolean) {
     } else { // enable
         // If enabled provider is a system provider, update SYSTEM_P voter set
         if (roles.has_system_access(provider)) {
-            create voter_set_member(voter_set @ { voter_sets.system_p }, provider);
+            val voter_set = system_p_voter_set();
+            if (empty(voter_set_member @? { voter_set, provider })) {
+                create voter_set_member(voter_set, provider);
+            }
         }
     }
     after_provider_updated(provider);

@@ -215,10 +215,13 @@ function test_enable_provider() {
       SP  |  +  |  +  | (+)
     */
     rell.test.tx().op(
-        propose_provider_state(initial_provider.pub, system_provider.pub, true)
+        propose_provider_state(initial_provider.pub, system_provider.pub, false)
     ).sign(initial_provider).run();
-    assert_true(sp.active);
-    assert_true(roles.has_system_access(sp));
+    rell.test.tx().op(
+        make_vote(system_provider.pub, last_proposal().rowid.to_integer(), true)
+    ).sign(system_provider).run();
+    assert_false(sp.active);
+    assert_false(roles.has_system_access(sp));
 
     /*
           | DP | NP  | SP
