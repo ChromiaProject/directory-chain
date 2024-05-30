@@ -513,7 +513,7 @@ function test_pay_shared_rewards_dapp_cluster_full_reward_is_payed() {
 function test_staking_req_reward_fail_due_to_low_own() {
 
     update_staking_requirements_constants(
-        staking_requirement_system_provider_own_stake_usd = 100000000000
+        staking_requirement_system_provider_own_stake_chr = 100000000000
     );
 
     val pa = run_staking_pay_out();
@@ -526,7 +526,7 @@ function test_staking_req_reward_fail_due_to_low_own() {
 function test_staking_req_reward_fail_due_to_low_total() {
 
     update_staking_requirements_constants(
-        staking_requirement_system_provider_total_stake_usd = 100000000000
+        staking_requirement_system_provider_total_stake_chr = 100000000000
     );
 
     val pa = run_staking_pay_out();
@@ -540,7 +540,7 @@ function test_staking_req_reward_successful() {
 
     val pa = run_staking_pay_out(
         reward = 10,
-        staking_amount = (economy_constants.staking_requirement_system_provider_total_stake_usd / economy_constants.chr_per_usd).to_integer() + 100
+        staking_amount = (economy_constants.staking_requirement_system_provider_total_stake_chr / economy_constants.chr_per_usd).to_integer() + 100
     );
 
     assert_equals(get_account_balance(pa.account), 11);
@@ -566,10 +566,10 @@ function test_staking_req_reward_successful_followed_by_stopped() {
     // Staking OK - pay reward
     update_staking_requirements_constants(
         staking_requirements_enabled = true,
-        staking_requirement_system_provider_own_stake_usd = 0,
-        staking_requirement_system_provider_total_stake_usd = 0,
-        staking_requirement_dapp_provider_own_stake_usd = 1,
-        staking_requirement_dapp_provider_total_stake_usd = 0
+        staking_requirement_system_provider_own_stake_chr = 0,
+        staking_requirement_system_provider_total_stake_chr = 0,
+        staking_requirement_dapp_provider_own_stake_chr = 1,
+        staking_requirement_dapp_provider_total_stake_chr = 0
     );
 
     var pa = run_staking_pay_out(
@@ -588,7 +588,7 @@ function test_staking_req_reward_successful_followed_by_stopped() {
 
     // Staking not OK - pay reward since number of days not yet reached for a stop
     update_staking_requirements_constants(
-        staking_requirement_dapp_provider_total_stake_usd = 1000000
+        staking_requirement_dapp_provider_total_stake_chr = 1000000
     );
     rell.test.set_next_block_time_delta((economy_constants.staking_requirement_stop_payout_days - 1) * DAY_MS); // Time is limit-1 day
     rell.test.block().run();
@@ -748,20 +748,20 @@ function run_pay_reward(reward: big_integer = 0, refill: boolean) {
 function update_staking_requirements_constants(
     staking_requirements_enabled: boolean? = null,
     staking_requirement_stop_payout_days: integer? = null,
-    staking_requirement_system_provider_own_stake_usd: integer? = null,
-    staking_requirement_system_provider_total_stake_usd: integer? = null,
-    staking_requirement_dapp_provider_own_stake_usd: integer? = null,
-    staking_requirement_dapp_provider_total_stake_usd: integer? = null
+    staking_requirement_system_provider_own_stake_chr: integer? = null,
+    staking_requirement_system_provider_total_stake_chr: integer? = null,
+    staking_requirement_dapp_provider_own_stake_chr: integer? = null,
+    staking_requirement_dapp_provider_total_stake_chr: integer? = null
 ) {
 
     rell.test.tx().op(
         update_staking_requirements_economy_constants(
             staking_requirements_enabled,
             staking_requirement_stop_payout_days,
-            staking_requirement_system_provider_own_stake_usd,
-            staking_requirement_system_provider_total_stake_usd,
-            staking_requirement_dapp_provider_own_stake_usd,
-            staking_requirement_dapp_provider_total_stake_usd
+            staking_requirement_system_provider_own_stake_chr,
+            staking_requirement_system_provider_total_stake_chr,
+            staking_requirement_dapp_provider_own_stake_chr,
+            staking_requirement_dapp_provider_total_stake_chr
         )
     ).sign(admin_privkey).run();
 }

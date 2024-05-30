@@ -258,30 +258,27 @@ function get_staking_requirement_payout_stop(provider_account): (integer, intege
 function provider_meets_staking_requirements(provider, provider_account): boolean {
 
     val required_own = if (provider.system)
-        economy_constants.staking_requirement_system_provider_own_stake_usd
+        economy_constants.staking_requirement_system_provider_own_stake_chr
     else
-        economy_constants.staking_requirement_dapp_provider_own_stake_usd;
+        economy_constants.staking_requirement_dapp_provider_own_stake_chr;
 
     val required_total = if (provider.system)
-            economy_constants.staking_requirement_system_provider_total_stake_usd
+            economy_constants.staking_requirement_system_provider_total_stake_chr
         else
-            economy_constants.staking_requirement_dapp_provider_total_stake_usd;
+            economy_constants.staking_requirement_dapp_provider_total_stake_chr;
 
-    val own_usd = get_chr_in_usd(staking_get_provider_stake(provider.pubkey));
-    val total_usd = get_chr_in_usd(staking_get_total_delegation_to(provider.pubkey));
+    val current_own = staking_get_provider_stake(provider.pubkey);
+    val current_total = staking_get_total_delegation_to(provider.pubkey);
 
-    if (own_usd < required_own) {
-        log("Provider %s has not enough own staking (%s < %s)".format(provider.pubkey, own_usd, required_own));
+    if (current_own < required_own) {
+        log("Provider %s has not enough own staking (%s < %s)".format(provider.pubkey, current_own, required_own));
         return false;
     }
 
-    if (total_usd < required_total) {
-        log("Provider %s has not enough total staking (%s < %s)".format(provider.pubkey, total_usd, required_total));
+    if (current_total < required_total) {
+        log("Provider %s has not enough total staking (%s < %s)".format(provider.pubkey, current_total, required_total));
         return false;
     }
 
     return true;
 }
-
-function get_chr_in_usd(chr: integer): decimal =
-    chr * economy_constants.chr_per_usd;
