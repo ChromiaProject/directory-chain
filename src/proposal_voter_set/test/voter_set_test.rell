@@ -72,8 +72,8 @@ function test_update_voter_set() {
     rell.test.tx()
         .op(create_voter_set(p1.pub, test_set, 0, remove_providers, null))
         .op(propose_update_voter_set(p1.pub, test_set, 1, null, list<pubkey>(), list<pubkey>()))
-        .op(propose_update_voter_set(p1.pub, test_set, null, null, add_providers, list<pubkey>()))    // Add p2
-        .op(propose_update_voter_set(p1.pub, test_set, null, null, list<pubkey>(), remove_providers)) // Remove p1
+        .op(propose_update_voter_set(p1.pub, test_set, null, null, add_providers, list<pubkey>()))// Add p2
+        .op(propose_update_voter_set(p1.pub, test_set, null, null, list<pubkey>(), remove_providers))// Remove p1
         .op(propose_update_voter_set(p2.pub, test_set, null, system_voter_set().name, list<pubkey>(), list<pubkey>()))
         .sign(p1)
         .sign(p2)
@@ -85,3 +85,36 @@ function test_update_voter_set() {
     assert_not_null(voter_set_member @? { vs, provider @ { p2.pub } });
     assert_null(voter_set_member @? { vs, provider @ { p1.pub } });
 }
+
+function test_update_voter_set_treshold_valid() {
+
+    setup_module();
+    rell.test.tx().op(
+        create_test_provider("bob", rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER)
+    ).run();
+
+    rell.test.tx()
+        .op(
+            create_voter_set(rell.test.keypairs.alice.pub, test_set, 0, [rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub], null),
+            propose_update_voter_set(rell.test.keypairs.alice.pub, test_set, 1, null, [], [rell.test.keypairs.bob.pub]),
+        )
+        .sign(rell.test.keypairs.alice, rell.test.keypairs.bob)
+        .run();
+}
+
+function test_update_voter_set_treshold_invalid() {
+
+    setup_module();
+    rell.test.tx().op(
+        create_test_provider("bob", rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER)
+    ).run();
+
+    rell.test.tx()
+        .op(
+            create_voter_set(rell.test.keypairs.alice.pub, test_set, 0, [rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub], null),
+            propose_update_voter_set(rell.test.keypairs.alice.pub, test_set, 2, null, [], [rell.test.keypairs.bob.pub]),
+        )
+        .sign(rell.test.keypairs.alice, rell.test.keypairs.bob)
+        .run_must_fail("Invalid threshold level");
+}
+

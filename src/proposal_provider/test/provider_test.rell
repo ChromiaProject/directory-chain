@@ -127,6 +127,16 @@ function test_propose_providers_duplication() {
     assert_true(exists(provider @? { keys3[0].pubkey, .system == true, .active == false }));
 }
 
+function test_propose_system_providers_is_already_active() {
+    setup_module();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, system_provider.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, system_provider.pub, true),
+        propose_provider_state(initial_provider.pub, system_provider.pub, true)
+    ).sign(initial_provider).run_must_fail("Provider is already active");
+}
+
 function test_propose_providers_with_invalid_pubkey() {
     setup_module();
     rell.test.tx().op(
