@@ -1,0 +1,87 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import ^.helper_operations.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.external.accounts.strategies;
+    import lib.ft4.accounts.strategies.transfer;
+    import lib.ft4.accounts.strategies.transfer.open;
+    import lib.ft4.assets;
+    import lib.ft4.auth;
+    import test_utils: lib.ft4.test.utils;
+}
+
+struct module_args {
+    admin_privkey: byte_array;
+}
+
+function test_create_account_on_internal_transfer_success() {
+    rell.test.tx().op(init()).run();
+
+    rell.test.tx().op(
+        register_account(rell.test.pubkeys.alice)
+    ).sign(chain_context.args.admin_privkey).run();
+    val sender = ft4.accounts.account_by_id(rell.test.pubkeys.alice.hash());
+    val sender_auth_descriptor = ft4.accounts.single_sig_auth_descriptor(rell.test.pubkeys.alice, set(["A", "T"]));
+    val recipient_id = rell.test.pubkeys.bob.hash();
+
+    val allowed_assets = require(ft4.transfer.get_allowed_assets(chain_context.blockchain_rid, sender.id, recipient_id));
+    require(allowed_assets.size() == 1);
+    val asset_id = allowed_assets[0].asset_id;
+    require(asset_id == get_asset().id);
+    val min_amount = allowed_assets[0].min_amount;
+    require(min_amount > 0);
+
+    val amount = min_amount;
+
+    rell.test.tx()
+        .op(ft4.auth.external.ft_auth(sender.id, sender_auth_descriptor.hash()))
+        .op(ft4.assets.external.transfer(recipient_id, asset_id, amount))
+        .sign(rell.test.keypairs.alice)
+        .run();
+
+    assert_true("open" in ft4.transfer.get_pending_transfer_strategies(recipient_id));
+
+    rell.test.tx()
+        .op(ft4.open.ras_transfer_open(ft4.accounts.single_sig_auth_descriptor(rell.test.pubkeys.bob, set(["A", "T"]))))
+        .op(register_user())
+        .sign(rell.test.keypairs.bob)
+        .run();
+
+    assert_true(empty(ft4.transfer.get_pending_transfer_strategies(recipient_id)));
+
+    val recipient = ft4.accounts.account_by_id(recipient_id);
+    assert_not_null(user @? { .account == recipient });
+    assert_equals(ft4.assets.get_asset_balance(recipient, get_asset()), amount);
+}
+
+function test_internal_transfer_fails_if_insufficient_amount_is_transferred() {
+    rell.test.tx().op(init()).run();
+
+    rell.test.tx().op(
+        register_account(rell.test.pubkeys.alice)
+    ).sign(chain_context.args.admin_privkey).run();
+    val sender = ft4.accounts.account_by_id(rell.test.pubkeys.alice.hash());
+    val sender_auth_descriptor = ft4.accounts.single_sig_auth_descriptor(rell.test.pubkeys.alice, set(["A", "T"]));
+    val recipient_id = rell.test.pubkeys.bob.hash();
+
+    val allowed_assets = require(ft4.transfer.get_allowed_assets(chain_context.blockchain_rid, sender.id, recipient_id));
+    require(allowed_assets.size() == 1);
+    val asset_id = allowed_assets[0].asset_id;
+    require(asset_id == get_asset().id);
+    val min_amount = allowed_assets[0].min_amount;
+    require(min_amount > 0);
+
+    val amount = min_amount - 1;
+
+    rell.test.tx()
+        .op(ft4.auth.external.ft_auth(sender.id, sender_auth_descriptor.hash()))
+        .op(ft4.assets.external.transfer(recipient_id, asset_id, amount))
+        .sign(rell.test.keypairs.alice)
+        .run_must_fail("no rule was found that allows account creation with");
+
+    assert_true(empty(ft4.transfer.get_pending_transfer_strategies(recipient_id)));
+}
