@@ -38,11 +38,11 @@ operation promote_node_provider(my_pubkey: pubkey, provider_pubkey: pubkey) { //
     after_provider_updated(p);
 }
 
-
 operation transfer_action_points(from: pubkey, to: pubkey, amount: integer) {
     val _from = require_is_provider_with_rate_limit(from);
     val _to = require_provider(to);
     require(provider_rl_state @ { _from } .points >= amount, "Not enough action points to transfer from.");
+    require(amount > 0, "Amount must be greater than 0");
     update provider_rl_state @ { _from } ( .points -= amount );
     update provider_rl_state @ { _to } ( .points += amount );
 }
