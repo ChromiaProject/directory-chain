@@ -511,6 +511,19 @@ function test_transfer_action_points() {
     ).sign(system_provider).run_must_fail();
 }
 
+function test_transfer_action_points_fail_on_negative_amount() {
+    setup_module();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, system_provider.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, node_provider1.pub, provider_tier.NODE_PROVIDER),
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        transfer_action_points(system_provider.pub, node_provider1.pub, -10)
+    ).sign(system_provider).run_must_fail("Amount must be greater than 0");
+}
+
 function _points(provider?) = provider_rl_state @ { provider!! } ( .points );
 
 function _enable_provider(provider, additional_voter: rell.test.keypair? = null) {
