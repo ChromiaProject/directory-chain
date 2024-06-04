@@ -47,12 +47,26 @@ function test_propose_minting_valiation() {
         .sign(rell.test.keypairs.alice)
         .run_must_fail("does not exist");
 
+    // proposal_by must be signer
+    rell.test.tx().op(
+        propose_minting(rell.test.keypairs.alice.pub, 1000000, x"01")
+    )
+        .sign(rell.test.keypairs.bob)
+        .run_must_fail("Operation must be signed by 0x02466d7fcae563e5cb09a0d1870bb580344804617879a14949cf22285f1bae3f27");
+
     // Create voter set and account
     rell.test.tx().op(
         create_chromia_foundation_voter_set()
     )
         .sign(rell.test.keypairs.alice)
         .run();
+
+    // proposal_by must be part of voter set
+    rell.test.tx().op(
+        propose_minting(rell.test.keypairs.bob.pub, 1000000, x"01")
+    )
+        .sign(rell.test.keypairs.bob)
+        .run_must_fail("0x034f355bdcb7cc0af728ef3cceb9615d90684bb5b2ca5f859ab0f0b704075871aa is not part of voter set CHROMIA_FOUNDATION");
 
     // Account not found
     rell.test.tx().op(
