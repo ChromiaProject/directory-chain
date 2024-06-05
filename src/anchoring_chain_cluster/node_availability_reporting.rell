@@ -2,6 +2,7 @@ import messaging.node_availability_reporting.*;
 import lib.icmf.*;
 
 val INTEGER_SIZE = 4;
+val PRIMARY_HEADER_KEY = "primary";
 
 object node_availability_report_stat {
     mutable last_node_availability_report: integer = 0;
@@ -50,16 +51,20 @@ function reset_node_availability_report_stat(current_number_of_signers: integer)
 
 function calculate_node_availability(start_time: integer, end_time: integer, block_range_size: integer): map<byte_array, decimal> {
     log("Calculating node availability, between timestamps %d and %d".format(start_time, end_time));
-    val anchored_block_witnesses = anchor_block @* { .timestamp >= start_time, .timestamp < end_time } (@sort @omit .timestamp, .blockchain_rid, .witness);
-    log("Fetched %d blocks from DB".format(anchored_block_witnesses.size()));
+    val anchored_blocks = anchor_block @* { .timestamp >= start_time, .timestamp < end_time } (@sort @omit .timestamp, .blockchain_rid, .witness, block_header.from_gtv(gtv.from_bytes(.block_header)));
+    log("Fetched %d blocks from DB".format(anchored_blocks.size()));
 
     val range_statistics = map<byte_array, range_statistic>();
     val current_ranges = map<byte_array, current_range>();
 
     // Any overflowing unfinished range will be calculated but not considered for node availability
     // Maybe there is a way to avoid the calculation?
-    for ((blockchain_rid, witness) in anchored_block_witnesses) {
+    for ((blockchain_rid, witness, header) in anchored_blocks) {
         val current_range = current_ranges.get_or_default(blockchain_rid, current_range());
+
+        // Add primary header field + witness
+        val primary_extra_header = header.extra.get_or_null(PRIMARY_HEADER_KEY);
+        if (exists(primary_extra_header)) current_range.active_signers.add(byte_array.from_gtv(primary_extra_header));
         current_range.active_signers.add_all(extract_signers_from_witness(witness));
 
         current_range.block_offset++;

@@ -357,7 +357,8 @@ function test_precise_configuration_update_rejected_invalid_config_has_signers()
 function test_precise_configuration_update_rejected_invalid_block_strategy_config() {
     val (anchor_chain, bc_rid) = setup();
 
-    val config_without_blockstrategy = ["config_consensus_strategy": "HEADER_HASH".to_gtv()];
+    val config_without_blockstrategy = apply_required_configuration_properties();
+    config_without_blockstrategy.remove("blockstrategy");
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config_without_blockstrategy.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run_must_fail("blockstrategy configuration must not be empty");
@@ -387,10 +388,8 @@ function test_precise_configuration_update_rejected_invalid_block_strategy_confi
 function test_precise_configuration_update_rejected_invalid_revolt_config() {
     val (anchor_chain, bc_rid) = setup();
 
-    val empty_revolt_config = [
-        "config_consensus_strategy": "HEADER_HASH".to_gtv(),
-        "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv()
-    ];
+    val empty_revolt_config = apply_required_configuration_properties();
+    empty_revolt_config.remove("revolt");
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, empty_revolt_config.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run_must_fail("revolt configuration must not be empty");
@@ -437,6 +436,23 @@ function test_precise_configuration_update_rejected_invalid_sync_exts() {
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config_with_invalid_sync_exts.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run_must_fail("Some of the configured synchronization infrastructure extensions are not in the allowed set");
+}
+
+function test_invalid_add_primary_key_to_header_configuration() {
+    val (anchor_chain, bc_rid) = setup();
+
+    val config_without_add_primary_key_to_header = apply_required_configuration_properties();
+    config_without_add_primary_key_to_header.remove("add_primary_key_to_header");
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config_without_add_primary_key_to_header.to_gtv_pretty().to_bytes(), "")
+    ).sign(initial_provider).run_must_fail("'add_primary_key_to_header' must be configured");
+
+    val config_with_invalid_add_primary_key_to_header = apply_required_configuration_properties([
+        "add_primary_key_to_header": false.to_gtv()
+    ]);
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config_with_invalid_add_primary_key_to_header.to_gtv_pretty().to_bytes(), "")
+    ).sign(initial_provider).run_must_fail("Configured value 'false' is not allowed for 'add_primary_key_to_header' property");
 }
 
 function test_precise_configuration_update_ignored_wrong_topic() {
