@@ -232,6 +232,10 @@ function test_renew_expired_container() {
     val alice_balance = get_account_balance(alice);
     val pool_balance = get_pool_balance();
 
+    // The amount of time the container will be expired, container will be created with start_time as last block time
+    // and we will build an extra block with default block interval to trigger change in block time delta
+    // Hence we overshoot by 1 + 2 * rell.test.block_interval
+    val expired_container_time = 1 + rell.test.block_interval * 2;
     rell.test.set_next_block_time_delta(millis_per_week + 1);
     rell.test.block().run();
     rell.test.block().run();
@@ -244,7 +248,7 @@ function test_renew_expired_container() {
     ).run();
     assert_lt(get_account_balance(alice), alice_balance);
     assert_gt(get_pool_balance(), pool_balance);
-    assert_equals(lease @ { container_name } (.duration_millis), 2 * millis_per_week);
+    assert_equals(lease @ { container_name } (.duration_millis), 2 * millis_per_week + expired_container_time);
     assert_false(lease @ { container_name } (.expired));
     assert_events(("icmf_message", (
         topic = restart_container_topic,
@@ -293,6 +297,24 @@ function test_renew_container_insufficient_funds() {
      ).op(
          renew_container(container_name, 10)
      ).run_must_fail("User does not have asset <0xc057c0e09e5e5eb9c3d134f52e39ff0d655017960b834130758c9d66481e4f35> in account <0xfd63a74765ddb4b1048cf53950e0fb62ec4335f559a24f0e08872353b95fea07>");
+}
+
+function test_renew_container_blocked_when_upgrading() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init);
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, upgrade_container(container_name, 3, 0, "Bob's cluster"))
+    ).op(
+        upgrade_container(container_name, 3, 0, "Bob's cluster")
+    ).run();
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, renew_container(container_name, 1))
+    ).op(
+        renew_container(container_name, 1)
+    ).run_must_fail("Can't renew lease of container with a pending upgrade");
 }
 
 function test_upgrade_container_success() {

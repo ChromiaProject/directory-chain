@@ -189,9 +189,6 @@ function renew_container_impl(container_name: text, duration_weeks: integer) {
     val lease = require_lease(container_name);
 
     renew_container_lease(account, lease, duration_weeks);
-    if (lease.expired) {
-        restart_container(lease);
-    }
 }
 
 @extend(ft4.auth.auth_handler)
@@ -228,7 +225,6 @@ function auto_renew_container_impl(container_name: text) {
 
     if (lease.expired) {
         renew_container_lease(account, lease, 1);
-        restart_container(lease);
     }
 }
 
@@ -262,18 +258,27 @@ function cancel_renew_container_impl(container_name: text) {
 }
 
 function renew_container_lease(ft4.accounts.account, lease, duration_weeks: integer) {
+    require(not has_pending_upgrade(lease.container_name), "Can't renew lease of container with a pending upgrade");
+
     val tag = lease.cluster.tag;
     val cost = calculate_container_cost(duration_weeks, lease.container_units, lease.extra_storage_gib, tag);
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), cost);
-    lease.duration_millis += duration_weeks * millis_per_week;
+
+    if (lease.expired) {
+        log("Lease for container %s was expired, restarting it".format(lease.container_name));
+        restart_container(lease.container_name);
+
+        lease.expired = false;
+        lease.duration_millis = (op_context.last_block_time - lease.start_time) + duration_weeks * millis_per_week;
+        on_lease_resurrected(lease);
+    } else {
+        lease.duration_millis += duration_weeks * millis_per_week;
+    }
 }
 
-function restart_container(lease) {
-    log("Lease for container %s was expired, restarting it".format(lease.container_name));
-    send_message(restart_container_topic, restart_container_message(container_name = lease.container_name).to_gtv()); // fire-and-forget
+function restart_container(container_name: text) {
     // TODO what if restart fails?
-    lease.expired = false;
-    on_lease_resurrected(lease);
+    send_message(restart_container_topic, restart_container_message(container_name).to_gtv()); // fire-and-forget
 }
 
 @extendable function on_lease_resurrected(lease) {}
