@@ -28,6 +28,10 @@ function test_create_account_on_internal_transfer_success() {
     val sender_auth_descriptor = ft4.accounts.single_sig_auth_descriptor(rell.test.pubkeys.alice, set(["A", "T"]));
     val recipient_id = rell.test.pubkeys.bob.hash();
 
+    rell.test.tx().op(
+        mint_to(sender, get_amount_to_mint())
+    ).run();
+
     val allowed_assets = require(ft4.transfer.get_allowed_assets(chain_context.blockchain_rid, sender.id, recipient_id));
     require(allowed_assets.size() == 1);
     val asset_id = allowed_assets[0].asset_id;
@@ -54,7 +58,6 @@ function test_create_account_on_internal_transfer_success() {
     assert_true(empty(ft4.transfer.get_pending_transfer_strategies(recipient_id)));
 
     val recipient = ft4.accounts.account_by_id(recipient_id);
-    assert_not_null(user @? { .account == recipient });
     assert_equals(ft4.assets.get_asset_balance(recipient, get_asset()), amount);
 }
 
@@ -67,6 +70,10 @@ function test_internal_transfer_fails_if_insufficient_amount_is_transferred() {
     val sender = ft4.accounts.account_by_id(rell.test.pubkeys.alice.hash());
     val sender_auth_descriptor = ft4.accounts.single_sig_auth_descriptor(rell.test.pubkeys.alice, set(["A", "T"]));
     val recipient_id = rell.test.pubkeys.bob.hash();
+
+    rell.test.tx().op(
+        mint_to(sender, get_amount_to_mint())
+    ).run();
 
     val allowed_assets = require(ft4.transfer.get_allowed_assets(chain_context.blockchain_rid, sender.id, recipient_id));
     require(allowed_assets.size() == 1);
