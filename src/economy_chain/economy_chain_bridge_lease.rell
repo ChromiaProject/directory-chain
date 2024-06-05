@@ -23,7 +23,6 @@ function add_bridge_lease_impl(container_name: text, blockchain_rid: byte_array,
     require(not lease.expired, "Container lease is expired");
 
     val account = ft4.auth.authenticate();
-    require(user @? { account }, "No user for account %s".format(account.id));
     require(lease.account == account, "Lease for container %s was not created by you".format(container_name));
     require((bridge_lease @* { lease }).size() < chain_context.args.max_bridge_leases_per_container, "Container lease already has max amount of bridge leases");
 
@@ -61,7 +60,6 @@ function update_bridge_lease_impl(blockchain_rid: byte_array, evm_network_id: in
     require(updated_validator_contract != null or updated_bridge_contract != null, "Must update contract or signers");
 
     val account = ft4.auth.authenticate();
-    require(user @? { account }, "No user for account %s".format(account.id));
     require(bridge_lease.lease.account == account, "Lease for container %s was not created by you".format(bridge_lease.lease.container_name));
 
     if (updated_validator_contract != null) bridge_lease.validator_contract = updated_validator_contract;
@@ -97,7 +95,6 @@ function remove_bridge_lease_impl(blockchain_rid: byte_array, evm_network_id: in
     require(bridge_lease, "No bridge lease found");
 
     val account = ft4.auth.authenticate();
-    require(user @? { account }, "No user for account %s".format(account.id));
     require(bridge_lease.lease.account == account, "Lease for container %s was not created by you".format(bridge_lease.lease.container_name));
 
     send_bridge_lease_deleted_message(bridge_lease);

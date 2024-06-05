@@ -13,7 +13,7 @@ namespace ft4 {
 }
 import lib.auth;
 
-val ticket_id_after_init = 21;
+val ticket_id_after_init = 20;
 
 function do_create_account(keypair: rell.test.keypair, auth_privkey: byte_array, failure: text? = null): ft4.accounts.account? {
     val eth_address = crypto.eth_privkey_to_address(keypair.priv);
@@ -30,7 +30,11 @@ function do_create_account(keypair: rell.test.keypair, auth_privkey: byte_array,
     } else {
         tx.run();
         val account_id = eth_address.hash();
-        return ft4.accounts.account_by_id(account_id);
+        val account = ft4.accounts.account_by_id(account_id);
+        rell.test.tx().op(
+            mint_to(account, get_amount_to_mint())
+        ).run();
+        return account;
     }
 }
 
@@ -221,7 +225,7 @@ function do_upgrade_container(
     val new_container_name = if (upgraded_container_name != null) upgraded_container_name else current_lease.container_name;
     val tag = cluster @ { .name == cluster_name }.tag;
 
-    val cost = calculate_container_cost(1, container_units, 0, tag) - calculate_remaining_lease_value(current_lease, rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL * (block_height - 1));
+    val cost = calculate_container_cost(1, container_units, 0, tag) - calculate_remaining_lease_value(current_lease, rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL * block_height);
 
     val initial_balance = get_account_balance(account);
     val initial_pool_balance = get_pool_balance();

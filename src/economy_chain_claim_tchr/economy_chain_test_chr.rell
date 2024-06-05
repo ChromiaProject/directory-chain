@@ -1,3 +1,9 @@
+
+entity faucet_user {
+    key ft4.accounts.account;
+    mutable last_refill_millis: integer;
+}
+
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
     scope = "claim_test_chr",
@@ -14,7 +20,7 @@ operation claim_test_chr() {
     require_initialized();
 
     val account = ft4.auth.authenticate();
-    val user = require(user @? { account }, "No user for account %s".format(account.id));
+    val user = faucet_user @? { account } ?: create faucet_user(account = account, last_refill_millis = 0);
 
     require(user.last_refill_millis + chain_context.args.test_chr_refill_limit_millis < op_context.last_block_time,
         "You have already claimed %s within the last 7 days, come back later".format(chain_context.args.asset_name));
