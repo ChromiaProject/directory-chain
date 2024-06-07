@@ -21,6 +21,7 @@ else null;
 function apply_container_limits(proposal) {
     val pps = pending_container_limits @? { proposal };
     if (pps == null) return;
+    validate_container_limits_proposal(pps);
     upgrade_container(pps.container, pps.container_units, pps.extra_storage, pps.max_blockchains);
 }
 
@@ -48,17 +49,16 @@ operation propose_container_limits(my_pubkey: pubkey, container_name: text, limi
     require_provider_auth_with_rate_limit(me);
     val container = require_container(container_name);
     require_cluster_governor(container.cluster, me);
-    require_container_units(container, limits_map[container_resource_limit_type.container_units]);
-    require_max_blockchains(container, limits_map[container_resource_limit_type.max_blockchains]);
-    require_extra_storage(container, limits_map[container_resource_limit_type.extra_storage]);
+    
     val prop = create_proposal(proposal_type.container_limits, me, container.cluster.governance, description);
-    create pending_container_limits(
+    val pcl = create pending_container_limits(
         prop,
         container,
         container_units = limits_map[container_resource_limit_type.container_units],
         max_blockchains = limits_map[container_resource_limit_type.max_blockchains],
         extra_storage = limits_map[container_resource_limit_type.extra_storage]
     );
+    validate_container_limits_proposal(pcl);
     internal_vote(me, prop, true);
 }
 
@@ -80,4 +80,11 @@ query get_container_limits_proposal(rowid) {
         pcl.proposal.state = proposal_state.REVOKED;
         delete pcl;
     }
+}
+
+function validate_container_limits_proposal(proposal_details: pending_container_limits) {
+
+    require_container_units(proposal_details.container, proposal_details.container_units);
+    require_max_blockchains(proposal_details.container, proposal_details.max_blockchains);
+    require_extra_storage(proposal_details.container, proposal_details.extra_storage);
 }

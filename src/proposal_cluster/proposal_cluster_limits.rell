@@ -10,6 +10,7 @@ entity pending_cluster_limits {
 function apply_cluster_limits(proposal) {
     val pps = pending_cluster_limits @? { proposal };
     if (pps == null) return;
+    validate_cluster_limits_proposal(pps);
     pps.cluster.cluster_units = pps.cluster_units;
     pps.cluster.extra_storage = pps.extra_storage;
     after_cluster_updated(pps.cluster);
@@ -28,17 +29,14 @@ operation propose_cluster_limits(my_pubkey: pubkey, cluster_name: text, cluster_
     require_provider_auth_with_rate_limit(me);
     val cluster = require_cluster(cluster_name);
     require_cluster_governor(cluster, me);
-    val new_cluster_units = if (cluster_units != null) cluster_units else cluster.cluster_units;
-    _require_cluster_units(cluster, new_cluster_units);
-    val new_extra_storage = if (extra_storage != null) extra_storage else cluster.extra_storage;
-    _require_extra_storage(cluster, new_extra_storage);
     val prop = create_proposal(proposal_type.cluster_limits, me, cluster.governance, description);
-    create pending_cluster_limits(
+    val pending_cluster_limits = create pending_cluster_limits(
         prop,
         cluster,
-        cluster_units = new_cluster_units,
-        extra_storage = new_extra_storage
+        cluster_units = if (cluster_units != null) cluster_units else cluster.cluster_units,
+        extra_storage = if (extra_storage != null) extra_storage else cluster.extra_storage
     );
+    validate_cluster_limits_proposal(pending_cluster_limits);
     internal_vote(me, prop, true);
 }
 
@@ -51,6 +49,12 @@ query get_cluster_limits_proposal(rowid) {
         cluster_units = pcl.cluster_units,
         extra_storage = pcl.extra_storage
     );
+}
+
+function validate_cluster_limits_proposal(proposal_details: pending_cluster_limits) {
+
+    _require_cluster_units(proposal_details.cluster, proposal_details.cluster_units);
+    _require_extra_storage(proposal_details.cluster, proposal_details.extra_storage);
 }
 
 function _require_cluster_units(cluster, new_cluster_units: integer) {

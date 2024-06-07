@@ -8,10 +8,10 @@ entity pending_blockchain_move_finish {
 operation propose_blockchain_move_finish(my_pubkey: pubkey, blockchain_rid: byte_array, final_height: integer, description: text = "") {
     val me = require_is_provider_with_rate_limit(my_pubkey);
     val blockchain = require_active_blockchain(blockchain_rid);
-    val bc_move_state = require(moving_blockchain @? { blockchain }, "Blockchain %s is not being moved".format(blockchain.rid));
+    val mv_bc = validate_blockchain_move_finish_proposal(blockchain);
 
-    val prop = create_proposal(proposal_type.blockchain_move_finish, me, bc_move_state.destination.deployer, description); // TODO: POS-961: src + dst?
-    create pending_blockchain_move_finish(prop, blockchain, bc_move_state.destination, final_height);
+    val prop = create_proposal(proposal_type.blockchain_move_finish, me, mv_bc.destination.deployer, description); // TODO: POS-961: src + dst?
+    create pending_blockchain_move_finish(prop, blockchain, mv_bc.destination, final_height);
     internal_vote(me, prop, true);
 }
 
@@ -33,7 +33,7 @@ query get_blockchain_move_finish_proposal(rowid?):
 
 function apply_blockchain_move_finish(proposal) {
     val pbmf = pending_blockchain_move_finish @ { proposal } ( $.to_struct() );
-    val mv_bc = require(moving_blockchain @? { pbmf.blockchain }, "Blockchain %s is not being moved".format(pbmf.blockchain.rid));
+    val mv_bc = validate_blockchain_move_finish_proposal(pbmf.blockchain);
 
     // create a base_config and signers config at final_height (base_config needed if signers don't change)
     // FYI: PCU-based update (i.e. update_configuration_signers_regular()) can't be used here.
@@ -52,4 +52,9 @@ function apply_blockchain_move_finish(proposal) {
 
 function delete_pending_blockchain_move_finish(proposal) {
     delete pending_blockchain_move_finish @? { proposal };
+}
+
+function validate_blockchain_move_finish_proposal(blockchain) {
+
+    return require(moving_blockchain @? { blockchain }, "Blockchain %s is not being moved".format(blockchain.rid));
 }

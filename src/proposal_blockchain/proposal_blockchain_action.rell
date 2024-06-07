@@ -27,6 +27,7 @@ function proposal_blockchain_action_str(prop: proposal): text? =
 function apply_blockchain_action(proposal) {
     val pba = pending_blockchain_action @? { proposal };
     if (pba == null) return;
+    validate_blockchain_action_proposal(pba.blockchain, pba.action);
     when (pba.action) {
         pause -> _apply_pause_blockchain(pba, proposal);
         resume -> _apply_resume_blockchain(pba, proposal);
@@ -131,6 +132,61 @@ function propose_blockchain_action_impl(my_pubkey: pubkey, blockchain_rid: byte_
     val pending_proposal = pending_blockchain_action @? { blockchain, .proposal.state == proposal_state.PENDING };
     require(empty(pending_proposal), "Blockchain action already proposed: " + pending_proposal?.proposal);
 
+    validate_blockchain_action_proposal(blockchain, action);
+
+    val container = container_blockchain @ { blockchain } .container;
+    require_container_deployer(container, me);
+    var deployer = container.deployer;
+
+    // action requirements
+    if (action == blockchain_action.remove) {
+        require(empty(blockchain_dependency @* { .dependent_on == blockchain }), "Blockchain can't be removed since other blockchains depend on it: " + blockchain.rid);
+    } else if (action == blockchain_action.archive) {
+        require(not(blockchain.system), "Archiving of system chains is not allowed: " + blockchain.rid);
+    } else if (action == blockchain_action.unarchive) {
+        // unarchiving from a container to another container running on the same node is not allowed
+        val args0 = unarchive_args.from_bytes(args);
+        val dst_container = require_container(args0.destination_container);
+        require_container_deployer(dst_container, me);
+        deployer = dst_container.deployer;
+        require_container_is_not_full(dst_container);
+    }
+
+    val prop = create_proposal(proposal_type.blockchain_action, me, deployer, description);
+    val pba = create pending_blockchain_action(prop, blockchain, action, args);
+    internal_vote(me, prop, true);
+}
+
+query get_blockchain_action_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.blockchain_action);
+    if (proposal == null) return null;
+    val pba = pending_blockchain_action @ { proposal };
+    return (
+        blockchain = pba.blockchain.rid,
+        blockchain_name = pba.blockchain.name,
+        action = pba.action
+    );
+}
+
+query get_blockchain_unarchive_action_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.blockchain_action);
+    if (proposal == null) return null;
+    val pba = pending_blockchain_action @ { proposal };
+    require(pba.action == blockchain_action.unarchive, "Proposal action is not 'unarchive'. Use get_blockchain_action_proposal() query");
+    val args = unarchive_args.from_bytes(pba.args);
+    val source_container = container_blockchain @ { pba.blockchain } ( .container.name );
+    return (
+        blockchain = pba.blockchain.rid,
+        blockchain_name = pba.blockchain.name,
+        action = pba.action,
+        source_container = source_container,
+        destination_container = args.destination_container,
+        final_height = args.final_height
+    );
+}
+
+function validate_blockchain_action_proposal(blockchain, action: blockchain_action) {
+
     // simple states
     when (blockchain.state) {
         blockchain_state.RUNNING -> {
@@ -163,55 +219,4 @@ function propose_blockchain_action_impl(my_pubkey: pubkey, blockchain_rid: byte_
     if (exists(unarchiving_blockchain @? { blockchain })) {
         require(false, "Unarchiving blockchain can't be %sd: %s".format(action.name, blockchain.rid));
     }
-
-    // container requirements
-    val container = container_blockchain @ { blockchain } .container;
-    require_container_deployer(container, me);
-    var deployer = container.deployer;
-
-    // action requirements
-    if (action == blockchain_action.remove) {
-        require(empty(blockchain_dependency @* { .dependent_on == blockchain }), "Blockchain can't be removed since other blockchains depend on it: " + blockchain.rid);
-    } else if (action == blockchain_action.archive) {
-        require(not(blockchain.system), "Archiving of system chains is not allowed: " + blockchain_rid);
-    } else if (action == blockchain_action.unarchive) {
-        // unarchiving from a container to another container running on the same node is not allowed
-        val args0 = unarchive_args.from_bytes(args);
-        val dst_container = require_container(args0.destination_container);
-        require_container_deployer(dst_container, me);
-        deployer = dst_container.deployer;
-        require_container_is_not_full(dst_container);
-    }
-
-    val prop = create_proposal(proposal_type.blockchain_action, me, deployer, description);
-    create pending_blockchain_action(prop, blockchain, action, args);
-    internal_vote(me, prop, true);
-}
-
-query get_blockchain_action_proposal(rowid) {
-    val proposal = get_latest_proposal(rowid, proposal_type.blockchain_action);
-    if (proposal == null) return null;
-    val pba = pending_blockchain_action @ { proposal };
-    return (
-        blockchain = pba.blockchain.rid,
-        blockchain_name = pba.blockchain.name,
-        action = pba.action
-    );
-}
-
-query get_blockchain_unarchive_action_proposal(rowid) {
-    val proposal = get_latest_proposal(rowid, proposal_type.blockchain_action);
-    if (proposal == null) return null;
-    val pba = pending_blockchain_action @ { proposal };
-    require(pba.action == blockchain_action.unarchive, "Proposal action is not 'unarchive'. Use get_blockchain_action_proposal() query");
-    val args = unarchive_args.from_bytes(pba.args);
-    val source_container = container_blockchain @ { pba.blockchain } ( .container.name );
-    return (
-        blockchain = pba.blockchain.rid,
-        blockchain_name = pba.blockchain.name,
-        action = pba.action,
-        source_container = source_container,
-        destination_container = args.destination_container,
-        final_height = args.final_height
-    );
 }

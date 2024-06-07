@@ -10,29 +10,10 @@ operation propose_blockchain_move(my_pubkey: pubkey, blockchain_rid: byte_array,
     // require blockchain is not system
     require(not(blockchain.system), "Moving of system chains is not allowed: " + blockchain_rid);
 
-    // require blockchain state
-    require(blockchain.state in [blockchain_state.RUNNING, blockchain_state.PAUSED],
-        "Only blockchains in RUNNING | PAUSED states can be moved; current state of blockchain %s is: %s".format(blockchain.rid, blockchain.state)
-    );
-
-    // require blockchain is not being moved right now
-    require(empty(moving_blockchain @? { blockchain }), "Blockchain %s is being moved".format(blockchain.rid));
-
-    // require there no pending blockchain actions (pause, resume, remove, archive, unarchive)
-    val pba = pending_blockchain_action @? { blockchain };
-    require(empty(pba), "Blockchain %s cannot be moved due to a pending proposal %s related to it".format(blockchain.rid, pba?.proposal));
-
-    // src container
-    val src_container = container_blockchain @ { blockchain } .container;
-    require_container_deployer(src_container, me);
-
-    // dst container
-    val dst_container = require_container(destination_container);
-    require_container_deployer(dst_container, me);
-    require_container_is_not_full(dst_container);
+    val dst_container = validate_blockchain_move_proposal(blockchain, me, destination_container);
 
     val prop = create_proposal(proposal_type.blockchain_move_start, me, dst_container.deployer, description); // TODO: POS-961: src + dst?
-    create pending_blockchain_move(prop, blockchain, dst_container);
+    val pending_blockchain_move = create pending_blockchain_move(prop, blockchain, dst_container);
     internal_vote(me, prop, true);
 }
 
@@ -52,7 +33,12 @@ query get_blockchain_move_proposal(rowid?):
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.blockchain_move_start.name: delete_pending_blockchain_move(*)];
 
 function apply_blockchain_move(proposal) {
-    val pbm = pending_blockchain_move @ { proposal } ($.to_struct());
+    val pending_blockchain_move = pending_blockchain_move @ { proposal };
+    val pbm = pending_blockchain_move.to_struct();
+    validate_blockchain_move_proposal(
+        pending_blockchain_move.blockchain,
+            pending_blockchain_move.proposal.proposed_by,
+            pending_blockchain_move.destination.name);
 
     // keep src cluster/container nodes as replicas
     val src_container = container_blockchain @ { pbm.blockchain } (.container);
@@ -66,7 +52,6 @@ function apply_blockchain_move(proposal) {
     delete container_blockchain @* { pbm.blockchain };
 
     // add bc to the dst container
-    require_container_is_not_full(pbm.destination);
     create container_blockchain(pbm.destination, pbm.blockchain);
     // remove dst cluster/container nodes from bc replicas
     val dst_nodes = cluster_node @* { pbm.destination.cluster } (@omit @sort .node.pubkey, .node);
@@ -80,4 +65,30 @@ function apply_blockchain_move(proposal) {
 
 function delete_pending_blockchain_move(proposal) {
     delete pending_blockchain_move @? { proposal };
+}
+
+function validate_blockchain_move_proposal(blockchain, proposed_by: provider, destination_container: text) {
+
+    // require blockchain state
+    require(blockchain.state in [blockchain_state.RUNNING, blockchain_state.PAUSED],
+        "Only blockchains in RUNNING | PAUSED states can be moved; current state of blockchain %s is: %s".format(blockchain.rid, blockchain.state)
+    );
+    
+    // require blockchain is not being moved right now
+    require(empty(moving_blockchain @? { blockchain }), "Blockchain %s is being moved".format(blockchain.rid));
+
+    // require there no pending blockchain actions (pause, resume, remove, archive, unarchive)
+    val pba = pending_blockchain_action @? { blockchain };
+    require(empty(pba), "Blockchain %s cannot be moved due to a pending proposal %s related to it".format(blockchain.rid, pba?.proposal));
+
+    // src container
+    val src_container = container_blockchain @ { blockchain } .container;
+    require_container_deployer(src_container, proposed_by);
+
+    // dst container
+    val dst_container = require_container(destination_container);
+    require_container_deployer(dst_container, proposed_by);
+    require_container_is_not_full(dst_container);
+
+    return dst_container;
 }
