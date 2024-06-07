@@ -1,0 +1,50 @@
+
+entity pending_cluster_change_tag {
+    key cluster, tag;
+    key proposal: common_proposal;
+}
+
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_cluster_change_tag.name: apply_cluster_change_tag(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_cluster_change_tag.name: cleanup_pending_cluster_change_tag(*)];
+
+operation change_cluster_tag(
+    cluster_name: text,
+    tag_name: text
+) {
+    val provider = require_system_provider_signer_entity();
+    val tag = require_tag(tag_name);
+    val cluster = require_cluster(cluster_name);
+
+    val proposal = create_system_p_proposal(common_proposal_type.ec_cluster_change_tag, provider, "Change tag for cluster %s".format(cluster_name));
+    create pending_cluster_change_tag(cluster, tag, proposal);
+
+    internal_common_vote(provider.pubkey, proposal, true);
+}
+
+function apply_cluster_change_tag(proposal: common_proposal) {
+
+    val pending_cluster_change_tag = pending_cluster_change_tag @ { proposal };
+
+    log("Changing tag of cluster %s to %s after approval".format(pending_cluster_change_tag.cluster.name, pending_cluster_change_tag.tag.name));
+
+    pending_cluster_change_tag.cluster.tag = pending_cluster_change_tag.tag;
+}
+
+function cleanup_pending_cluster_change_tag(proposal: common_proposal) {
+
+    log("Cleaning up pending_cluster_change_tag");
+
+    delete pending_cluster_change_tag @ { proposal };
+}
+
+query get_cluster_change_tag_proposal(proposal_id: rowid) {
+
+    val proposal = require_common_proposal(proposal_id);
+    val pending_cluster_change_tag = pending_cluster_change_tag @ { proposal };
+
+    return pending_cluster_change_tag_data(
+        cluster = pending_cluster_change_tag.cluster.name,
+        current_tag = pending_cluster_change_tag.cluster.tag.name,
+        new_tag = pending_cluster_change_tag.tag.name
+    );
+}

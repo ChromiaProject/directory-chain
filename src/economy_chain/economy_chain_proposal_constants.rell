@@ -1,5 +1,42 @@
-@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_constants_update.name: apply_economy_constants(*)];
+entity pending_economy_constants {
+    key proposal: common_proposal;
+    min_lease_time_weeks: integer;
+    max_lease_time_weeks: integer;
+    staking_reward_rate: decimal;
+    staking_reward_fee_share: decimal;
+    chromia_foundation_fee_share: decimal;
+    resource_pool_margin_fee_share: decimal;
+    dapp_provider_risk_share: decimal;
+}
 
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_constants_update.name: apply_economy_constants(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_constants_update.name: cleanup_pending_economy_constants(*)];
+
+operation update_economy_constants(
+    min_lease_time_weeks: integer?,
+    max_lease_time_weeks: integer?,
+    staking_reward_rate: decimal?,
+    staking_reward_fee_share: decimal?,
+    chromia_foundation_fee_share: decimal?,
+    resource_pool_margin_fee_share: decimal?,
+    dapp_provider_risk_share: decimal?
+) {
+    val provider = require_system_provider_signer_entity();
+
+    val proposal = create_system_p_proposal(common_proposal_type.ec_constants_update, provider, "Update economy constants");
+    create pending_economy_constants(
+        proposal,
+        min_lease_time_weeks = get_integer_or_default(min_lease_time_weeks, -1)!!,
+        max_lease_time_weeks = get_integer_or_default(max_lease_time_weeks, -1)!!,
+        staking_reward_rate = get_decimal_or_default(staking_reward_rate, -1)!!,
+        staking_reward_fee_share = get_decimal_or_default(staking_reward_fee_share, -1)!!,
+        chromia_foundation_fee_share = get_decimal_or_default(chromia_foundation_fee_share, -1)!!,
+        resource_pool_margin_fee_share = get_decimal_or_default(resource_pool_margin_fee_share, -1)!!,
+        dapp_provider_risk_share = get_decimal_or_default(dapp_provider_risk_share, -1)!!
+    );
+
+    internal_common_vote(provider.pubkey, proposal, true);
+}
 
 function apply_economy_constants(proposal: common_proposal) {
 
@@ -30,11 +67,25 @@ function apply_economy_constants(proposal: common_proposal) {
     }
 }
 
-@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_constants_update.name: cleanup_pending_economy_constants(*)];
-
 function cleanup_pending_economy_constants(proposal: common_proposal) {
 
     log("Cleaning up pending_economy_constants");
 
     delete pending_economy_constants @ { proposal };
+}
+
+query get_econony_constants_proposal(proposal_id: rowid) {
+
+    val proposal = require_common_proposal(proposal_id);
+    val pending_economy_constants = pending_economy_constants @ { proposal };
+
+    return pending_economy_constants_data(
+        min_lease_time_weeks = get_integer_or_default(pending_economy_constants.min_lease_time_weeks, null),
+        max_lease_time_weeks = get_integer_or_default(pending_economy_constants.max_lease_time_weeks, null),
+        staking_reward_rate = get_decimal_or_default(pending_economy_constants.staking_reward_rate, null),
+        staking_reward_fee_share = get_decimal_or_default(pending_economy_constants.staking_reward_fee_share, null),
+        chromia_foundation_fee_share = get_decimal_or_default(pending_economy_constants.chromia_foundation_fee_share, null),
+        resource_pool_margin_fee_share = get_decimal_or_default(pending_economy_constants.resource_pool_margin_fee_share, null),
+        dapp_provider_risk_share = get_decimal_or_default(pending_economy_constants.dapp_provider_risk_share, null)
+    );
 }
