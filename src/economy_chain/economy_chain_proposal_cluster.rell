@@ -1,5 +1,66 @@
+entity pending_cluster {
+    key name;
+    tag: tag;
+    proposer_pubkey: pubkey;
+    governor_voter_set_name: text;
+    voter_set_name: text;
+    cluster_units: integer;
+    extra_storage: integer;
+    proposal: common_proposal;
+    mutable status: pending_cluster_status;
+}
+
 @extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_cluster_create.name: apply_cluster_create(*)];
-@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_cluster_change_tag.name: apply_cluster_change_tag(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_cluster_create.name: cleanup_pending_cluster_create(*)];
+
+operation create_cluster(
+    name,
+    governor_voter_set_name: text,
+    voter_set_name: text,
+    cluster_units: integer,
+    extra_storage: integer,
+    tag_name: text
+) {
+    val provider = require_system_provider_signer_entity();
+
+    require(empty(cluster @* { .name == name }), "Cluster %s already exists".format(name));
+    require(pending_cluster @? { name } == null, "There is already a pending request to create cluster with name %s".format(name));
+    validate_entity_name(name);
+    val tag = require_tag(tag_name);
+
+    val proposal = create_system_p_proposal(common_proposal_type.ec_cluster_create, provider, "Create economy chain cluster %s".format(name));
+
+    create pending_cluster(
+        name = name,
+        tag,
+        proposer_pubkey = provider.pubkey,
+        governor_voter_set_name = governor_voter_set_name,
+        voter_set_name = voter_set_name,
+        cluster_units,
+        extra_storage,
+        proposal,
+        pending_cluster_status.PENDING_APPROVAL
+    );
+
+    internal_common_vote(provider.pubkey, proposal, true);
+}
+
+query get_cluster_create_proposal(proposal_id: rowid): pending_cluster_data {
+
+    val proposal = require_common_proposal(proposal_id);
+    val pending_cluster = pending_cluster @ { proposal };
+
+    return pending_cluster_data(
+        name = pending_cluster.name,
+        tag = pending_cluster.tag.name,
+        proposer_pubkey = pending_cluster.proposer_pubkey,
+        governor_voter_set_name = pending_cluster.governor_voter_set_name,
+        voter_set_name = pending_cluster.voter_set_name,
+        cluster_units = pending_cluster.cluster_units,
+        extra_storage = pending_cluster.extra_storage,
+        status = pending_cluster.status
+    );
+}
 
 function apply_cluster_create(proposal: common_proposal) {
 
@@ -24,9 +85,6 @@ function apply_cluster_create(proposal: common_proposal) {
         log("Message sent to create cluster %s".format(pending_cluster.name));
     }
 }
-
-@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_cluster_create.name: cleanup_pending_cluster_create(*)];
-@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_cluster_change_tag.name: cleanup_pending_cluster_change_tag(*)];
 
 function cleanup_pending_cluster_create(proposal: common_proposal) {
 

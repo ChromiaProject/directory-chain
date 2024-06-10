@@ -1,16 +1,79 @@
+// Same structure for create, update and remove
+entity pending_tag_operation {
+    key name;
+    key proposal: common_proposal;
+    scu_price: integer = -1;
+    extra_storage_price: integer = -1;
+}
+
 @extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_tag_create.name: apply_tag_create(*)];
 @extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_tag_update.name: apply_tag_update(*)];
 @extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_tag_remove.name: apply_tag_remove(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_tag_create.name: cleanup_pending_tag_operation(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_tag_update.name: cleanup_pending_tag_operation(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_tag_remove.name: cleanup_pending_tag_operation(*)];
+
+operation create_tag(
+    name: text,
+    scu_price: integer,
+    extra_storage_price: integer
+) {
+    val provider = require_system_provider_signer_entity();
+    require(scu_price > 0, "Tag must have a positive SCU price");
+    require(extra_storage_price > 0, "Tag must have a positive extra storage price");
+
+    val proposal = create_system_p_proposal(common_proposal_type.ec_tag_create, provider, "Create tag %s".format(name));
+    val proposal_details = create pending_tag_operation(name = name, scu_price = scu_price, extra_storage_price = extra_storage_price, proposal);
+    validate_tag_proposal(proposal_details);
+
+    internal_common_vote(provider.pubkey, proposal, true);
+}
+
+operation update_tag(
+    name: text,
+    scu_price: integer?,
+    extra_storage_price: integer?
+) {
+    val provider = require_system_provider_signer_entity();
+    require(empty(scu_price) or scu_price > 0, "Tag must have a positive SCU price");
+    require(empty(extra_storage_price) or extra_storage_price > 0, "Tag must have a positive extra storage price");
+
+    val proposal = create_system_p_proposal(common_proposal_type.ec_tag_update, provider, "Update tag %s".format(name));
+    val proposal_details = create pending_tag_operation(name = name, scu_price = scu_price ?: -1, extra_storage_price = extra_storage_price ?: -1, proposal);
+    validate_tag_proposal(proposal_details);
+
+    internal_common_vote(provider.pubkey, proposal, true);
+}
+
+operation remove_tag(
+    name: text
+) {
+    val provider = require_system_provider_signer_entity();
+    val tag = require_tag(name);
+
+    val proposal = create_system_p_proposal(common_proposal_type.ec_tag_remove, provider, "Remove tag %s".format(name));
+    val proposal_details = create pending_tag_operation(name = name, proposal);
+    validate_tag_proposal(proposal_details);
+
+    internal_common_vote(provider.pubkey, proposal, true);
+}
+
+query get_tag_proposal(proposal_id: rowid): tag_data {
+
+    val proposal = require_common_proposal(proposal_id);
+    val pending_tag_operation = require(pending_tag_operation @? { proposal }, "Proposal is of different type: %s".format(proposal.proposal_type));
+
+    return tag_data(name = pending_tag_operation.name, scu_price = pending_tag_operation.scu_price, extra_storage_price = pending_tag_operation.extra_storage_price);
+}
 
 function apply_tag_remove(proposal: common_proposal) {
 
     val pending_tag = pending_tag_operation @ { proposal };
+    validate_tag_proposal(pending_tag);
     val tag = tag @ { pending_tag.name };
 
     log("Remove tag %s after approval".format(tag.name));
 
-    val clusters = cluster @* { tag };
-    require(clusters.empty(), "Tag with name %s is in use.".format(tag.name));
 
     delete tag;
 }
@@ -18,6 +81,7 @@ function apply_tag_remove(proposal: common_proposal) {
 function apply_tag_update(proposal: common_proposal) {
 
     val pending_tag = pending_tag_operation @ { proposal };
+    validate_tag_proposal(pending_tag);
     val tag = tag @ { pending_tag.name };
 
     log("Update tag %s after approval".format(tag.name));
@@ -29,24 +93,12 @@ function apply_tag_update(proposal: common_proposal) {
 function apply_tag_create(proposal: common_proposal) {
 
     val pending_tag = pending_tag_operation @ { proposal };
+    validate_tag_proposal(pending_tag);
 
     log("Create tag %s after approval".format(pending_tag.name));
 
     create tag(name = pending_tag.name, scu_price = pending_tag.scu_price, extra_storage_price = pending_tag.extra_storage_price);
 }
-
-function apply_cluster_change_tag(proposal: common_proposal) {
-
-    val pending_cluster_change_tag = pending_cluster_change_tag @ { proposal };
-
-    log("Changing tag of cluster %s to %s after approval".format(pending_cluster_change_tag.cluster.name, pending_cluster_change_tag.tag.name));
-
-    pending_cluster_change_tag.cluster.tag = pending_cluster_change_tag.tag;
-}
-
-@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_tag_create.name: cleanup_pending_tag_operation(*)];
-@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_tag_update.name: cleanup_pending_tag_operation(*)];
-@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_tag_remove.name: cleanup_pending_tag_operation(*)];
 
 function cleanup_pending_tag_operation(proposal: common_proposal) {
 
@@ -55,9 +107,27 @@ function cleanup_pending_tag_operation(proposal: common_proposal) {
     delete pending_tag_operation @ { proposal };
 }
 
-function cleanup_pending_cluster_change_tag(proposal: common_proposal) {
+function validate_tag_proposal(proposal_details: pending_tag_operation) {
 
-    log("Cleaning up pending_cluster_change_tag");
+    require(pending_tag_operation @? { .name == proposal_details.name, .rowid != proposal_details.rowid } == null,
+        "A proposal for tag %s already exists".format(proposal_details.name));
 
-    delete pending_cluster_change_tag @ { proposal };
+    if (proposal_details.proposal.proposal_type == common_proposal_type.ec_tag_create) {
+        validate_entity_name(proposal_details.name);
+        require(tag @? { .name == proposal_details.name } == null, "Tag %s already exists".format(proposal_details.name));
+    } else {
+
+        val tag = require_tag(proposal_details.name);
+
+        if (proposal_details.proposal.proposal_type == common_proposal_type.ec_tag_remove) {
+            val clusters = cluster @* { tag };
+            require(clusters.empty(), "Tag with name %s is in use.".format(tag.name));
+
+            val pending_cluster = pending_cluster @* { tag };
+            require(pending_cluster.empty(), "Pending cluster(s) depends on this tag.");
+
+            val pending_cluster_change_tag = pending_cluster_change_tag @* { tag };
+            require(pending_cluster_change_tag.empty(), "Pending cluster tag change depends on this tag.");
+        }
+    }
 }

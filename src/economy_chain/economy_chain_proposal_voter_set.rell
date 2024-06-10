@@ -28,6 +28,7 @@ namespace ec_voter_set_update {
 }
 
 @extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_voter_set_update.name: apply_ec_voter_set_update(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_voter_set_update.name: delete_pending_ec_voter_set_update(*)];
 
 function apply_ec_voter_set_update(proposal: common_proposal) {
     val vsp = pending_ec_voter_set_update @? { proposal };
@@ -43,8 +44,6 @@ function apply_ec_voter_set_update(proposal: common_proposal) {
         delete common_voter_set_member @ { vsp.voter_set, m };
     }
 }
-
-@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_voter_set_update.name: delete_pending_ec_voter_set_update(*)];
 
 function delete_pending_ec_voter_set_update(proposal: common_proposal) {
     val p = pending_ec_voter_set_update @? { proposal };
