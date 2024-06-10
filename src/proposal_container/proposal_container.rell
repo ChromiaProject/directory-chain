@@ -14,6 +14,7 @@ entity pending_container {
 function apply_container(proposal) {
     val pps = pending_container @? { proposal };
     if (pps == null) return;
+    validate_container_proposal(pps);
     create_container_with_limits(
         pps.proposed_by,
         pps.name,
@@ -39,19 +40,18 @@ operation propose_container(my_pubkey: pubkey, cluster_name: text, name, deploye
     val cluster = require_cluster(cluster_name);
     val deployer = require_voter_set(deployer_name);
     require_cluster_governor(cluster, me);
-    require_provider_quota(me, provider_quota_type.max_containers);
+
     validate_entity_name(name);
 
     val container_units = standard_container_defaults.container_units;
     val max_blockchains = standard_container_defaults.max_blockchains;
     val extra_storage = standard_container_defaults.extra_storage;
 
-    require_cluster_quotas(cluster, container_units, extra_storage);
-
     val prop = create_proposal(proposal_type.container, me, cluster.governance, description);
-    create pending_container(
+    val pending_container = create pending_container(
         prop, name, cluster, deployer, container_units, max_blockchains, extra_storage, me
     );
+    validate_container_proposal(pending_container);
     internal_vote(me, prop, true);
 }
 
@@ -65,5 +65,10 @@ query get_container_proposal(rowid) {
         max_blockchains = pcwl.max_blockchains,
         extra_storage = pcwl.extra_storage
     );
+}
+
+function validate_container_proposal(pending_container) {
+    require_provider_quota(pending_container.proposed_by, provider_quota_type.max_containers);
+    require_cluster_quotas(pending_container.cluster, pending_container.container_units, pending_container.extra_storage);
 }
 

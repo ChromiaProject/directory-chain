@@ -34,31 +34,24 @@ operation propose_foreign_blockchain_import(
     validate_host(host);
     validate_url(api_url);
 
-    require(empty(blockchain @? { blockchain_rid }), "Blockchain with RID %s already exists".format(blockchain_rid));
     require("signers" in map<text, gtv>.from_gtv(gtv.from_bytes(initial_config_data)), "No signers in configuration");
-    // Require container resource limits are honored
-    require_container_is_not_full(container);
     require(empty(pending_foreign_blockchain_import @* { .blockchain_rid == blockchain_rid, .proposal.state == proposal_state.PENDING } limit 1), "Already proposed");
 
     val prop = create_proposal(proposal_type.foreign_blockchain_import, me, container.deployer, description);
-    create pending_foreign_blockchain_import(
+    val pending_foreign_blockchain_import = create pending_foreign_blockchain_import(
         prop,
         pubkey = node_pubkey, host, port, api_url,
         chain0_rid,
         blockchain_name, blockchain_rid, initial_config_data,
         container);
+    validate_foreign_blockchain_import_proposal(pending_foreign_blockchain_import);
     internal_vote(me, prop, true);
 }
 
 function apply_foreign_blockchain_import(proposal) {
     val pfbi = pending_foreign_blockchain_import @? { proposal };
     if (pfbi == null) return;
-
-    require(empty(blockchain @? { pfbi.blockchain_rid }), "Blockchain with RID %s already exists".format(pfbi.blockchain_rid));
-
-    val nodes = cluster_node @* { pfbi.container.cluster } (@sort .node.pubkey);
-    require(nodes.size() > 0, "Cluster must have at least one node");
-    require_container_is_not_full(pfbi.container);
+    validate_foreign_blockchain_import_proposal(pfbi);
 
     val blockchain = create blockchain(pfbi.blockchain_rid, pfbi.blockchain_name, system = false, state = blockchain_state.IMPORTING);
     create container_blockchain(pfbi.container, blockchain);
@@ -95,4 +88,13 @@ query get_foreign_blockchain_import_proposal(rowid?) {
         blockchain_rid = .blockchain_rid,
         container = .container.name
     );
+}
+
+function validate_foreign_blockchain_import_proposal(proposal_details: pending_foreign_blockchain_import) {
+    require(empty(blockchain @? { proposal_details.blockchain_rid }), "Blockchain with RID %s already exists".format(proposal_details.blockchain_rid));
+    // Require container resource limits are honored
+    require_container_is_not_full(proposal_details.container);
+
+    val nodes = cluster_node @* { proposal_details.container.cluster } (@sort .node.pubkey);
+    require(nodes.size() > 0, "Cluster must have at least one node");
 }
