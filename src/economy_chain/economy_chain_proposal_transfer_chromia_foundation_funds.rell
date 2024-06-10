@@ -1,0 +1,67 @@
+entity pending_transfer_chromia_foundation_funds {
+    proposal: common_proposal;
+    amount: integer;
+    account_id: byte_array;
+}
+
+struct pending_transfer_chromia_foundation_funds_data {
+    amount: integer;
+    account_id: byte_array;
+}
+
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_transfer_chromia_foundation_funds.name: apply_ec_pending_transfer_chromia_foundation_funds(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_transfer_chromia_foundation_funds.name: cleanup_ec_pending_transfer_chromia_foundation_funds(*)];
+
+operation propose_transfer_chromia_foundation_funds(proposal_by: byte_array, amount: integer, account_id: byte_array) {
+
+    val voter_set = require_voter_set_with_signer_and_member(voter_sets.chromia_foundation, proposal_by);
+
+    val proposal = create common_proposal(
+        op_context.last_block_time,
+        common_proposal_type.ec_transfer_chromia_foundation_funds,
+        proposal_by,
+        voter_set,
+        "Transfer Chromia Foundation funds %d assets to account id %s".format(amount, account_id));
+
+    val proposal_details = create pending_transfer_chromia_foundation_funds(
+        proposal,
+        amount,
+        account_id
+    );
+    validate_ec_transfer_chromia_foundation_funds_proposal(proposal_details);
+
+    internal_common_vote(proposal.proposed_by, proposal, true);
+}
+
+query get_propose_transfer_chromia_foundation_funds_proposal(proposal_id: rowid) {
+
+    val proposal = require_common_proposal(proposal_id);
+    val pending_transfer_chromia_foundation_funds = require(pending_transfer_chromia_foundation_funds @? { proposal }, "Proposal %s is not of type transfer chromia foundation funds".format(proposal_id));
+
+    return pending_transfer_chromia_foundation_funds_data(pending_transfer_chromia_foundation_funds.amount, pending_transfer_chromia_foundation_funds.account_id);
+}
+
+function apply_ec_pending_transfer_chromia_foundation_funds(proposal: common_proposal) {
+
+    val proposal_details = pending_transfer_chromia_foundation_funds @ { proposal };
+    val to_account = validate_ec_transfer_chromia_foundation_funds_proposal(proposal_details);
+
+    log("Apply transfer chromia foundation proposal %d".format(proposal_details.rowid));
+
+    ft4.assets.Unsafe.transfer(get_chromia_foundation_account(), to_account, get_asset(), proposal_details.amount);
+}
+
+function cleanup_ec_pending_transfer_chromia_foundation_funds(proposal: common_proposal) {
+
+    log("Cleaning up pending transfer chromia foundation funds proposal");
+
+    delete pending_transfer_chromia_foundation_funds @ { proposal };
+}
+
+function validate_ec_transfer_chromia_foundation_funds_proposal(proposal_details: pending_transfer_chromia_foundation_funds) {
+
+    val account = ft4.accounts.Account(proposal_details.account_id);
+    require(proposal_details.amount > 0, "Amount must be greater than 0");
+    require(proposal_details.amount <= get_account_balance(get_chromia_foundation_account()), "Insufficient funds for transfer.");
+    return account;
+}

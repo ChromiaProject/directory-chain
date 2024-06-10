@@ -4,29 +4,31 @@ entity pending_minting {
     account_id: byte_array;
 }
 
+struct pending_minting_data {
+    amount: integer;
+    account_id: byte_array;
+}
+
 @extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_mint.name: apply_ec_pending_minting(*)];
 @extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_mint.name: cleanup_ec_pending_minting(*)];
 
 operation propose_minting(proposal_by: byte_array, amount: integer, account_id: byte_array) {
 
-    require_is_signer(proposal_by);
-    val mint_chr_voter_set = require_mint_chr_voter_set();
-    require_common_voter_set_member(mint_chr_voter_set, proposal_by);
-    require(amount > 0, "Amount must be greater than 0");
-    ft4.accounts.Account(account_id);
+    val voter_set = require_voter_set_with_signer_and_member(voter_sets.chromia_foundation, proposal_by);
 
     val proposal = create common_proposal(
         op_context.last_block_time,
         common_proposal_type.ec_mint,
         proposal_by,
-        mint_chr_voter_set,
+        voter_set,
         "Minting %d assets to account id %s".format(amount, account_id));
 
-    create pending_minting(
+    val minting_proposal = create pending_minting(
         proposal,
         amount,
         account_id
     );
+    validate_ec_minting_proposal(minting_proposal);
 
     internal_common_vote(proposal.proposed_by, proposal, true);
 }
@@ -42,7 +44,7 @@ query get_minting_proposal(proposal_id: rowid) {
 function apply_ec_pending_minting(proposal: common_proposal) {
 
     val pending_minting = pending_minting @ { proposal };
-    val account = require(ft4.accounts.account @? { pending_minting.account_id }, "Account not found");
+    val account = validate_ec_minting_proposal(pending_minting);
 
     log("Apply minting proposal %d".format(pending_minting.rowid));
 
@@ -54,4 +56,10 @@ function cleanup_ec_pending_minting(proposal: common_proposal) {
     log("Cleaning up pending minting proposal");
 
     delete pending_minting @ { proposal };
+}
+
+function validate_ec_minting_proposal(proposal_details: pending_minting) {
+
+    require(proposal_details.amount > 0, "Amount must be greater than 0");
+    return ft4.accounts.Account(proposal_details.account_id);
 }
