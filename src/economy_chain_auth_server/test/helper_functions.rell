@@ -1,0 +1,31 @@
+@test module;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.auth;
+    import test_utils: lib.ft4.test.utils;
+}
+import lib.auth;
+
+function do_create_account(keypair: rell.test.keypair, auth_privkey: byte_array, failure: text? = null): ft4.accounts.account? {
+    val eth_address = crypto.eth_privkey_to_address(keypair.priv);
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(eth_address, set(["A", "T"]));
+    val signature = ft4.test_utils.evm_sign(auth.get_message_to_sign(), keypair.priv);
+
+    val tx = rell.test.tx().op(
+        auth.register_account(auth_descriptor, signature)
+    ).nop().sign(auth_privkey);
+
+    if (failure != null) {
+        tx.run_must_fail(failure);
+        return null;
+    } else {
+        tx.run();
+        val account_id = eth_address.hash();
+        val account = ft4.accounts.account_by_id(account_id);
+        rell.test.tx().op(
+            mint_to(account, get_amount_to_mint())
+        ).run();
+        return account;
+    }
+}

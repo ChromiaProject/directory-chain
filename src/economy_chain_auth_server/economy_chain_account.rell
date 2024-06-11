@@ -1,0 +1,36 @@
+import lib.auth;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.auth;
+}
+
+@extend(auth.before_account_registration) function(economy_chain.ft4.accounts.auth_descriptor, economy_chain.ft4.auth.signature) {
+    before_account_registration(auth_descriptor);
+}
+
+@extend(auth.after_account_registration) function(economy_chain.ft4.accounts.account, economy_chain.ft4.accounts.auth_descriptor, economy_chain.ft4.auth.signature) {
+    after_account_registration(account, auth_descriptor);
+}
+
+operation register_account(pubkey) {
+    register_account_impl(pubkey);
+}
+
+function register_account_impl(pubkey) {
+    economy_chain.require_admin();
+
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(pubkey, set(["A", "T"]));
+
+    before_account_registration(auth_descriptor);
+    val account = ft4.accounts.create_account_with_auth(auth_descriptor);
+    after_account_registration(account, auth_descriptor);
+}
+
+function before_account_registration(ft4.accounts.auth_descriptor) {
+    economy_chain.require_initialized();
+}
+
+function after_account_registration(ft4.accounts.account, ft4.accounts.auth_descriptor) {
+    log("Account created: %s".format(account.id));
+}
