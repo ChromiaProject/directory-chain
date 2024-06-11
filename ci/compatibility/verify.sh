@@ -31,6 +31,10 @@ for bc in "${blockchains_to_verify[@]}" ; do
     cp "$chromia_yml" "$chromia_yml_modified"
 
     bcrid=$(echo "$blockchains" | jq -r ".[] | select(.name == \"$bc_node_name\").rid" )
+    if [ -z "$bcrid" ]; then
+      echo "BCRID not found for $bc_node_name on $node_url"
+      exit 1
+    fi
     echo
     echo "Verifying $bc_settings_name / $bc_node_name with bcrid $bcrid"
 
