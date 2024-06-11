@@ -67,6 +67,13 @@ definitions:
       snapshot:
         levels_per_page: 2
         snapshots_to_keep: 2
+  economy_chain_claim_tchr_args: &economy_chain_claim_tchr_args
+    economy_chain_claim_tchr:
+      asset_name: "Chromia Test"
+      asset_symbol: "tCHR"
+      asset_decimals: 6
+      amount_to_mint: 1000000000
+      test_chr_refill_limit_millis: 604800000 # 1 week
   economy_chain_ft4_module_args: &economy_chain_ft4_module_args
     lib.ft4.core.accounts:
       rate_limit:
@@ -87,6 +94,59 @@ definitions:
     lib.auth:
       # TODO set proper pubkey for auth-server-ft4
       auth_pubkey: x"0317FF1ECF25B04026B6F9FA1960BA58070FB1CFC98519F7BC02D71ED1B00B1997"
+  economy_chain_ft4_module_args_hacknet: &economy_chain_ft4_module_args_hacknet
+    lib.ft4.core.accounts:
+      rate_limit:
+        active: 1
+        max_points: 20
+        recovery_time: 5000
+        points_at_account_creation: 1
+    lib.ft4.core.accounts.strategies.transfer:
+      rules:
+        - sender_blockchain: "$" # Only allow transfer from account on this chain
+          sender: "*"
+          recipient: "*"
+          asset:
+            - name: "Chromia Test" # Should match `economy_chain_module_args.asset_name`
+              min_amount: 10000000L # 10.0 tCHR
+          timeout_days: 10
+          strategy: "open"
+  economy_chain_ft4_module_args_projectnet: &economy_chain_ft4_module_args_projectnet
+    lib.ft4.core.accounts:
+      rate_limit:
+        active: 1
+        max_points: 20
+        recovery_time: 5000
+        points_at_account_creation: 1
+    lib.ft4.core.accounts.strategies.transfer:
+      rules:
+        - sender_blockchain: "$" # Only allow transfer from account on this chain
+          sender: "*"
+          recipient: "*"
+          asset:
+            - name: "Chromia Test" # Should match `economy_chain_module_args.asset_name`
+              min_amount: 10000000L # 10.0 tCHR
+          timeout_days: 10
+          strategy: "open"
+    lib.auth:
+      auth_pubkey: x"0317FF1ECF25B04026B6F9FA1960BA58070FB1CFC98519F7BC02D71ED1B00B1997" # TODO set proper pubkey for auth-server-ft4
+  economy_chain_ft4_module_args_questnet: &economy_chain_ft4_module_args_questnet
+    lib.ft4.core.accounts:
+      rate_limit:
+        active: 1
+        max_points: 20
+        recovery_time: 5000
+        points_at_account_creation: 1
+    lib.ft4.core.accounts.strategies.transfer:
+      rules:
+        - sender_blockchain: "$" # Only allow transfer from account on this chain
+          sender: "*"
+          recipient: "*"
+          asset:
+            - name: "Chromia Test" # Should match `economy_chain_module_args.asset_name`
+              min_amount: 10000000L # 10.0 tCHR
+          timeout_days: 10
+          strategy: "open"
   economy_chain_module_args: &economy_chain_module_args
       bsc_asset_network_id: 97
       bsc_asset_address: "B2ee8499B5e73795F28287A0603d66db6843a0f0"
@@ -187,8 +247,80 @@ blockchains:
         staking_withdrawal_delay_ms: 60000 # 1 min
         staking_delegation_delay_ms: 60000 # 1 min
         staking_payout_interval_ms: 10000 # 10 seconds - Good for testing
+  hacknet:
+    module: management_chain_hacknet
+    config:
+      << : *common_config
+      icmf:
+        receiver:
+          anchoring:
+            topics:
+              - G_configuration_updated
+              - G_configuration_failed
+              - G_last_anchored_heights
+          global:
+            topics:
+              - G_create_cluster
+              - G_create_container
+              - G_upgrade_container
+              - G_stop_container
+              - G_restart_container
+    moduleArgs:
+      common.init: *common_init
+      common:
+        allow_blockchain_dependencies: false
+        provider_quota_max_actions_per_day: 100
+      proposal_blockchain.util: *proposal_blockchain_util
   mainnet:
     module: management_chain_mainnet
+    config:
+      << : *common_config
+      icmf:
+        receiver:
+          anchoring:
+            topics:
+              - G_configuration_updated
+              - G_configuration_failed
+              - G_last_anchored_heights
+          global:
+            topics:
+              - G_create_cluster
+              - G_create_container
+              - G_upgrade_container
+              - G_stop_container
+              - G_restart_container
+    moduleArgs:
+      common.init: *common_init
+      common:
+        allow_blockchain_dependencies: false
+        provider_quota_max_actions_per_day: 100
+      proposal_blockchain.util: *proposal_blockchain_util
+  projectnet:
+    module: management_chain_projectnet
+    config:
+      << : *common_config
+      icmf:
+        receiver:
+          anchoring:
+            topics:
+              - G_configuration_updated
+              - G_configuration_failed
+              - G_last_anchored_heights
+          global:
+            topics:
+              - G_create_cluster
+              - G_create_container
+              - G_upgrade_container
+              - G_stop_container
+              - G_restart_container
+    moduleArgs:
+      common.init: *common_init
+      common:
+        allow_blockchain_dependencies: false
+        provider_quota_max_actions_per_day: 100
+      proposal_blockchain.util: *proposal_blockchain_util
+  questnet:
+    module: management_chain_questnet
     config:
       << : *common_config
       icmf:
@@ -267,17 +399,12 @@ blockchains:
       <<: *common_economy_chain
     moduleArgs:
       <<: *economy_chain_ft4_module_args
+      <<: *economy_chain_claim_tchr_args
       economy_chain:
         <<: *economy_chain_module_args
         staking_withdrawal_delay_ms: 60000 # 1 min
         staking_delegation_delay_ms: 60000 # 1 min
         staking_payout_interval_ms: 10000 # 10 seconds - Good for testing
-      economy_chain_claim_tchr:
-        asset_name: "Chromia Test"
-        asset_symbol: "tCHR"
-        asset_decimals: 6
-        amount_to_mint: 1000000000
-        test_chr_refill_limit_millis: 604800000 # 1 week
     test:
       modules:
         - economy_chain.test
@@ -337,6 +464,34 @@ blockchains:
       << : *common_economy_chain
     moduleArgs:
       << : *economy_chain_ft4_module_args
+      << : *economy_chain_claim_tchr_args
+      economy_chain:
+        << : *economy_chain_module_args
+  economy_chain_hacknet:
+    module: economy_chain_hacknet
+    config:
+      << : *common_economy_chain
+    moduleArgs:
+      << : *economy_chain_ft4_module_args_hacknet
+      << : *economy_chain_claim_tchr_args
+      economy_chain:
+        << : *economy_chain_module_args
+  economy_chain_projectnet:
+    module: economy_chain_projectnet
+    config:
+      << : *common_economy_chain
+    moduleArgs:
+      << : *economy_chain_ft4_module_args_projectnet
+      << : *economy_chain_claim_tchr_args
+      economy_chain:
+        << : *economy_chain_module_args
+  economy_chain_questnet:
+    module: economy_chain_questnet
+    config:
+      << : *common_economy_chain
+    moduleArgs:
+      << : *economy_chain_ft4_module_args_questnet
+      << : *economy_chain_claim_tchr_args
       economy_chain:
         << : *economy_chain_module_args
 
