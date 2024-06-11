@@ -26,6 +26,10 @@ function add_bridge_lease_impl(container_name: text, blockchain_rid: byte_array,
     require(lease.account == account, "Lease for container %s was not created by you".format(container_name));
     require((bridge_lease @* { lease }).size() < chain_context.args.max_bridge_leases_per_container, "Container lease already has max amount of bridge leases");
 
+    require(
+        empty(bridge_lease @? { blockchain_rid, evm_network_id }),
+        "Bridge lease already exists for blockchain %s and EVM network %s".format(blockchain_rid, evm_network_id)
+    );
     create bridge_lease(blockchain_rid, evm_network_id, lease, validator_contract, bridge_contract, anomaly_detection);
 
     send_message(bridge_mapping_topic, bridge_mapping_message(

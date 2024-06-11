@@ -121,6 +121,22 @@ function test_propose_and_remove_container() {
     ));
 }
 
+function test_container_duplicate_name() {
+    setup_module();
+
+    val sp = rell.test.keypairs.trudy;
+
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p),
+        register_provider(initial_provider.pub, sp.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, sp.pub, true)
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        propose_container(sp.pub, clusters.system, "container1", voter_sets.system_p)
+    ).nop().sign(sp).run_must_fail("Container with name container1 already exists");
+}
+
 function _make_vote(voter: rell.test.keypair) {
     rell.test.tx().op(
         make_vote(voter.pub, last_proposal().rowid.to_integer(), true)

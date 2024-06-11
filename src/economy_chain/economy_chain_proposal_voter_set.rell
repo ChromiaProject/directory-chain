@@ -87,6 +87,10 @@ function _propose_update_ec_voter_set(my_pubkey: pubkey, voter_set_name: text, n
         create ec_voter_set_update.threshold(update_prop, new_threshold);
     }
     for (m in new_member) {
+        require(
+            empty(common_voter_set_member @? { voter_set, .pubkey == m }),
+            "%s is already a member of voter set %s".format(m, voter_set_name)
+        );
         create ec_voter_set_update.new_member(update_prop, m);
     }
     for (m in remove_member) {

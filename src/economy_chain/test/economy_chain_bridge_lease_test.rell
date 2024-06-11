@@ -46,6 +46,12 @@ function test_bridge_lease_add_update_and_remove() {
     assert_equals(bridge_lease @? { .lease == container_lease } ( .anomaly_detection ), false);
     assert_true(empty(get_blockchains_with_bridge_and_anomaly_detection()));
 
+    // Duplicates prevented
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)),
+        add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)
+    ).nop().sign(rell.test.keypairs.alice).run_must_fail("Bridge lease already exists for blockchain 0x and EVM network 1");
+
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, update_bridge_lease(x"", 1, "validator2", "bridge2", true)),
         update_bridge_lease(x"", 1, "validator2", "bridge2", true)
