@@ -74,16 +74,20 @@ function test_update_voter_set() {
         .op(propose_update_voter_set(p1.pub, test_set, 1, null, list<pubkey>(), list<pubkey>()))
         .op(propose_update_voter_set(p1.pub, test_set, null, null, add_providers, list<pubkey>()))// Add p2
         .op(propose_update_voter_set(p1.pub, test_set, null, null, list<pubkey>(), remove_providers))// Remove p1
-        .op(propose_update_voter_set(p2.pub, test_set, null, system_voter_set().name, list<pubkey>(), list<pubkey>()))
+        .op(propose_update_voter_set(p2.pub, test_set, null, system_p_voter_set().name, list<pubkey>(), list<pubkey>()))
         .sign(p1)
         .sign(p2)
         .run();
 
     val vs = voter_set @ { test_set };
     assert_equals(vs.threshold, 1);
-    assert_equals(voter_set_governance @ { .voter_set == vs }.governor, system_voter_set());
+    assert_equals(voter_set_governance @ { .voter_set == vs }.governor, system_p_voter_set());
     assert_not_null(voter_set_member @? { vs, provider @ { p2.pub } });
     assert_null(voter_set_member @? { vs, provider @ { p1.pub } });
+
+    rell.test.tx().op(
+        propose_update_voter_set(p1.pub, test_set, null, null, add_providers, list<pubkey>()), // Add p2 again
+    ).sign(p1).run_must_fail("%s is already a member of voter set %s".format(p2.pub, test_set));
 }
 
 function test_update_voter_set_treshold_valid() {

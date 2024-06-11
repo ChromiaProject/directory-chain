@@ -121,3 +121,20 @@ function test_blockchain_dependencies_only_allowed_in_same_container() {
             "fee_chain", "container2")
     ).sign(initial_provider).run_must_fail();
 }
+
+function test_duplicate_blockchain_rid() {
+    setup_module();
+
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p),
+        propose_blockchain(initial_provider.pub, apply_required_configuration_properties().to_gtv().to_bytes(),
+            "foo_chain", "container1")
+    ).sign(initial_provider).run();
+
+    val bc = blockchain @ { .name == "foo_chain" };
+    rell.test.tx().op(
+        propose_blockchain(initial_provider.pub, apply_required_configuration_properties().to_gtv().to_bytes(),
+        "foo_chain2", "container1")
+    ).sign(initial_provider)
+        .run_must_fail("Another blockchain with same RID %s has previously been deployed to this network. Please ensure that the initial configuration is unique.".format(bc.rid));
+}

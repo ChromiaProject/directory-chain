@@ -75,3 +75,31 @@ function test_operational_when_provider_is_removed() {
     // With one provider less we get a operational cluster with 2 nodes and 2 providers
     assert_true(cluster @ { cluster_name } ( .operational ));
 }
+
+function test_duplicate_cluster_provider() {
+    setup_module();
+
+    val cluster_name = "cluster1";
+
+    rell.test.tx().op(
+        // Register and activate 2 providers
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, rell.test.pubkeys.trudy, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.bob, true),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.trudy, true),
+
+        // Create cluster
+        create_cluster(initial_provider.pub, cluster_name, voter_sets.system_p,
+            [rell.test.pubkeys.alice, rell.test.pubkeys.bob])
+    ).sign(initial_provider).run();
+
+    // Add duplicate cluster provider
+    rell.test.tx().op(
+        propose_cluster_provider(rell.test.pubkeys.alice, cluster_name, rell.test.pubkeys.alice, true)
+    ).sign(initial_provider).run_must_fail("%s is already a provider in cluster %s".format(rell.test.pubkeys.alice, cluster_name));
+
+    // Remove non-existing cluster provider
+    rell.test.tx().op(
+        propose_cluster_provider(rell.test.pubkeys.alice, cluster_name, rell.test.pubkeys.trudy, false)
+    ).sign(initial_provider).run_must_fail("%s is not a provider in cluster %s".format(rell.test.pubkeys.trudy, cluster_name));
+}

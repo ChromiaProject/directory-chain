@@ -11,6 +11,10 @@ function add_blockchain(
     state: blockchain_state = blockchain_state.RUNNING
 ): blockchain {
     val blockchain_rid = calculate_configuration_hash(base_configuration, signers);
+    require(
+        empty(blockchain @? { .rid == blockchain_rid }),
+        "Another blockchain with same RID %s has previously been deployed to this network. Please ensure that the initial configuration is unique.".format(blockchain_rid)
+    );
     val signer_bytes = signers.to_gtv().to_bytes();
     val blockchain = create blockchain(blockchain_rid, name, system, state);
     compress_and_store_configuration(blockchain, 0, base_configuration);
