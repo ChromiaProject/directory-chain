@@ -30,6 +30,15 @@ definitions:
             - G_configuration_updated
             - G_configuration_failed
             - G_last_anchored_heights
+        global:
+          topics:
+            - G_create_cluster
+            - G_create_container
+            - G_upgrade_container
+            - G_stop_container
+            - G_restart_container
+            - G_register_dapp_provider
+            - G_change_dapp_providers_state
   economy_chain_config: &common_economy_chain
     config_consensus_strategy: HEADER_HASH
     revolt:
@@ -185,7 +194,15 @@ definitions:
 blockchains:
   manager:
     module: management_chain_directory1
-    config: *common_config
+    config:
+      << : *common_config
+      icmf:
+        receiver:
+          anchoring:
+            topics:
+              - G_configuration_updated
+              - G_configuration_failed
+              - G_last_anchored_heights
     moduleArgs:
       common.init: *common_init
       common:
@@ -213,22 +230,7 @@ blockchains:
         staking_payout_interval_ms: 10000 # 10 seconds - Good for testing
   devnet1:
     module: management_chain_devnet1
-    config:
-      << : *common_config
-      icmf:
-        receiver:
-          anchoring:
-            topics:
-              - G_configuration_updated
-              - G_configuration_failed
-              - G_last_anchored_heights
-          global:
-            topics:
-              - G_create_cluster
-              - G_create_container
-              - G_upgrade_container
-              - G_stop_container
-              - G_restart_container
+    config: *common_config
     moduleArgs:
       common.init: *common_init
       common:
@@ -247,22 +249,7 @@ blockchains:
         staking_payout_interval_ms: 10000 # 10 seconds - Good for testing
   hacknet:
     module: management_chain_hacknet
-    config:
-      << : *common_config
-      icmf:
-        receiver:
-          anchoring:
-            topics:
-              - G_configuration_updated
-              - G_configuration_failed
-              - G_last_anchored_heights
-          global:
-            topics:
-              - G_create_cluster
-              - G_create_container
-              - G_upgrade_container
-              - G_stop_container
-              - G_restart_container
+    config: *common_config
     moduleArgs:
       common.init: *common_init
       common:
@@ -273,20 +260,6 @@ blockchains:
     module: management_chain_mainnet
     config:
       << : *common_config
-      icmf:
-        receiver:
-          anchoring:
-            topics:
-              - G_configuration_updated
-              - G_configuration_failed
-              - G_last_anchored_heights
-          global:
-            topics:
-              - G_create_cluster
-              - G_create_container
-              - G_upgrade_container
-              - G_stop_container
-              - G_restart_container
     moduleArgs:
       common.init: *common_init
       common:
@@ -295,22 +268,7 @@ blockchains:
       proposal_blockchain.util: *proposal_blockchain_util
   projectnet:
     module: management_chain_projectnet
-    config:
-      << : *common_config
-      icmf:
-        receiver:
-          anchoring:
-            topics:
-              - G_configuration_updated
-              - G_configuration_failed
-              - G_last_anchored_heights
-          global:
-            topics:
-              - G_create_cluster
-              - G_create_container
-              - G_upgrade_container
-              - G_stop_container
-              - G_restart_container
+    config: *common_config
     moduleArgs:
       common.init: *common_init
       common:
@@ -319,22 +277,7 @@ blockchains:
       proposal_blockchain.util: *proposal_blockchain_util
   questnet:
     module: management_chain_questnet
-    config:
-      << : *common_config
-      icmf:
-        receiver:
-          anchoring:
-            topics:
-              - G_configuration_updated
-              - G_configuration_failed
-              - G_last_anchored_heights
-          global:
-            topics:
-              - G_create_cluster
-              - G_create_container
-              - G_upgrade_container
-              - G_stop_container
-              - G_restart_container
+    config: *common_config
     moduleArgs:
       common.init: *common_init
       common:
@@ -403,6 +346,7 @@ blockchains:
         staking_withdrawal_delay_ms: 60000 # 1 min
         staking_delegation_delay_ms: 60000 # 1 min
         staking_payout_interval_ms: 10000 # 10 seconds - Good for testing
+        max_dapp_providers_per_lease: 2 # Good for testing
       economy_chain_test_admin:
         # TODO set proper pubkey for admin for test networks
         admin_pubkey: x"0317AC5B309A05B81A68F1A64321A3C6E6799E037C12892838682EBB9A620316A6"
@@ -440,6 +384,9 @@ blockchains:
           auth_privkey: x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6"  # Only for tests
           admin_privkey: x"D223C1BEF057A86FCB4603BF8CCBF7FFBFAF1F1928ADBD52A8FCCD08E3C487C3"  # Only for tests
         economy_chain.test.economy_chain_bridge_lease_test:
+          auth_privkey: x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6"  # Only for tests
+          admin_privkey: x"D223C1BEF057A86FCB4603BF8CCBF7FFBFAF1F1928ADBD52A8FCCD08E3C487C3"  # Only for tests
+        economy_chain.test.economy_chain_dapp_provider_test:
           auth_privkey: x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6"  # Only for tests
           admin_privkey: x"D223C1BEF057A86FCB4603BF8CCBF7FFBFAF1F1928ADBD52A8FCCD08E3C487C3"  # Only for tests
         economy_chain_test_auth_server:

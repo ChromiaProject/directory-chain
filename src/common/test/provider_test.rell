@@ -38,18 +38,15 @@ function test_register_provider() {
     assert_true(dp1.active); // DP is active by default if creator is NP
     assert_false(roles.has_node_access(dp1));
 
-    // DP registers DP
+    // DP is not allowed to register new providers
     rell.test.tx().op(
         register_provider(dapp_provider1.pub, dapp_provider2.pub, provider_tier.DAPP_PROVIDER)
-    ).sign(dapp_provider1).run();
-    val dp2 = provider @ { dapp_provider2.pub };
-    assert_true(dp2.active); // DP is always active by default
-    assert_false(roles.has_node_access(dp2));
-
-    // DP tries to register NP/SP and fails, since only SP can register NP
-    rell.test.tx().op(
-        register_provider(dapp_provider1.pub, node_provider2.pub, provider_tier.NODE_PROVIDER)
     ).sign(dapp_provider1).run_must_fail();
+
+    // Activate NP
+    rell.test.tx().op(
+        propose_provider_state(initial_provider.pub, node_provider1.pub, true)
+    ).sign(initial_provider).run();
 
     // NP registers DP
     val pk3 = x"aaaaaaaaaaaaaaaaaaaaaaaaaaaE4ABFB92936540FDF9B9F1BC7CEB51481286E31";
@@ -85,8 +82,8 @@ function test_register_provider() {
         register_provider(initial_provider.pub, node_provider2.pub, provider_tier.NODE_PROVIDER)
     ).sign(initial_provider).run_must_fail();
 
-    assert_equals(get_providers(provider_tier.DAPP_PROVIDER, false, true).size(), 4);
-    assert_equals(get_providers(provider_tier.NODE_PROVIDER, false, true).size(), 1);
+    assert_equals(get_providers(provider_tier.DAPP_PROVIDER, false, true).size(), 3);
+    assert_equals(get_providers(provider_tier.NODE_PROVIDER, false, true).size(), 2);
     assert_equals(get_providers(provider_tier.NODE_PROVIDER, true, true).size(), 1);
     assert_equals(get_providers(provider_tier.NODE_PROVIDER, false, false).size(), 3);
     assert_fails(get_providers(provider_tier.DAPP_PROVIDER, true, true, *));

@@ -1,0 +1,76 @@
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = "register_dapp_provider",
+    flags = ["T"],
+    message = register_dapp_provider_auth_message(*)
+);
+
+function register_dapp_provider_auth_message(gtv) {
+    val args = struct<register_dapp_provider>.from_gtv(gtv);
+    return "Please sign the message\nto add dapp provider to container lease %s\nwith public key %s\n".format(
+        args.container_name,
+        args.new_provider
+    );
+}
+
+function register_dapp_provider_impl(container_name: text, new_provider: pubkey) {
+    val lease = require_lease(container_name);
+    require(not lease.expired, "Container lease is expired");
+
+    val account = ft4.auth.authenticate();
+    require(lease.account == account, "Lease for container %s was not created by you".format(container_name));
+
+    // Some validation to minimize the risk of failing provider creation in directory chain
+    require(empty(provider @? { .pubkey == new_provider }), "Another provider is already registered with the same public key");
+    require(empty(node @? { .pubkey == new_provider }), "A node is already registered with the same public key");
+    require(empty(lease_dapp_provider @? { .provider == new_provider }), "Provider has already been added");
+
+    require(
+        lease_dapp_provider @ { lease } (@sum 1) < chain_context.args.max_dapp_providers_per_lease,
+        "No more dapp providers can be added to lease, maximum limit %s exceeded".format(chain_context.args.max_dapp_providers_per_lease)
+    );
+
+    create lease_dapp_provider(lease, new_provider);
+
+    // Fire and forget, not super critical since no payment is made, client can query directory chain for progress
+    send_message(register_dapp_provider_topic, register_dapp_provider_message(
+        container_name,
+        new_provider
+    ).to_gtv());
+}
+
+@extend(on_lease_expired) function disable_lease_providers(lease) {
+    change_lease_providers_state(lease, false);
+}
+
+@extend(on_lease_resurrected) function enable_lease_providers(lease) {
+    change_lease_providers_state(lease, true);
+}
+
+function change_lease_providers_state(lease, enable: boolean) {
+    val lease_providers = lease_dapp_provider @* { lease }.provider;
+    if (exists(lease_providers)) {
+        send_message(change_dapp_providers_state_topic, change_dapp_providers_state_message(
+            providers = lease_providers,
+            enable
+        ).to_gtv());
+    }
+}
+
+function delete_lease_dapp_providers(lease): list<pubkey> {
+    val lease_providers = lease_dapp_provider @* { lease };
+    val deleted_providers = list<pubkey>();
+
+    for (lease_provider in lease_providers) {
+        deleted_providers.add(lease_provider.provider);
+        delete lease_provider;
+    }
+
+    return deleted_providers;
+}
+
+function transfer_dapp_providers_to_lease(lease, providers: list<pubkey>) {
+    for (provider in providers) {
+        create lease_dapp_provider(lease, provider);
+    }
+}
