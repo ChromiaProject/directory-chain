@@ -1,0 +1,118 @@
+entity pending_staking_requirement_constants {
+    key proposal: common_proposal;
+    enabled: integer; // -1 not specified, 0 false, 1 true
+    stop_payout_days: integer;
+    system_provider_own_stake_chr: integer;
+    system_provider_total_stake_chr: integer;
+    dapp_provider_own_stake_chr: integer;
+    dapp_provider_total_stake_chr: integer;
+}
+
+struct pending_staking_requirement_constants_data {
+    enabled: boolean? = null;
+    stop_payout_days: integer? = null;
+    system_provider_own_stake_chr: integer? = null;
+    system_provider_total_stake_chr: integer? = null;
+    dapp_provider_own_stake_chr: integer? = null;
+    dapp_provider_total_stake_chr: integer? = null;
+}
+
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_staking_requirement_constants_update.name: apply_staking_requirement_constants(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_staking_requirement_constants_update.name: cleanup_staking_requirement_pending_constants(*)];
+
+operation propose_staking_requirement_constants(
+    enabled: boolean? = null,
+    stop_payout_days: integer? = null,
+    system_provider_own_stake_chr: integer? = null,
+    system_provider_total_stake_chr: integer? = null,
+    dapp_provider_own_stake_chr: integer? = null,
+    dapp_provider_total_stake_chr: integer? = null,
+) {
+    val provider = require_system_provider_signer_entity();
+
+    val proposal = create_system_p_proposal(common_proposal_type.ec_staking_requirement_constants_update, provider, "Update staking requirement constants in economy chain");
+    val proposal_details = create pending_staking_requirement_constants(
+        proposal,
+        enabled = get_boolean_int(enabled),
+        stop_payout_days = stop_payout_days ?: -1,
+        system_provider_own_stake_chr = system_provider_own_stake_chr ?: -1,
+        system_provider_total_stake_chr = system_provider_total_stake_chr ?: -1,
+        dapp_provider_own_stake_chr = dapp_provider_own_stake_chr ?: -1,
+        dapp_provider_total_stake_chr = dapp_provider_total_stake_chr ?: -1,
+    );
+    validate_staking_requirement_constants_proposal(proposal_details);
+
+    internal_common_vote(provider.pubkey, proposal, true);
+}
+
+function apply_staking_requirement_constants(proposal: common_proposal) {
+
+    val proposal_details = pending_staking_requirement_constants @ { proposal };
+    validate_staking_requirement_constants_proposal(proposal_details);
+
+    log("Updating staking requirement constants after approval of proposal %d".format(proposal.rowid));
+
+    if (proposal_details.enabled > -1) {
+        economy_constants.staking_requirements_enabled = get_boolean(proposal_details.enabled);
+    }
+    if (proposal_details.stop_payout_days > -1) {
+        economy_constants.staking_requirement_stop_payout_days = proposal_details.stop_payout_days;
+    }
+    if (proposal_details.system_provider_own_stake_chr > -1) {
+        economy_constants.staking_requirement_system_provider_own_stake_chr = proposal_details.system_provider_own_stake_chr;
+    }
+    if (proposal_details.system_provider_total_stake_chr > -1) {
+        economy_constants.staking_requirement_system_provider_total_stake_chr = proposal_details.system_provider_total_stake_chr;
+    }
+    if (proposal_details.dapp_provider_own_stake_chr > -1) {
+        economy_constants.staking_requirement_dapp_provider_own_stake_chr = proposal_details.dapp_provider_own_stake_chr;
+    }
+    if (proposal_details.dapp_provider_total_stake_chr > -1) {
+        economy_constants.staking_requirement_dapp_provider_total_stake_chr = proposal_details.dapp_provider_total_stake_chr;
+    }
+}
+
+function cleanup_staking_requirement_pending_constants(proposal: common_proposal) {
+
+    log("Cleaning up pending staking requirement economy constants");
+
+    delete pending_staking_requirement_constants @ { proposal };
+}
+
+query get_staking_requirement_constants_proposal(proposal_id: rowid) {
+
+    val proposal = require_common_proposal(proposal_id);
+    val proposal_details = require(pending_staking_requirement_constants @? { proposal }, "Proposal %s is not of type staking requirements constants".format(proposal_id));
+
+    return pending_staking_requirement_constants_data(
+        enabled = if (proposal_details.enabled == -1) null else get_boolean(proposal_details.enabled),
+        stop_payout_days = get_optional_proposal_int(proposal_details.stop_payout_days),
+        system_provider_own_stake_chr = get_optional_proposal_int(proposal_details.system_provider_own_stake_chr),
+        system_provider_total_stake_chr = get_optional_proposal_int(proposal_details.system_provider_total_stake_chr),
+        dapp_provider_own_stake_chr = get_optional_proposal_int(proposal_details.dapp_provider_own_stake_chr),
+        dapp_provider_total_stake_chr = get_optional_proposal_int(proposal_details.dapp_provider_total_stake_chr),
+    );
+}
+
+function validate_staking_requirement_constants_proposal(proposal_details: pending_staking_requirement_constants) {
+
+    require_only_pending_proposal_of_type(proposal_details.proposal);
+
+    require(proposal_details.stop_payout_days >= -1, "Stop payout days must be larger or equal to 0");
+    require(proposal_details.system_provider_own_stake_chr >= -1, "System provider own stake chr must be larger or equal to 0");
+    require(proposal_details.system_provider_total_stake_chr >= -1, "System provider total stake chr must be larger or equal to 0");
+    require(proposal_details.dapp_provider_own_stake_chr >= -1, "Dapp provider own stake chr must be larger or equal to 0");
+    require(proposal_details.dapp_provider_total_stake_chr >= -1, "Dapp provider total stake chr must be larger or equal to 0");
+}
+
+function get_boolean(value: integer?): boolean {
+    return value != null and value == 1;
+}
+
+function get_boolean_int(value: boolean?): integer {
+    return when(value) {
+        null -> -1;
+        false -> 0;
+        true -> 1;
+    };
+}

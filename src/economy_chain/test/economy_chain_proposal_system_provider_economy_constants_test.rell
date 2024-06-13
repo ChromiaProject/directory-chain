@@ -1,0 +1,99 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+
+function test_propose_system_provider_economy_constants_require_system_provider_signer() {
+
+    rell.test.tx().op(
+        propose_system_provider_economy_constants(1, 2, 3)
+    ).run_must_fail("Expected system provider signature");
+}
+
+function test_propose_system_provider_economy_constants_validate_input() {
+
+    add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
+
+    rell.test.tx().op(
+        propose_system_provider_economy_constants(-3, null, null)
+    ).sign(rell.test.keypairs.alice).run_must_fail("Total cost system providers must be larger or equal to 0");
+
+    rell.test.tx().op(
+        propose_system_provider_economy_constants(null, -3, null)
+    ).sign(rell.test.keypairs.alice).run_must_fail("System provider fee share must be larger or equal to 0");
+
+    rell.test.tx().op(
+        propose_system_provider_economy_constants(null, null, -3)
+    ).sign(rell.test.keypairs.alice).run_must_fail("System provider risk share must be larger or equal to 0");
+}
+
+function test_propose_system_provider_economy_constants_all() {
+
+    val constants: economy_constants_data = get_economy_constants();
+    assert_equals(constants.total_cost_system_providers, 828);
+    assert_equals(constants.system_provider_fee_share, 0.1);
+    assert_equals(constants.system_provider_risk_share, 0.1);
+
+    add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op(
+        propose_system_provider_economy_constants(2000, 0.2, 0.3)
+    ).sign(rell.test.keypairs.alice).run();
+
+    val updated_constants: economy_constants_data = get_economy_constants();
+    assert_equals(updated_constants.total_cost_system_providers, 2000);
+    assert_equals(updated_constants.system_provider_fee_share, 0.2);
+    assert_equals(updated_constants.system_provider_risk_share, 0.3);
+
+    assert_true(empty(pending_system_provider_economy_constants @* { }));
+}
+
+function test_propose_system_provider_economy_constants_partial() {
+    val constants: economy_constants_data = get_economy_constants();
+    assert_equals(constants.total_cost_system_providers, 828);
+    assert_equals(constants.system_provider_fee_share, 0.1);
+    assert_equals(constants.system_provider_risk_share, 0.1);
+
+    add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
+
+    rell.test.tx().op(
+        propose_system_provider_economy_constants(2000, null, null)
+    ).sign(rell.test.keypairs.alice).run();
+
+    var updated_constants: economy_constants_data = get_economy_constants();
+    assert_equals(updated_constants.total_cost_system_providers, 2000);
+    assert_equals(updated_constants.system_provider_fee_share, 0.1);
+    assert_equals(updated_constants.system_provider_risk_share, 0.1);
+
+    rell.test.tx().op(
+        propose_system_provider_economy_constants(null, 0.3, null)
+    ).sign(rell.test.keypairs.alice).run();
+
+    updated_constants = get_economy_constants();
+    assert_equals(updated_constants.total_cost_system_providers, 2000);
+    assert_equals(updated_constants.system_provider_fee_share, 0.3);
+    assert_equals(updated_constants.system_provider_risk_share, 0.1);
+
+    rell.test.tx().op(
+        propose_system_provider_economy_constants(null, null, 3.5)
+    ).sign(rell.test.keypairs.alice).run();
+
+    updated_constants = get_economy_constants();
+    assert_equals(updated_constants.total_cost_system_providers, 2000);
+    assert_equals(updated_constants.system_provider_fee_share, 0.3);
+    assert_equals(updated_constants.system_provider_risk_share, 3.5);
+}
+
+function test_get_system_provider_economy_constants_proposal() {
+
+    add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
+    add_provider(rell.test.keypairs.bob.pub, true, provider_tier.NODE_PROVIDER);
+    
+    rell.test.tx().op(
+        propose_system_provider_economy_constants(2000, 0.2, 0.3)
+    ).sign(rell.test.keypairs.alice).run();
+
+    val proposal = get_system_provider_economy_constants_proposal(get_latest_proposal_id());
+    assert_equals(proposal.total_cost_system_providers, 2000);
+    assert_equals(proposal.system_provider_fee_share, 0.2);
+    assert_equals(proposal.system_provider_risk_share, 0.3);
+}
