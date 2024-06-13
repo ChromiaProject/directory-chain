@@ -67,14 +67,17 @@ function calculate_dapp_cluster_rewards(cluster: cluster, node_availability_repo
     val dapp_cluster_value = dapp_cluster_value(cluster);
     val number_of_nodes_per_dapp_cluster = cluster_nodes.size();
 
-    val max_dapp_provider_reward_per_node = ((dapp_cluster_value * (1 - economy_constants.dapp_provider_risk_share) + dapp_cluster_value * occupancy_rate * economy_constants.dapp_provider_risk_share) / number_of_nodes_per_dapp_cluster) * economy_constants.chr_per_usd * units_per_asset;
     val node_reward = map<node, big_integer>();
-    for (cluster_node in cluster_nodes) {
-        val availability_factor = adjusted_availability_factor(node_availability_report.node_availability[cluster_node.pubkey]);
-        val dapp_provider_reward_per_node = max_dapp_provider_reward_per_node * availability_factor;
-        log("Reward calculated for node %s in cluster %s based on dapp_cluster_value: %s, dapp_provider_risk_share: %s, dapp_cluster_value: %s, occupancy_rate: %s, number_of_nodes_per_dapp_cluster: %s, availability_factor: %s, chr_per_usd: %s, units_per_asset: %s, system_provider_fee_share: %s, staking_reward_fee_share: %s, chromia_foundation_fee_share: %s, resource_pool_margin_fee_share: %s, dapp_provider_reward_per_node: %s"
-            .format(cluster_node.pubkey, cluster.name, dapp_cluster_value, economy_constants.dapp_provider_risk_share, dapp_cluster_value, occupancy_rate, number_of_nodes_per_dapp_cluster, availability_factor, economy_constants.chr_per_usd, units_per_asset, economy_constants.system_provider_fee_share, economy_constants.staking_reward_fee_share, economy_constants.chromia_foundation_fee_share, economy_constants.resource_pool_margin_fee_share, dapp_provider_reward_per_node));
-        node_reward[cluster_node] = dapp_provider_reward_per_node.to_big_integer();
+    if (number_of_nodes_per_dapp_cluster > 0) {
+
+        val max_dapp_provider_reward_per_node = ((dapp_cluster_value * (1 - economy_constants.dapp_provider_risk_share) + dapp_cluster_value * occupancy_rate * economy_constants.dapp_provider_risk_share) / number_of_nodes_per_dapp_cluster) * economy_constants.chr_per_usd * units_per_asset;
+        for (cluster_node in cluster_nodes) {
+            val availability_factor = adjusted_availability_factor(node_availability_report.node_availability[cluster_node.pubkey]);
+            val dapp_provider_reward_per_node = max_dapp_provider_reward_per_node * availability_factor;
+            log("Reward calculated for node %s in cluster %s based on dapp_cluster_value: %s, dapp_provider_risk_share: %s, dapp_cluster_value: %s, occupancy_rate: %s, number_of_nodes_per_dapp_cluster: %s, availability_factor: %s, chr_per_usd: %s, units_per_asset: %s, system_provider_fee_share: %s, staking_reward_fee_share: %s, chromia_foundation_fee_share: %s, resource_pool_margin_fee_share: %s, dapp_provider_reward_per_node: %s"
+                .format(cluster_node.pubkey, cluster.name, dapp_cluster_value, economy_constants.dapp_provider_risk_share, dapp_cluster_value, occupancy_rate, number_of_nodes_per_dapp_cluster, availability_factor, economy_constants.chr_per_usd, units_per_asset, economy_constants.system_provider_fee_share, economy_constants.staking_reward_fee_share, economy_constants.chromia_foundation_fee_share, economy_constants.resource_pool_margin_fee_share, dapp_provider_reward_per_node));
+            node_reward[cluster_node] = dapp_provider_reward_per_node.to_big_integer();
+        }
     }
     return node_reward;
 }
@@ -201,7 +204,10 @@ function occupied_scus(cluster: cluster): integer = lease @ { cluster, not .expi
 
 function total_available_scus(cluster_units: integer): integer = cluster_units * standard_cluster_unit.container_units;
 
-function occupancy_rate(cluster): decimal = decimal(occupied_scus(cluster)) / (total_available_scus(cluster.cluster_units) - standard_cluster_unit.system_container_units);
+function occupancy_rate(cluster): decimal {
+    val scus = total_available_scus(cluster.cluster_units) - standard_cluster_unit.system_container_units;
+    return if (scus > 0) decimal(occupied_scus(cluster)) / scus else 0;
+}
 
 function adjusted_availability_factor(availability_factor: decimal): decimal = max(0, availability_factor - 0.9) * 10;
 
