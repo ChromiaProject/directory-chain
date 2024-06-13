@@ -17,6 +17,15 @@ database:
 ```
 Or as an environment variable to the docker container `-e CHR_DATABASE_HOST=<host>`
 
+## Dependencies on the PMC Tool
+
+Changes to this project will often necessitate changes to the [Postchain Management Console](https://docs.chromia.com/category/postchain-management-console) for elements that can be configured by providers. This is often true for Economy Chain changes.
+
+For example, the change that allowed the reward rate to be voted on by providers led to [this merge request](https://chromaway.atlassian.net/wiki/x/AYAMDw) for the PMC.
+
+For all such changes, `version.rell` needs to be incremented appropriately. Otherwise existing PMC users will not know to upgrade to use the new features.
+
+
 ## Releases
 
 Whenever an api is added or changed (signature of query/operations), the api version should be updated in `version.rell`. If the api is changed in `nm_api` or `cm_api`, the respective version of those libs should also be updated.
