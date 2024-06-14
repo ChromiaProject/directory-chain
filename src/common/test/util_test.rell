@@ -1,0 +1,24 @@
+@test module;
+
+import ^^.test.ops.*;
+import proposal_provider.*;
+import proposal.voting.*;
+
+function test_get_voter_set_members_sorted() {
+
+    rell.test.tx().op(
+        create_test_provider("alice", rell.test.pubkeys.alice, provider_tier.NODE_PROVIDER),
+        create_test_provider("bob", rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        create_voter_set(rell.test.pubkeys.alice, "vs1", 0, initials = [rell.test.pubkeys.alice, rell.test.pubkeys.bob], governor = null),
+    )
+        .sign(rell.test.keypairs.alice)
+        .run();
+
+    rell.test.tx().op(
+        create_voter_set(rell.test.pubkeys.alice, "vs2", 0, initials = [rell.test.pubkeys.bob, rell.test.pubkeys.alice], governor = null),
+    )
+        .sign(rell.test.keypairs.alice)
+        .run();
+
+    assert_equals(get_voter_set_members_sorted("vs1"), get_voter_set_members_sorted("vs2"));
+}

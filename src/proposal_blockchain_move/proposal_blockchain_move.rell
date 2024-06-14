@@ -1,3 +1,5 @@
+import common.*;
+
 entity pending_blockchain_move {
     key proposal;
     blockchain;
@@ -12,7 +14,7 @@ operation propose_blockchain_move(my_pubkey: pubkey, blockchain_rid: byte_array,
 
     val dst_container = validate_blockchain_move_proposal(blockchain, me, destination_container);
 
-    val prop = create_proposal(proposal_type.blockchain_move_start, me, dst_container.deployer, description); // TODO: POS-961: src + dst?
+    val prop = create_proposal(proposal_type.blockchain_move_start, me, dst_container.deployer, description);
     val pending_blockchain_move = create pending_blockchain_move(prop, blockchain, dst_container);
     internal_vote(me, prop, true);
 }
@@ -89,6 +91,10 @@ function validate_blockchain_move_proposal(blockchain, proposed_by: provider, de
     val dst_container = require_container(destination_container);
     require_container_deployer(dst_container, proposed_by);
     require_container_is_not_full(dst_container);
+
+    require(
+        get_voter_set_members_sorted(src_container.deployer.name) == get_voter_set_members_sorted(dst_container.deployer.name),
+        "Deployers of source and destination container must be identical");
 
     return dst_container;
 }
