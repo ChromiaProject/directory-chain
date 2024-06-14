@@ -1,0 +1,129 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import ^.helper_operations.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.assets;
+    import lib.ft4.auth;
+    import test_utils: lib.ft4.test.utils;
+}
+import lib.auth;
+
+struct module_args {
+    auth_privkey: byte_array;
+    admin_privkey: byte_array;
+}
+
+val auth_privkey = chain_context.args.auth_privkey;
+val cluster_name = "test_cluster";
+
+function test_register_dapp_provider() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, cluster_name = cluster_name, container_units = 2);
+
+    val container_lease = lease @ { container_name };
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, register_dapp_provider(container_name, rell.test.pubkeys.bob)),
+        register_dapp_provider(container_name, rell.test.pubkeys.bob)
+    ).sign(rell.test.keypairs.alice).run();
+
+    assert_not_null(lease_dapp_provider @? { .lease == container_lease, .provider == rell.test.pubkeys.bob });
+    assert_events(("icmf_message", (
+        topic = register_dapp_provider_topic,
+        body = register_dapp_provider_message(
+            container_name,
+            new_provider = rell.test.pubkeys.bob
+        ).to_gtv()
+    ).to_gtv_pretty()));
+
+    // Duplicates prevented
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, register_dapp_provider(container_name, rell.test.pubkeys.bob)),
+        register_dapp_provider(container_name, rell.test.pubkeys.bob)
+    ).nop().sign(rell.test.keypairs.alice).run_must_fail("Provider has already been added");
+}
+
+function test_expired_container_lease_disables_dapp_providers() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, cluster_name = cluster_name, container_units = 2);
+
+    val container_lease = lease @ { container_name };
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, register_dapp_provider(container_name, rell.test.pubkeys.bob)),
+        register_dapp_provider(container_name, rell.test.pubkeys.bob)
+    ).sign(rell.test.keypairs.alice).run();
+
+    assert_not_null(lease_dapp_provider @? { .lease == container_lease, .provider == rell.test.pubkeys.bob });
+
+    rell.test.set_next_block_time_delta(millis_per_week + 1);
+    rell.test.block().run();
+    rell.test.block().run();
+
+    assert_true(container_lease.expired);
+    assert_events(("icmf_message", (
+        topic = stop_container_topic,
+        body = stop_container_message(container_name).to_gtv()
+    ).to_gtv_pretty()),
+        ("icmf_message", (
+            topic = change_dapp_providers_state_topic,
+            body = change_dapp_providers_state_message(
+                providers = [rell.test.pubkeys.bob],
+                enable = false
+            ).to_gtv()
+        ).to_gtv_pretty()));
+
+    // Assert no dapp providers can be added when lease is expired
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, register_dapp_provider(container_name, rell.test.pubkeys.trudy)),
+        register_dapp_provider(container_name, rell.test.pubkeys.trudy)
+    ).sign(rell.test.keypairs.alice).run_must_fail("Container lease is expired");
+}
+
+function test_dapp_providers_are_transferred_on_container_upgrade() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, cluster_name = cluster_name, container_units = 2);
+
+    val container_lease = lease @ { container_name };
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, register_dapp_provider(container_name, rell.test.pubkeys.bob)),
+        register_dapp_provider(container_name, rell.test.pubkeys.bob)
+    ).sign(rell.test.keypairs.alice).run();
+
+    assert_not_null(lease_dapp_provider @? { .lease == container_lease, .provider == rell.test.pubkeys.bob });
+
+    val upgraded_container_name = do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 5, ticket_id = ticket_id_after_init + 6, current_lease = container_lease, container_units = 3, cluster_name = cluster_name, upgraded_container_name = "upgraded_container");
+
+    val upgraded_container_lease = lease @ { upgraded_container_name };
+    assert_null(lease_dapp_provider @? { .lease == container_lease, .provider == rell.test.pubkeys.bob });
+    assert_not_null(lease_dapp_provider @? { .lease == upgraded_container_lease, .provider == rell.test.pubkeys.bob });
+}
+
+function test_max_dapp_providers_limit() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, cluster_name = cluster_name, container_units = 2);
+
+    val container_lease = lease @ { container_name };
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, register_dapp_provider(container_name, rell.test.pubkeys.bob)),
+        register_dapp_provider(container_name, rell.test.pubkeys.bob)
+    ).sign(rell.test.keypairs.alice).run();
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, register_dapp_provider(container_name, rell.test.pubkeys.trudy)),
+        register_dapp_provider(container_name, rell.test.pubkeys.trudy)
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Third should break limit
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, register_dapp_provider(container_name, rell.test.pubkeys.charlie)),
+        register_dapp_provider(container_name, rell.test.pubkeys.charlie)
+    ).sign(rell.test.keypairs.alice).run_must_fail("No more dapp providers can be added to lease, maximum limit 2 exceeded");
+}

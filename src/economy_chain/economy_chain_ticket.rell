@@ -54,6 +54,7 @@ function receive_ticket_container_result_message(body: gtv) {
                     val currently_auto_renewed = current_lease.auto_renew;
                     val current_duration = current_lease.duration_millis;
                     val bridge_leases = delete_bridge_leases(current_lease);
+                    val lease_dapp_providers = delete_lease_dapp_providers(current_lease);
                     delete current_lease;
                     val new_lease = create lease(
                         container_name = upgraded_container_name,
@@ -66,6 +67,7 @@ function receive_ticket_container_result_message(body: gtv) {
                         auto_renew = currently_auto_renewed
                     );
                     transfer_bridge_leases_to_lease(new_lease, bridge_leases);
+                    transfer_dapp_providers_to_lease(new_lease, lease_dapp_providers);
                 }
                 ticket_state.FAILURE -> {
                     log("Failed to upgrade container for ticket %s".format(message.ticket_id));

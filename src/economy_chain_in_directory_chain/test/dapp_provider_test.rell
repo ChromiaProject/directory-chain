@@ -1,0 +1,69 @@
+@test module;
+
+import common.operations.*;
+import common.test.setup.*;
+import common.test.util.*;
+import direct_container.*;
+import ^^.*;
+import ^.helpers.*;
+
+function test_register_dapp_provider() {
+    setup_module();
+
+    val conf = apply_required_configuration_properties();
+    val container_name = "container1";
+    rell.test.tx().op(
+        init_economy_chain(initial_provider.pub, conf.to_gtv().to_bytes()),
+        create_container(initial_provider.pub, container_name, clusters.system, 0, [initial_provider.pub])
+    ).sign(initial_provider).run();
+    val container = container @ { .name == container_name };
+
+    val dapp_provider_key = rell.test.pubkeys.bob;
+    rell.test.tx().op(
+        register_dapp_provider_op(register_dapp_provider_message(
+            container_name,
+            dapp_provider_key
+        ).to_gtv())
+    ).run();
+
+    val dapp_provider = provider @ { .pubkey == dapp_provider_key };
+    assert_not_null(voter_set_member @? { .voter_set == container.deployer, .provider == dapp_provider });
+}
+
+function test_change_dapp_providers_state() {
+    setup_module();
+
+    val conf = apply_required_configuration_properties();
+    val dp1_key = rell.test.pubkeys.bob;
+    val dp2_key = rell.test.pubkeys.trudy;
+    rell.test.tx().op(
+        init_economy_chain(initial_provider.pub, conf.to_gtv().to_bytes()),
+        register_provider(initial_provider.pub, dp1_key, provider_tier.DAPP_PROVIDER),
+        register_provider(initial_provider.pub, dp2_key, provider_tier.DAPP_PROVIDER)
+    ).sign(initial_provider).run();
+    val dp1 = provider @ { .pubkey == dp1_key };
+    val dp2 = provider @ { .pubkey == dp2_key };
+
+    assert_true(dp1.active);
+    assert_true(dp2.active);
+
+    // Disable
+    rell.test.tx().op(
+        change_dapp_providers_state_op(change_dapp_providers_state_message(
+            [dp1_key, dp2_key],
+            false
+        ).to_gtv())
+    ).run();
+    assert_false(dp1.active);
+    assert_false(dp2.active);
+
+    // Enable
+    rell.test.tx().op(
+        change_dapp_providers_state_op(change_dapp_providers_state_message(
+            [dp1_key, dp2_key],
+            true
+        ).to_gtv())
+    ).run();
+    assert_true(dp1.active);
+    assert_true(dp2.active);
+}

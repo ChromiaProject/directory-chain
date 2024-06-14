@@ -1,0 +1,24 @@
+@extend(receive_icmf_message) function receive_register_dapp_provider(sender: byte_array, topic: text, body: gtv) {
+    if (topic != register_dapp_provider_topic) return;
+
+    if (sender != economy_chain.rid) {
+        log("Sender %s is not the economy chain, ignoring".format(sender));
+        return;
+    }
+
+    receive_register_dapp_provider_impl(body);
+}
+
+function receive_register_dapp_provider_impl(body: gtv) {
+    val register_dapp_provider_message = register_dapp_provider_message.from_gtv(body);
+    val container_voter_set = container @? { .name == register_dapp_provider_message.container_name }.deployer;
+
+    try_call(register_and_enable_provider(
+        provider_info(register_dapp_provider_message.new_provider),
+        provider_tier.DAPP_PROVIDER,
+        null,
+        container_voter_set,
+        true,
+        *
+    ));
+}
