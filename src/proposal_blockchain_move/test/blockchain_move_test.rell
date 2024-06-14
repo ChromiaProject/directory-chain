@@ -15,6 +15,35 @@ import direct_container.*;
 import direct_cluster.*;
 import nm_api.*;
 
+function test_blockchain_moving_within_a_node_fail_due_to_changed_deployer_set() {
+    // setup
+    setup_module(provider_quota_max_containers = 2, cluster_anchoring_config = ["any": "value".to_gtv()]);
+    var conf = apply_required_configuration_properties();
+
+    rell.test.tx().op(
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1a", "s1", 0, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1b", "s1", 0, [initial_provider.pub]),
+        update_node_with_units(initial_provider.pub, test_node.pubkey, cluster_units = 3),
+        add_node_to_cluster(initial_provider.pub, test_node.pubkey, "s1"),
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1a")
+    ).sign(initial_provider).run();
+    val foo_chain = blockchain @ { "foo_chain" };
+
+    // 1. start blockchain moving
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c1b")
+    ).sign(initial_provider).run();
+
+    // 2. finish blockchain moving
+    rell.test.tx().op(
+        // Change source container deployer by adding Bob
+        create_test_provider("bob", rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        add_container_deployer(initial_provider.pub, "c1a", rell.test.pubkeys.bob),
+        propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 123)
+    ).sign(initial_provider).run_must_fail("Deployers of source and destination container must be identical");
+}
+
 function test_blockchain_moving_within_a_node() {
     // setup
     setup_module(provider_quota_max_containers = 2, cluster_anchoring_config = ["any": "value".to_gtv()]);
@@ -357,4 +386,66 @@ function test_system_blockchain_moving_is_not_allowed() {
     rell.test.tx().op(
         propose_blockchain_move(initial_provider.pub, blockchain @ { blockchains.directory_chain } (.rid), "c1")
     ).sign(initial_provider).run_must_fail("Moving of system chains is not allowed: ");
+}
+
+function test_blockchain_moving_invalid_signer_not_src_deployer() {
+
+    setup_module(provider_quota_max_containers = 2, cluster_anchoring_config = ["any": "value".to_gtv()]);
+    var conf = apply_required_configuration_properties();
+
+    rell.test.tx().op(
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_test_provider("bob", rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        create_container(initial_provider.pub, "c1a", "s1", 0, [rell.test.pubkeys.bob]),
+        create_container(initial_provider.pub, "c1b", "s1", 0, []),
+        update_node_with_units(initial_provider.pub, test_node.pubkey, cluster_units = 3),
+        add_node_to_cluster(initial_provider.pub, test_node.pubkey, "s1"),
+        propose_blockchain(rell.test.pubkeys.bob, conf.to_gtv().to_bytes(), "foo_chain", "c1a")
+    ).sign(initial_provider, rell.test.keypairs.bob).run();
+
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, blockchain @ { "foo_chain" } ( .rid ), "c1b")
+    ).sign(initial_provider).run_must_fail("Provider 0x02466d7fcae563e5cb09a0d1870bb580344804617879a14949cf22285f1bae3f27 is not a deployer of container c1a");
+}
+
+function test_blockchain_moving_invalid_signer_not_dst_deployer() {
+
+    setup_module(provider_quota_max_containers = 2, cluster_anchoring_config = ["any": "value".to_gtv()]);
+    var conf = apply_required_configuration_properties();
+
+    rell.test.tx().op(
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1a", "s1", 0, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1b", "s1", 0, []),
+        update_node_with_units(initial_provider.pub, test_node.pubkey, cluster_units = 3),
+        add_node_to_cluster(initial_provider.pub, test_node.pubkey, "s1"),
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1a")
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, blockchain @ { "foo_chain" } ( .rid ), "c1b")
+    ).sign(initial_provider).run_must_fail("Provider 0x02466d7fcae563e5cb09a0d1870bb580344804617879a14949cf22285f1bae3f27 is not a deployer of container c1b");
+}
+
+function test_blockchain_moving_invalid_src_and_dst_deployer_voter_set() {
+
+    setup_module(provider_quota_max_containers = 2, cluster_anchoring_config = ["any": "value".to_gtv()]);
+    var conf = apply_required_configuration_properties();
+
+    // src: initial_proivder & bob, dst: initial_provider
+    rell.test.tx().op(
+        create_test_provider("bob", rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1a", "s1", 0, [rell.test.pubkeys.bob,initial_provider.pub]),
+        create_container(initial_provider.pub, "c1b", "s1", 0, [initial_provider.pub]),
+        update_node_with_units(initial_provider.pub, test_node.pubkey, cluster_units = 3),
+        add_node_to_cluster(initial_provider.pub, test_node.pubkey, "s1"),
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1a")
+    ).sign(initial_provider).run();
+
+    vote_for_last_proposal(rell.test.keypairs.bob);
+
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, blockchain @ { "foo_chain" } ( .rid ), "c1b")
+    ).sign(initial_provider).run_must_fail("Deployers of source and destination container must be identical");
 }

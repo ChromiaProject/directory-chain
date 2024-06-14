@@ -1,3 +1,5 @@
+import common.*;
+
 entity pending_blockchain_move_finish {
     key proposal;
     blockchain;
@@ -10,7 +12,7 @@ operation propose_blockchain_move_finish(my_pubkey: pubkey, blockchain_rid: byte
     val blockchain = require_active_blockchain(blockchain_rid);
     val mv_bc = validate_blockchain_move_finish_proposal(blockchain);
 
-    val prop = create_proposal(proposal_type.blockchain_move_finish, me, mv_bc.destination.deployer, description); // TODO: POS-961: src + dst?
+    val prop = create_proposal(proposal_type.blockchain_move_finish, me, mv_bc.destination.deployer, description);
     create pending_blockchain_move_finish(prop, blockchain, mv_bc.destination, final_height);
     internal_vote(me, prop, true);
 }
@@ -56,5 +58,11 @@ function delete_pending_blockchain_move_finish(proposal) {
 
 function validate_blockchain_move_finish_proposal(blockchain) {
 
-    return require(moving_blockchain @? { blockchain }, "Blockchain %s is not being moved".format(blockchain.rid));
+    val proposal_details = require(moving_blockchain @? { blockchain }, "Blockchain %s is not being moved".format(blockchain.rid));
+
+    require(
+        get_voter_set_members_sorted(proposal_details.source.deployer.name) == get_voter_set_members_sorted(proposal_details.destination.deployer.name),
+        "Deployers of source and destination container must be identical");
+
+    return proposal_details;
 }
