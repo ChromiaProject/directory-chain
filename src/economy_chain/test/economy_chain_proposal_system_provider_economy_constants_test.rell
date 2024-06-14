@@ -16,15 +16,20 @@ function test_propose_system_provider_economy_constants_validate_input() {
 
     rell.test.tx().op(
         propose_system_provider_economy_constants(-3, null, null)
-    ).sign(rell.test.keypairs.alice).run_must_fail("Total cost system providers must be larger or equal to 0");
+    ).sign(rell.test.keypairs.alice).run_must_fail("Total cost system providers must be greater or equal to 0");
 
     rell.test.tx().op(
         propose_system_provider_economy_constants(null, -3, null)
-    ).sign(rell.test.keypairs.alice).run_must_fail("System provider fee share must be larger or equal to 0");
+    ).sign(rell.test.keypairs.alice).run_must_fail("System provider fee share must be between 0 and 1");
 
     rell.test.tx().op(
         propose_system_provider_economy_constants(null, null, -3)
-    ).sign(rell.test.keypairs.alice).run_must_fail("System provider risk share must be larger or equal to 0");
+    ).sign(rell.test.keypairs.alice).run_must_fail("System provider risk share must be between 0 and 1");
+
+    // Total sum of "share" values exceeds 1.0
+    rell.test.tx().op(
+        propose_system_provider_economy_constants(null, 0.5, 0.5)
+    ).sign(rell.test.keypairs.alice).run_must_fail("The sum (1.500000) of all economy chain share values must be between 0 and 1.0 inclusive");
 }
 
 function test_propose_system_provider_economy_constants_all() {
@@ -74,13 +79,13 @@ function test_propose_system_provider_economy_constants_partial() {
     assert_equals(updated_constants.system_provider_risk_share, 0.1);
 
     rell.test.tx().op(
-        propose_system_provider_economy_constants(null, null, 3.5)
+        propose_system_provider_economy_constants(null, null, 0)
     ).sign(rell.test.keypairs.alice).run();
 
     updated_constants = get_economy_constants();
     assert_equals(updated_constants.total_cost_system_providers, 2000);
     assert_equals(updated_constants.system_provider_fee_share, 0.3);
-    assert_equals(updated_constants.system_provider_risk_share, 3.5);
+    assert_equals(updated_constants.system_provider_risk_share, 0);
 }
 
 function test_get_system_provider_economy_constants_proposal() {
