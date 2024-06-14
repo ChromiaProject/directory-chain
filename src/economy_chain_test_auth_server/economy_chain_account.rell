@@ -5,6 +5,10 @@ namespace ft4 {
     import lib.ft4.auth;
 }
 
+struct module_args {
+    admin_pubkey: byte_array;
+}
+
 @extend(auth.before_account_registration) function(economy_chain.ft4.accounts.auth_descriptor, economy_chain.ft4.auth.signature) {
     before_account_registration(auth_descriptor);
 }
@@ -18,7 +22,8 @@ operation register_account(pubkey) {
 }
 
 function register_account_impl(pubkey) {
-    economy_chain.require_admin();
+
+    require(op_context.is_signer(chain_context.args.admin_pubkey), "Expected admin signature");
 
     val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(pubkey, set(["A", "T"]));
 

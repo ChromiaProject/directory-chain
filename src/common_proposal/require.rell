@@ -14,3 +14,11 @@ function require_common_voter_set_governor(common_voter_set, pubkey) {
 function require_is_signer(pubkey) {
     require(op_context.is_signer(pubkey), "Operation must be signed by " + pubkey);
 }
+
+function require_only_pending_proposal_of_type(proposal: common_proposal) {
+    require(empty(common_proposal @* {
+        proposal.proposal_type,
+        .rowid != proposal.rowid,
+        .state == common_proposal_state.PENDING
+    }), "A pending proposal of type %s already exists".format(proposal.proposal_type));
+}

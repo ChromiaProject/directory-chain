@@ -1,0 +1,94 @@
+entity pending_system_provider_economy_constants {
+    key proposal: common_proposal;
+    total_cost_system_providers: integer;
+    system_provider_fee_share: decimal;
+    system_provider_risk_share: decimal;
+}
+
+struct pending_system_provider_economy_constants_data {
+    total_cost_system_providers: integer?;
+    system_provider_fee_share: decimal?;
+    system_provider_risk_share: decimal?;
+}
+
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_system_provider_constants_update.name: apply_system_provider_economy_constants(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_system_provider_constants_update.name: cleanup_pending_system_provider_economy_constants(*)];
+
+operation propose_system_provider_economy_constants(
+    total_cost_system_providers: integer? = null,
+    system_provider_fee_share: decimal? = null,
+    system_provider_risk_share: decimal? = null
+) {
+    val provider = require_system_provider_signer_entity();
+
+    val proposal = create_system_p_proposal(common_proposal_type.ec_system_provider_constants_update, provider, "Update system provider economy constants");
+    val proposal_details = create pending_system_provider_economy_constants(
+        proposal,
+        total_cost_system_providers = total_cost_system_providers ?: -1,
+        system_provider_fee_share = system_provider_fee_share ?: -1.0,
+        system_provider_risk_share = system_provider_risk_share ?: -1.0,
+    );
+    validate_system_provider_economy_constants_proposal(proposal_details);
+
+    internal_common_vote(provider.pubkey, proposal, true);
+}
+
+function apply_system_provider_economy_constants(proposal: common_proposal) {
+
+    val proposal_details = pending_system_provider_economy_constants @ { proposal };
+    validate_system_provider_economy_constants_proposal(proposal_details);
+
+    log("Updating system provider economy constants after approval of proposal %d".format(proposal.rowid));
+
+    if (proposal_details.total_cost_system_providers > -1) {
+        economy_constants.total_cost_system_providers = proposal_details.total_cost_system_providers;
+    }
+    if (proposal_details.system_provider_fee_share > -1) {
+        economy_constants.system_provider_fee_share = proposal_details.system_provider_fee_share;
+    }
+    if (proposal_details.system_provider_risk_share > -1) {
+        economy_constants.system_provider_risk_share = proposal_details.system_provider_risk_share;
+    }
+}
+
+function cleanup_pending_system_provider_economy_constants(proposal: common_proposal) {
+
+    log("Cleaning up pending system provider economy constants");
+
+    delete pending_system_provider_economy_constants @ { proposal };
+}
+
+query get_system_provider_economy_constants_proposal(proposal_id: rowid) {
+
+    val proposal = require_common_proposal(proposal_id);
+    val proposal_details = require(pending_system_provider_economy_constants @? { proposal }, "Proposal %s is not of type system provider economy constants".format(proposal_id));
+
+    return pending_system_provider_economy_constants_data(
+        total_cost_system_providers = get_optional_proposal_int(proposal_details.total_cost_system_providers),
+        system_provider_fee_share = get_optional_proposal_decimal(proposal_details.system_provider_fee_share),
+        system_provider_risk_share = get_optional_proposal_decimal(proposal_details.system_provider_risk_share),
+    );
+}
+
+function validate_system_provider_economy_constants_proposal(proposal_details: pending_system_provider_economy_constants) {
+
+    require_only_pending_proposal_of_type(proposal_details.proposal);
+
+    require(proposal_details.total_cost_system_providers >= -1, "Total cost system providers must be larger or equal to 0");
+    require(proposal_details.system_provider_fee_share >= -1, "System provider fee share must be larger or equal to 0");
+    require(proposal_details.system_provider_risk_share >= -1, "System provider risk share must be larger or equal to 0");
+}
+
+function get_optional_proposal_int(value: integer): integer? {
+    if (value == -1) {
+        return null;
+    }
+    return value;
+}
+
+function get_optional_proposal_decimal(value: decimal): decimal? {
+    if (value == -1) {
+        return null;
+    }
+    return value;
+}
