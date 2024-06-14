@@ -66,6 +66,54 @@ function require_provider_quota(provider, quota_type: provider_quota_type) {
     }
 }
 
+function disable_provider(provider) {
+    provider.active = false;
+
+    update node @* { provider } ( .active = false );
+
+    // cluster nodes
+    val cluster_nodes = cluster_node @* { .node.provider == provider } ( .cluster, .node );
+    delete cluster_node @* { .node.provider == provider };
+    for (cn in cluster_nodes) {
+        update_configuration_signers(cn.cluster, cn.node);
+        after_node_removed_from_cluster(cn.node, cn.cluster);
+    }
+
+    val pending_proposals_with_provider_as_voter = (prop: proposal, vsm: voter_set_member) @* { prop.voter_set == vsm.voter_set, vsm.provider == provider, prop.state == proposal_state.PENDING } ( prop );
+
+    // cluster replica nodes
+    val cluster_replica_nodes = cluster_replica_node @* { .node.provider == provider } ( .cluster, .node );
+    delete cluster_replica_node @* { .node.provider == provider };
+    for (crn in cluster_replica_nodes) {
+        after_replica_node_removed_from_cluster(crn.node, crn.cluster);
+    }
+
+    // blockchain replica nodes
+    delete blockchain_replica_node @* { .node.provider == provider };
+    // remove disabled provider from voter_set_member table
+    delete voter_set_member @* { .provider == provider };
+    // if provider is last to vote on proposals make sure the proposals are voted on
+    for (prop in pending_proposals_with_provider_as_voter) {
+        // We should delete any vote that the removed provider has cast on the pending proposal (for correctness)
+        delete vote @? { prop, provider };
+        try_to_apply_proposal(prop);
+    }
+    after_provider_updated(provider);
+}
+
+function enable_provider(provider) {
+    provider.active = true;
+
+    // If enabled provider is a system provider, update SYSTEM_P voter set
+    if (roles.has_system_access(provider)) {
+        val voter_set = system_p_voter_set();
+        if (empty(voter_set_member @? { voter_set, provider })) {
+            create voter_set_member(voter_set, provider);
+        }
+    }
+    after_provider_updated(provider);
+}
+
 function _require_provider_quota(quota: integer, quota_type: provider_quota_type, count: integer) {
     require(count < quota , "Provider quota exceeded: %s = %d".format(quota_type, quota));
 }
