@@ -122,7 +122,7 @@ function test_blockchain_dependencies_only_allowed_in_same_container() {
     ).sign(initial_provider).run_must_fail();
 }
 
-function test_duplicate_blockchain_rid() {
+function test_duplicate_blockchains() {
     setup_module();
 
     rell.test.tx().op(
@@ -137,4 +137,32 @@ function test_duplicate_blockchain_rid() {
         "foo_chain2", "container1")
     ).sign(initial_provider)
         .run_must_fail("Another blockchain with same RID %s has previously been deployed to this network. Please ensure that the initial configuration is unique.".format(bc.rid));
+
+    rell.test.tx().op(
+        propose_blockchain(initial_provider.pub, apply_required_configuration_properties(["test": (1).to_gtv()]).to_gtv().to_bytes(),
+        "foo_chain", "container1")
+    ).sign(initial_provider)
+        .run_must_fail("A blockchain with the same name already exists");
+
+    // Remove chain
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, bc.rid, blockchain_action.remove)
+    ).sign(initial_provider).run();
+
+    assert_null(blockchain @? { .name == "foo_chain", .state == blockchain_state.RUNNING });
+
+    // Same brid should still not be allowed
+    rell.test.tx().op(
+        propose_blockchain(initial_provider.pub, apply_required_configuration_properties().to_gtv().to_bytes(),
+            "foo_chain2", "container1")
+    ).sign(initial_provider)
+        .run_must_fail("Another blockchain with same RID %s has previously been deployed to this network. Please ensure that the initial configuration is unique.".format(bc.rid));
+
+    // Same name should be allowed
+    rell.test.tx().op(
+        propose_blockchain(initial_provider.pub, apply_required_configuration_properties(["test": (1).to_gtv()]).to_gtv().to_bytes(),
+        "foo_chain", "container1")
+    ).sign(initial_provider).run();
+
+    assert_not_null(blockchain @? { .name == "foo_chain", .state == blockchain_state.RUNNING });
 }
