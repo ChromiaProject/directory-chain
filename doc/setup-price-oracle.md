@@ -12,7 +12,7 @@ The [Price oracle](https://bitbucket.org/chromawallet/priceoracle/src/main/) col
 
    Price oracle needs a dedicated evm receiver deployed in a similar way as the bridge & staking evm receiver. Build it from the [postchain-eif](https://gitlab.com/chromaway/core/postchain-eif) repository and deploy the `eif_event_receiver_price_oracle_mainnet` configuration by using `pmc`:
 
-   `pmc network initialize-evm-event-receiver-chain -erc eif_event_receiver_mainnet.xml`
+   `pmc network initialize-evm-event-receiver-price-oracle-chain -erc eif_event_receiver_price_oracle_mainnet.xml`
 
 2. Clone price oracle
 
