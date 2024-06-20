@@ -1,3 +1,5 @@
+
+// All currencies stored as usd-per-crypto (the opposite to chr_per_usd constant)
 entity price_oracle_rates {
     key symbol: text;
     name: text;
@@ -11,10 +13,17 @@ function receive_price_oracle_update(sender: byte_array, body: gtv) {
 
     val message = token_price_changed_body.from_gtv(body);
 
-    set_price_oracle_rate_value(message);
+    if (message.price > 0) {
 
-    if (message.symbol == chain_context.args.asset_symbol) {
-        economy_constants.chr_per_usd = message.price;
+        set_price_oracle_rate_value(message);
+
+        if (message.symbol == chain_context.args.asset_symbol) {
+            economy_constants.chr_per_usd = 1 / message.price;
+
+            log("CHR per USD updated to: %s".format(economy_constants.chr_per_usd));
+        }
+    } else {
+        log("Received incorrect rate from price oracle for %s (%s): %s".format(message.name, message.symbol, message.price));
     }
 }
 
