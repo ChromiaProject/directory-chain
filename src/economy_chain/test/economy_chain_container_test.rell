@@ -374,6 +374,18 @@ function test_remaining_lease_value_is_correct() {
     assert_equals(expired_lease_remaining_value, 0);
 }
 
+function test_calculate_container_cost() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name, scu_price = 1234000, extra_storage_price = 1234000)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 2);
+
+    val tag = cluster @ { .name == cluster_name }.tag;
+    val lease = lease @ { container_name };
+    val lease_value = calculate_container_cost(1, 2, 0, tag);
+
+    assert_equals(lease_value, 86380000);
+}
+
 function test_expire_lease_not_done_when_upgrade_is_pending() {
     rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
     val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
