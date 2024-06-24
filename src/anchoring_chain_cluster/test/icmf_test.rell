@@ -1,0 +1,106 @@
+@test module;
+
+import ^.helpers.*;
+import ^^.*;
+
+val BLOCKCHAIN_RID = byte_array.from_hex("F435688B2F74933C71F8AA1952E1CFBCDAA421EF378A441EFF4EC5900896F1FA");
+val TOPIC = "L_test";
+
+function test_headers_with_messages_query_limit() {
+    // Setup:
+    // 2 anchored blocks per anchor block with messages in all of them
+    // Total: 3 anchor blocks -> 6 anchored blocks
+    rell.test.tx().op(
+        create_anchor_block(
+            blockchain_rid = BLOCKCHAIN_RID,
+            block_height = 0,
+            timestamp = 0,
+            block_rid = x"00",
+            block_header = x"00",
+            witness = x"00",
+            anchoring_tx_op_index = 0),
+        create_icmf_messages_height(
+            topic = TOPIC,
+            sender = BLOCKCHAIN_RID,
+            sender_height = 0,
+            anchor_height = 0
+        ),
+        create_anchor_block(
+            blockchain_rid = BLOCKCHAIN_RID,
+            block_height = 1,
+            timestamp = 1,
+            block_rid = x"01",
+            block_header = x"01",
+            witness = x"01",
+            anchoring_tx_op_index = 0),
+        create_icmf_messages_height(
+            topic = TOPIC,
+            sender = BLOCKCHAIN_RID,
+            sender_height = 1,
+            anchor_height = 0
+        ),
+    ).run();
+    rell.test.tx().op(
+        create_anchor_block(
+            blockchain_rid = BLOCKCHAIN_RID,
+            block_height = 2,
+            timestamp = 2,
+            block_rid = x"02",
+            block_header = x"02",
+            witness = x"02",
+            anchoring_tx_op_index = 0),
+        create_icmf_messages_height(
+            topic = TOPIC,
+            sender = BLOCKCHAIN_RID,
+            sender_height = 2,
+            anchor_height = 1
+        ),
+        create_anchor_block(
+            blockchain_rid = BLOCKCHAIN_RID,
+            block_height = 3,
+            timestamp = 3,
+            block_rid = x"03",
+            block_header = x"03",
+            witness = x"03",
+            anchoring_tx_op_index = 0),
+        create_icmf_messages_height(
+            topic = TOPIC,
+            sender = BLOCKCHAIN_RID,
+            sender_height = 3,
+            anchor_height = 1
+        ),
+    ).run();
+    rell.test.tx().op(
+        create_anchor_block(
+            blockchain_rid = BLOCKCHAIN_RID,
+            block_height = 4,
+            timestamp = 4,
+            block_rid = x"04",
+            block_header = x"04",
+            witness = x"04",
+            anchoring_tx_op_index = 0),
+        create_icmf_messages_height(
+            topic = TOPIC,
+            sender = BLOCKCHAIN_RID,
+            sender_height = 4,
+            anchor_height = 2
+        ),
+        create_anchor_block(
+            blockchain_rid = BLOCKCHAIN_RID,
+            block_height = 5,
+            timestamp = 5,
+            block_rid = x"05",
+            block_header = x"05",
+            witness = x"05",
+            anchoring_tx_op_index = 0),
+        create_icmf_messages_height(
+            topic = TOPIC,
+            sender = BLOCKCHAIN_RID,
+            sender_height = 5,
+            anchor_height = 2
+        ),
+    ).run();
+
+    // Limit is 3 -> return 4, since we should not cut off in the middle of a height
+    assert_equals(icmf_get_headers_with_messages_after_height(TOPIC, -1).size(), 4);
+}
