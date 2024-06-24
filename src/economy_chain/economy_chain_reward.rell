@@ -47,14 +47,14 @@ function calculate_system_cluster_rewards(system_cluster: cluster, node_availabi
     val sum_total_max_revenue_per_dapp_cluster = sum_total_max_revenue_per_dapp_cluster();
 
     val system_provider_cost_share_per_node = (sum_total_max_revenue_per_dapp_cluster * economy_constants.system_provider_fee_share) / number_of_nodes_in_system_cluster;
-    val max_system_provider_reward_per_node = max(economy_constants.total_cost_system_providers * (1 - economy_constants.system_provider_risk_share) + system_provider_cost_share_per_node * economy_constants.system_provider_risk_share, system_provider_cost_share_per_node) * economy_constants.chr_per_usd * units_per_asset;
+    val max_system_provider_reward_per_node = max((economy_constants.total_cost_system_providers / units_per_usd) * (1 - economy_constants.system_provider_risk_share) + system_provider_cost_share_per_node * economy_constants.system_provider_risk_share, system_provider_cost_share_per_node) * economy_constants.chr_per_usd * units_per_asset;
 
     val system_node_reward = map<node, big_integer>();
     for (system_cluster_node in system_cluster_nodes) {
         val availability_factor = adjusted_availability_factor(node_availability_report.node_availability[system_cluster_node.pubkey]);
         val system_provider_reward_per_node = max_system_provider_reward_per_node * availability_factor;
         log("Reward calculated for node %s in system cluster based on total_cost_system_providers: %s, system_provider_risk_share: %s, system_provider_cost_share_per_node: %s, system_provider_risk_share: %s, availability_factor: %s, chr_per_usd: %s, units_per_asset: %s, system_provider_fee_share: %s, system_provider_reward_per_node: %s"
-            .format(system_cluster_node.pubkey, economy_constants.total_cost_system_providers, economy_constants.system_provider_risk_share, system_provider_cost_share_per_node, economy_constants.system_provider_risk_share, availability_factor, economy_constants.chr_per_usd, units_per_asset, economy_constants.system_provider_fee_share, system_provider_reward_per_node));
+            .format(system_cluster_node.pubkey, economy_constants.total_cost_system_providers / units_per_usd, economy_constants.system_provider_risk_share, system_provider_cost_share_per_node, economy_constants.system_provider_risk_share, availability_factor, economy_constants.chr_per_usd, units_per_asset, economy_constants.system_provider_fee_share, system_provider_reward_per_node));
         system_node_reward[system_cluster_node] = system_provider_reward_per_node.to_big_integer();
     }
     return system_node_reward;
@@ -194,7 +194,11 @@ function sum_total_max_revenue_per_dapp_cluster(): decimal {
     return sum_total_max_revenue_per_dapp_cluster;
 }
 
-function total_max_revenue_per_dapp_cluster(cluster: cluster): decimal = (total_available_scus(cluster.cluster_units) - standard_cluster_unit.system_container_units) * cluster.tag.scu_price + cluster.tag.extra_storage_price * (cluster.extra_storage / 1024);
+function total_max_revenue_per_dapp_cluster(cluster: cluster): decimal {
+    val scu_revenue_usd = (total_available_scus(cluster.cluster_units) - standard_cluster_unit.system_container_units) * (decimal(cluster.tag.scu_price) / units_per_usd);
+    val extra_storage_revenue_usd = (cluster.extra_storage / 1024) * (decimal(cluster.tag.extra_storage_price) / units_per_usd);
+    return scu_revenue_usd + extra_storage_revenue_usd;
+}
 
 function dapp_provider_fee_share(): decimal = 1 - economy_constants.chromia_foundation_fee_share - economy_constants.resource_pool_margin_fee_share - economy_constants.system_provider_fee_share;
 
