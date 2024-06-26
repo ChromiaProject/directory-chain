@@ -3,23 +3,14 @@ module;
 import economy_chain.*;
 
 struct module_args {
-    admin_pubkey: byte_array;
+    auth_privkey: byte_array;
+    admin_privkey: byte_array;
+    staking_delegation_delay_ms: integer;
 }
 
-function require_admin() = require(op_context.is_signer(chain_context.args.admin_pubkey), "Expected admin signature");
+val START_OF_2030 : timestamp = 1893456000000;
+val START_OF_2050 : timestamp = 2524608000000;
 
-/**
-/* Manually claim user rewards
-**/
-operation _staking_claim_rewards() {
-    require_admin();
-    _staking_distribute_rewards();
-}
-
-operation _update_chr_per_usd(
-    chr_per_usd: decimal?
-) {
-    require_admin();
-    economy_constants.chr_per_usd = chr_per_usd ?: economy_constants.chr_per_usd;
-}
-
+val auth_privkey = chain_context.args.auth_privkey;
+val admin_privkey = chain_context.args.admin_privkey;
+val staking_delegation_delay_ms = chain_context.args.staking_delegation_delay_ms;
