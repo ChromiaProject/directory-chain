@@ -6,6 +6,22 @@ entity price_oracle_rates {
     mutable price: decimal;
 }
 
+struct price_oracle_rates_data {
+    symbol: text;
+    name: text;
+    price: decimal;
+}
+
+function price_oracle_init() {
+
+    log("Initializing price oracle");
+
+    // Set default values
+    set_price_oracle_rate("CHR", "Chromia - USD per CHR", 1 / economy_constants.chr_per_usd);
+    set_price_oracle_rate("ETH", "Eth - USD per ETH", 3375.0);
+    set_price_oracle_rate("BNB", "Chromia - USD per BNB", 575.0);
+}
+
 function receive_price_oracle_update(sender: byte_array, body: gtv) {
 
     require(exists(sender_blockchain @? { .name == blockchains.price_oracle_chain_name, .rid == sender }),
@@ -13,27 +29,37 @@ function receive_price_oracle_update(sender: byte_array, body: gtv) {
 
     val message = token_price_changed_body.from_gtv(body);
 
-    if (message.price > 0) {
+    set_price_oracle_rate(message.symbol, message.name, message.price);
+}
 
-        set_price_oracle_rate_value(message);
+function set_price_oracle_rate(symbol: text, name, price: decimal) {
 
-        if (message.symbol == chain_context.args.asset_symbol) {
-            economy_constants.chr_per_usd = 1 / message.price;
+    if (price > 0) {
+
+        upsert_price_oracle_rate_entity(name, symbol, price);
+
+        if (symbol == chain_context.args.asset_symbol) {
+            economy_constants.chr_per_usd = 1 / price;
 
             log("CHR per USD updated to: %s".format(economy_constants.chr_per_usd));
         }
     } else {
-        log("Received incorrect rate from price oracle for %s (%s): %s".format(message.name, message.symbol, message.price));
+        log("Received incorrect rate from price oracle for %s (%s): %s".format(name, symbol, price));
     }
 }
 
-function set_price_oracle_rate_value(message: token_price_changed_body) {
+function upsert_price_oracle_rate_entity(name, symbol: text,  price: decimal) {
 
-    val price_oracle_rates = price_oracle_rates @? { .name == message.name };
+    val price_oracle_rates = price_oracle_rates @? { .symbol == symbol };
 
     if (price_oracle_rates == null) {
-        create price_oracle_rates(symbol = message.symbol, name = message.name, message.price);
+        create price_oracle_rates(symbol = symbol, name = name, price);
     } else {
-        price_oracle_rates.price = message.price;
+        price_oracle_rates.price = price;
     }
+}
+
+
+query get_price_oracle_rates() {
+    return price_oracle_rates @* {} (price_oracle_rates_data(.symbol, .name, .price));
 }
