@@ -1,0 +1,62 @@
+@test module;
+
+import ^^.*;
+
+import economy_chain.test.helper_functions.*;
+import economy_chain.test.helper_operations.*;
+
+function test_reward_start_time_is_set() {
+    assert_equals(START_OF_2050, staking_get_rewards_start());
+}
+
+function test_rewards_are_disabled_before_2050() {
+    rell.test.tx().op(init()).run();
+
+    // Put the date to 2030
+    rell.test.set_next_block_time(START_OF_2030);
+    rell.test.block().run();
+
+    // Set up a delegated state
+    val test_account_alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val test_account_bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
+
+    rell.test.tx()
+        .op(mint_to(test_account_alice, 9999999))
+    .sign(admin_privkey).run();
+
+    add_provider(rell.test.keypairs.bob.pub);
+
+    // Add some delegation
+    do_staking_deposit_native(rell.test.keypairs.alice, 9999999);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.bob.pub);
+
+    // Advance 10 periods
+    rell.test.set_next_block_time_delta(10 * staking_delegation_delay_ms);
+    rell.test.block().run();
+
+    // See there is no reward
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id), 0);
+
+    // Advance time to 2050
+    rell.test.set_next_block_time(START_OF_2050);
+    rell.test.block().run();
+    
+    // No reward at this point
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id), 0);
+
+    // Advance 1 period
+    rell.test.set_next_block_time_delta(10 * staking_delegation_delay_ms);
+    rell.test.block().run();
+
+    // There is a reward
+    val first_reward = staking_rewards_claimable_for(test_account_alice.id);
+    assert_true(first_reward > 0);
+
+    // Advance 1 period
+    rell.test.set_next_block_time_delta(10 * staking_delegation_delay_ms);
+    rell.test.block().run();
+
+    // There is more reward
+    val second_reward = staking_rewards_claimable_for(test_account_alice.id);
+    assert_true(first_reward < second_reward);
+}
