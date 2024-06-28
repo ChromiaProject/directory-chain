@@ -79,3 +79,11 @@ function get_resource_limits_or_defaults(resource_limits: map<container_resource
     resource_limits.get_or_default(container_resource_limit_type.max_blockchains, standard_container_defaults.max_blockchains),
     resource_limits.get_or_default(container_resource_limit_type.extra_storage, standard_container_defaults.extra_storage)
 );
+
+operation remove_container(me: pubkey, container_name: text) {
+    val provider = require_is_provider_with_rate_limit(me);
+    val container = require_container(container_name);
+    require_cluster_governor(container.cluster, provider);
+    require_container_available_for_removal(container);
+    remove_container_and_voter_set(container);
+}

@@ -56,14 +56,8 @@ function _apply_resume_blockchain(action: pending_blockchain_action, proposal) {
 // Delete everything about this bc except D1 information
 function _apply_delete_blockchain(action: pending_blockchain_action, proposal) {
     val bc = action.blockchain;
-    before_delete_blockchain(bc);
-    bc.state = blockchain_state.REMOVED;
-    delete container_blockchain @ { bc };
-    delete blockchain_replica_node @* { bc };
+    remove_blockchain(bc);
     delete pending_blockchain_action @ { proposal };
-    delete blockchain_dependency @* { .me == bc };
-    delete inactive_blockchain @? { bc };
-    create inactive_blockchain(bc, op_context.block_height);
 }
 
 function _apply_archive_blockchain(action: pending_blockchain_action, proposal) {
