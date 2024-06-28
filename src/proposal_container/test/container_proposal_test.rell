@@ -71,17 +71,6 @@ function test_propose_and_remove_container() {
     assert_not_null(bc_foo);
     assert_not_null(container_blockchain @? { container1, bc_foo });
 
-    // Trying to remove container and fail due to the fact it contains a foo_chain
-    rell.test.tx().op(
-        propose_remove_container(initial_provider.pub, "container1")
-    ).sign(initial_provider).run_must_fail();
-
-    // Deleting blockchain
-    rell.test.tx().op(
-        propose_blockchain_action(initial_provider.pub, bc_foo.rid, blockchain_action.remove)
-    ).sign(initial_provider).run();
-    _make_vote(sp);
-
     // Proposing container limits and container blockchain
     val limits = map<container_resource_limit_type, integer>();
     var conf_bar = apply_required_configuration_properties();
@@ -119,6 +108,9 @@ function test_propose_and_remove_container() {
     assert_true(empty(
         container_resource_limit @* { .container in container @* { "container1" } }
     ));
+
+    // Asserting foo_chain is deleted
+    assert_equals(bc_foo.state, blockchain_state.REMOVED);
 }
 
 function test_container_duplicate_name() {

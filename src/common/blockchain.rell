@@ -226,4 +226,21 @@ function store_configuration(blockchain, height: integer, configuration: byte_ar
     }
 }
 
+function remove_blockchain(blockchain) {
+    before_delete_blockchain(blockchain);
+    blockchain.state = blockchain_state.REMOVED;
+    delete container_blockchain @ { blockchain };
+    delete blockchain_replica_node @* { blockchain };
+    delete blockchain_dependency @* { .me == blockchain };
+    delete inactive_blockchain @? { blockchain };
+    create inactive_blockchain(blockchain, op_context.block_height);
+}
+
+@extend(before_remove_container) function remove_container_blockchains(container) {
+    val container_blockchains = container_blockchain @* { container }.blockchain;
+    for (blockchain in container_blockchains) {
+        remove_blockchain(blockchain);
+    }
+}
+
 @extendable function before_delete_blockchain(blockchain) {}
