@@ -11,11 +11,9 @@ function () = ft4.auth.add_auth_handler(
     message = claim_test_chr_auth_message(*)
 );
 
-function get_amount_to_mint() = chain_context.args.amount_to_mint;
-
 function claim_test_chr_auth_message(gtv) =
     "Please sign the message\nto receive %s %s on account {account_id}".format(
-        ft4.assets.format_amount_with_decimals(get_amount_to_mint(), chain_context.args.asset_decimals),
+        ft4.assets.format_amount_with_decimals(chain_context.args.amount_to_mint, chain_context.args.asset_decimals),
         chain_context.args.asset_symbol);
 
 operation claim_test_chr() {
@@ -27,6 +25,6 @@ operation claim_test_chr() {
     require(user.last_refill_millis + chain_context.args.test_chr_refill_limit_millis < op_context.last_block_time,
         "You have already claimed %s within the last 7 days, come back later".format(chain_context.args.asset_name));
 
-    ft4.assets.Unsafe.mint(account, get_asset(), get_amount_to_mint());
+    ft4.assets.Unsafe.mint(account, get_asset(), chain_context.args.amount_to_mint);
     user.last_refill_millis = op_context.last_block_time;
 }
