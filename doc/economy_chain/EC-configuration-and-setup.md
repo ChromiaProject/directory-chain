@@ -16,13 +16,13 @@ The Economy Chain has the following module args:
 | `asset_decimals`                    | The Chromia Network asset number of decimals.                                                                                            | text    | :white_check_mark: |         |
 | `asset_icon`                        | The Chromia Network asset icon url.                                                                                                      | text    | :white_check_mark: |         |
 | `amount_to_mint`                    | Amount of asset to be minted for new registered accounts.                                                                                | int     | :white_check_mark: |         |
-| `pool_amount_to_mint`               | Maximum amount of asset that can be minted to the pool account over the interval of time defined by `test_chr_pool_refill_limit_millis`. | int     | :white_check_mark: |         |
+| `pool_amount_to_mint`               | Maximum amount of asset that can be minted to the pool account over the interval of time defined by `pool_refill_limit_ms`. | int     | :white_check_mark: |         |
 | `admin_pubkey`                      | Admin pubkey.                                                                                                                            | pubkey  | :white_check_mark: |         |
 | `staking_initial_reward_rate`       | Staking initial reward rate.                                                                                                             | decimal | :white_check_mark: |         |
 | `staking_rate_change_delay_ms`      | Amount of time required to pass between staking rate changes.                                                                            | int     | :white_check_mark: |         |
 | `staking_withdrawal_delay_ms`       | Amount of time required to pass between staking withdrawals.                                                                             | int     | :white_check_mark: |         |
 | `staking_payout_interval_ms`        | Amount of time required to pass between payouts.                                                                                         | int     | :white_check_mark: |         |
-| `test_chr_pool_refill_limit_millis` | Amount of time required to pass between pool refills.                                                                                    | int     | :white_check_mark: |         |
+| `pool_refill_limit_ms` | Amount of time required to pass between pool refills.                                                                                    | int     | :white_check_mark: |         |
 | `max_bridge_leases_per_container`   | Max amount of bridge leases per container.                                                                                               | int     | :white_check_mark: |         |
 | `evm_transaction_submitters_bonus`  | Bonus coefficient used in computing the reward for EVM transaction submitters.                                                           | decimal | :white_check_mark: |         |
 
@@ -131,7 +131,7 @@ Example:
          staking_rate_change_delay_ms: 604800000
          staking_withdrawal_delay_ms: 1209600000
          staking_payout_interval_ms: 31536000000 
-         test_chr_pool_refill_limit_millis: 86400000 
+         pool_refill_limit_ms: 86400000 
          max_bridge_leases_per_container: 10
          evm_transaction_submitters_bonus: 0.1
          
