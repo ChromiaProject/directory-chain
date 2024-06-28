@@ -15,6 +15,10 @@ import lib.auth;
 
 val ticket_id_after_init = 23;
 
+struct module_args {
+    amount_to_mint: big_integer = 1000000000;
+}
+
 function do_create_account(keypair: rell.test.keypair, auth_privkey: byte_array, failure: text? = null): ft4.accounts.account? {
     val eth_address = crypto.eth_privkey_to_address(keypair.priv);
     val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(eth_address, set(["A", "T"]));
@@ -32,7 +36,7 @@ function do_create_account(keypair: rell.test.keypair, auth_privkey: byte_array,
         val account_id = eth_address.hash();
         val account = ft4.accounts.account_by_id(account_id);
         rell.test.tx().op(
-            mint_to(account, get_amount_to_mint())
+            mint_to(account, chain_context.args.amount_to_mint)
         ).run();
         return account;
     }

@@ -16,6 +16,7 @@ namespace ft4 {
 
 struct module_args {
     admin_privkey: byte_array;
+    amount_to_mint: big_integer = 1000000000;
 }
 
 function test_create_account_on_internal_transfer_success() {
@@ -29,7 +30,7 @@ function test_create_account_on_internal_transfer_success() {
     val recipient_id = rell.test.pubkeys.bob.hash();
 
     rell.test.tx().op(
-        mint_to(sender, get_amount_to_mint())
+        mint_to(sender, chain_context.args.amount_to_mint)
     ).run();
 
     val allowed_assets = require(ft4.transfer.get_allowed_assets(chain_context.blockchain_rid, sender.id, recipient_id));
@@ -72,7 +73,7 @@ function test_internal_transfer_fails_if_insufficient_amount_is_transferred() {
     val recipient_id = rell.test.pubkeys.bob.hash();
 
     rell.test.tx().op(
-        mint_to(sender, get_amount_to_mint())
+        mint_to(sender, chain_context.args.amount_to_mint)
     ).run();
 
     val allowed_assets = require(ft4.transfer.get_allowed_assets(chain_context.blockchain_rid, sender.id, recipient_id));
