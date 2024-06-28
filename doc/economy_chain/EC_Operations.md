@@ -29,38 +29,40 @@
 | update_chromia_foundation_voter_set      | my_pubkey: pubkey, new_threshold: integer?, new_member: list<pubkey>, remove_member: list<pubkey>                                                                                                                                  | Create propose to add and/or remove members from CHROMIA_FOUNDATION voter set.                                                                                                                                                                           |
 | propose_minting                          | proposal_by: byte_array, amount: integer, account_id: byte_array                                                                                                                                                                   | Create minting to account proposal.                                                                                                                                                                                                                      |
 | register_dapp_provider                   | container_name: text, new_provider: byte_array                                                                                                                                                                                     | Register a new dapp provider, will be added to the container deployer voter set                                                                                                                                                                          |
+| propose_price_oracle_rate                | rates: list<pending_price_oracle_rate_data>                                                                                                                                                                                        | Creates a system provider proposal to manually set one or many price oracle asset rates. These should normally be set automatically by ICMF messages sent from the Price oracle chain.                                                                   |
 
 ## Arguments
 
-| Name                           | Type             | Description                                                                                    |
-|--------------------------------|------------------|------------------------------------------------------------------------------------------------|
-| provider_pubkey                | pubkey           | Pubkey of a provider.                                                                          |
-| user_account_pubkey            | pubkey           | Pubkey of a user account.                                                                      |
-| container_units                | integer          | Number of container_units.                                                                     |
-| duration_weeks                 | integer          | Lease duration in weeks.                                                                       |
-| extra_storage_gib              | integer          | Extra storage to associate with a container in GiB.                                            |
-| cluster_name                   | text             | Name of cluster to use.                                                                        |
-| auto_renew                     | boolean          | Should a lease be auto-renewed or not.                                                         |
-| upgraded_extra_storage_gib     | integer          | Extra storage to associate with a container in GiB.                                            |
-| upgraded_cluster_name          | text             | Name of cluster to use.                                                                        |
-| amount                         | big_integer      | An amount of tokens.                                                                           |
-| total_cost_system_providers    | integer          | Amount of tokens representing the total cost to reward a system provider for providing a node. |
-| system_provider_fee_share      | decimal          | System provider fee share of a reward.                                                         |
-| system_provider_risk_share     | decimal          | System provider risk share of a reward.                                                        |
-| chr_per_usd                    | decimal          | Chromia per usd ratio.                                                                         |
-| min_lease_time_weeks           | integer          | Minimum amount of weeks to lease a container.                                                  |
-| max_lease_time_weeks           | integer          | Maximum amount of weeks to lease a container.                                                  |
-| staking_reward_fee_share       | decimal          | Staking reward fee share.                                                                      |
-| chromia_foundation_fee_share   | decimal          | Chromia foundation fee share of a reward.                                                      |
-| resource_pool_margin_fee_share | decimal          | Resource pool margin fee share of a reward.                                                    |
-| dapp_provider_risk_share       | decimal          | Dapp provider risk share of a reward.                                                          |
-| scu_price                      | integer          | The price per day of a standard container unit                                                 |
-| extra_storage_price            | integer          | The price per day for extra storage                                                            |
-| governor_voter_set_name        | text             | The names of the governor voters                                                               |
-| cluster_units                  | text             | How many container_units does the cluster support                                              |
-| evm_network_id                 | integer          | The EVM network id.                                                                            |
-| validator_contract             | text             | The validator contract address.                                                                |
-| updated_validator_contract     | text             | The validator contract address to be updated with.                                             |
-| bridge_contract                | text             | The bridge contract address.                                                                   |
-| updated_validator_contract     | list<byte_array> | Bridge lease signers to be updated with.                                                       |
-| anomaly_detection              | boolean          | Does bridge lease has an anomaly detector.                                                     |
+| Name                            | Type             | Description                                                                                    |
+|---------------------------------|------------------|------------------------------------------------------------------------------------------------|
+| provider_pubkey                 | pubkey           | Pubkey of a provider.                                                                          |
+| user_account_pubkey             | pubkey           | Pubkey of a user account.                                                                      |
+| container_units                 | integer          | Number of container_units.                                                                     |
+| duration_weeks                  | integer          | Lease duration in weeks.                                                                       |
+| extra_storage_gib               | integer          | Extra storage to associate with a container in GiB.                                            |
+| cluster_name                    | text             | Name of cluster to use.                                                                        |
+| auto_renew                      | boolean          | Should a lease be auto-renewed or not.                                                         |
+| upgraded_extra_storage_gib      | integer          | Extra storage to associate with a container in GiB.                                            |
+| upgraded_cluster_name           | text             | Name of cluster to use.                                                                        |
+| amount                          | big_integer      | An amount of tokens.                                                                           |
+| total_cost_system_providers     | integer          | Amount of tokens representing the total cost to reward a system provider for providing a node. |
+| system_provider_fee_share       | decimal          | System provider fee share of a reward.                                                         |
+| system_provider_risk_share      | decimal          | System provider risk share of a reward.                                                        |
+| chr_per_usd                     | decimal          | Chromia per usd ratio.                                                                         |
+| min_lease_time_weeks            | integer          | Minimum amount of weeks to lease a container.                                                  |
+| max_lease_time_weeks            | integer          | Maximum amount of weeks to lease a container.                                                  |
+| staking_reward_fee_share        | decimal          | Staking reward fee share.                                                                      |
+| chromia_foundation_fee_share    | decimal          | Chromia foundation fee share of a reward.                                                      |
+| resource_pool_margin_fee_share  | decimal          | Resource pool margin fee share of a reward.                                                    |
+| dapp_provider_risk_share        | decimal          | Dapp provider risk share of a reward.                                                          |
+| scu_price                       | integer          | The price per day of a standard container unit                                                 |
+| extra_storage_price             | integer          | The price per day for extra storage                                                            |
+| governor_voter_set_name         | text             | The names of the governor voters                                                               |
+| cluster_units                   | text             | How many container_units does the cluster support                                              |
+| evm_network_id                  | integer          | The EVM network id.                                                                            |
+| validator_contract              | text             | The validator contract address.                                                                |
+| updated_validator_contract      | text             | The validator contract address to be updated with.                                             |
+| bridge_contract                 | text             | The bridge contract address.                                                                   |
+| updated_validator_contract      | list<byte_array> | Bridge lease signers to be updated with.                                                       |
+| anomaly_detection               | boolean          | Does bridge lease has an anomaly detector.                                                     |
+| pending_price_oracle_rate_data  | struct           | Contains token symbol and its price against USD.                                               |
