@@ -69,8 +69,7 @@ definitions:
             - G_token_price_changed
         local:
           - topic: L_evm_block_events
-#            bc-rid: x"0000000000000000000000000000000000000000000000000000000000000000" # TODO Set to EVM receiver bcrid
-            bc-rid: x"2F9B88002205529A9929A4D6F442DFA0BF13E71087C93C2DC8942A089DCF3F69" # TODO this is mainnet - move to separate mainnet config
+            bc-rid: x"0000000000000000000000000000000000000000000000000000000000000000" # TODO Set to EVM receiver bcrid
     eif:
       snapshot:
         levels_per_page: 2
@@ -307,16 +306,6 @@ blockchains:
         allow_blockchain_dependencies: false
         provider_quota_max_actions_per_day: 100
       proposal_blockchain.util: *proposal_blockchain_util
-  mainnet:
-    module: management_chain_mainnet
-    config:
-      << : *common_config
-    moduleArgs:
-      common.init: *common_init
-      common:
-        allow_blockchain_dependencies: false
-        provider_quota_max_actions_per_day: 100
-      proposal_blockchain.util: *proposal_blockchain_util
   projectnet:
     module: management_chain_projectnet
     config: *common_config
@@ -443,46 +432,6 @@ blockchains:
         <<: *economy_chain_test_module_args
         economy_chain:
           <<: *economy_chain_module_args
-  economy_chain_prod:
-    module: economy_chain_prod
-    config:
-      << : *common_economy_chain
-    moduleArgs:
-      lib.ft4.core.accounts:
-        rate_limit:
-          active: 1
-          max_points: 20
-          recovery_time: 5000
-          points_at_account_creation: 1
-      lib.ft4.core.accounts.strategies.transfer:
-        rules:
-          - sender_blockchain: "$" # Only allow transfer from account on this chain
-            sender: "*"
-            recipient: "*"
-            asset:
-              - name: "Chromia" # Should match `economy_chain_module_args.asset_name`
-                min_amount: 10000000L # 10.0 CHR
-            timeout_days: 10
-            strategy: "open"
-      economy_chain:
-        bsc_asset_network_id: 56 #changed
-        bsc_asset_address: "f9CeC8d50f6c8ad3Fb6dcCEC577e05aA32B224FE" #changed
-        eth_asset_network_id: 1 #changed
-        eth_asset_address: "8A2279d4A90B6fe1C4B30fa660cC9f926797bAA2" #changed
-        asset_name: "Chromia" #changed
-        asset_symbol: "CHR" #changed
-        asset_decimals: 6
-        asset_icon: "https://assets.chromia.com/chr.png"
-        pool_amount_to_mint: 50000000000 # 50k CHR each time account do not have cover
-        staking_withdrawal_delay_ms: 1209600000 # 14 days
-        staking_delegation_delay_ms: 604800000 # 7 days
-        staking_payout_interval_ms: 86400000 # 1 day
-        staking_rewards_share: 0.1
-        staking_rewards_start_time: 1724158800000 # Tue Aug 20 2024 15:00:00 GMT+0200 (Central European Summer Time) / Tue Aug 20 2024 13:00:00 GMT+0000
-        pool_refill_limit_ms: 86400000 # 1 day
-        max_dapp_providers_per_lease: 50
-        max_bridge_leases_per_container: 10
-        evm_transaction_submitters_bonus: 0.1
   economy_chain_hacknet:
     module: economy_chain_hacknet
     config:
