@@ -4,8 +4,8 @@ set -e
 
 script_dir=$(dirname -- "$0")
 project_dir=$script_dir/../../
-chromia_yml=$project_dir/chromia.yml
-chromia_yml_modified=$project_dir/chromia.yml.orig
+chromia_yml=$project_dir/chromia-mainnet.yml
+chromia_yml_modified=$project_dir/chromia.yml.mod
 secret=$script_dir/devnet2_secret
 node_url=$(grep api.url "$secret" | sed 's/^api.url[ =]*//g')
 
@@ -15,7 +15,7 @@ blockchains_to_verify=(
   "mainnet:directory_chain"
   "system_anchoring:system_anchoring"
   "cluster_anchoring:cluster_anchoring_system"
-  "economy_chain_test:economy_chain"
+  "economy_chain_prod:economy_chain"
 )
 
 directory_chain_brid=$(curl -s "$node_url/brid/iid_0")
