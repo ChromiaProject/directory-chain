@@ -277,6 +277,28 @@ function test_get_average_occupancy_rate_of_a_providers_scus_full_occupancy(){
     assert_equals(total, 1);
 }
 
+function test_only_dapp_nodes_included_in_occupancy() {
+    rell.test.tx().op(init()).run();
+    val system_provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    val system_cluster = ensure_cluster(system_cluster_name, false, false, 1, 0);
+    val dapp_cluster = ensure_cluster(cluster_bob, false, false, 1, 0);
+    val system_cluster_node = ensure_node(provider_pubkey, node_pubkey_bob, true, "SE", 1, 0, false);
+    val dapp_cluster_node = ensure_node(provider_pubkey, node_pubkey_charlie, true, "SE", 1, 0, false);
+
+    val provider_account = require(do_create_account(provider_key, auth_privkey));
+
+    rell.test.tx().op(
+        create_cluster_node_op(system_cluster, system_cluster_node),
+        create_cluster_node_op(dapp_cluster, dapp_cluster_node),
+        create_lease("lease1", 12, provider_account, dapp_cluster, false),
+    ).run();
+
+    val provider_nodes = get_provider_nodes(system_provider);
+    val total = get_average_occupancy_rate_of_a_providers_scus(provider_nodes);
+
+    assert_equals(total, 1);
+}
+
 function test_get_total_reward_payed_in_the_last_24h(){
     val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
     val node_bob = ensure_node(provider_pubkey, node_pubkey_bob, true, "SE", 1, 1024, false);
