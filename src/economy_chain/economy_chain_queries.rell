@@ -177,15 +177,22 @@ function get_total_number_of_scus_per_provider(provider_nodes: list<node>): inte
 
 function get_average_occupancy_rate_of_a_providers_scus(provider_nodes: list<node>): decimal {
     var occupancy_rate = 0.0;
+    var dapp_nodes = 0;
     for (node in provider_nodes) {
-        val clusters = cluster_node @* { node } ( .cluster );
+        val node_dapp_clusters = cluster_node @* { node, .cluster.name != system_cluster_name } ( .cluster );
+        // Node is only part of system cluster, ignore it for occupancy rate calculations
+        if (node_dapp_clusters.empty() and exists(cluster_node @? { node, .cluster.name == system_cluster_name })) {
+            continue;
+        }
+        dapp_nodes++;
+
         var node_occupancy_rate = 0.0;
-        for (cluster in clusters) {
+        for (cluster in node_dapp_clusters) {
             node_occupancy_rate += occupancy_rate(cluster);
         }
-        occupancy_rate += if (clusters.empty()) 0.0 else node_occupancy_rate / clusters.size();
+        occupancy_rate += if (node_dapp_clusters.empty()) 0.0 else node_occupancy_rate / node_dapp_clusters.size();
     }
-    return if (provider_nodes.empty()) 0.0 else occupancy_rate / provider_nodes.size();
+    return if (dapp_nodes == 0) 0.0 else occupancy_rate / dapp_nodes;
 }
 
 function get_total_reward_payed_in_the_last_24h(provider_nodes: list<pubkey>) {
