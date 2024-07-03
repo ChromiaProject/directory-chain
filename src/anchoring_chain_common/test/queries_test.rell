@@ -1,0 +1,30 @@
+@test module;
+
+import ^.helpers.*;
+import ^^.*;
+
+function test_get_anchor_block_by_transaction_block_height() {
+    val blockchain_rid = x"1111";
+    val block_rid = x"2222";
+    val block_witness = x"abcd";
+
+    val block_header0 = block_header(
+        blockchain_rid = blockchain_rid,
+        previous_block_rid = block_rid,
+        merkle_root_hash = ["foo": "zero".to_gtv()].to_gtv().hash(),
+        timestamp = 10,
+        height = 3,
+        dependencies = null.to_gtv(),
+        extra = map<text,gtv>()
+    ).to_gtv();
+    rell.test.tx().op(
+        anchor_block_header_op(block_rid, block_header0, x"abcd")
+    ).run();
+
+    val result = get_anchor_block_by_transaction_block_height(blockchain_rid, 0);
+
+    assert_equals(result?.block_height, 3);
+    assert_equals(result?.blockchain_rid, x"1111");
+    assert_equals(result?.block_rid, x"2222");
+
+}
