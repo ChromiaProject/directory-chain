@@ -22,9 +22,11 @@ The Economy Chain has the following module args:
 | `staking_rate_change_delay_ms`      | Amount of time required to pass between staking rate changes.                                                                            | int     | :white_check_mark: |         |
 | `staking_withdrawal_delay_ms`       | Amount of time required to pass between staking withdrawals.                                                                             | int     | :white_check_mark: |         |
 | `staking_payout_interval_ms`        | Amount of time required to pass between payouts.                                                                                         | int     | :white_check_mark: |         |
+| `staking_rewards_start_time` | Time after which staking reward should begin to accumulate | timestamp | | 0 |
 | `pool_refill_limit_ms` | Amount of time required to pass between pool refills.                                                                                    | int     | :white_check_mark: |         |
 | `max_bridge_leases_per_container`   | Max amount of bridge leases per container.                                                                                               | int     | :white_check_mark: |         |
 | `evm_transaction_submitters_bonus`  | Bonus coefficient used in computing the reward for EVM transaction submitters.                                                           | decimal | :white_check_mark: |         |
+| `max_dapp_providers_per_lease` | Maximum number of dapp providers that can be added to lease | int | | 100 |
 
 Module args for FT4 configuration:
 
