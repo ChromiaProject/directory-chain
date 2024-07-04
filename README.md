@@ -17,6 +17,12 @@ database:
 ```
 Or as an environment variable to the docker container `-e CHR_DATABASE_HOST=<host>`
 
+## Configuration Variables
+
+### Economy Chain
+
+Please see the [separate Economy Chain set-up and configuration guide](doc/economy_chain/EC-configuration-and-setup.md).
+
 ## Dependencies on the PMC Tool
 
 Changes to this project will often necessitate changes to the [Postchain Management Console](https://docs.chromia.com/category/postchain-management-console) for elements that can be configured by providers. This is often true for Economy Chain changes.
