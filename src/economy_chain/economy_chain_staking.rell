@@ -92,7 +92,7 @@ function _staking_request_withdrawal(user: ft4.accounts.account, _network: netwo
 
     // Make a new request
     create staker_withdrawal_request (
-        finish_at = _staking_last_known_time() + chain_context.args.staking_delegation_delay_ms,
+        finish_at = _staking_last_known_time() + chain_context.args.staking_withdrawal_delay_ms,
         ss,
         true
     );
@@ -139,12 +139,16 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
 
     val new_provider = require(provider @? { provider_pubkey }, "No provider for this public key.");
 
+    // Delegation from nothing happens without the delay
+    val old_provider = staking_get_current_delegate(staker.id);
+    val new_time_offset = if (empty(old_provider)) chain_context.args.staking_delegation_delay_ms else 0;
+
     // Update appropriate staker states with new provider
     val staker_states_to_update = staker_states @* {
         $ not in staker_states_to_exclude
     } (
         struct<staker_state_to_provider> (
-            timestamp = _staking_last_known_time(),
+            timestamp = _staking_last_known_time() - new_time_offset,
             staker_state = $,
             provider = new_provider
         )
