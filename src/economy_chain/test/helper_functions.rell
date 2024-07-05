@@ -63,9 +63,10 @@ function remove_provider(pubkey: pubkey) {
 }
 
 
-function ensure_cluster(name: text, deleted: boolean, operational: boolean, cluster_units: integer, extra_storage: integer, anchoring_chain: byte_array = x""): cluster {
+function ensure_cluster(name: text, deleted: boolean, operational: boolean, cluster_units: integer, extra_storage: integer, anchoring_chain: byte_array = x"", scu_price: integer = 1 * units_per_usd,
+    extra_storage_price: integer = 1 * units_per_usd): cluster {
     rell.test.tx().op(
-        create_pending_cluster(name, "test-tag"),
+        create_pending_cluster(name, "test-tag", scu_price = scu_price, extra_storage_price = extra_storage_price),
         icmf_message_op(x"", cluster_update_topic, body = cluster_update_message(
             name, deleted, operational, cluster_units, extra_storage, anchoring_chain).to_gtv())
     ).run();

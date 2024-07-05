@@ -772,3 +772,117 @@ function update_staking_requirements_constants(
         )
     ).sign(admin_privkey).run();
 }
+
+function test_sn_initial_mainnet_reward() {
+    add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
+
+    val scu_price = 12864857;
+    val extra_storage_price = 4142;
+    val create_lease_number = 5;
+
+    rell.test.tx().op(
+        update_system_provider_economy_constants(
+            118, // cant set decimals - 457142, // total cost system provider USD
+            0.1, // System provider fee share
+            0.1, // System provider risk share
+        ),
+        update_chr_per_usd(4)
+    ).sign(admin_privkey).run();
+    rell.test.tx().op(
+        update_economy_constants(
+            1,  // min_lease_time_weeks: integer?,
+            1,  // max_lease_time_weeks: integer?,
+            0,  // staking_reward_rate: decimal?,
+            0,  // staking_reward_fee_share: decimal?,
+            0.1, // chromia_foundation_fee_share: decimal?,
+            0.1, // resource_pool_margin_fee_share: decimal?,
+            0.2, // dapp_provider_risk_share: decimal?
+        )
+
+    ).sign(rell.test.keypairs.alice).run();
+
+    val node_availability_report = node_availability_report(start_time = 0, end_time = 0, [system_node_pubkey: 1.0]); // 100 % availability
+
+    if (not state.initialized) rell.test.tx().op(init()).run();
+
+    val system_cluster = ensure_system_cluster();
+    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024,
+        scu_price = scu_price, extra_storage_price = extra_storage_price
+    );
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
+    add_cluster_node(cluster_name, node_pubkey, false);
+    val system_node = ensure_node(provider_pubkey, system_node_pubkey, true, "SE", 1, 1024, false);
+    add_cluster_node(system_cluster_name, system_node_pubkey, false);
+
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+
+    rell.test.tx().op(
+        create_lease("lease", create_lease_number, alice, cluster, false)
+    ).run();
+
+    val reward = calculate_system_cluster_rewards(system_cluster, node_availability_report)[system_node];
+
+    log("--------------------------------------");
+    log("Reward: %s raw CHR".format(reward));
+    log("Reward: %s CHR".format(decimal(reward) / units_per_asset));
+    log("Reward: %s USD".format((decimal(reward) / units_per_asset) / economy_constants.chr_per_usd));
+    log("CHR per USD: %s".format(economy_constants.chr_per_usd));
+}
+
+function test_dn_initial_mainnet_reward() {
+    add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
+
+    val scu_price = 12864857;
+    val extra_storage_price = 4142;
+    val create_lease_number = 0;
+
+    rell.test.tx().op(
+        update_system_provider_economy_constants(
+            118, // cant set decimals - 457142, // total cost system provider USD
+            0.1, // System provider fee share
+            0.1, // System provider risk share
+        ),
+        update_chr_per_usd(4)
+    ).sign(admin_privkey).run();
+    rell.test.tx().op(
+        update_economy_constants(
+            1,  // min_lease_time_weeks: integer?,
+            1,  // max_lease_time_weeks: integer?,
+            0,  // staking_reward_rate: decimal?,
+            0,  // staking_reward_fee_share: decimal?,
+            0.1, // chromia_foundation_fee_share: decimal?,
+            0.1, // resource_pool_margin_fee_share: decimal?,
+            0.2, // dapp_provider_risk_share: decimal?
+        )
+
+    ).sign(rell.test.keypairs.alice).run();
+
+    val node_availability_report = node_availability_report(start_time = 0, end_time = 0, [node_pubkey: 1.0]); // 100 % availability
+
+    if (not state.initialized) rell.test.tx().op(init()).run();
+
+    val system_cluster = ensure_system_cluster();
+    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024,
+        scu_price = scu_price, extra_storage_price = extra_storage_price
+    );
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
+    add_cluster_node(cluster_name, node_pubkey, false);
+    val system_node = ensure_node(provider_pubkey, system_node_pubkey, true, "SE", 1, 1024, false);
+    add_cluster_node(system_cluster_name, system_node_pubkey, false);
+
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+
+    rell.test.tx().op(
+        create_lease("lease", create_lease_number, alice, cluster, false)
+    ).run();
+
+    val reward = calculate_dapp_cluster_rewards(cluster, node_availability_report)[node];
+
+    log("--------------------------------------");
+    log("Reward: %s raw CHR".format(reward));
+    log("Reward: %s CHR".format(decimal(reward) / units_per_asset));
+    log("Reward: %s USD".format((decimal(reward) / units_per_asset) / economy_constants.chr_per_usd));
+    log("CHR per USD: %s".format(economy_constants.chr_per_usd));
+}
