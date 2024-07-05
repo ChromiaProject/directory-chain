@@ -20,9 +20,15 @@ operation mint_to_pool(amount: big_integer) {
     ft4.assets.Unsafe.mint(get_pool_account(), get_asset(), amount);
 }
 
-operation create_pending_cluster(cluster_name: text, tag_name: text, status: pending_cluster_status = pending_cluster_status.PENDING_APPROVAL) {
+operation create_pending_cluster(
+    cluster_name: text,
+    tag_name: text,
+    status: pending_cluster_status = pending_cluster_status.PENDING_APPROVAL,
+    scu_price: integer = 1 * units_per_usd,
+    extra_storage_price: integer = 1 * units_per_usd
+) {
 
-    val tag = create_or_return_tag(tag_name);
+    val tag = create_or_return_tag(tag_name, scu_price = scu_price, extra_storage_price = extra_storage_price);
     val proposal = create_proposal(common_proposal_type.ec_cluster_create);
 
     create pending_cluster(
@@ -128,13 +134,17 @@ operation create_tag_removal_proposal_with_voter_set(voter_set_name: text) {
     create_proposal(common_proposal_type.ec_tag_remove, voter_set_name);
 }
 
-function create_or_return_tag(tag_name: text) {
+function create_or_return_tag(
+    tag_name: text,
+    scu_price: integer = 1 * units_per_usd,
+    extra_storage_price: integer = 1 * units_per_usd
+) {
     var tag = tag @? { tag_name };
     if (tag == null) {
         tag = create tag(
             tag_name,
-            scu_price = 1 * units_per_usd,
-            extra_storage_price = 1 * units_per_usd
+            scu_price = scu_price,
+            extra_storage_price = extra_storage_price
         );
     }
     return tag;
