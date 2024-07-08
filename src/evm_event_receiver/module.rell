@@ -12,6 +12,11 @@ object evm_event_receiver_chain {
     mutable rid: byte_array = x"";
 }
 
+/**
+ * Create and initialize the EVM event receiver system chain.
+ * @param my_pubkey The pubkey of initializer, must be signing transaction and a system provider.
+ * @param event_receiver_chain_config Event receiver chain configuration, see `postchain-eif` for more information.
+ */
 operation init_evm_event_receiver_chain(my_pubkey: pubkey, event_receiver_chain_config: byte_array) {
     require_is_provider_with_rate_limit(my_pubkey);
     require_is_system_provider(my_pubkey);
@@ -29,4 +34,9 @@ operation init_evm_event_receiver_chain(my_pubkey: pubkey, event_receiver_chain_
     send_message(blockchain_rid_topic, blockchain_rid(rid = evm_event_receiver_blockchain.rid, name = blockchains.evm_event_receiver_chain).to_gtv());
 }
 
+/**
+* Get the EVM event receiver blockchain RID.
+*
+* @returns A bytearray of the blockchain RID.
+*/
 query get_evm_event_receiver_chain_rid(): byte_array? = if (evm_event_receiver_chain.rid == x"") null else evm_event_receiver_chain.rid;
