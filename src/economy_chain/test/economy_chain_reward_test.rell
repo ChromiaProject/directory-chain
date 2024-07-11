@@ -413,13 +413,49 @@ function test_calculate_evm_transactions_submitters_rewards() {
         create_price_oracle_rates_op("MATIC", "Polygon", 0.01)
     ).run();
 
-    val result1 = calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost(id = x"01", processed_by = node_pubkey, cost  = 10000L * units_per_evm_token, currency_symbol = "ETH"));
-    val result2 = calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost(id = x"02", processed_by = node_pubkey, cost  = 10000L * units_per_evm_token, currency_symbol = "BNB"));
-    val result3 = calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost(id = x"03", processed_by = node_pubkey, cost  = 10000L * units_per_evm_token, currency_symbol = "MATIC"));
+    val result1 = calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost(id = x"01", processed_by = node_pubkey, cost  = 10000L * units_per_txs_evm_cost, currency_symbol = "ETH"));
+    val result2 = calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost(id = x"02", processed_by = node_pubkey, cost  = 10000L * units_per_txs_evm_cost, currency_symbol = "BNB"));
+    val result3 = calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost(id = x"03", processed_by = node_pubkey, cost  = 10000L * units_per_txs_evm_cost, currency_symbol = "MATIC"));
 
-    assert_equals(result1[node], 22000);
-    assert_equals(result2[node], 110000);
-    assert_equals(result3[node], 110);
+    assert_equals(result1[node], 22000000000);
+    assert_equals(result2[node], 110000000000);
+    assert_equals(result3[node], 110000000);
+}
+
+function test_calculate_evm_transactions_submitters_rewards_real_example_eth() {
+    rell.test.tx().op(init()).run();
+
+    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
+    add_cluster_node(cluster_name, node_pubkey, false);
+
+    rell.test.tx().op(
+        create_price_oracle_rates_op("tCHR", "Chromia Test", 0.25159185329855150584),
+        create_price_oracle_rates_op("ETH", "Ether", 3125.69818475089158878802),
+    ).run();
+
+    val result1 = calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost(id = x"01", processed_by = node_pubkey, cost  = 168588 * 6302265549, currency_symbol = "ETH"));
+
+    assert_equals(result1[node], 14519996);
+}
+
+function test_calculate_evm_transactions_submitters_rewards_real_example_bnb() {
+    rell.test.tx().op(init()).run();
+
+    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
+    add_cluster_node(cluster_name, node_pubkey, false);
+
+    rell.test.tx().op(
+        create_price_oracle_rates_op("tCHR", "Chromia Test", 0.25159185329855150584),
+        create_price_oracle_rates_op("BNB", "B", 527.6200000777692305765),
+    ).run();
+
+    val result1 = calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost(id = x"01", processed_by = node_pubkey, cost = 182081 * 1000000000, currency_symbol = "BNB"));
+
+    assert_equals(result1[node], 420031);
 }
 
 function test_receive_evm_transaction_submitter_cost_message() {
@@ -456,12 +492,12 @@ function test_receive_evm_transaction_submitter_cost_message() {
         icmf_message_op(evm_transaction_submitter_bc_rid, evm_transaction_submitter_cost_topic, body = evm_transaction_submitter_cost(
             id = x"10",
             processed_by = node_pubkey,
-            cost = 6L * units_per_evm_token,
+            cost = 6L * units_per_txs_evm_cost,
             currency_symbol = "ETH"
         ).to_gtv())
     ).run();
 
-    assert_equals(node_payed_reward @ {} ( .value), 13);
+    assert_equals(node_payed_reward @ {} ( .value), 13200000);
 }
 
 function test_receive_evm_transaction_submitter_cost_invalid_sender() {
@@ -471,7 +507,7 @@ function test_receive_evm_transaction_submitter_cost_invalid_sender() {
         icmf_message_op(x"", evm_transaction_submitter_cost_topic, body = evm_transaction_submitter_cost(
             id = x"10",
             processed_by = node_pubkey,
-            cost = 6L * units_per_evm_token,
+            cost = 6L * units_per_txs_evm_cost,
             currency_symbol = "ETH"
         ).to_gtv())
     ).run();

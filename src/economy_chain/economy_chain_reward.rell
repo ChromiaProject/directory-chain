@@ -1,7 +1,17 @@
 val DAY_MS = 86400000; // 1000 * 60 * 60 * 24 - 1 day
 
 function pay_evm_transaction_submitter_rewards(evm_transaction_submitter_cost: evm_transaction_submitter_cost) {
-    pay_out_node_rewards(calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost));
+    val node_reward = calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost);
+
+    log("Calculated transaction submitter reward for transaction %s, processed_by: %s, cost: %s (%s): %s".format(
+        evm_transaction_submitter_cost.id,
+            evm_transaction_submitter_cost.processed_by,
+            evm_transaction_submitter_cost.cost,
+            evm_transaction_submitter_cost.currency_symbol,
+            node_reward
+    ));
+
+    pay_out_node_rewards(node_reward);
 }
 
 function calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost: evm_transaction_submitter_cost): map<node, big_integer> {
@@ -14,16 +24,31 @@ function calculate_evm_transaction_submitter_reward(evm_transaction_submitter_co
     if (node == null) {
         log("Warning: Node %s does not exists in EC. Transaction %s will not be rewarded.".format(evm_transaction_submitter_cost.processed_by, evm_transaction_submitter_cost.id));
     } else {
+
         if (not currency_to_price.contains(evm_transaction_submitter_cost.currency_symbol)) {
             log("Warning: Currency %s does not exists in price oracle. Transaction %s will not be rewarded.".format(evm_transaction_submitter_cost.currency_symbol, evm_transaction_submitter_cost.id));
         } else {
             val native_currency_to_chr_ratio = currency_to_price[evm_transaction_submitter_cost.currency_symbol] / currency_to_price[chain_context.args.asset_symbol];
-            node_reward[node] = ((decimal(evm_transaction_submitter_cost.cost) / units_per_evm_token) * native_currency_to_chr_ratio * (1 + chain_context.args.evm_transaction_submitters_bonus)).to_big_integer();
+            val decimal_cost = decimal(evm_transaction_submitter_cost.cost) / units_per_txs_evm_cost;
+            log("TXS reward for TX %s cost: %s %s -> %s %s".format(
+                evm_transaction_submitter_cost.id,
+                evm_transaction_submitter_cost.cost,
+                evm_transaction_submitter_cost.currency_symbol,
+                decimal_cost,
+                evm_transaction_submitter_cost.currency_symbol));
+            log("TXS reward for TX %S CHR cost: %s rate: %s".format(
+                evm_transaction_submitter_cost.id,
+                decimal_cost * native_currency_to_chr_ratio,
+                native_currency_to_chr_ratio
+            ));
+            node_reward[node] = (decimal_cost * native_currency_to_chr_ratio * units_per_asset * (1 + chain_context.args.evm_transaction_submitters_bonus)).to_big_integer();
         }
     }
+
+    log("TXS reward result: %s".format(node_reward));
+
     return node_reward;
 }
-
 
 function pay_rewards(cluster: cluster, node_availability_report: node_availability_report) {
 
@@ -209,6 +234,15 @@ function pay_reward(pool: ft4.accounts.account, pool_balance: big_integer, accou
     }
 
     val pay_reward_result = pay_reward_result(payed_reward = amount_to_transfer, payed_to = account, pool_balance = total_pool_balance, reward_debt = total_reward_debt);
+
+    log("Pay reward result for %s: payed_reward = %s, reward_debt = %s, payed_to = %s, pool_balance = %s".format(
+        identity,
+        pay_reward_result.payed_reward,
+        pay_reward_result.reward_debt,
+        pay_reward_result.payed_to.id,
+        pay_reward_result.pool_balance
+    ));
+
     after_pay_reward(pay_reward_result);
     return pay_reward_result;
 }
