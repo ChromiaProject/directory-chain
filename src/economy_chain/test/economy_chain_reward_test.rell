@@ -773,6 +773,22 @@ function update_staking_requirements_constants(
     ).sign(admin_privkey).run();
 }
 
+function test_reset_provider_rewards() {
+    val pa = run_pay_rewards(0, false);
+
+    assert_equals(pa.reward_debt, 33090909);
+
+    rell.test.tx().op(
+        reset_provider_reward_debt(provider_pubkey)
+    ).sign(rell.test.keypairs.alice).run_must_fail("Operation must be signed by " + provider_pubkey);
+
+    rell.test.tx().op(
+        reset_provider_reward_debt(provider_pubkey)
+    ).sign(provider_key).run();
+
+    assert_equals(pa.reward_debt, 0);
+}
+
 function test_sn_initial_mainnet_reward() {
     add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
 
