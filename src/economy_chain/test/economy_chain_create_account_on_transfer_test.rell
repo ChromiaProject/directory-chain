@@ -8,7 +8,7 @@ namespace ft4 {
     import lib.ft4.accounts;
     import lib.ft4.external.accounts.strategies;
     import lib.ft4.accounts.strategies.transfer;
-    import lib.ft4.accounts.strategies.transfer.open;
+    import lib.ft4.accounts.strategies.transfer.fee;
     import lib.ft4.assets;
     import lib.ft4.auth;
     import test_utils: lib.ft4.test.utils;
@@ -17,6 +17,7 @@ namespace ft4 {
 struct module_args {
     admin_privkey: byte_array;
     amount_to_mint: big_integer = 1000000000;
+    asset: gtv = ["name": "Chromia Test".to_gtv(), "amount": "10000000".to_gtv()].to_gtv();
 }
 
 function test_create_account_on_internal_transfer_success() {
@@ -48,10 +49,10 @@ function test_create_account_on_internal_transfer_success() {
         .sign(rell.test.keypairs.alice)
         .run();
 
-    assert_true("open" in ft4.transfer.get_pending_transfer_strategies(recipient_id));
+    assert_true("fee" in ft4.transfer.get_pending_transfer_strategies(recipient_id));
 
     rell.test.tx()
-        .op(ft4.open.ras_transfer_open(ft4.accounts.single_sig_auth_descriptor(rell.test.pubkeys.bob, set(["A", "T"]))))
+        .op(ft4.fee.ras_transfer_fee(asset_id, ft4.accounts.single_sig_auth_descriptor(rell.test.pubkeys.bob, set(["A", "T"]))))
         .op(ft4.strategies.register_account())
         .sign(rell.test.keypairs.bob)
         .run();
@@ -59,7 +60,10 @@ function test_create_account_on_internal_transfer_success() {
     assert_true(empty(ft4.transfer.get_pending_transfer_strategies(recipient_id)));
 
     val recipient = ft4.accounts.account_by_id(recipient_id);
-    assert_equals(ft4.assets.get_asset_balance(recipient, get_asset()), amount);
+    assert_equals(ft4.assets.get_asset_balance(recipient, get_asset()), 0L);
+
+    val pool_account = get_pool_account();
+    assert_equals(ft4.assets.get_asset_balance(pool_account, get_asset()), amount);
 }
 
 function test_internal_transfer_fails_if_insufficient_amount_is_transferred() {
