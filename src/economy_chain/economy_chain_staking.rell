@@ -174,6 +174,8 @@ function _staking_distribute_rewards() {
         ) * rate
         )
     );
+
+    log("Preparing to distribute %s rewards".format(rewards.size()));
     for (reward in rewards) {
         total_amount += reward.amount;
     }
@@ -185,8 +187,8 @@ function _staking_distribute_rewards() {
     }
     update staker_state @* { } ( .pending_token_time = 0 );
 
-    var payments = list<struct<staking_payment>>();
     // Do the payouts
+    var payments = list<struct<staking_payment>>();
     for ((account,amount) in rewards) {
         ft4.assets.Unsafe.transfer(get_pool_account(), account, get_asset(), amount);
         log("Paid out %s to %s", account, amount);
