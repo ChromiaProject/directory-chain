@@ -7,6 +7,8 @@ entity provisional_stake_balance {
     mutable staked_balance: integer;
 }
 
+// Note: This is likely unnecessary, as `after_evm_account_linked` will be called for each account linked,
+// but it's here just in case.
 function _staking_import_evm_balance_impl(address: byte_array, network_id: integer) {
     require_initialized();
 
@@ -24,6 +26,12 @@ function _staking_import_evm_balance_impl(address: byte_array, network_id: integ
 
     flush_provisional_stake_balance(staker, address);
 }
+
+@extend(eif.hbridge.after_evm_account_linked)
+function (address: byte_array, account: ft4.accounts.account, network_id: integer, is_contract: boolean) {
+    flush_provisional_stake_balance(account, address);
+}
+
 
 function _staking_network_id_to_enum(network_id: integer) = when (network_id) {
     STAKING_NETWORK_ID_ETH -> network.ETH;
