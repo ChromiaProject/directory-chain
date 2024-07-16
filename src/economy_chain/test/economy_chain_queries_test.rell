@@ -375,39 +375,43 @@ function test_get_economy_metrics(){
 
 function test_get_provider_availabilities() {
     val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
-    val cluster = ensure_cluster(cluster_bob, false, false, 1, 1024);
+    val cluster1 = ensure_cluster(cluster_bob, false, false, 1, 1024);
+    val cluster2 = ensure_cluster(cluster_charlie, false, false, 2, 1024);
     val node_bob = ensure_node(provider_pubkey, node_pubkey_bob, true, "SE", 1, 1024, false);
     val node_charlie = ensure_node(provider_pubkey, node_pubkey_charlie, true, "SE", 1, 1024, false);
+    rell.test.set_next_block_time(get_last_blocktime() + millis_per_week);
+    rell.test.block().run();
+    var block_time = get_last_blocktime() + 10000;
     rell.test.tx().op(
-        save_node_availability_op(node_availability_report(start_time = 1001, end_time = 2000, [node_pubkey_bob: 0.90])),
-        save_node_availability_op(node_availability_report(start_time = 2001, end_time = 3000, [node_pubkey_bob: 0.90])),
-        save_node_availability_op(node_availability_report(start_time = 3001, end_time = 4000, [node_pubkey_bob: 0.94])),
-        save_node_availability_op(node_availability_report(start_time = 1001, end_time = 2000, [node_pubkey_charlie: 1.0])),
-        save_node_availability_op(node_availability_report(start_time = 2001, end_time = 3000, [node_pubkey_charlie: 1.0])),
-        save_node_availability_op(node_availability_report(start_time = 3001, end_time = 4000, [node_pubkey_charlie: 1.0])),
-        create_cluster_node_op(cluster, node_bob),
-        create_cluster_node_op(cluster, node_charlie))
-        .sign(provider_key)
-        .run();
+        save_node_availability_op(node_availability_report(start_time = block_time - 2 * millis_per_day, end_time = block_time - millis_per_day + 5000, [node_pubkey_bob: 0.6])),
+        save_node_availability_op(node_availability_report(start_time = block_time - millis_per_day, end_time = block_time, [node_pubkey_bob: 0.4])),
+        create_cluster_node_op(cluster1, node_bob),
+
+        save_node_availability_op(node_availability_report(start_time = block_time - 2 * millis_per_day + 1, end_time = block_time - millis_per_day + 5001, [node_pubkey_charlie: 0.5])),
+        save_node_availability_op(node_availability_report(start_time = block_time - millis_per_day + 1, end_time = block_time + 5001, [node_pubkey_charlie: 0.3])),
+        create_cluster_node_op(cluster2, node_charlie)
+    )
+    .sign(provider_key)
+    .run();
 
     val provider_nodes = node @* { provider } ( .pubkey );
 
-    val availabilities = get_provider_availabilities(provider_nodes, 2500);
+    val availabilities = get_provider_availabilities(provider_nodes, get_last_blocktime() - millis_per_week);
 
-    val availability1 = provider_availability(
-        availability = 0.95,
-        start_time = 2001,
-        end_time = 3000
+    val availability_2_days_ago = provider_availability(
+        availability = 0.55,
+        start_time = block_time - 2 * millis_per_day,
+        end_time = block_time - millis_per_day - 1
     );
 
-    val availability2 = provider_availability(
-        availability = 0.97,
-        start_time = 3001,
-        end_time = 4000
+    val availability_1_days_ago = provider_availability(
+        availability = 0.35,
+        start_time = block_time - millis_per_day,
+        end_time = block_time - 1
     );
 
-    assert_equals(availabilities[0], availability1);
-    assert_equals(availabilities[1], availability2);
+    assert_equals(availabilities[0], availability_2_days_ago);
+    assert_equals(availabilities[1], availability_1_days_ago);
 }
 
 function test_get_provider_payed_rewards(){
@@ -467,7 +471,7 @@ function test_get_provider_performance_metrics(){
         provider_availability(
         availability = 0.95,
         start_time = 1000,
-        end_time = 2000
+        end_time = 86400999
     )],[provider_payed_reward(
         time = 1000,
         value = 500
@@ -501,7 +505,7 @@ function test_get_provider_performance_metrics_periods(){
     val provider_availability_last_7_days = provider_availability(
         availability = 0.90,
         start_time = block_time - millis_per_week,
-        end_time = block_time - millis_per_week
+        end_time = block_time - millis_per_week + millis_per_day - 1
         );
     val provider_payed_reward_last_7_days = provider_payed_reward(
         time = block_time - millis_per_week,
@@ -510,7 +514,7 @@ function test_get_provider_performance_metrics_periods(){
     val provider_availability_last_30_days = provider_availability(
         availability = 0.95,
         start_time = block_time - millis_per_month,
-        end_time = block_time - millis_per_month
+        end_time = block_time - millis_per_month + millis_per_day - 1
     );
     val provider_payed_reward_last_30_days = provider_payed_reward(
         time = block_time - millis_per_month,
@@ -519,7 +523,7 @@ function test_get_provider_performance_metrics_periods(){
     val provider_availability_last_365_days = provider_availability(
         availability = 1.00,
         start_time = block_time - millis_per_year,
-        end_time = block_time - millis_per_year
+        end_time = block_time - millis_per_year + millis_per_day - 1
     );
     val provider_payed_reward_last_365_days = provider_payed_reward(
         time = block_time - millis_per_year,

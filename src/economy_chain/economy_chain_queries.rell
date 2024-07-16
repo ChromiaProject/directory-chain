@@ -155,12 +155,25 @@ function get_average_availability_on_a_providers_nodes_in_the_last_24h(provider_
 
 function get_provider_availabilities(provider_nodes: list<pubkey>, start: timestamp): list<provider_availability> {
     val result = list<provider_availability>();
-    val availabilities = node_availability @* { .node in provider_nodes  and .end_time >= start } (
-        @group .start_time, @group .end_time, @sum node_count = 1, @sum availability_sum = .availability
-    );
+    val availabilities = node_availability @* { .node in provider_nodes  and .end_time >= start };
+    var days_to_availabilities = map<integer, list<decimal>>();
     for (availability in availabilities) {
-        val provider_availability_average = availability.availability_sum / availability.node_count;
-        result.add(provider_availability(availability = provider_availability_average, start_time = availability.start_time, end_time = availability.end_time));
+        val day = (availability.start_time - start) / millis_per_day;
+        if (not days_to_availabilities.contains(day)) {
+            days_to_availabilities[day] = [availability.availability];
+        } else {
+            days_to_availabilities[day].add(availability.availability);
+        }
+    }
+    for ((day, day_availabilities) in days_to_availabilities) {
+        val provider_availability_average = day_availabilities @ {} (@sum $) / day_availabilities.size();
+        result.add(
+            provider_availability(
+                availability = provider_availability_average,
+                start_time = start + day * millis_per_day,
+                end_time = start + (day + 1) * millis_per_day - 1
+            )
+        );
     }
     return result;
 }
