@@ -66,6 +66,12 @@ function test_register_node() {
     rell.test.tx().op(
         register_node_with_node_data(node_provider1.pub, register_node_data(np1_node_key, host = "host", port = 7777, api_url = "http://host/api_url"))
     ).sign(initial_provider).run_must_fail();
+
+    // NP node is added with trailing slash in node url and fails
+    rell.test.tx().op(
+        register_node_with_node_data(node_provider1.pub, register_node_data(np1_node_key, host = "host", port = 7777, api_url = "http://host/api_url/"))
+    ).sign(node_provider1).run_must_fail("URL must not end with /");
+
     // NP adds a node
     rell.test.tx().op(
         register_node_with_node_data(node_provider1.pub, register_node_data(np1_node_key, host = "host", port = 7777, api_url = "http://host/api_url"))
@@ -288,6 +294,11 @@ function test_update_node() {
         _get_node_data(prov),
         ("new_host", 777, before[2], _prev_block_time(), 2)
     );
+
+    // Updating with incorrect node url and fail
+    rell.test.tx().op(
+        update_node_with_node_data(initial_provider.pub, update_node_data(pubkey = initial_signer.pub, api_url = "http://localhost/api/v2/"))
+    ).sign(initial_provider).run_must_fail("URL must not end with /");
 
     // Updating api_port
     rell.test.tx().op(
