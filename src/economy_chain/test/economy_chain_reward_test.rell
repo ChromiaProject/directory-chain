@@ -45,7 +45,7 @@ function test_rewards_with_no_providers() {
     assert_equals(get_pool_balance(), 20000000);
 }
 
-function test_rewards_with_no_availability() {
+function test_calculate_system_cluster_rewards_with_no_availability() {
     add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
 
     val node_availability_report = node_availability_report(start_time = 0, end_time = 0, map<pubkey, decimal>());
@@ -161,6 +161,35 @@ function test_calculate_dapp_cluster_rewards_with_constants_0_availability_095()
 
     // 12 scu priced 1 plus 1 gb extra storage priced 1
     assert_equals(reward, 130000000 * 0.5);
+}
+
+function test_calculate_dapp_cluster_rewards_with_no_availability_for_node() {
+    add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
+
+    val node_availability_report = node_availability_report(start_time = 0, end_time = 0, [rell.test.pubkeys.trudy : 1.0]);
+
+    val reward = run_calculate_reward(node_availability_report, 12, false);
+
+    assert_equals(reward, 0);
+}
+
+function test_calculate_dapp_cluster_rewards_with_no_availabilities() {
+    add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
+
+    rell.test.tx().op(
+        update_system_provider_economy_constants(100, 0, 0),
+        update_chr_per_usd(10)
+    ).sign(admin_privkey).run();
+    rell.test.tx().op(
+        update_economy_constants(1, 1, 0, 0, 0, 0, 0)
+    ).sign(rell.test.keypairs.alice).run();
+
+    val node_availability_report = node_availability_report(start_time = 0, end_time = 0, map<pubkey, decimal>());
+
+    val reward = run_calculate_reward(node_availability_report, 12, false);
+
+    // 12 scu priced 1 plus 1 gb extra storage priced 1
+    assert_equals(reward, 130000000);
 }
 
 function test_calculate_dapp_cluster_rewards_with_constants_0_occupancy_0() {

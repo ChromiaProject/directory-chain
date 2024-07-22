@@ -113,7 +113,10 @@ function calculate_dapp_cluster_rewards(cluster: cluster, node_availability_repo
         val max_dapp_provider_reward_per_node = ((dapp_cluster_value * (1 - economy_constants.dapp_provider_risk_share) + dapp_cluster_value * occupancy_rate * economy_constants.dapp_provider_risk_share) / number_of_nodes_per_dapp_cluster) * economy_constants.chr_per_usd * units_per_asset;
 
         for (cluster_node in cluster_nodes) {
-            val reported_availability = node_availability_report.node_availability.get_or_default(cluster_node.pubkey, 0);
+            // If availability report is completely empty then it could be that no chains are running in the cluster,
+            // we choose to be nice and interpret this as 100% availability
+            val reported_availability = if (node_availability_report.node_availability.empty())
+                1 else node_availability_report.node_availability.get_or_default(cluster_node.pubkey, 0);
             val availability_factor = adjusted_availability_factor(reported_availability);
             val dapp_provider_reward_per_node = max_dapp_provider_reward_per_node * availability_factor;
             log("Reward calculated for node %s in cluster %s based on max_dapp_provider_reward_per_node: %s CHR, occupancy_rate: %s, dapp_cluster_value: %s, number_of_nodes_per_dapp_cluster: %s, dapp_provider_risk_share: %s, availability_factor: %s, chr_per_usd: %s, units_per_asset: %s, system_provider_fee_share: %s, staking_reward_fee_share: %s, chromia_foundation_fee_share: %s, resource_pool_margin_fee_share: %s, dapp_provider_reward_per_node: %s"
