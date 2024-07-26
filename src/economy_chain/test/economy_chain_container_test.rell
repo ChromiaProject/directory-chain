@@ -154,6 +154,11 @@ function test_auto_renew_and_cancel_renew_lease() {
     rell.test.set_next_block_time_delta(millis_per_week + 1);
     rell.test.block().run();
     rell.test.block().run();
+
+    val purchases = get_lease_purchases_by_account(alice.id, null, null).data;
+    val latest_purchase = lease_purchase_data.from_gtv_pretty(purchases[purchases.size() - 1]);
+    assert_equals(latest_purchase.type, lease_purchase_type.RENEWAL);
+
     assert_false(lease @ { container_name } (.expired));
     assert_events(); // assert no ICMF messages sent
 
@@ -219,6 +224,11 @@ function test_renew_non_expired_container() {
     ).run();
     assert_lt(get_account_balance(alice), alice_balance);
     assert_gt(get_pool_balance(), pool_balance);
+    val purchases = get_lease_purchases_by_account(alice.id, null, null).data;
+    val latest_purchase = lease_purchase_data.from_gtv_pretty(purchases[purchases.size() - 1]);
+    assert_equals(latest_purchase.type, lease_purchase_type.RENEWAL);
+    assert_equals(latest_purchase.price, alice_balance - get_account_balance(alice));
+
     assert_equals(lease @ { container_name } (.duration_millis), 2 * millis_per_week);
     assert_false(lease @ { container_name } (.expired));
     assert_events(); // assert no ICMF messages sent
@@ -248,6 +258,11 @@ function test_renew_expired_container() {
     ).run();
     assert_lt(get_account_balance(alice), alice_balance);
     assert_gt(get_pool_balance(), pool_balance);
+    val purchases = get_lease_purchases_by_account(alice.id, null, null).data;
+    val latest_purchase = lease_purchase_data.from_gtv_pretty(purchases[purchases.size() - 1]);
+    assert_equals(latest_purchase.type, lease_purchase_type.RENEWAL);
+    assert_equals(latest_purchase.price, alice_balance - get_account_balance(alice));
+
     assert_equals(lease @ { container_name } (.duration_millis), 2 * millis_per_week + expired_container_time);
     assert_false(lease @ { container_name } (.expired));
     assert_events(("icmf_message", (
@@ -275,6 +290,11 @@ function test_auto_renew_expired_container() {
     ).op(
         auto_renew_container(container_name)
     ).run();
+    val purchases = get_lease_purchases_by_account(alice.id, null, null).data;
+    val latest_purchase = lease_purchase_data.from_gtv_pretty(purchases[purchases.size() - 1]);
+    assert_equals(latest_purchase.type, lease_purchase_type.RENEWAL);
+    assert_equals(latest_purchase.price, alice_balance - get_account_balance(alice));
+
     assert_true(lease @ { container_name } (.auto_renew));
     assert_false(lease @ { container_name } (.expired));
     assert_events(("icmf_message", (
@@ -323,7 +343,7 @@ function test_upgrade_container_success() {
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 2);
 
     val created_lease = lease @ { container_name };
-    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 4, ticket_id = ticket_id_after_init + 5, current_lease = created_lease, container_units = 3);
+    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 4, ticket_id = ticket_id_after_init + 6, current_lease = created_lease, container_units = 3);
 
     val expected_lease = lease_data(
         container_name = container_name,
@@ -331,6 +351,32 @@ function test_upgrade_container_success() {
         container_units = 3, // Should be 3 now
         extra_storage_gib = 0,
         expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*5 + millis_per_week,
+        expired = false,
+        auto_renew = false
+    );
+
+    val leases2 = get_leases_by_account(alice.id);
+    assert_equals(leases2.size(), 1);
+    assert_equals(leases2[0], expected_lease);
+
+    val lease_data = require(get_lease_by_container_name(container_name));
+    assert_equals(lease_data, expected_lease);
+}
+
+function test_upgrade_container_failure() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 2);
+
+    val created_lease = lease @ { container_name };
+    do_upgrade_container(alice, rell.test.keypairs.alice, success = false, block_height = 4, ticket_id = ticket_id_after_init + 6, current_lease = created_lease, container_units = 3);
+
+    val expected_lease = lease_data(
+        container_name = container_name,
+        cluster_name = cluster_name,
+        container_units = 2, // Should still be 2
+        extra_storage_gib = 0,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*3 + millis_per_week,
         expired = false,
         auto_renew = false
     );

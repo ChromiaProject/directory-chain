@@ -169,6 +169,7 @@ function do_create_container(
 
     val initial_balance = get_account_balance(account);
     val initial_pool_balance = get_pool_balance();
+    val initial_lease_investment = total_lease_investment();
 
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(keypair.priv, create_container(keypair.pub, container_units, 1, 0, cluster_name, auto_renew))
@@ -185,6 +186,12 @@ function do_create_container(
     val pending_ticket = container_ticket_data(ticket_id, ticket_type.CREATE_CONTAINER, ticket_state.PENDING, error_message = "", container_name = "");
     assert_equals(require(get_create_container_ticket_by_id(ticket_id)), pending_ticket);
     assert_equals(require(get_create_container_ticket_by_transaction(tx_rid)), pending_ticket);
+
+    assert_equals(total_lease_investment(), initial_lease_investment + cost);
+    val purchases = get_lease_purchases_by_account(account.id, null, null).data;
+    val latest_purchase = lease_purchase_data.from_gtv_pretty(purchases[purchases.size() - 1]);
+    assert_equals(latest_purchase.type, lease_purchase_type.INITIAL);
+    assert_equals(latest_purchase.price, cost);
 
     assert_equals(get_account_balance(account), initial_balance - cost);
     assert_equals(get_pool_balance(), initial_pool_balance + cost);
@@ -208,6 +215,11 @@ function do_create_container(
     } else {
         assert_equals(get_account_balance(account), initial_balance);
         assert_equals(get_pool_balance(), initial_pool_balance);
+        assert_equals(total_lease_investment(), initial_lease_investment);
+
+        val refunds = get_lease_refunds_by_account(account.id, null, null).data;
+        val latest_refund = lease_refund_data.from_gtv_pretty(refunds[refunds.size() - 1]);
+        assert_equals(latest_refund.amount, cost);
     }
 
     return container_name;
@@ -234,6 +246,7 @@ function do_upgrade_container(
 
     val initial_balance = get_account_balance(account);
     val initial_pool_balance = get_pool_balance();
+    val initial_lease_investment = total_lease_investment();
 
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(keypair.priv, upgrade_container(container_name, container_units, 0, cluster_name))
@@ -251,6 +264,12 @@ function do_upgrade_container(
     assert_equals(require(get_upgrade_container_ticket_by_id(ticket_id)), pending_ticket);
     assert_equals(require(get_upgrade_container_ticket_by_transaction(tx_rid)), pending_ticket);
 
+    assert_equals(total_lease_investment(), initial_lease_investment + cost);
+    val purchases = get_lease_purchases_by_account(account.id, null, null).data;
+    val latest_purchase = lease_purchase_data.from_gtv_pretty(purchases[purchases.size() - 1]);
+    assert_equals(latest_purchase.type, lease_purchase_type.UPGRADE);
+    assert_equals(latest_purchase.price, cost);
+
     assert_equals(get_account_balance(account), initial_balance - cost);
     assert_equals(get_pool_balance(), initial_pool_balance + cost);
 
@@ -262,7 +281,7 @@ function do_upgrade_container(
         type = ticket_type.UPGRADE_CONTAINER,
         state = if (success) ticket_state.SUCCESS else ticket_state.FAILURE,
         error_message = if (success) "" else "error",
-        container_name = if (success) container_name else ""
+        container_name = container_name
     );
     assert_equals(require(get_upgrade_container_ticket_by_id(ticket_id)), done_ticket);
     assert_equals(require(get_upgrade_container_ticket_by_transaction(tx_rid)), done_ticket);
@@ -273,6 +292,11 @@ function do_upgrade_container(
     } else {
         assert_equals(get_account_balance(account), initial_balance);
         assert_equals(get_pool_balance(), initial_pool_balance);
+        assert_equals(total_lease_investment(), initial_lease_investment);
+
+        val refunds = get_lease_refunds_by_account(account.id, null, null).data;
+        val latest_refund = lease_refund_data.from_gtv_pretty(refunds[refunds.size() - 1]);
+        assert_equals(latest_refund.amount, cost);
     }
 
     return new_container_name;
