@@ -317,6 +317,96 @@ query find_dapp_details(dapp_rowid: rowid, requested_content_types: list<dapp_co
     ).to_gtv_pretty();
 }
 
+query get_lease_purchases(page_size: integer?, page_cursor: text?): ft4.utils.paged_result {
+    val before_rowid = ft4.utils.before_rowid(page_cursor);
+
+    val paginated_result = lease_purchase @* {
+        .rowid > (before_rowid ?: rowid(0))
+    } (
+        ft4.utils.pagination_result(
+            data = lease_purchase_data(
+                account_id = .account.id,
+                duration_millis = .duration_millis,
+                container_units = .container_units,
+                extra_storage_gib = .extra_storage_gib,
+                price = .price,
+                type = .type,
+                timestamp = .transaction.block.timestamp,
+                tx_rid = .transaction.tx_rid
+            ).to_gtv_pretty(),
+            rowid = .rowid
+        )
+    ) limit ft4.utils.fetch_data_size(page_size);
+
+    return ft4.utils.make_page(paginated_result, page_size);
+}
+
+query get_lease_refunds(page_size: integer?, page_cursor: text?): ft4.utils.paged_result {
+    val before_rowid = ft4.utils.before_rowid(page_cursor);
+
+    val paginated_result = lease_refund @* {
+        .rowid > (before_rowid ?: rowid(0))
+    } (
+        ft4.utils.pagination_result(
+            data = lease_refund_data(
+                .account.id,
+                .amount
+            ).to_gtv_pretty(),
+            rowid = .rowid
+        )
+    ) limit ft4.utils.fetch_data_size(page_size);
+
+    return ft4.utils.make_page(paginated_result, page_size);
+}
+
+query get_lease_purchases_by_account(account_id: byte_array, page_size: integer?, page_cursor: text?): ft4.utils.paged_result {
+    val before_rowid = ft4.utils.before_rowid(page_cursor);
+
+    val paginated_result = lease_purchase @* {
+        .account.id == account_id,
+        .rowid > (before_rowid ?: rowid(0))
+    } (
+        ft4.utils.pagination_result(
+            data = lease_purchase_data(
+                account_id = account_id,
+                duration_millis = .duration_millis,
+                container_units = .container_units,
+                extra_storage_gib = .extra_storage_gib,
+                price = .price,
+                type = .type,
+                timestamp = .transaction.block.timestamp,
+                tx_rid = .transaction.tx_rid
+            ).to_gtv_pretty(),
+            rowid = .rowid
+        )
+    ) limit ft4.utils.fetch_data_size(page_size);
+
+    return ft4.utils.make_page(paginated_result, page_size);
+}
+
+query get_lease_refunds_by_account(account_id: byte_array, page_size: integer?, page_cursor: text?): ft4.utils.paged_result {
+    val before_rowid = ft4.utils.before_rowid(page_cursor);
+
+    val paginated_result = lease_refund @* {
+        .account.id == account_id,
+        .rowid > (before_rowid ?: rowid(0))
+    } (
+        ft4.utils.pagination_result(
+            data = lease_refund_data(
+                account_id,
+                .amount
+            ).to_gtv_pretty(),
+            rowid = .rowid
+        )
+    ) limit ft4.utils.fetch_data_size(page_size);
+
+    return ft4.utils.make_page(paginated_result, page_size);
+}
+
+query total_lease_investment(): integer {
+    return lease_purchase @ {} (@sum .price) - lease_refund @ {} (@sum .amount);
+}
+
 function get_last_blocktime(){
     return block @ {} (@max .timestamp) ?: 0;
 }

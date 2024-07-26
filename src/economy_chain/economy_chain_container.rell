@@ -88,6 +88,8 @@ function create_container_impl(
         extra_storage = 1024 * extra_storage_gib,
         cluster_name = cluster_name
     ).to_gtv());
+
+    create lease_purchase(account, duration_millis = duration_weeks * millis_per_week, container_units, extra_storage_gib, price = cost);
 }
 
 @extend(ft4.auth.auth_handler)
@@ -156,6 +158,12 @@ function upgrade_container_impl(
         extra_storage = 1024 * upgraded_extra_storage_gib,
         cluster_name = upgraded_cluster_name
     ).to_gtv());
+
+    create lease_purchase(
+        account, duration_millis = lease.duration_millis,
+        container_units = upgraded_container_units, extra_storage_gib = upgraded_extra_storage_gib,
+        price = cost, lease_purchase_type.UPGRADE
+    );
 }
 
 @extend(ft4.auth.auth_handler)
@@ -263,6 +271,11 @@ function renew_container_lease(ft4.accounts.account, lease, duration_weeks: inte
     val tag = lease.cluster.tag;
     val cost = calculate_container_cost(duration_weeks, lease.container_units, lease.extra_storage_gib, tag);
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), cost);
+    create lease_purchase(
+        account, duration_millis = duration_weeks * millis_per_week,
+        container_units = lease.container_units, extra_storage_gib = lease.extra_storage_gib,
+        price = cost, lease_purchase_type.RENEWAL
+    );
 
     if (lease.expired) {
         log("Lease for container %s was expired, restarting it".format(lease.container_name));
@@ -305,6 +318,8 @@ function refund_lease(lease: lease) {
         val lease_value = calculate_remaining_lease_value(lease, op_context.last_block_time);
         if (not try_call(ft4.assets.Unsafe.transfer(get_pool_account(), lease.account, get_asset(), lease_value, *))) {
             log("Unable to refund lease with container name %s".format(lease.container_name));
+        } else {
+            create lease_refund(lease.account, lease_value);
         }
     }
 
