@@ -161,7 +161,6 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
 // Rewards
 
 function _staking_distribute_rewards() {
-    var total_amount = 0;
     val rate = staking_get_current_rate() / millis_per_year;
 
     // Get a list of payouts
@@ -171,14 +170,12 @@ function _staking_distribute_rewards() {
         @sum amount = integer (
             (
             .pending_token_time
-        ) * rate
+        ) * rate * units_per_asset
         )
     );
 
-    log("Preparing to distribute %s rewards".format(rewards.size()));
-    for (reward in rewards) {
-        total_amount += reward.amount;
-    }
+    val total_amount = rewards @ {} (@sum .amount);
+    log("Preparing to distribute %s rewards worth %s".format(rewards.size(), total_amount));
 
     // Do not start what we cannot finish
     if (get_account_balance(get_pool_account()) < total_amount) {
@@ -187,14 +184,24 @@ function _staking_distribute_rewards() {
     }
     update staker_state @* { } ( .pending_token_time = 0 );
 
-    // Do the payouts
+    // Send payouts
     var payments = list<struct<staking_payment>>();
-    for ((account,amount) in rewards) {
-        ft4.assets.Unsafe.transfer(get_pool_account(), account, get_asset(), amount);
-        log("Paid out %s to %s", account, amount);
-        payments.add(struct<staking_payment>(timestamp = _staking_last_known_time(), amount, account));
+    for ( (account, amount) in rewards ) {
+
+        /// @dev This can be removed once Rell supports a HAVING equivalent.
+        if (integer(amount) == 0) {
+            log("Skip zero payment.");
+            continue;
+        }
+
+        ft4.assets.Unsafe.transfer(get_pool_account(), account, get_asset(), integer(amount));
+        log("Paid out %s to %s".format(amount, account.id));
+
+        payments.add(struct<staking_payment>(timestamp = _staking_last_known_time(), amount = integer(amount), account));
     }
+
     create staking_payment ( payments );
+    log("Stored payments on-chain.");
 }
 
 

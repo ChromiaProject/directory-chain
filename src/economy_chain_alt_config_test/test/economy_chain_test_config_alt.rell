@@ -25,14 +25,17 @@ function test_rewards_are_disabled_before_2050() {
     val test_account_alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val test_account_bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
 
+    val an_amount = 3 * units_per_asset;
+
     rell.test.tx()
-        .op(mint_to(test_account_alice, 9999999))
+        .op(mint_to(test_account_alice, an_amount))
+        .op(mint_to(get_pool_account(), an_amount))
     .sign(admin_privkey).run();
 
     add_provider(rell.test.keypairs.bob.pub);
 
     // Add some delegation
-    do_staking_deposit_native(rell.test.keypairs.alice, 9999999);
+    do_staking_deposit_native(rell.test.keypairs.alice, an_amount);
     do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.bob.pub);
 
     // Advance 10 periods
@@ -49,21 +52,24 @@ function test_rewards_are_disabled_before_2050() {
     // No reward at this point
     assert_equals(staking_rewards_claimable_for(test_account_alice.id), 0);
 
-    // Advance 1 period
-    rell.test.set_next_block_time_delta(10 * staking_delegation_delay_ms);
+    // Advance 10 periods
+    rell.test.set_next_block_time(START_OF_2050 + 10 * staking_delegation_delay_ms);
     rell.test.block().run();
 
     // There is a reward
     val first_reward = staking_rewards_claimable_for(test_account_alice.id);
     assert_true(first_reward > 0);
 
-    // Advance 1 period
-    rell.test.set_next_block_time_delta(10 * staking_delegation_delay_ms);
+    // Advance 10 periods
+    rell.test.set_next_block_time(START_OF_2050 + 20 * staking_delegation_delay_ms);
     rell.test.block().run();
 
     // There is more reward
     val second_reward = staking_rewards_claimable_for(test_account_alice.id);
-    assert_true(first_reward < second_reward);
+    assert_true(0 < second_reward);
+
+    // A payout has happened
+    assert_true(staking_get_rewards_paid(test_account_alice.id) > 0);
 }
 
 function test_fee_share_are_disabled_before_2050() {
