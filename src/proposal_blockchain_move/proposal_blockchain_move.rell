@@ -83,13 +83,14 @@ function validate_blockchain_move_proposal(blockchain, proposed_by: provider, de
     val pba = pending_blockchain_action @? { blockchain };
     require(empty(pba), "Blockchain %s cannot be moved due to a pending proposal %s related to it".format(blockchain.rid, pba?.proposal));
 
-    // src container
+    // containers
     val src_container = container_blockchain @ { blockchain } .container;
-    require_container_deployer(src_container, proposed_by);
-
-    // dst container
     val dst_container = require_container(destination_container);
+    require(src_container != dst_container, "Source and destination containers must be different");
+    // container deployers
+    require_container_deployer(src_container, proposed_by);
     require_container_deployer(dst_container, proposed_by);
+    // container limits
     require_container_is_not_full(dst_container);
 
     require(
