@@ -5,10 +5,6 @@ import proposal.*;
 import proposal_blockchain.*;
 import model.*;
 
-entity remove_moved_blockchain_on_original_node {
-    key blockchain, node;
-}
-
 @extend(on_configuration_updated)
 function try_to_finalize_blockchain_move(message: configuration_updated) {
     val moving_bc = moving_blockchain @? { .blockchain.rid == message.blockchain_rid, .final_height == message.height - 1 };
@@ -16,7 +12,6 @@ function try_to_finalize_blockchain_move(message: configuration_updated) {
         val src_nodes = cluster_node @* { moving_bc.source.cluster } ( .node );
         for (node in src_nodes) {
             delete blockchain_replica_node @? { moving_bc.blockchain, node };
-            create remove_moved_blockchain_on_original_node(moving_bc.blockchain, node);
         }
         if (not src_nodes.empty()) {
             log("blockchain_replica_node removed: %s".format(src_nodes @* {} ( .pubkey )));
