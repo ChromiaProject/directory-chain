@@ -123,7 +123,7 @@ function test_blockchain_moving_within_a_node() {
     // Moving blockchain back to "c1a"
     rell.test.tx().op(
         propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c1a"),
-        propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 455)
+        propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 456)
     ).sign(initial_provider).run();
     val info2 = nm_get_migrating_blockchain_node_info(test_node.pubkey, foo_chain.rid);
     assert_true(exists(info2));
@@ -131,7 +131,7 @@ function test_blockchain_moving_within_a_node() {
     assert_equals(info2.destination_container, "c1a");
     assert_equals(info2.is_source_node, true);
     assert_equals(info2.is_destination_node, true);
-    assert_equals(info2.final_height, 455);
+    assert_equals(info2.final_height, 456);
     // conf update
     rell.test.tx().op(
         receive_configuration_updated_op(
@@ -139,7 +139,7 @@ function test_blockchain_moving_within_a_node() {
             configuration_updated_topic,
             configuration_updated(
                 blockchain_rid = foo_chain.rid,
-                height = 456,
+                height = 457,
                 config_hash = x"" // x"" is enough for this test
             ).to_gtv()
         )
@@ -276,11 +276,48 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
     assert_null(nm_get_migrating_blockchain_node_info(node1.pubkey, foo_chain.rid));
     // bs state didn't chang (RUNNING)
     assert_equals(foo_chain.state, blockchain_state.RUNNING);
+
+    // Moving blockchain backward from c2 -> c1
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c1")
+    ).sign(initial_provider).run();
+    bob_votes();
+    rell.test.tx().op(
+        propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 456)
+    ).sign(initial_provider).run();
+    bob_votes();
+    val info02 = nm_get_migrating_blockchain_node_info(node0.pubkey, foo_chain.rid);
+    assert_true(exists(info02));
+    assert_equals(info02!!.source_container, "c2");
+    assert_equals(info02.destination_container, "c1");
+    assert_equals(info02.is_source_node, false);
+    assert_equals(info02.is_destination_node, true);
+    assert_equals(info02.final_height, 456);
+    val info12 = nm_get_migrating_blockchain_node_info(node1.pubkey, foo_chain.rid);
+    assert_true(exists(info12));
+    assert_equals(info12!!.source_container, "c2");
+    assert_equals(info12.destination_container, "c1");
+    assert_equals(info12.is_source_node, true);
+    assert_equals(info12.is_destination_node, false);
+    assert_equals(info12.final_height, 456);
+    // conf update
+    rell.test.tx().op(
+        receive_configuration_updated_op(
+            cluster_anchoring_chain @ { .cluster.name == "s1" } ( .blockchain.rid ),
+            configuration_updated_topic,
+            configuration_updated(
+                blockchain_rid = foo_chain.rid,
+                height = 457,
+                config_hash = x"" // x"" is enough for this test
+            ).to_gtv()
+        )
+    ).run();
+    assert_null(nm_get_migrating_blockchain_node_info(test_node.pubkey, foo_chain.rid));
 }
 
 function test_paused_blockchain_moving_between_containers_running_on_different_nodes() {
     // setup
-    setup_module(provider_quota_max_containers = 3);
+    setup_module(provider_quota_max_containers = 3, cluster_anchoring_config = ["any": "value".to_gtv()]);
     val ip = provider @ { initial_provider.pub };
     val node0 = node @ { test_node.pubkey };
     var conf = apply_required_configuration_properties();
@@ -347,6 +384,65 @@ function test_paused_blockchain_moving_between_containers_running_on_different_n
     assert_equals(mv_bc.remove_on_nodes, [node0.pubkey].to_gtv().to_bytes());
     // asserting that blockchain_state is PAUSED
     assert_equals(foo_chain.state, blockchain_state.PAUSED);
+
+    // imitation of ICMF message receiving
+    rell.test.tx().op(
+        receive_configuration_updated_op(
+            cluster_anchoring_chain @ { .cluster.name == "s2" } ( .blockchain.rid ),
+            configuration_updated_topic,
+            configuration_updated(
+                blockchain_rid = foo_chain.rid,
+                height = 124,
+                config_hash = x"" // x"" is enough for this test
+            ).to_gtv()
+        )
+    ).run();
+    // no replicas for foo_chain
+    assert_true(empty(blockchain_replica_node @* { foo_chain }));
+    // no moving state for foo_chain
+    assert_true(empty(moving_blockchain @? { foo_chain }));
+    // asserting migrating_blockchain_info though NM API
+    assert_null(nm_get_migrating_blockchain_node_info(node0.pubkey, foo_chain.rid));
+    assert_null(nm_get_migrating_blockchain_node_info(node1.pubkey, foo_chain.rid));
+    // bs state didn't chang (PAUSED)
+    assert_equals(foo_chain.state, blockchain_state.PAUSED);
+
+    // Moving blockchain backward from c2 -> c1
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c1")
+    ).sign(initial_provider).run();
+    bob_votes();
+    rell.test.tx().op(
+        propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 456)
+    ).sign(initial_provider).run();
+    bob_votes();
+    val info02 = nm_get_migrating_blockchain_node_info(node0.pubkey, foo_chain.rid);
+    assert_true(exists(info02));
+    assert_equals(info02!!.source_container, "c2");
+    assert_equals(info02.destination_container, "c1");
+    assert_equals(info02.is_source_node, false);
+    assert_equals(info02.is_destination_node, true);
+    assert_equals(info02.final_height, 456);
+    val info12 = nm_get_migrating_blockchain_node_info(node1.pubkey, foo_chain.rid);
+    assert_true(exists(info12));
+    assert_equals(info12!!.source_container, "c2");
+    assert_equals(info12.destination_container, "c1");
+    assert_equals(info12.is_source_node, true);
+    assert_equals(info12.is_destination_node, false);
+    assert_equals(info12.final_height, 456);
+    // conf update
+    rell.test.tx().op(
+        receive_configuration_updated_op(
+            cluster_anchoring_chain @ { .cluster.name == "s1" } ( .blockchain.rid ),
+            configuration_updated_topic,
+            configuration_updated(
+                blockchain_rid = foo_chain.rid,
+                height = 457,
+                config_hash = x"" // x"" is enough for this test
+            ).to_gtv()
+        )
+    ).run();
+    assert_null(nm_get_migrating_blockchain_node_info(test_node.pubkey, foo_chain.rid));
 }
 
 function test_removed_blockchain_moving_is_not_allowed() {
