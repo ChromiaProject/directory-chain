@@ -245,30 +245,7 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
     assert_equals(foo_chain.state, blockchain_state.RUNNING);
 
     // Moving blockchain backward from c2 -> c1
-    rell.test.tx().op(
-        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c1")
-    ).sign(initial_provider).run();
-    bob_votes();
-    rell.test.tx().op(
-        propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 456)
-    ).sign(initial_provider).run();
-    bob_votes();
-    val info02 = nm_get_migrating_blockchain_node_info(node0.pubkey, foo_chain.rid);
-    assert_true(exists(info02));
-    assert_equals(info02!!.source_container, "c2");
-    assert_equals(info02.destination_container, "c1");
-    assert_equals(info02.is_source_node, false);
-    assert_equals(info02.is_destination_node, true);
-    assert_equals(info02.final_height, 456);
-    val info12 = nm_get_migrating_blockchain_node_info(node1.pubkey, foo_chain.rid);
-    assert_true(exists(info12));
-    assert_equals(info12!!.source_container, "c2");
-    assert_equals(info12.destination_container, "c1");
-    assert_equals(info12.is_source_node, true);
-    assert_equals(info12.is_destination_node, false);
-    assert_equals(info12.final_height, 456);
-    _build_block_after_moving("s1", foo_chain.rid, 457);
-    assert_null(nm_get_migrating_blockchain_node_info(test_node.pubkey, foo_chain.rid));
+    _test_backward_moving(foo_chain.rid, "c2", node0.pubkey, "c1", "s1", node1.pubkey, 456);
 }
 
 function test_paused_blockchain_moving_between_containers_running_on_different_nodes() {
@@ -353,30 +330,7 @@ function test_paused_blockchain_moving_between_containers_running_on_different_n
     assert_equals(foo_chain.state, blockchain_state.PAUSED);
 
     // Moving blockchain backward from c2 -> c1
-    rell.test.tx().op(
-        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c1")
-    ).sign(initial_provider).run();
-    bob_votes();
-    rell.test.tx().op(
-        propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 456)
-    ).sign(initial_provider).run();
-    bob_votes();
-    val info02 = nm_get_migrating_blockchain_node_info(node0.pubkey, foo_chain.rid);
-    assert_true(exists(info02));
-    assert_equals(info02!!.source_container, "c2");
-    assert_equals(info02.destination_container, "c1");
-    assert_equals(info02.is_source_node, false);
-    assert_equals(info02.is_destination_node, true);
-    assert_equals(info02.final_height, 456);
-    val info12 = nm_get_migrating_blockchain_node_info(node1.pubkey, foo_chain.rid);
-    assert_true(exists(info12));
-    assert_equals(info12!!.source_container, "c2");
-    assert_equals(info12.destination_container, "c1");
-    assert_equals(info12.is_source_node, true);
-    assert_equals(info12.is_destination_node, false);
-    assert_equals(info12.final_height, 456);
-    _build_block_after_moving("s1", foo_chain.rid, 457);
-    assert_null(nm_get_migrating_blockchain_node_info(test_node.pubkey, foo_chain.rid));
+    _test_backward_moving(foo_chain.rid, "c2", node0.pubkey, "c1", "s1", node1.pubkey, 456);
 }
 
 function test_removed_blockchain_moving_is_not_allowed() {
@@ -518,4 +472,31 @@ function _build_block_after_moving(cluster: text, brid: byte_array, height: inte
             ).to_gtv()
         )
     ).run();
+}
+
+function _test_backward_moving(brid: byte_array, src_container: text, src_node_pubkey: byte_array, dst_container: text, dst_cluster: text, dst_node_pubkey: byte_array, final_height: integer) {
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, brid, "c1")
+    ).sign(initial_provider).run();
+    bob_votes();
+    rell.test.tx().op(
+        propose_blockchain_move_finish(initial_provider.pub, brid, final_height)
+    ).sign(initial_provider).run();
+    bob_votes();
+    val info02 = nm_get_migrating_blockchain_node_info(src_node_pubkey, brid);
+    assert_true(exists(info02));
+    assert_equals(info02!!.source_container, "c2");
+    assert_equals(info02.destination_container, "c1");
+    assert_equals(info02.is_source_node, false);
+    assert_equals(info02.is_destination_node, true);
+    assert_equals(info02.final_height, final_height);
+    val info12 = nm_get_migrating_blockchain_node_info(dst_node_pubkey, brid);
+    assert_true(exists(info12));
+    assert_equals(info12!!.source_container, "c2");
+    assert_equals(info12.destination_container, "c1");
+    assert_equals(info12.is_source_node, true);
+    assert_equals(info12.is_destination_node, false);
+    assert_equals(info12.final_height, final_height);
+    _build_block_after_moving("s1", brid, final_height + 1);
+    assert_null(nm_get_migrating_blockchain_node_info(dst_node_pubkey, brid));
 }
