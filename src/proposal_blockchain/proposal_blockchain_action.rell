@@ -56,6 +56,7 @@ function _apply_resume_blockchain(action: pending_blockchain_action, proposal) {
 // Delete everything about this bc except D1 information
 function _apply_delete_blockchain(action: pending_blockchain_action, proposal) {
     val bc = action.blockchain;
+    validate_blockchain_removal(bc);
     remove_blockchain(bc);
     delete pending_blockchain_action @ { proposal };
 }
@@ -134,7 +135,7 @@ function propose_blockchain_action_impl(my_pubkey: pubkey, blockchain_rid: byte_
 
     // action requirements
     if (action == blockchain_action.remove) {
-        require(empty(blockchain_dependency @* { .dependent_on == blockchain }), "Blockchain can't be removed since other blockchains depend on it: " + blockchain.rid);
+        validate_blockchain_removal(blockchain);
     } else if (action == blockchain_action.archive) {
         require(not(blockchain.system), "Archiving of system chains is not allowed: " + blockchain.rid);
     } else if (action == blockchain_action.unarchive) {
@@ -213,4 +214,8 @@ function validate_blockchain_action_proposal(blockchain, action: blockchain_acti
     if (exists(unarchiving_blockchain @? { blockchain })) {
         require(false, "Unarchiving blockchain can't be %sd: %s".format(action.name, blockchain.rid));
     }
+}
+
+function validate_blockchain_removal(blockchain) {
+    require(empty(blockchain_dependency @* { .dependent_on == blockchain }), "Blockchain can't be removed since other blockchains depend on it: " + blockchain.rid);
 }
