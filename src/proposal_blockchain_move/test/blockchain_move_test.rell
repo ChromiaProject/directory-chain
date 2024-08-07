@@ -99,18 +99,7 @@ function test_blockchain_moving_within_a_node() {
     // old signers are not replicas
     assert_true(empty(blockchain_replica_node @* { foo_chain }));
 
-    // imitation of ICMF message receiving
-    rell.test.tx().op(
-        receive_configuration_updated_op(
-            cluster_anchoring_chain @ { .cluster.name == "s1" } ( .blockchain.rid ),
-            configuration_updated_topic,
-            configuration_updated(
-                blockchain_rid = foo_chain.rid,
-                height = 124,
-                config_hash = x"" // x"" is enough for this test
-            ).to_gtv()
-        )
-    ).run();
+    _build_block_after_moving("s1", foo_chain.rid, 124);
     // no replicas for foo_chain
     assert_true(empty(blockchain_replica_node @* { foo_chain }));
     // no moving state for foo_chain
@@ -132,18 +121,7 @@ function test_blockchain_moving_within_a_node() {
     assert_equals(info2.is_source_node, true);
     assert_equals(info2.is_destination_node, true);
     assert_equals(info2.final_height, 456);
-    // conf update
-    rell.test.tx().op(
-        receive_configuration_updated_op(
-            cluster_anchoring_chain @ { .cluster.name == "s1" } ( .blockchain.rid ),
-            configuration_updated_topic,
-            configuration_updated(
-                blockchain_rid = foo_chain.rid,
-                height = 457,
-                config_hash = x"" // x"" is enough for this test
-            ).to_gtv()
-        )
-    ).run();
+    _build_block_after_moving("s1", foo_chain.rid, 457);
     assert_null(nm_get_migrating_blockchain_node_info(test_node.pubkey, foo_chain.rid));
 }
 
@@ -255,18 +233,7 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
     assert_equals(mv_bc.final_height, 123);
     assert_equals(mv_bc.remove_on_nodes, [node0.pubkey].to_gtv().to_bytes());
 
-    // imitation of ICMF message receiving
-    rell.test.tx().op(
-        receive_configuration_updated_op(
-            cluster_anchoring_chain @ { .cluster.name == "s2" } ( .blockchain.rid ),
-            configuration_updated_topic,
-            configuration_updated(
-                blockchain_rid = foo_chain.rid,
-                height = 124,
-                config_hash = x"" // x"" is enough for this test
-            ).to_gtv()
-        )
-    ).run();
+    _build_block_after_moving("s2", foo_chain.rid, 124);
     // no replicas for foo_chain
     assert_true(empty(blockchain_replica_node @* { foo_chain }));
     // no moving state for foo_chain
@@ -300,18 +267,7 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
     assert_equals(info12.is_source_node, true);
     assert_equals(info12.is_destination_node, false);
     assert_equals(info12.final_height, 456);
-    // conf update
-    rell.test.tx().op(
-        receive_configuration_updated_op(
-            cluster_anchoring_chain @ { .cluster.name == "s1" } ( .blockchain.rid ),
-            configuration_updated_topic,
-            configuration_updated(
-                blockchain_rid = foo_chain.rid,
-                height = 457,
-                config_hash = x"" // x"" is enough for this test
-            ).to_gtv()
-        )
-    ).run();
+    _build_block_after_moving("s1", foo_chain.rid, 457);
     assert_null(nm_get_migrating_blockchain_node_info(test_node.pubkey, foo_chain.rid));
 }
 
@@ -385,18 +341,7 @@ function test_paused_blockchain_moving_between_containers_running_on_different_n
     // asserting that blockchain_state is PAUSED
     assert_equals(foo_chain.state, blockchain_state.PAUSED);
 
-    // imitation of ICMF message receiving
-    rell.test.tx().op(
-        receive_configuration_updated_op(
-            cluster_anchoring_chain @ { .cluster.name == "s2" } ( .blockchain.rid ),
-            configuration_updated_topic,
-            configuration_updated(
-                blockchain_rid = foo_chain.rid,
-                height = 124,
-                config_hash = x"" // x"" is enough for this test
-            ).to_gtv()
-        )
-    ).run();
+    _build_block_after_moving("s2", foo_chain.rid, 124);
     // no replicas for foo_chain
     assert_true(empty(blockchain_replica_node @* { foo_chain }));
     // no moving state for foo_chain
@@ -430,18 +375,7 @@ function test_paused_blockchain_moving_between_containers_running_on_different_n
     assert_equals(info12.is_source_node, true);
     assert_equals(info12.is_destination_node, false);
     assert_equals(info12.final_height, 456);
-    // conf update
-    rell.test.tx().op(
-        receive_configuration_updated_op(
-            cluster_anchoring_chain @ { .cluster.name == "s1" } ( .blockchain.rid ),
-            configuration_updated_topic,
-            configuration_updated(
-                blockchain_rid = foo_chain.rid,
-                height = 457,
-                config_hash = x"" // x"" is enough for this test
-            ).to_gtv()
-        )
-    ).run();
+    _build_block_after_moving("s1", foo_chain.rid, 457);
     assert_null(nm_get_migrating_blockchain_node_info(test_node.pubkey, foo_chain.rid));
 }
 
@@ -570,4 +504,18 @@ function test_blockchain_moving_invalid_src_and_dst_deployer_voter_set() {
     rell.test.tx().op(
         propose_blockchain_move(initial_provider.pub, blockchain @ { "foo_chain" } ( .rid ), "c1b")
     ).sign(initial_provider).run_must_fail("Deployers of source and destination container must be identical");
+}
+
+function _build_block_after_moving(cluster: text, brid: byte_array, height: integer) {
+    rell.test.tx().op(
+        receive_configuration_updated_op(
+            cluster_anchoring_chain @ { .cluster.name == cluster } ( .blockchain.rid ),
+            configuration_updated_topic,
+            configuration_updated(
+                blockchain_rid = brid,
+                height = height,
+                config_hash = x"" // x"" is enough for this test
+            ).to_gtv()
+        )
+    ).run();
 }
