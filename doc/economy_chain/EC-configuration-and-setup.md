@@ -27,7 +27,7 @@ The Economy Chain has the following module args:
 | `max_bridge_leases_per_container`  | Max amount of bridge leases per container.                                                                                  | int       | :white_check_mark: |         |
 | `evm_transaction_submitters_bonus` | Bonus coefficient used in computing the reward for EVM transaction submitters.                                              | decimal   | :white_check_mark: |         |
 | `max_dapp_providers_per_lease`     | Maximum number of dapp providers that can be added to lease                                                                 | int       |                    | 100     |
-| `deposit_account_pubkey`           | Pubkey used to update special FT4 deposit account to regular FT4 account                                                    |
+| `deposit_account_pubkey`           | Pubkey used to update special FT4 deposit account to regular FT4 account                                                    | pubkey    | :white_check_mark: |         |
 
 Module args for FT4 configuration:
 
