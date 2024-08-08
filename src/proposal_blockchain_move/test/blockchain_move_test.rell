@@ -398,6 +398,20 @@ function test_system_blockchain_moving_is_not_allowed() {
     ).sign(initial_provider).run_must_fail("Moving of system chains is not allowed: ");
 }
 
+function test_blockchain_moving_is_not_allowed_if_src_and_dst_containers_are_identical() {
+    setup_module();
+    var conf = apply_required_configuration_properties();
+    rell.test.tx().op(
+        create_container(initial_provider.pub, "c1", clusters.system, 0, [initial_provider.pub]),
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
+    ).sign(initial_provider).run();
+    val foo_chain = blockchain @ { "foo_chain" };
+
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c1")
+    ).sign(initial_provider).run_must_fail("Source and destination containers must be different");
+}
+
 function test_blockchain_moving_invalid_signer_not_src_deployer() {
 
     setup_module(provider_quota_max_containers = 2, cluster_anchoring_config = ["any": "value".to_gtv()]);
@@ -442,7 +456,7 @@ function test_blockchain_moving_invalid_src_and_dst_deployer_voter_set() {
     setup_module(provider_quota_max_containers = 2, cluster_anchoring_config = ["any": "value".to_gtv()]);
     var conf = apply_required_configuration_properties();
 
-    // src: initial_proivder & bob, dst: initial_provider
+    // src: initial_provider & bob, dst: initial_provider
     rell.test.tx().op(
         create_test_provider("bob", rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
         create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
