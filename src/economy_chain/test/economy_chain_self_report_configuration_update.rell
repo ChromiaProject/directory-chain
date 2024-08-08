@@ -1,0 +1,25 @@
+@test module;
+
+import ^.helper_functions.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+}
+
+function test_economy_chain_self_report_configuration_change() {
+    rell.test.tx().op(init()).run();
+
+    var account = get_deposit_account();
+    val auth_descriptors_special_account = ft4.accounts.get_auth_descriptors(account.id);
+
+    assert_true(empty(auth_descriptors_special_account));
+
+    rell.test.tx().op(
+        economy_chain_self_report_configuration_change_op(1)
+    ).run();
+
+    val auth_descriptor_regular_account = ft4.accounts.get_auth_descriptors(account.id)[0];
+
+    assert_equals(auth_descriptor_regular_account.account_id,  account.id);
+    assert_equals(auth_descriptor_regular_account.args,  [["A".to_gtv(),"T".to_gtv()].to_gtv(), x"03559F5999D9F6C75590DC0008A36AE483D813E44EB7CE4984BDE01B90C9C2352E".to_gtv()].to_gtv());
+}
