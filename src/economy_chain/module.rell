@@ -47,6 +47,7 @@ struct module_args {
     max_bridge_leases_per_container: integer;
     evm_transaction_submitters_bonus: decimal;
     max_dapp_providers_per_lease: integer = 100;
+    deposit_account_pubkey: pubkey;
 }
 
 // Rell does not have a power function/operator
@@ -80,6 +81,7 @@ operation init() {
 
 operation __begin_block(height: integer) {
     if (state.initialized) {
+        economy_chain_self_report_configuration_change(height);
         if (not try_call(expire_leases(op_context.last_block_time, *))) log("Failed lease expiry.");
         if (not try_call(__staking_begin_block(height, *))) log("Failed staking begin block hook.");
     }

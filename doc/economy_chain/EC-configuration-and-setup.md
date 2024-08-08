@@ -4,29 +4,30 @@
 
 The Economy Chain has the following module args:
 
-| Name                                | Description                                                                                                                              | Type    | Required           | Default |
-|-------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|---------|--------------------|---------|
-| `evm_asset_network_id`              | The EVM network id where the asset resides.                                                                                              | int     | :white_check_mark: |         |
-| `evm_asset_address`                 | The EVM asset address.                                                                                                                   | text    | :white_check_mark: |         |
-| `evm_asset_name`                    | The EVM asset name.                                                                                                                      | text    | :white_check_mark: |         |
-| `evm_asset_symbol`                  | The EVM asset symbol.                                                                                                                    | int     | :white_check_mark: |         |
-| `evm_asset_decimals`                | The EVM asset number of decimals.                                                                                                        | int     | :white_check_mark: |         |
-| `asset_name`                        | The Chromia Network asset name.                                                                                                          | text    | :white_check_mark: |         |
-| `asset_symbol`                      | The Chromia Network asset symbol.                                                                                                        | text    | :white_check_mark: |         |
-| `asset_decimals`                    | The Chromia Network asset number of decimals.                                                                                            | text    | :white_check_mark: |         |
-| `asset_icon`                        | The Chromia Network asset icon url.                                                                                                      | text    | :white_check_mark: |         |
-| `amount_to_mint`                    | Amount of asset to be minted for new registered accounts.                                                                                | int     | :white_check_mark: |         |
-| `pool_amount_to_mint`               | Maximum amount of asset that can be minted to the pool account over the interval of time defined by `pool_refill_limit_ms`. | int     | :white_check_mark: |         |
-| `admin_pubkey`                      | Admin pubkey.                                                                                                                            | pubkey  | :white_check_mark: |         |
-| `staking_initial_reward_rate`       | Staking initial reward rate.                                                                                                             | decimal | :white_check_mark: |         |
-| `staking_rate_change_delay_ms`      | Amount of time required to pass between staking rate changes.                                                                            | int     | :white_check_mark: |         |
-| `staking_withdrawal_delay_ms`       | Amount of time required to pass between staking withdrawals.                                                                             | int     | :white_check_mark: |         |
-| `staking_payout_interval_ms`        | Amount of time required to pass between payouts.                                                                                         | int     | :white_check_mark: |         |
-| `staking_rewards_start_time` | Time after which staking reward should begin to accumulate | timestamp | | 0 |
-| `pool_refill_limit_ms` | Amount of time required to pass between pool refills.                                                                                    | int     | :white_check_mark: |         |
-| `max_bridge_leases_per_container`   | Max amount of bridge leases per container.                                                                                               | int     | :white_check_mark: |         |
-| `evm_transaction_submitters_bonus`  | Bonus coefficient used in computing the reward for EVM transaction submitters.                                                           | decimal | :white_check_mark: |         |
-| `max_dapp_providers_per_lease` | Maximum number of dapp providers that can be added to lease | int | | 100 |
+| Name                               | Description                                                                                                                 | Type      | Required           | Default |
+|------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|-----------|--------------------|---------|
+| `evm_asset_network_id`             | The EVM network id where the asset resides.                                                                                 | int       | :white_check_mark: |         |
+| `evm_asset_address`                | The EVM asset address.                                                                                                      | text      | :white_check_mark: |         |
+| `evm_asset_name`                   | The EVM asset name.                                                                                                         | text      | :white_check_mark: |         |
+| `evm_asset_symbol`                 | The EVM asset symbol.                                                                                                       | int       | :white_check_mark: |         |
+| `evm_asset_decimals`               | The EVM asset number of decimals.                                                                                           | int       | :white_check_mark: |         |
+| `asset_name`                       | The Chromia Network asset name.                                                                                             | text      | :white_check_mark: |         |
+| `asset_symbol`                     | The Chromia Network asset symbol.                                                                                           | text      | :white_check_mark: |         |
+| `asset_decimals`                   | The Chromia Network asset number of decimals.                                                                               | text      | :white_check_mark: |         |
+| `asset_icon`                       | The Chromia Network asset icon url.                                                                                         | text      | :white_check_mark: |         |
+| `amount_to_mint`                   | Amount of asset to be minted for new registered accounts.                                                                   | int       | :white_check_mark: |         |
+| `pool_amount_to_mint`              | Maximum amount of asset that can be minted to the pool account over the interval of time defined by `pool_refill_limit_ms`. | int       | :white_check_mark: |         |
+| `admin_pubkey`                     | Admin pubkey.                                                                                                               | pubkey    | :white_check_mark: |         |
+| `staking_initial_reward_rate`      | Staking initial reward rate.                                                                                                | decimal   | :white_check_mark: |         |
+| `staking_rate_change_delay_ms`     | Amount of time required to pass between staking rate changes.                                                               | int       | :white_check_mark: |         |
+| `staking_withdrawal_delay_ms`      | Amount of time required to pass between staking withdrawals.                                                                | int       | :white_check_mark: |         |
+| `staking_payout_interval_ms`       | Amount of time required to pass between payouts.                                                                            | int       | :white_check_mark: |         |
+| `staking_rewards_start_time`       | Time after which staking reward should begin to accumulate                                                                  | timestamp |                    | 0       |
+| `pool_refill_limit_ms`             | Amount of time required to pass between pool refills.                                                                       | int       | :white_check_mark: |         |
+| `max_bridge_leases_per_container`  | Max amount of bridge leases per container.                                                                                  | int       | :white_check_mark: |         |
+| `evm_transaction_submitters_bonus` | Bonus coefficient used in computing the reward for EVM transaction submitters.                                              | decimal   | :white_check_mark: |         |
+| `max_dapp_providers_per_lease`     | Maximum number of dapp providers that can be added to lease                                                                 | int       |                    | 100     |
+| `deposit_account_pubkey`           | Pubkey used to update special FT4 deposit account to regular FT4 account                                                    |
 
 Module args for FT4 configuration:
 
