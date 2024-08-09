@@ -2,7 +2,7 @@
  * Returns NM API Version
  * NM API Version: 1
  */
-query nm_api_version() = 19;
+query nm_api_version() = 20;
 
 /**
  * Returns peer info list
@@ -355,4 +355,20 @@ query nm_is_blockchain_provider(provider_pubkey: pubkey, blockchain_rid: byte_ar
     val container = container_blockchain @ { blockchain } .container;
 
     return roles.has_deploy_access(provider, container);
+}
+
+/**
+ * Returns the Docker image required to run subnode for container,
+ * or `null` if the container does not specify any image.
+ *
+ * NM API Version: 20
+ */
+query nm_get_container_image(name): container_image_info? {
+    val container = require_container(name);
+    val subnode_image = container_subnode_image @? { container } (.subnode_image);
+    if (subnode_image == null) return null;
+    if (subnode_image.subnode_image_type == subnode_image_type.SPECIAL) {
+        if (cluster_subnode_image @? { container.cluster, subnode_image } == null) return null;
+    }
+    return container_image_info(name = subnode_image.name, url = subnode_image.url, digest = subnode_image.digest);
 }

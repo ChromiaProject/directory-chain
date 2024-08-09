@@ -2,6 +2,7 @@ module;
 
 import ^^.*;
 import ^^^.economy_chain_in_directory_chain.*;
+import ^^^.model.*;
 
 // Query wrapped in func to be able to assert require() call
 function _query_in_fun__nm_get_container_for_blockchain(blockchain_rid: byte_array) {
@@ -14,4 +15,16 @@ operation stop_container_op(container_name: text) {
 
 operation restart_container_op(container_name: text) {
     restart_container(container_name);
+}
+
+operation create_subnode_image(name, url: text, digest: text, subnode_image_type, provider_pubkey: pubkey) {
+    create subnode_image(name, url, digest, subnode_image_type, require_provider(provider_pubkey));
+}
+
+operation associate_subnode_image_with_cluster(cluster_name: text, subnode_image_name: text) {
+    create cluster_subnode_image(require_cluster(cluster_name), subnode_image @ { .name == subnode_image_name });
+}
+
+operation associate_subnode_image_with_container(container_name: text, subnode_image_name: text) {
+    create container_subnode_image(require_container(container_name), subnode_image @ { .name == subnode_image_name });
 }
