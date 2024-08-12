@@ -1,0 +1,56 @@
+entity pending_subnode_image_state {
+    key proposal;
+    key name;
+    active: boolean;
+}
+
+@extend(apply_voting_result_handlers)
+function() = [proposal_type.subnode_image_state.name: apply_subnode_image_state(*)];
+
+function apply_subnode_image_state(proposal) {
+    val psis = pending_subnode_image_state @? { proposal };
+    if (psis == null) return;
+    update subnode_image @ { .name == psis.name } ( active = psis.active );
+}
+
+@extend(delete_proposal_handlers)
+function(): map<text, (proposal) -> unit> = [proposal_type.subnode_image_state.name: delete_pending_subnode_image_state(*)];
+
+function delete_pending_subnode_image_state(proposal) {
+    delete pending_subnode_image_state @? { proposal };
+}
+
+operation propose_subnode_image_state(my_pubkey: pubkey, name, active: boolean, description: text = "") {
+    val me = require_provider(my_pubkey);
+    require_provider_auth_with_rate_limit(me);
+    require_system_access(me);
+
+    val prop = create_proposal(proposal_type.subnode_image_state, me, system_p_voter_set(), description);
+    val pending_subnode_image_state = create pending_subnode_image_state (
+        prop,
+        name,
+        active,
+    );
+    validate_subnode_image_state_proposal(pending_subnode_image_state);
+    internal_vote(me, prop, true);
+}
+
+query get_subnode_image_state_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.subnode_image);
+    if (proposal == null) return null;
+    val psis = pending_subnode_image_state @ { proposal };
+    return (
+        name = psis.name,
+        active = psis.active,
+    );
+}
+
+function validate_subnode_image_state_proposal(pending_subnode_image_state) {
+    val subnode_image = require(
+        subnode_image @? { .name == pending_subnode_image_state.name },
+        "Subnode image with name %s not found".format(pending_subnode_image_state.name)
+    );
+    require(subnode_image.active != pending_subnode_image_state.active,
+        "Subnode image with name %s already ".format(pending_subnode_image_state.name) + if (pending_subnode_image_state.active) "active" else "inactive"
+    );
+}
