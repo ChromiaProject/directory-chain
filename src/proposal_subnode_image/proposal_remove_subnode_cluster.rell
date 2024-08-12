@@ -1,0 +1,52 @@
+entity pending_remove_cluster_subnode_image {
+    key proposal;
+    key cluster, subnode_image;
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.remove_cluster_subnode_image.name: apply_remove_cluster_subnode_image(*)];
+
+function apply_remove_cluster_subnode_image(proposal) {
+    val prcsi = pending_remove_cluster_subnode_image @? { proposal };
+    if (prcsi == null) return;
+    val cluster_subnode_image = validate_remove_cluster_subnode_image_proposal(prcsi);
+    delete cluster_subnode_image;
+    after_cluster_updated(prcsi.cluster);
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.remove_cluster_subnode_image.name: delete_pending_remove_cluster_subnode_image(*)];
+
+function delete_pending_remove_cluster_subnode_image(proposal) {
+    delete pending_remove_cluster_subnode_image @? { proposal };
+}
+
+operation propose_remove_cluster_subnode_image(my_pubkey: pubkey, cluster_name: text, subnode_image_name: text, description: text = "") {
+    val me = require_provider(my_pubkey);
+    // check that provider authority and that it is a cluster governor
+    require_provider_auth_with_rate_limit(me);
+    val cluster = require_cluster(cluster_name);
+    require_cluster_governor(cluster, me);
+    val subnode_image = require_subnode_image(subnode_image_name);
+    val prop = create_proposal(proposal_type.remove_cluster_subnode_image, me, cluster.governance, description);
+    val prcsi = create pending_remove_cluster_subnode_image(
+        prop,
+        cluster,
+        subnode_image,
+    );
+    validate_remove_cluster_subnode_image_proposal(prcsi);
+    internal_vote(me, prop, true);
+}
+
+query get_remove_cluster_subnode_image_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.remove_cluster_subnode_image);
+    if (proposal == null) return null;
+    val prcsi = pending_remove_cluster_subnode_image @ { proposal };
+    return (
+        cluster = prcsi.cluster.name,
+        subnode_image = prcsi.subnode_image.name,
+    );
+}
+
+function validate_remove_cluster_subnode_image_proposal(prcsi: pending_remove_cluster_subnode_image): cluster_subnode_image = require(
+    cluster_subnode_image @? { prcsi.cluster, prcsi.subnode_image },
+    "Subnode image with name %s is not allowed by cluster %s".format(prcsi.subnode_image.name, prcsi.cluster.name)
+);
