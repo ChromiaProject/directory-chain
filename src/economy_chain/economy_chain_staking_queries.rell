@@ -1,12 +1,12 @@
 // Rates
 
 /** Current annualised reward rate
-/*  @return as a decimal fraction, eg. 0.1 is 10%
+/*  @returns as a decimal fraction, eg. 0.1 is 10%
 */
 query staking_get_current_rate(): decimal = economy_constants.staking_reward_rate;
 
 /** Starting instant of rewards
-/*  @return As a Unix timestamp
+/*  @returns As a Unix timestamp
 */
 query staking_get_rewards_start(): timestamp = chain_context.args.staking_rewards_start_time;
 
@@ -19,7 +19,7 @@ query staking_get_rewards_start(): timestamp = chain_context.args.staking_reward
 /*
 /* @param account_id User account ID (bytes32)
 /* @param network Network using the enum
-/* @return Public key of the delegated to provider, or null if currently undelegated
+/* @returns Public key of the delegated to provider, or null if currently undelegated
 */
 query staking_get_current_delegate_on_network(account_id: byte_array, network): byte_array? {
     val _provider_pubkey = staker_state_to_provider @? {
@@ -34,7 +34,7 @@ query staking_get_current_delegate_on_network(account_id: byte_array, network): 
 /* Gets the user's stake delegation for the native Chromia network. Any other stakes should be identical.
 /*
 /* @param account_id Given user
-/* @return Public key of the delegated to provider on Chromia mainet, or null if currently undelegated 
+/* @returns Public key of the delegated to provider on Chromia mainet, or null if currently undelegated 
 */
 query staking_get_current_delegate(
     account_id: byte_array
@@ -44,7 +44,7 @@ query staking_get_current_delegate(
 /* Delegation changes do not take place immediately. This will return the next delegation change, or null if there is none.
 /*
 /* @param account_id Given user
-/* @return A tuple of the next to be delegated to provider and the timestamp the delegation will take effect. Or null if no re-delegation is scheduled.
+/* @returns A tuple of the next to be delegated to provider and the timestamp the delegation will take effect. Or null if no re-delegation is scheduled.
 */
 query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubkey, time: integer)? {
     val staker = ft4.accounts.Account(account_id);
@@ -64,7 +64,7 @@ query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubk
 /* Total staked CHR across all networks and all users that had been delegated to the provider with that public key.
 /*
 /* @param pubkey Public key of the given provider
-/* @return Total CHR staked to the given provider in  minor units
+/* @returns Total CHR staked to the given provider in  minor units
 */
 query staking_get_total_delegation_to(pubkey, network? = null) {
     return ( s1: staker_state_to_provider) @* {
@@ -83,7 +83,7 @@ query staking_get_total_delegation_to(pubkey, network? = null) {
 /* Total stake the provider has delegated to themselves
 /*
 /* @param pubkey Public key of the given provider
-/* @return Total self staked CHR in  minor units
+/* @returns Total self staked CHR in  minor units
 */
 query staking_get_provider_stake(pubkey) {
     val provider_id = provider_account @ {pubkey == .provider.pubkey} (.account.id);
@@ -99,7 +99,7 @@ query staking_get_provider_stake(pubkey) {
 /* Expected timestamp of the next withdrawal.
 /*
 /* @param account_id Given account's id
-/* @return Timestamp of the expected withdrawal time or null if not withdrawal has been requested
+/* @returns Timestamp of the expected withdrawal time or null if not withdrawal has been requested
 */
 query staking_get_withdrawal_time(account_id: byte_array, network = network.CHR): timestamp? {
     return staker_withdrawal_request @? {
@@ -116,7 +116,7 @@ query staking_get_withdrawal_time(account_id: byte_array, network = network.CHR)
 /* Reward that would be paid to the user if rewards were distributed now
 /*
 /* @param account_id Account ID
-/* @return Amount of CHR in minor units
+/* @returns Amount of CHR in minor units
 */
 query staking_rewards_claimable_for(account_id: byte_array) {
     val rate = staking_get_current_rate() / millis_per_year;
@@ -134,7 +134,7 @@ query staking_rewards_claimable_for(account_id: byte_array) {
 /* All staking rewards earned for an account, including both distributed and undistributed rewards.
 /*
 /* @param account_id Account ID
-/* @return Amount of CHR in minor units
+/* @returns Amount of CHR in minor units
 */
 query staking_rewards_for(
     account_id: byte_array
@@ -148,7 +148,7 @@ query staking_rewards_for(
 /* Staking rewards that have already been distributed to the user
 /*
 /* @param account_id Account ID
-/* @return Amount of CHR in minor units
+/* @returns Amount of CHR in minor units
 */
 query staking_get_rewards_paid(account_id: byte_array): integer {
     val account = ft4.accounts.Account(account_id);
@@ -163,7 +163,7 @@ query staking_get_rewards_paid(account_id: byte_array): integer {
 /* Balance staked by the user
 /*
 /* @param account_id Account ID
-/* @return Total balance of CHR in minor units
+/* @returns Total balance of CHR in minor units
 */
 query staking_get_balance(
     account_id: byte_array
@@ -177,7 +177,7 @@ query staking_get_balance(
 /* Native Ft4 Chromia balance of CHR (in minor units) staked by the user
 /*
 /* @param account_id Account ID
-/* @return Total balance of CHR in minor units
+/* @returns Total balance of CHR in minor units
 */
 query staking_get_native_balance(account_id: byte_array) {
     val account = ft4.accounts.Account(account_id);
@@ -190,14 +190,14 @@ query staking_get_native_balance(account_id: byte_array) {
 /**
 /* Total staked by all users (including undelegated stakes)
 /*
-/* @return Total staked of CHR in minor units
+/* @returns Total staked of CHR in minor units
 */
 query staking_total_stake() = staker_state @* { } ( @sum .balance )[0];
 
 /**
 /* Total staked by all users (including undelegated stakes)
 /*
-/* @return User count
+/* @returns User count
 */
 query staking_total_accounts() = staker_state @* { } ( @sum 1 )[0];
 
