@@ -1,0 +1,73 @@
+entity pending_subnode_image {
+    key proposal;
+    key name;
+    url: text;
+    digest: text;
+    subnode_image_type;
+}
+
+@extend(apply_voting_result_handlers)
+function() = [proposal_type.subnode_image.name: apply_subnode_image(*)];
+
+function apply_subnode_image(proposal) {
+    val psi = pending_subnode_image @? { proposal };
+    if (psi == null) return;
+    validate_subnode_image_proposal(psi);
+    create subnode_image(
+        name = psi.name,
+        url = psi.url,
+        digest = psi.digest,
+        psi.subnode_image_type,
+        proposal.proposed_by,
+    );
+}
+
+@extend(delete_proposal_handlers)
+function(): map<text, (proposal) -> unit> = [proposal_type.subnode_image.name: delete_pending_subnode_image(*)];
+
+function delete_pending_subnode_image(proposal) {
+    delete pending_subnode_image @? { proposal };
+}
+
+operation propose_subnode_image(my_pubkey: pubkey, name, url: text, digest: text, subnode_image_type, description: text = "") {
+    val me = require_provider(my_pubkey);
+    require_provider_auth_with_rate_limit(me);
+    require_system_access(me);
+
+    validate_entity_name(name);
+    validate_url(url);
+    require(
+        digest.matches("^[a-zA-Z0-9:]{1,100}$"),
+        "Digest name can only contain letters, numerals, and colon. Maximum allowed length is 100 characters."
+    );
+
+    val prop = create_proposal(proposal_type.subnode_image, me, system_p_voter_set(), description);
+    val pending_subnode_image = create pending_subnode_image (
+        prop,
+        name,
+        url,
+        digest,
+        subnode_image_type,
+    );
+    validate_subnode_image_proposal(pending_subnode_image);
+    internal_vote(me, prop, true);
+}
+
+query get_subnode_image_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.subnode_image);
+    if (proposal == null) return null;
+    val psi = pending_subnode_image @ { proposal };
+    return (
+        name = psi.name,
+        url = psi.url,
+        digest = psi.url,
+        subnode_image_type = psi.subnode_image_type,
+    );
+}
+
+function validate_subnode_image_proposal(pending_subnode_image) {
+    require(
+        empty(subnode_image @? { .name == pending_subnode_image.name }),
+        "Subnode image with name %s already exists".format(pending_subnode_image.name)
+    );
+}

@@ -1,0 +1,89 @@
+@test module;
+
+import common.operations.*;
+import common.test.setup.*;
+import common.test.util.*;
+import model.*;
+import proposal_subnode_image.*;
+import proposal_provider.*;
+
+function test_propose_subnode_image() {
+    setup_module();
+
+    // 0. governance
+    val sp1 = rell.test.keypairs.bob;
+    val sp2 = rell.test.keypairs.trudy;
+    val np = rell.test.keypairs.eve;
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, sp1.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, sp2.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, np.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, sp1.pub, true),
+        propose_provider_is_system(initial_provider.pub, sp2.pub, true),
+        propose_provider_state(initial_provider.pub, np.pub, true),
+    ).sign(initial_provider).run();
+    _make_vote(sp1);
+    _make_vote(sp1);
+    _make_vote(sp2);
+
+    rell.test.tx().op(
+        propose_subnode_image(np.pub, "subnode_image1", "url", "digest", subnode_image_type.COMMON)
+    ).sign(np)
+        .run_must_fail("must have system privileges");
+
+    rell.test.tx().op(
+        propose_subnode_image(initial_provider.pub, "subnode_image@1", "url", "digest", subnode_image_type.COMMON)
+    ).sign(initial_provider)
+        .run_must_fail("Entity name can only contain letters, numerals, and underscores");
+
+    rell.test.tx().op(
+        propose_subnode_image(initial_provider.pub, "subnode_image1", "url", "digest", subnode_image_type.COMMON)
+    ).sign(initial_provider).run();
+    _make_vote(sp1);
+    _make_vote(sp2);
+
+    val subnode_image1 = subnode_image @? { .name == "subnode_image1" };
+    assert_not_null(subnode_image1);
+    assert_true(subnode_image1.active);
+
+    rell.test.tx().op(
+        propose_subnode_image(initial_provider.pub, "subnode_image1", "url", "digest", subnode_image_type.COMMON)
+    ).nop()
+        .sign(initial_provider)
+        .run_must_fail("Subnode image with name subnode_image1 already exists");
+
+    rell.test.tx().op(
+        propose_subnode_image_state(initial_provider.pub, "subnode_image1", true)
+    ).nop()
+        .sign(initial_provider)
+        .run_must_fail("Subnode image with name subnode_image1 already active");
+
+    rell.test.tx().op(
+        propose_subnode_image_state(initial_provider.pub, "subnode_image1", false)
+    ).sign(initial_provider).run();
+    _make_vote(sp1);
+    _make_vote(sp2);
+
+    val subnode_image2 = subnode_image @? { .name == "subnode_image1" };
+    assert_not_null(subnode_image2);
+    assert_false(subnode_image1.active);
+
+    rell.test.tx().op(
+        propose_subnode_image_state(initial_provider.pub, "bogus", false)
+    ).nop()
+        .sign(initial_provider)
+        .run_must_fail("Subnode image with name bogus not found");
+
+    rell.test.tx().op(
+        propose_subnode_image_state(initial_provider.pub, "subnode_image1", false)
+    ).nop()
+        .sign(initial_provider)
+        .run_must_fail("Subnode image with name subnode_image1 already inactive");
+}
+
+function _make_vote(voter: rell.test.keypair) {
+    rell.test.tx().op(
+        make_vote(voter.pub, last_proposal().rowid.to_integer(), true)
+    ).sign(voter).run();
+}
