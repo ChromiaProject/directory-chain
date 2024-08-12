@@ -1,0 +1,55 @@
+@test module;
+
+import ^^.*;
+
+function test_valid_entity_name() {
+    validate_entity_name("foobar");
+}
+
+function test_names_cannot_be_empty() {
+    assert_fails("Entity name cannot be empty", validate_entity_name("", *));
+}
+
+function test_valid_metadata_text() {
+    validate_metadata_text("my_param", "Foo bar");
+}
+
+function test_no_exotic_characters_allowed_in_metadata_text() {
+    assert_fails("Illegal character in my_param", validate_metadata_text("my_param", "Foo\uFFFEbar", *));
+}
+
+function test_valid_url() {
+    validate_url("http://foo.bar/baz");
+}
+
+function test_no_exotic_characters_allowed_in_urls() {
+    assert_fails("Illegal character in URL", validate_url("http://\uFFFE/baz", *));
+}
+
+function test_valid_host() {
+    validate_host("foo.bar");
+}
+
+function test_no_exotic_characters_allowed_in_hosts() {
+    assert_fails("Illegal character in host", validate_host("foo\uFFFE.bar", *));
+}
+
+function test_valid_territory_code() {
+    validate_territory_code("SE");
+}
+
+function test_empty_territory_code() {
+    validate_territory_code("");
+}
+
+function test_too_short_territory_code() {
+    assert_fails("Territory code must be two characters or empty", validate_territory_code("S", *));
+}
+
+function test_too_long_territory_code() {
+    assert_fails("Territory code must be two characters or empty", validate_territory_code("SES", *));
+}
+
+function test_no_exotic_characters_allowed_in_territory_code() {
+    assert_fails("Territory code must be two characters or empty", validate_territory_code("SE\uFFFE", *));
+}
