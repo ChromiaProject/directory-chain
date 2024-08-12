@@ -6,6 +6,7 @@ import common.test.util.*;
 import model.*;
 import proposal_subnode_image.*;
 import proposal_provider.*;
+import direct_cluster.*;
 
 function test_propose_subnode_image() {
     setup_module();
@@ -22,10 +23,13 @@ function test_propose_subnode_image() {
         propose_provider_is_system(initial_provider.pub, sp1.pub, true),
         propose_provider_is_system(initial_provider.pub, sp2.pub, true),
         propose_provider_state(initial_provider.pub, np.pub, true),
+        create_cluster(initial_provider.pub, "cluster1", voter_sets.system_p, list()),
     ).sign(initial_provider).run();
     _make_vote(sp1);
     _make_vote(sp1);
     _make_vote(sp2);
+
+    val cluster1 = require_cluster("cluster1");
 
     rell.test.tx().op(
         propose_subnode_image(np.pub, "subnode_image1", "url", "digest", subnode_image_type.COMMON)
@@ -54,6 +58,14 @@ function test_propose_subnode_image() {
         .run_must_fail("Subnode image with name subnode_image1 already exists");
 
     rell.test.tx().op(
+        propose_subnode_image(initial_provider.pub, "subnode_image2", "url2", "digest2", subnode_image_type.SPECIAL)
+    ).sign(initial_provider).run();
+    _make_vote(sp1);
+    _make_vote(sp2);
+
+    val subnode_image2 = require_subnode_image("subnode_image2");
+
+    rell.test.tx().op(
         propose_subnode_image_state(initial_provider.pub, "subnode_image1", true)
     ).nop()
         .sign(initial_provider)
@@ -65,9 +77,9 @@ function test_propose_subnode_image() {
     _make_vote(sp1);
     _make_vote(sp2);
 
-    val subnode_image2 = subnode_image @? { .name == "subnode_image1" };
-    assert_not_null(subnode_image2);
-    assert_false(subnode_image1.active);
+    val subnode_image1_2 = subnode_image @? { .name == "subnode_image1" };
+    assert_not_null(subnode_image1_2);
+    assert_false(subnode_image1_2.active);
 
     rell.test.tx().op(
         propose_subnode_image_state(initial_provider.pub, "bogus", false)
@@ -80,6 +92,28 @@ function test_propose_subnode_image() {
     ).nop()
         .sign(initial_provider)
         .run_must_fail("Subnode image with name subnode_image1 already inactive");
+
+    assert_null(cluster_subnode_image @? { .cluster == cluster1, .subnode_image == subnode_image1 });
+
+    rell.test.tx().op(
+        propose_add_cluster_subnode_image(initial_provider.pub, "cluster1", "subnode_image2")
+    ).sign(initial_provider).run();
+    _make_vote(sp1);
+    _make_vote(sp2);
+
+    assert_not_null(cluster_subnode_image @? { .cluster == cluster1, .subnode_image == subnode_image2 });
+
+    rell.test.tx().op(
+        propose_remove_cluster_subnode_image(initial_provider.pub, "cluster1", "subnode_image2")
+    ).sign(initial_provider).run();
+    _make_vote(sp1);
+    _make_vote(sp2);
+
+    assert_null(cluster_subnode_image @? { .cluster == cluster1, .subnode_image == subnode_image2 });
+
+    rell.test.tx().op(
+        propose_remove_cluster_subnode_image(initial_provider.pub, "cluster1", "subnode_image2")
+    ).nop().sign(initial_provider).run_must_fail("Subnode image with name subnode_image2 is not allowed by cluster cluster1");
 }
 
 function _make_vote(voter: rell.test.keypair) {

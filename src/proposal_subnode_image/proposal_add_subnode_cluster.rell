@@ -1,0 +1,58 @@
+entity pending_add_cluster_subnode_image {
+    key proposal;
+    key cluster, subnode_image;
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.add_cluster_subnode_image.name: apply_add_cluster_subnode_image(*)];
+
+function apply_add_cluster_subnode_image(proposal) {
+    val pacsi = pending_add_cluster_subnode_image @? { proposal };
+    if (pacsi == null) return;
+    validate_add_cluster_subnode_image_proposal(pacsi);
+    create cluster_subnode_image(pacsi.cluster, pacsi.subnode_image);
+    after_cluster_updated(pacsi.cluster);
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.add_cluster_subnode_image.name: delete_pending_add_cluster_subnode_image(*)];
+
+function delete_pending_add_cluster_subnode_image(proposal) {
+    delete pending_add_cluster_subnode_image @? { proposal };
+}
+
+operation propose_add_cluster_subnode_image(my_pubkey: pubkey, cluster_name: text, subnode_image_name: text, description: text = "") {
+    val me = require_provider(my_pubkey);
+    // check that provider authority and that it is a cluster governor
+    require_provider_auth_with_rate_limit(me);
+    val cluster = require_cluster(cluster_name);
+    require_cluster_governor(cluster, me);
+    val subnode_image = require_subnode_image(subnode_image_name);
+    val prop = create_proposal(proposal_type.add_cluster_subnode_image, me, cluster.governance, description);
+    val pacsi = create pending_add_cluster_subnode_image(
+        prop,
+        cluster,
+        subnode_image,
+    );
+    validate_add_cluster_subnode_image_proposal(pacsi);
+    internal_vote(me, prop, true);
+}
+
+query get_add_cluster_subnode_image_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.add_cluster_subnode_image);
+    if (proposal == null) return null;
+    val pacsi = pending_add_cluster_subnode_image @ { proposal };
+    return (
+        cluster = pacsi.cluster.name,
+        subnode_image = pacsi.subnode_image.name,
+    );
+}
+
+function validate_add_cluster_subnode_image_proposal(pacsi: pending_add_cluster_subnode_image) {
+    require(
+        empty(cluster_subnode_image @? { pacsi.cluster, pacsi.subnode_image }),
+        "Subnode image with name %s is already allowed by cluster %s".format(pacsi.subnode_image.name, pacsi.cluster.name)
+    );
+    require(pacsi.subnode_image.active,
+        "Subnode image with name %s is not active".format(pacsi.subnode_image.name));
+    require(pacsi.subnode_image.subnode_image_type == subnode_image_type.SPECIAL,
+        "Subnode image with name %s is not special".format(pacsi.subnode_image.name));
+}
