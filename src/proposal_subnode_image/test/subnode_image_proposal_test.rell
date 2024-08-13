@@ -1,6 +1,7 @@
 @test module;
 
 import common.operations.*;
+import common.queries.*;
 import common.test.setup.*;
 import common.test.util.*;
 import model.*;
@@ -47,8 +48,7 @@ function test_propose_subnode_image() {
     _make_vote(sp1);
     _make_vote(sp2);
 
-    val subnode_image1 = subnode_image @? { .name == "subnode_image1" };
-    assert_not_null(subnode_image1);
+    val subnode_image1 = get_subnode_image("subnode_image1");
     assert_true(subnode_image1.active);
 
     rell.test.tx().op(
@@ -63,7 +63,7 @@ function test_propose_subnode_image() {
     _make_vote(sp1);
     _make_vote(sp2);
 
-    val subnode_image2 = require_subnode_image("subnode_image2");
+    val subnode_image2 = get_subnode_image("subnode_image2");
 
     rell.test.tx().op(
         propose_subnode_image_state(initial_provider.pub, "subnode_image1", true)
@@ -77,8 +77,7 @@ function test_propose_subnode_image() {
     _make_vote(sp1);
     _make_vote(sp2);
 
-    val subnode_image1_2 = subnode_image @? { .name == "subnode_image1" };
-    assert_not_null(subnode_image1_2);
+    val subnode_image1_2 = get_subnode_image("subnode_image1");
     assert_false(subnode_image1_2.active);
 
     rell.test.tx().op(
@@ -93,7 +92,7 @@ function test_propose_subnode_image() {
         .sign(initial_provider)
         .run_must_fail("Subnode image with name subnode_image1 already inactive");
 
-    assert_null(cluster_subnode_image @? { .cluster == cluster1, .subnode_image == subnode_image1 });
+    assert_true(get_cluster_subnode_images(cluster1.name).empty());
 
     rell.test.tx().op(
         propose_add_cluster_subnode_image(initial_provider.pub, "cluster1", "subnode_image2")
@@ -101,7 +100,9 @@ function test_propose_subnode_image() {
     _make_vote(sp1);
     _make_vote(sp2);
 
-    assert_not_null(cluster_subnode_image @? { .cluster == cluster1, .subnode_image == subnode_image2 });
+    assert_equals(get_cluster_subnode_images(cluster1.name), [
+        (name="subnode_image2", url="url2", digest="digest2")
+    ]);
 
     rell.test.tx().op(
         propose_remove_cluster_subnode_image(initial_provider.pub, "cluster1", "subnode_image2")
@@ -109,7 +110,7 @@ function test_propose_subnode_image() {
     _make_vote(sp1);
     _make_vote(sp2);
 
-    assert_null(cluster_subnode_image @? { .cluster == cluster1, .subnode_image == subnode_image2 });
+    assert_true(get_cluster_subnode_images(cluster1.name).empty());
 
     rell.test.tx().op(
         propose_remove_cluster_subnode_image(initial_provider.pub, "cluster1", "subnode_image2")
@@ -125,7 +126,26 @@ function test_propose_subnode_image() {
     _make_vote(sp1);
     _make_vote(sp2);
 
-    assert_equals(subnode_image @ { .name == "subnode_image1" } (.digest), "digest2");
+    assert_equals(get_subnode_image("subnode_image1").digest, "digest2");
+
+    assert_equals(get_subnode_images(), [
+        subnode_image_data(
+            name = "subnode_image1",
+            url = "url",
+            digest = "digest2",
+            subnode_image_type = subnode_image_type.COMMON,
+            owner = initial_provider.pub,
+            active = false,
+        ),
+        subnode_image_data(
+            name = "subnode_image2",
+            url = "url2",
+            digest = "digest2",
+            subnode_image_type = subnode_image_type.SPECIAL,
+            owner = initial_provider.pub,
+            active = true,
+        )
+    ]);
 }
 
 function _make_vote(voter: rell.test.keypair) {
