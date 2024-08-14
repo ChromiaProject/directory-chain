@@ -1,6 +1,7 @@
 @test module;
 
 import common.operations.*;
+import common.queries.*;
 import common.test.setup.*;
 import common.test.util.*;
 import model.*;
@@ -47,6 +48,18 @@ function test_propose_and_remove_container() {
         propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p)
     ).sign(initial_provider).run();
     _make_vote(sp);
+
+    assert_equals(get_container_data("container1"), container_data(
+            name = "container1",
+            cluster = clusters.system,
+            deployer = voter_sets.system_p,
+            proposed_by_pubkey = initial_provider.pub,
+            proposed_by_name = "",
+            system = false,
+            state = container_state.RUNNING,
+            subnode_image = null,
+        )
+    );
 
     // Adding a second container, must fail due to `max_containers` restrictions
     rell.test.tx().op(
