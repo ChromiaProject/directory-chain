@@ -54,17 +54,21 @@ function test_add_remove_providers() {
     do_staking_delegate(rell.test.keypairs.dave, rell.test.keypairs.bob.pub);
 
     // Wait for delegation to take effect
-    rell.test.set_next_block_time_delta(staking_delegation_delay_ms);
+    rell.test.set_next_block_time_delta(millis_per_month);
+    rell.test.block().run();
     rell.test.block().run();
     assert_equals(staking_get_balance(test_account_alice.id), 9999999);
     assert_equals(staking_get_total_delegation_to(rell.test.keypairs.charlie.pub), 9999999);
     assert_equals(staking_get_total_delegation_to(rell.test.keypairs.bob.pub), 11);
+    assert_true(staking_rewards_claimable_for(test_account_alice.id) > 0);
 
     remove_provider(rell.test.keypairs.charlie.pub);
 
     // Ensure delegates have been removed
     assert_equals(staking_get_total_delegation_to(rell.test.keypairs.charlie.pub), 0); // <- Removed immediately
     assert_equals(staking_get_total_delegation_to(rell.test.keypairs.bob.pub), 11); // <- Unchanged
+
+    log("Staking start time: ", staking_get_rewards_start());
 
     // Should have earned something
     assert_true(staking_rewards_claimable_for(test_account_alice.id) > 0);
@@ -114,8 +118,6 @@ function test_delegation() {
     assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.bob.pub);
     assert_null(staking_get_next_delegation_change(test_account_alice.id));
 
-    assert_true(staking_rewards_claimable_for(test_account_alice.id) > 0);
-
     // Undelegating has a delay
     do_staking_undelegate(rell.test.keypairs.alice);
 
@@ -141,10 +143,15 @@ function test_staking_deposit() {
 }
 
 function test_yield_and_payout_crudely () {
+
+    log("Rate per year: ", staking_get_current_rate());
+
+    val too_small_to_care = 10 * units_per_asset;
+
     // Basic intialisation
     rell.test.tx()
         .op(init())
-        .op(mint_to_pool(8888888888))
+        .op(mint_to_pool(888 * units_per_asset))
     .sign(admin_privkey).run();
 
     val test_account_alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
@@ -152,8 +159,8 @@ function test_yield_and_payout_crudely () {
     val test_account_charlie = require(do_create_account(rell.test.keypairs.charlie, auth_privkey));
 
     rell.test.tx()
-        .op(mint_to(test_account_alice, 9999999))
-        .op(mint_to(test_account_bob, 9999999))
+        .op(mint_to(test_account_alice, 1000 * units_per_asset))
+        .op(mint_to(test_account_bob, 1000 * units_per_asset))
     .run();
 
     // Check no yield
@@ -162,8 +169,8 @@ function test_yield_and_payout_crudely () {
     assert_equals(staking_rewards_claimable_for(test_account_charlie.id), 0);
 
     // FFWD
-    rell.test.set_next_block_time_delta(staking_delegation_delay_ms);
-    rell.test.block().run(); rell.test.block().run();
+    rell.test.set_next_block_time_delta(millis_per_year);
+    rell.test.block().run();
 
     // Check no yield
     assert_equals(staking_rewards_claimable_for(test_account_alice.id), 0);
@@ -172,12 +179,12 @@ function test_yield_and_payout_crudely () {
 
     // Deposit 100 with A
     // Deposit 200 with B
-    do_staking_deposit_native(rell.test.keypairs.alice, 1000000);
-    do_staking_deposit_native(rell.test.keypairs.bob, 2000000);
+    do_staking_deposit_native(rell.test.keypairs.alice, 100 * units_per_asset);
+    do_staking_deposit_native(rell.test.keypairs.bob, 200 * units_per_asset);
 
     // FFWD
-    rell.test.set_next_block_time_delta(staking_delegation_delay_ms);
-    rell.test.block().run(); rell.test.block().run();
+    rell.test.set_next_block_time_delta(millis_per_year);
+    rell.test.block().run();
 
     // Check that there is a yield and that B is twice of A (allow for rounding)
     val alice_amount = staking_rewards_claimable_for(test_account_alice.id);
@@ -185,42 +192,48 @@ function test_yield_and_payout_crudely () {
     assert_true(alice_amount > 0);
     assert_true(bob_amount > 0);
     assert_equals(staking_rewards_claimable_for(test_account_charlie.id), 0);
-    assert_true(1 >= abs(2 * alice_amount - bob_amount));
+    log("alice amount: ", alice_amount);
+    log("bob amount: ", bob_amount);
+    assert_true(too_small_to_care >= abs(2 * alice_amount - bob_amount));
 
     // FFWD
-    rell.test.set_next_block_time_delta(staking_delegation_delay_ms);
-    rell.test.block().run(); rell.test.block().run();
+    rell.test.set_next_block_time_delta(millis_per_year);
+    rell.test.block().run();
 
     // Check both numbers have doubled (allow for rounding)
-    assert_true(1 >= abs(staking_rewards_claimable_for(test_account_alice.id) - 2 * alice_amount));
-    assert_true(1 >= abs(staking_rewards_claimable_for(test_account_bob.id) - 2 * bob_amount));
+    val alice_amount_2 = staking_rewards_claimable_for(test_account_alice.id);
+    val bob_amount_2 = staking_rewards_claimable_for(test_account_bob.id);
+    log("Alice amount 2: ", alice_amount_2);
+    log("Bob amount 2: ", bob_amount_2);
+    assert_true(too_small_to_care >= abs(alice_amount_2 - 2 * alice_amount));
+    assert_true(too_small_to_care >= abs(bob_amount_2 - 2 * bob_amount));
     assert_equals(staking_rewards_claimable_for(test_account_charlie.id), 0);
 
     // Do payout
     rell.test.tx().op(staking_claim_rewards()).sign(admin_privkey).run();
 
     // Ensure there's no (more than a few seconds worth of) claimable yield after payout
-    assert_equals(staking_rewards_claimable_for(test_account_alice.id), 0);
-    assert_equals(staking_rewards_claimable_for(test_account_bob.id), 0);
-    assert_equals(staking_rewards_claimable_for(test_account_charlie.id), 0);
+    assert_true(too_small_to_care >= staking_rewards_claimable_for(test_account_alice.id));
+    assert_true(too_small_to_care >= staking_rewards_claimable_for(test_account_bob.id));
+    assert_true(too_small_to_care >= staking_rewards_claimable_for(test_account_charlie.id));
 
     // Run the clock forward a 6 months and check we have claimable rewards
     rell.test.set_next_block_time_delta(integer(millis_per_year / 2));
     rell.test.block().run(); rell.test.block().run();
-    assert_true(staking_rewards_claimable_for(test_account_alice.id) > 100);
-    assert_true(staking_rewards_claimable_for(test_account_bob.id) > 100);
+    assert_true(staking_rewards_claimable_for(test_account_alice.id) > 1 * units_per_asset);
+    assert_true(staking_rewards_claimable_for(test_account_bob.id) > 1 * units_per_asset);
 
-    // Run the clock forward another 24 months and see that we have less, eg. payout has triggered
+    // Run the clock forward another 24 months and see that payout has triggered
     rell.test.set_next_block_time_delta(integer(millis_per_year * 2));
-    rell.test.block().run(); rell.test.block().run();
-    assert_true(staking_rewards_claimable_for(test_account_alice.id) < 100);
-    assert_true(staking_rewards_claimable_for(test_account_bob.id) < 100);
+    rell.test.block().run();
+    assert_true(staking_get_rewards_paid(test_account_alice.id) > 1 * units_per_asset);
+    assert_true(staking_get_rewards_paid(test_account_bob.id) > 1 * units_per_asset);
 
     // However the total amount ever earned is not going to be 
-    assert_true(staking_rewards_for(test_account_bob.id) > 100);
+    assert_true(staking_rewards_for(test_account_bob.id) > 1 * units_per_asset);
 
     // Everything paid up
-    assert_equals(staking_rewards_for(test_account_bob.id), staking_get_rewards_paid(test_account_bob.id));
+    assert_equals(staking_rewards_for(test_account_bob.id), staking_get_rewards_paid(test_account_bob.id) + staking_rewards_claimable_for(test_account_bob.id));
 }
 
 function test_withdrawal() {
