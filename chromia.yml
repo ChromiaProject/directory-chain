@@ -164,6 +164,37 @@ definitions:
         - name: "Chromia Test" # Should match `economy_chain_module_args.asset_name`
           amount: 10000000L # 10.0 tCHR
       fee_account: x"5137564F6168DC08129D29C51311C543E7407D4F83926C34DFD015C5C1CBFBA7" # pool account
+  economy_chain_ft4_module_args_devnet1: &economy_chain_ft4_module_args_devnet1
+    lib.ft4.core.accounts:
+      rate_limit:
+        active: 1
+        max_points: 20
+        recovery_time: 5000
+        points_at_account_creation: 1
+    lib.ft4.core.accounts.strategies.transfer:
+      rules:
+        - sender_blockchain:
+            - "EBDB17097454BDDD233BF52C0EB4FA6FDF3DB085F5F56537BAEC724CC99A8108" # chr repl -c '("EVM",97,x"3d9Eac338Eb6f7ADe3f0D8aF26E88a4f088F8F4c").hash()', based on BSC testnet token address
+          sender: "*"
+          recipient: "*"
+          asset:
+            - name: "Chromia Test" # Should match `economy_chain_module_args.asset_name`
+              min_amount: 10000000L # 10.0 tCHR
+          timeout_days: 1
+          strategy: "open"
+        - sender_blockchain: "$"
+          sender: "*"
+          recipient: "*"
+          asset:
+            - name: "Chromia Test" # Should match `economy_chain_module_args.asset_name`
+              min_amount: 10000000L # 10.0 tCHR
+          timeout_days: 1
+          strategy: "fee"
+    lib.ft4.core.accounts.strategies.transfer.fee:
+      asset:
+        - name: "Chromia Test"  # Should match `economy_chain_module_args.asset_name`
+          amount: 10000000L # 10.0 tCHR
+      fee_account: x"23746168BF9C5F4E96A0866720CDC63A540E036CCB11F7A7F76F7B23A992C063" # pool account
   economy_chain_ft4_module_args_questnet: &economy_chain_ft4_module_args_questnet
     lib.ft4.core.accounts:
       rate_limit:
@@ -472,6 +503,17 @@ blockchains:
       << : *common_economy_chain
     moduleArgs:
       << : *economy_chain_ft4_module_args_projectnet
+      << : *economy_chain_test_claim_tchr_args
+      economy_chain:
+        << : *economy_chain_module_args
+      economy_chain_test_mint_on_ras_staking:
+        amount_to_mint: 1000000000
+  economy_chain_devnet1:
+    module: economy_chain_devnet1
+    config:
+      << : *common_economy_chain
+    moduleArgs:
+      << : *economy_chain_ft4_module_args_devnet1
       << : *economy_chain_test_claim_tchr_args
       economy_chain:
         << : *economy_chain_module_args
