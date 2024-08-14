@@ -7,6 +7,7 @@ entity pending_container {
     max_blockchains: integer;
     extra_storage: integer;
     proposed_by: provider;
+    subnode_image_name: text = "";
 }
 
 @extend(apply_voting_result_handlers) function() = [proposal_type.container.name: apply_container(*)];
@@ -14,8 +15,8 @@ entity pending_container {
 function apply_container(proposal) {
     val pps = pending_container @? { proposal };
     if (pps == null) return;
-    validate_container_proposal(pps);
-    create_container_with_limits(
+    val maybe_subnode_image = validate_container_proposal(pps);
+    val c = create_container_with_limits(
         pps.proposed_by,
         pps.name,
         pps.cluster,
@@ -24,6 +25,9 @@ function apply_container(proposal) {
         pps.max_blockchains,
         pps.extra_storage
     );
+    if (maybe_subnode_image != null) {
+        create container_subnode_image(c, maybe_subnode_image);
+    }
 }
 
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.container.name: delete_pending_container(*)];
@@ -32,8 +36,16 @@ function delete_pending_container(proposal) {
     delete pending_container @? { proposal };
 }
 
-// Who can create a new container? Cluster deployers' voter set. (They can also update container limits.)
 operation propose_container(my_pubkey: pubkey, cluster_name: text, name, deployer_name: text, description: text = "") {
+    propose_container_impl(my_pubkey, cluster_name, name, deployer_name, null, description);
+}
+
+operation propose_container_with_subnode_image(my_pubkey: pubkey, cluster_name: text, name, deployer_name: text, subnode_image: text, description: text = "") {
+    propose_container_impl(my_pubkey, cluster_name, name, deployer_name, subnode_image, description);
+}
+
+// Who can create a new container? Cluster deployers' voter set. (They can also update container limits.)
+function propose_container_impl(my_pubkey: pubkey, cluster_name: text, name, deployer_name: text, subnode_image: text?, description: text = "") {
     // check that provider authority and that it is cluster's deployer
     val me = require_provider(my_pubkey);
     require_provider_auth_with_rate_limit(me);
@@ -49,7 +61,7 @@ operation propose_container(my_pubkey: pubkey, cluster_name: text, name, deploye
 
     val prop = create_proposal(proposal_type.container, me, cluster.governance, description);
     val pending_container = create pending_container(
-        prop, name, cluster, deployer, container_units, max_blockchains, extra_storage, me
+        prop, name, cluster, deployer, container_units, max_blockchains, extra_storage, me, subnode_image_name = subnode_image ?: ""
     );
     validate_container_proposal(pending_container);
     internal_vote(me, prop, true);
@@ -63,13 +75,22 @@ query get_container_proposal(rowid) {
         container = pcwl.name,
         container_units = pcwl.container_units,
         max_blockchains = pcwl.max_blockchains,
-        extra_storage = pcwl.extra_storage
+        extra_storage = pcwl.extra_storage,
+        subnode_image_name = pcwl.subnode_image_name,
     );
 }
 
-function validate_container_proposal(pending_container) {
+function validate_container_proposal(pending_container): subnode_image? {
     require(empty(container @? { pending_container.name }), "Container with name %s already exists".format(pending_container.name));
     require_provider_quota(pending_container.proposed_by, provider_quota_type.max_containers);
     require_cluster_quotas(pending_container.cluster, pending_container.container_units, pending_container.extra_storage);
+    if (not pending_container.subnode_image_name.empty()) {
+        val subnode_image = require_subnode_image(pending_container.subnode_image_name);
+        require(subnode_image.active, "Subnode image %s is not active".format(pending_container.subnode_image_name));
+        require(subnode_image.subnode_image_type == subnode_image_type.COMMON or not empty(cluster_subnode_image @? { pending_container.cluster, subnode_image }),
+            "Subnode image %s is not compatible with cluster %s".format(pending_container.subnode_image_name, pending_container.cluster.name));
+        return subnode_image;
+    } else {
+        return null;
+    }
 }
-

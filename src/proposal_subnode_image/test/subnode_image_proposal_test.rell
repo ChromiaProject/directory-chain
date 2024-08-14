@@ -6,6 +6,7 @@ import common.test.setup.*;
 import common.test.util.*;
 import model.*;
 import proposal_subnode_image.*;
+import proposal_container.*;
 import proposal_provider.*;
 import direct_cluster.*;
 
@@ -146,6 +147,84 @@ function test_propose_subnode_image() {
             active = true,
         )
     ]);
+}
+
+function test_propose_container_with_subnode_image() {
+    setup_module();
+
+    // 0. governance
+    val sp1 = rell.test.keypairs.bob;
+    val sp2 = rell.test.keypairs.trudy;
+    val np = rell.test.keypairs.eve;
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, sp1.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, sp2.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, np.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, sp1.pub, true),
+        propose_provider_quota(initial_provider.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_containers, 10),
+        propose_provider_is_system(initial_provider.pub, sp2.pub, true),
+        propose_provider_state(initial_provider.pub, np.pub, true),
+        create_cluster(initial_provider.pub, "cluster1", voter_sets.system_p, list()),
+    ).sign(initial_provider).run();
+    _make_vote(sp1);
+    _make_vote(sp1);
+    _make_vote(sp1);
+    _make_vote(sp2);
+
+    rell.test.tx().op(
+        propose_subnode_image(initial_provider.pub, "subnode_image1", "url", "digest", subnode_image_type.COMMON)
+    ).sign(initial_provider).run();
+    _make_vote(sp1);
+    _make_vote(sp2);
+
+    rell.test.tx().op(
+        propose_subnode_image(initial_provider.pub, "subnode_image2", "url", "digest", subnode_image_type.SPECIAL)
+    ).sign(initial_provider).run();
+    _make_vote(sp1);
+    _make_vote(sp2);
+
+    rell.test.tx().op(
+        propose_subnode_image(initial_provider.pub, "subnode_image3", "url", "digest", subnode_image_type.COMMON)
+    ).sign(initial_provider).run();
+    _make_vote(sp1);
+    _make_vote(sp2);
+
+    rell.test.tx().op(
+        propose_subnode_image_state(initial_provider.pub, "subnode_image3", false)
+    ).sign(initial_provider).run();
+    _make_vote(sp1);
+    _make_vote(sp2);
+
+    rell.test.tx().op(
+        propose_container_with_subnode_image(initial_provider.pub, "cluster1", "container1", voter_sets.system_p, "subnode_image1")
+    ).sign(initial_provider).run();
+    _make_vote(sp1);
+    _make_vote(sp2);
+
+    assert_equals(get_container_data("container1").subnode_image, "subnode_image1");
+
+    rell.test.tx().op(
+        propose_container_with_subnode_image(initial_provider.pub, "cluster1", "container2", voter_sets.system_p, "subnode_image2")
+    ).sign(initial_provider).run_must_fail("Subnode image subnode_image2 is not compatible with cluster cluster1");
+
+    rell.test.tx().op(
+        propose_add_cluster_subnode_image(initial_provider.pub, "cluster1", "subnode_image2")
+    ).sign(initial_provider).run();
+    _make_vote(sp1);
+    _make_vote(sp2);
+
+    rell.test.tx().op(
+        propose_container_with_subnode_image(initial_provider.pub, "cluster1", "container2", voter_sets.system_p, "subnode_image2")
+    ).sign(initial_provider).run();
+    _make_vote(sp1);
+    _make_vote(sp2);
+
+    assert_equals(get_container_data("container1").subnode_image, "subnode_image1");
+
+    rell.test.tx().op(
+        propose_container_with_subnode_image(initial_provider.pub, "cluster1", "container3", voter_sets.system_p, "subnode_image3")
+    ).sign(initial_provider).run_must_fail("Subnode image subnode_image3 is not active");
 }
 
 function _make_vote(voter: rell.test.keypair) {
