@@ -41,12 +41,7 @@ function _staking_deposit_native_impl(amount: integer, delegate_to: pubkey? = nu
     }
     if (delegate_to != null) {
         val _provider = provider @ { .pubkey == delegate_to };
-
-        create staker_state_to_provider (
-            timestamp = _staking_last_known_time(),
-            ss,
-            _provider
-        );
+        _staking_delegate(staker, delegate_to);
     }
 }
 
@@ -69,7 +64,7 @@ function _staking_update_evm_state(staker: ft4.accounts.account, network, new_ba
             last_update = _staking_last_known_time(),
             pending_token_time = 0
         );
-        create staker_state_to_provider ( timestamp = _staking_last_known_time(), ss, _provider );
+        _staking_delegate(staker, _provider.pubkey);
     }
 }
 
@@ -129,6 +124,7 @@ function _staking_distribute_withdrawals() {
 // Delegation
 
 function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey) {
+
     // get all staker states of user, and all related withdraw requests
     val staker_states = staker_state @* { .account == staker };
     val withdraw_requests = staker_withdrawal_request @* { .active and .staker_state in staker_states };
