@@ -1,6 +1,48 @@
 // Holds the last handled configuration update
 object configuration_updates {
-    mutable last_api_version: integer = 0;
+    mutable serial: integer = 0;
+}
+
+namespace SCOPE {
+    val DAPP_SCOPE = "dapp";
+    val TEST_SCOPE = "test";
+}
+
+namespace TEST_SCOPE {
+
+    object result_value {
+        mutable result: integer = 0;
+    }
+
+    object serial_value {
+        mutable serial: integer = 0;
+    }
+
+    function _serial_supplier() = serial_value.serial;
+
+    function _dummy_supplier() = -1;
+
+    operation set_serial_op(serial: integer) {
+        serial_value.serial = serial;
+    }
+
+    @extend(configuration_updated_handlers) function () = add_configuration_updated_handler(1, handler_1(*));
+    function handler_1() {
+        result_value.result = 1;
+    }
+
+    @extend(configuration_updated_handlers) function () = add_configuration_updated_handler(1, handler_2(*));
+    function handler_2() {
+        result_value.result = 2;
+    }
+}
+
+function get_serial_suppplier(scope: text): () -> integer {
+    return when (scope) {
+        SCOPE.DAPP_SCOPE -> _api_version(*);
+        SCOPE.TEST_SCOPE -> TEST_SCOPE._serial_supplier(*);
+        else -> TEST_SCOPE._dummy_supplier(*);
+    };
 }
 
 @extendable
@@ -9,21 +51,21 @@ function configuration_updated_handlers(): map<integer, () -> unit>;
 function add_configuration_updated_handler(version: integer, handler: () -> unit) = [version: handler];
 
 // The main entry point to the configuration updates handling
-function handle_configuration_update() {
-    val version = api_version();
+function handle_configuration_update(scope: text = SCOPE.DAPP_SCOPE) {
+    val next_serial = get_serial_suppplier(scope)();
 
-    val handler = configuration_updated_handlers().get_or_null(version);
+    val handler = configuration_updated_handlers().get_or_null(next_serial);
     if (handler == null) return;
 
-    if (already_handled(version)) return;
+    if (already_handled(next_serial)) return;
 
-    log("Handling configuration update with api version %d".format(version));
+    log("Handling configuration update with api version %d".format(next_serial));
     handler();
-    configuration_updates.last_api_version = version;
+    configuration_updates.serial = next_serial;
 }
 
-function already_handled(version: integer): boolean {
-    return configuration_updates.last_api_version >= version;
+function already_handled(serial: integer): boolean {
+    return configuration_updates.serial >= serial;
 }
 
 // api_version: 37
