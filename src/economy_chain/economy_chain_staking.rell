@@ -59,7 +59,9 @@ function _staking_update_evm_state(staker: ft4.accounts.account, network, new_ba
         _update_pending_token_time(ss);
         ss.balance = new_balance;
     } else {
-        val _provider = provider @ { .pubkey == get_null_account() };
+        // It would be extraordinary for a delegation to exist before a stake.
+        // However this might happen if other logic is changed, so we will handle it correctly by checking.
+        val _provider = provider @ { .pubkey == staking_get_current_delegate(staker.id) ?: get_null_account() };
         ss = create staker_state (
             staker,
             network,
