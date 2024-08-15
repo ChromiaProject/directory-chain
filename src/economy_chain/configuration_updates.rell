@@ -1,0 +1,50 @@
+// Holds the last handled configuration update
+object configuration_updates {
+    mutable last_api_version: integer = 0;
+}
+
+@extendable
+function configuration_updated_handlers(): map<integer, () -> unit>;
+
+function add_configuration_updated_handler(version: integer, handler: () -> unit) = [version: handler];
+
+// The main entry point to the configuration updates handling
+function handle_configuration_update() {
+    val version = api_version();
+
+    val handler = configuration_updated_handlers().get_or_null(version);
+    if (handler == null) return;
+
+    if (already_handled(version)) return;
+
+    log("Handling configuration update with api version %d".format(version));
+    handler();
+    configuration_updates.last_api_version = version;
+}
+
+function already_handled(version: integer): boolean {
+    return configuration_updates.last_api_version >= version;
+}
+
+// api_version: 37
+@extend(configuration_updated_handlers)
+function () = add_configuration_updated_handler(37, configuration_update_37(*));
+
+function configuration_update_37() {
+    val asset = get_asset();
+
+    val expected_bsc_asset = eif.hbridge.get_erc20_for_asset(asset.id) @? {
+        .network_id == chain_context.args.bsc_asset_network_id,
+        .token_address == chain_context.args.bsc_asset_address
+    };
+
+    if (empty(expected_bsc_asset)) {
+        eif.hbridge.register_erc20_asset(
+            chain_context.args.bsc_asset_network_id,
+            chain_context.args.bsc_asset_address,
+            asset,
+            // Should be native for mainnet
+            eif.hbridge.bridge_mode.foreign
+        );
+    }
+}

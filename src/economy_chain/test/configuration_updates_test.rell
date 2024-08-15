@@ -1,0 +1,37 @@
+@test module;
+
+import ^^.*;
+import ^.helper_operations.*;
+
+function test_updated_configuration_handlers() {
+    // init EC
+    rell.test.tx().op(init()).run();
+
+    // asserting the initial state
+    assert_equals(configuration_updates.last_api_version, 0);
+
+    val bsc_assets_before = eif.hbridge.get_erc20_for_asset(get_asset().id) @* { .network_id == 97 } ( .token_address );
+    assert_equals(bsc_assets_before, [byte_array.from_hex("AaE0437b279696464f5d49C54f9E8Fe5488F9323")]);
+
+    // begin block 0
+    rell.test.tx().op(
+        begin_block_op(0)
+    ).run();
+
+    // asserting that last_api_version has changed
+    assert_equals(configuration_updates.last_api_version, api_version());
+    // according to test config, bsc asset address has not changed
+    val bsc_assets_after = eif.hbridge.get_erc20_for_asset(get_asset().id) @* { .network_id == 97 } ( .token_address );
+    assert_equals(bsc_assets_after, [byte_array.from_hex("AaE0437b279696464f5d49C54f9E8Fe5488F9323")]);
+
+    // begin block 1
+    rell.test.tx().op(
+        begin_block_op(1)
+    ).run();
+
+    // api_version can't be mocked, so we can check only idempotency for handle_configuration_update() function
+    assert_equals(configuration_updates.last_api_version, api_version());
+    // according to test config, bsc asset address has not changed
+    val bsc_assets_after2 = eif.hbridge.get_erc20_for_asset(get_asset().id) @* { .network_id == 97 } ( .token_address );
+    assert_equals(bsc_assets_after2, [byte_array.from_hex("AaE0437b279696464f5d49C54f9E8Fe5488F9323")]);
+}
