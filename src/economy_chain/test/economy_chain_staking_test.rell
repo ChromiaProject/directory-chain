@@ -91,12 +91,12 @@ function test_delegation() {
     assert_equals(staking_rewards_claimable_for(test_account_alice.id), 0);
     assert_equals(staking_rewards_claimable_for(test_account_bob.id), 0);
 
-    rell.test.tx().op(
-        staking_delegate(test_account_charlie.id)
-    ).run_must_fail("No provider for this public key.");
+    do_staking_delegate_failure(rell.test.keypairs.alice, rell.test.keypairs.bob.pub, "No provider for this public key.");
 
     add_provider(rell.test.keypairs.bob.pub);
     add_provider(rell.test.keypairs.charlie.pub);
+
+    do_staking_delegate_failure(rell.test.keypairs.alice, rell.test.keypairs.bob.pub, "Need stake to delegate.");
 
     do_staking_deposit_native(rell.test.keypairs.alice, 8000);
     do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.charlie.pub);
