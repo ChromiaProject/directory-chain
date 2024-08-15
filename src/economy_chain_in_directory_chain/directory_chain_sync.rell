@@ -117,3 +117,38 @@ function after_node_removed_from_cluster_impl(node, cluster?, replica: boolean) 
     ).to_gtv());
 }
 
+@extend(after_subnode_image_creation) function(subnode_image) {
+    update_subnode_image(subnode_image);
+}
+
+@extend(after_subnode_image_updated) function(subnode_image) {
+    update_subnode_image(subnode_image);
+}
+
+function update_subnode_image(subnode_image) {
+    send_message(subnode_image_update_topic, subnode_image_update_message(
+        name = subnode_image.name,
+        url = subnode_image.url,
+        digest = subnode_image.digest,
+        subnode_image_type = subnode_image.subnode_image_type.name,
+        owner = subnode_image.owner.pubkey,
+        description = subnode_image.description,
+        active = subnode_image.active,
+    ).to_gtv());
+}
+
+@extend(after_cluster_subnode_image_added) function(cluster, subnode_image) {
+    send_message(cluster_subnode_image_update_topic, cluster_subnode_image_update_message(
+        cluster = cluster.name,
+        subnode_image = subnode_image.name,
+        deleted = false,
+    ).to_gtv());
+}
+
+@extend(after_cluster_subnode_image_removed) function(cluster, subnode_image) {
+    send_message(cluster_subnode_image_update_topic, cluster_subnode_image_update_message(
+        cluster = cluster.name,
+        subnode_image = subnode_image.name,
+        deleted = true,
+    ).to_gtv());
+}

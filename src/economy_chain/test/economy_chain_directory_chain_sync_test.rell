@@ -425,3 +425,66 @@ function test_receive_provider_update_message_revoke_proposals_on_sp_changes() {
     assert_equals(common_proposal @ { create_tag_1_proposal_id } ( .state ), common_proposal_state.PENDING);
     assert_equals(common_proposal @ { create_tag_2_proposal_id } ( .state ), common_proposal_state.REVOKED);
 }
+
+function test_subnode_image() {
+    rell.test.tx().op(init()).run();
+
+    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
+    val provider = add_provider(rell.test.pubkeys.alice, true, provider_tier.NODE_PROVIDER);
+
+    rell.test.tx().op(
+        icmf_message_op(x"", subnode_image_update_topic, body = subnode_image_update_message(
+            name = "subnode_image1",
+            url = "url",
+            digest = "digest",
+            subnode_image_type = subnode_image_type.SPECIAL.name,
+            owner = rell.test.pubkeys.alice,
+            description = "one",
+            active = true).to_gtv())
+    ).run();
+    assert_equals(subnode_image @ { .name == "subnode_image1" } ($.to_struct()), struct<subnode_image>(
+        name = "subnode_image1",
+        url = "url",
+        digest = "digest",
+        subnode_image_type = subnode_image_type.SPECIAL,
+        owner = provider,
+        description = "one",
+        active = true)
+    );
+
+    rell.test.tx().op(
+        icmf_message_op(x"", subnode_image_update_topic, body = subnode_image_update_message(
+            name = "subnode_image1",
+            url = "url",
+            digest = "digest",
+            subnode_image_type = subnode_image_type.SPECIAL.name,
+            owner = rell.test.pubkeys.alice,
+            description = "one",
+            active = false).to_gtv())
+    ).run();
+    assert_equals(subnode_image @ { .name == "subnode_image1" } ($.to_struct()), struct<subnode_image>(
+        name = "subnode_image1",
+        url = "url",
+        digest = "digest",
+        subnode_image_type = subnode_image_type.SPECIAL,
+        owner = provider,
+        description = "one",
+        active = false)
+    );
+
+    rell.test.tx().op(
+        icmf_message_op(x"", cluster_subnode_image_update_topic, body = cluster_subnode_image_update_message(
+            cluster = cluster.name,
+            subnode_image = "subnode_image1",
+            deleted = false).to_gtv())
+    ).run();
+    assert_false(empty(cluster_subnode_image @? { .cluster == cluster, .subnode_image.name == "subnode_image1" }));
+
+    rell.test.tx().op(
+        icmf_message_op(x"", cluster_subnode_image_update_topic, body = cluster_subnode_image_update_message(
+            cluster = cluster.name,
+            subnode_image = "subnode_image1",
+            deleted = true).to_gtv())
+    ).run();
+    assert_true(empty(cluster_subnode_image @? { .cluster == cluster, .subnode_image.name == "subnode_image1" }));
+}

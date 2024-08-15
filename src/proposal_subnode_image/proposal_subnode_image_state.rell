@@ -10,7 +10,9 @@ function() = [proposal_type.subnode_image_state.name: apply_subnode_image_state(
 function apply_subnode_image_state(proposal) {
     val psis = pending_subnode_image_state @? { proposal };
     if (psis == null) return;
-    update subnode_image @ { .name == psis.name } ( active = psis.active );
+    val subnode_image = subnode_image @ { .name == psis.name };
+    subnode_image.active = psis.active;
+    after_subnode_image_updated(subnode_image);
 }
 
 @extend(delete_proposal_handlers)

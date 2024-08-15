@@ -52,6 +52,8 @@ From directory-chain:
 - `L_cluster_node_update`
 - `L_token_price_changed`
 - `L_blockchain_rid_topic`
+- `L_subnode_image_update`
+- `L_cluster_subnode_image_update`
 From EVM Transaction Submitter chain:
 - `G_evm_transaction_submitter_cost_topic`
 
@@ -89,6 +91,8 @@ Example:
               - L_cluster_node_update
               - L_token_price_changed
               - L_blockchain_rid_topic
+              - L_subnode_image_update
+              - L_cluster_subnode_image_update 
           global:
             topics:
               - G_evm_transaction_submitter_cost_topic

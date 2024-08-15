@@ -201,3 +201,40 @@ function receive_cluster_node_update_message(body: gtv) {
         }
     }
 }
+
+function receive_subnode_image_update_message(body: gtv) {
+    val message = subnode_image_update_message.from_gtv(body);
+    val subnode_image = subnode_image @? { .name == message.name };
+    if (exists(subnode_image)) {
+        log("Updating subnode image %s".format(message.name));
+        update subnode_image @ { .name == message.name } (
+            url = message.url,
+            digest = message.digest,
+            active = message.active,
+        );
+    } else {
+        log("Creating subnode image %s".format(message.name));
+        create subnode_image(
+            name = message.name,
+            url = message.url,
+            digest = message.digest,
+            subnode_image_type = subnode_image_type.value(message.subnode_image_type),
+            owner = provider @ { .pubkey == message.owner },
+            description = message.description,
+            active = message.active,
+        );
+    }
+}
+
+function receive_cluster_subnode_image_update_message(body: gtv) {
+    val message = cluster_subnode_image_update_message.from_gtv(body);
+    val subnode_image = subnode_image @ { .name == message.subnode_image };
+    val cluster = cluster @ { .name == message.cluster };
+    if (message.deleted) {
+        log("Removing subnode image %s from cluster %s".format(message.subnode_image, message.cluster));
+        delete cluster_subnode_image @ { subnode_image, cluster };
+    } else {
+        log("Adding subnode image %s to cluster %s".format(message.subnode_image, message.cluster));
+        create cluster_subnode_image(cluster, subnode_image);
+    }
+}
