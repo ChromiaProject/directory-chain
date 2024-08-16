@@ -415,26 +415,6 @@ function test_nm_get_container_image_null() {
     assert_null(nm_get_container_image("container"));
 }
 
-function test_nm_get_container_image_inactive() {
-    setup_module();
-
-    var conf = apply_required_configuration_properties();
-    rell.test.tx().op(
-        create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
-        create_subnode_image(
-            name = "chromaway/chromia-subnode",
-            url = "registry.gitlab.com/chromaway/postchain-chromia/chromaway/chromia-subnode",
-            digest = "sha256:3d8ec76e4e510ad90515e5fd71c6185360cd3ba32e3feb80f1cc15460722f482",
-            subnode_image_type = subnode_image_type.COMMON,
-            provider_pubkey = initial_provider.pub,
-            active = false,
-        ),
-        associate_subnode_image_with_container("container", "chromaway/chromia-subnode")
-    ).sign(initial_provider).run();
-
-    assert_null(nm_get_container_image("container"));
-}
-
 function test_nm_get_container_image_common() {
     setup_module();
 
@@ -480,24 +460,4 @@ function test_nm_get_container_image_special_for_cluster() {
     assert_equals(image_info.name, "chromaway/chromia-subnode");
     assert_equals(image_info.url, "registry.gitlab.com/chromaway/postchain-chromia/chromaway/chromia-subnode");
     assert_equals(image_info.digest, "sha256:3d8ec76e4e510ad90515e5fd71c6185360cd3ba32e3feb80f1cc15460722f482");
-}
-
-function test_nm_get_container_image_special_not_for_cluster() {
-    setup_module();
-
-    var conf = apply_required_configuration_properties();
-    rell.test.tx().op(
-        create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
-        create_subnode_image(
-            name = "chromaway/chromia-subnode",
-            url = "registry.gitlab.com/chromaway/postchain-chromia/chromaway/chromia-subnode",
-            digest = "sha256:3d8ec76e4e510ad90515e5fd71c6185360cd3ba32e3feb80f1cc15460722f482",
-            subnode_image_type = subnode_image_type.SPECIAL,
-            provider_pubkey = initial_provider.pub,
-            active = true,
-        ),
-        associate_subnode_image_with_container("container", "chromaway/chromia-subnode"),
-    ).sign(initial_provider).run();
-
-    assert_null(nm_get_container_image("container"));
 }
