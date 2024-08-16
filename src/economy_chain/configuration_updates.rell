@@ -10,20 +10,15 @@ function add_configuration_updated_handler(version: integer, handler: () -> unit
 
 // The main entry point to the configuration updates handling
 function handle_configuration_update() {
-    val version = api_version();
-
-    val handler = configuration_updated_handlers().get_or_null(version);
-    if (handler == null) return;
-
-    if (already_handled(version)) return;
-
-    log("Handling configuration update with api version %d".format(version));
-    handler();
-    configuration_updates.last_api_version = version;
+    for (version in range(configuration_updates.last_api_version + 1, api_version() + 1)) {
+        val handler = configuration_updated_handlers().get_or_null(version);
+        if (handler != null) {
+            log("Handling configuration update with api version %d".format(version));
+            handler();
+        }
+    }
+    configuration_updates.last_api_version = api_version();
 }
-
-function already_handled(version: integer) =
-    configuration_updates.last_api_version >= version;
 
 // api_version: 37
 @extend(configuration_updated_handlers)
