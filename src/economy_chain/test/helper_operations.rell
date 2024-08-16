@@ -81,6 +81,22 @@ operation create_test_cluster(
     create cluster(name = cluster_name, operational = true, cluster_units = 1, extra_storage = 1, anchoring_chain = x"", tag = tag);
 }
 
+operation create_test_subnode_image(
+    name: text,
+    url: text = "url",
+    digest: text = "digest",
+    subnode_image_type = subnode_image_type.COMMON,
+    owner: provider,
+    description: text = "description",
+    active: boolean = true,
+    cluster_name: text = "",
+) {
+    val s = create subnode_image(name, url = url, digest = digest, subnode_image_type = subnode_image_type, owner, description, active);
+    if (not cluster_name.empty()) {
+        create cluster_subnode_image(cluster @ { .name == cluster_name }, s);
+    }
+}
+
 operation create_lease(container_name: text, container_units: integer, account: ft4.accounts.account, cluster: cluster, expired: boolean) {
     create lease(
         container_name = container_name,

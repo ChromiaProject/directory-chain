@@ -23,10 +23,28 @@ query get_upgrade_container_ticket_by_id(ticket_id: integer): container_ticket_d
             (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
 
 query get_leases_by_account(account_id: byte_array): list<lease_data> =
-        lease @* { .account.id == account_id } (lease_data(container_name = .container_name, cluster_name = .cluster.name, container_units = .container_units, extra_storage_gib = .extra_storage_gib, expire_time_millis = .start_time + .duration_millis, .expired, .auto_renew));
+        (lease, @outer lease_subnode_image) @* { .account.id == account_id } (lease_data(
+                container_name = .container_name,
+                cluster_name = .cluster.name,
+                container_units = .container_units,
+                extra_storage_gib = .extra_storage_gib,
+                expire_time_millis = .start_time + .duration_millis,
+                .expired,
+                .auto_renew,
+                subnode_image_name = .subnode_image?.name ?: ""
+        ));
 
 query get_lease_by_container_name(container_name: text): lease_data? =
-        lease @? { container_name } (lease_data(container_name = .container_name, cluster_name = .cluster.name, container_units = .container_units, extra_storage_gib = .extra_storage_gib, expire_time_millis = .start_time + .duration_millis, .expired, .auto_renew));
+        (lease, @outer lease_subnode_image) @? { container_name } (lease_data(
+                container_name = .container_name,
+                cluster_name = .cluster.name,
+                container_units = .container_units,
+                extra_storage_gib = .extra_storage_gib,
+                expire_time_millis = .start_time + .duration_millis,
+                .expired,
+                .auto_renew,
+                 subnode_image_name = .subnode_image?.name ?: ""
+        ));
 
 query get_min_lease_duration(): integer = economy_constants.min_lease_time_weeks;
 
@@ -261,6 +279,22 @@ query get_all_bridge_leases_for_container(container_name: text) = (bridge_lease,
         bridge_contract = .bridge_contract
     )
 );
+
+/**
+ * @returns all common subnode images which are available for all clusters
+ */
+query get_available_subnode_images_for_all_clusters(): list<subnode_image_data> =
+    (subnode_image) @*
+    { .active, .subnode_image_type == subnode_image_type.COMMON }
+    ( subnode_image_data(name = .name, url = .url, digest = .digest, owner = .owner.pubkey, description = .description) );
+
+/**
+ * @returns all subnode images which are available for a specific cluster (common and special for this cluster)
+ */
+query get_available_subnode_images_for_cluster(cluster_name: text): list<subnode_image_data> =
+    (subnode_image, @outer cluster_subnode_image @* { .subnode_image == subnode_image, .cluster.name == cluster_name }) @*
+    { .active, (.subnode_image_type == subnode_image_type.COMMON or .subnode_image == subnode_image) }
+    ( subnode_image_data(name = .name, url = .url, digest = .digest, owner = .owner.pubkey, description = .description) );
 
 query get_blockchains_with_bridge_and_anomaly_detection() = bridge_lease @* { .anomaly_detection } (
     bridge_anomaly_detector_data(

@@ -165,6 +165,39 @@ function test_get_cluster_creation_status_with_failure() {
     assert_equals(status, cluster_creation_status.FAILURE);
 }
 
+function test_get_available_subnode_images_for_all_clusters() {
+    rell.test.tx().op(init()).run();
+    val bob = add_provider(rell.test.pubkeys.bob);
+    rell.test.tx().op(create_test_cluster("cluster")).run();
+    rell.test.tx()
+        .op(create_test_subnode_image(name = "common_active", owner = bob))
+        .op(create_test_subnode_image(name = "common_inactive", owner = bob, active = false))
+        .op(create_test_subnode_image(name = "special_active", owner = bob, subnode_image_type = subnode_image_type.SPECIAL, cluster_name = "cluster"))
+        .op(create_test_subnode_image(name = "special_inactive", owner = bob, subnode_image_type = subnode_image_type.SPECIAL, active = false, cluster_name = "cluster"))
+        .run();
+
+    assert_equals(get_available_subnode_images_for_all_clusters(), [
+        subnode_image_data(name = "common_active", url = "url", digest = "digest", owner = bob.pubkey, description = "description"),
+    ]);
+}
+
+function test_get_available_subnode_images_for_cluster() {
+    rell.test.tx().op(init()).run();
+    val bob = add_provider(rell.test.pubkeys.bob);
+    rell.test.tx().op(create_test_cluster("cluster")).run();
+    rell.test.tx()
+        .op(create_test_subnode_image(name = "common_active", owner = bob))
+        .op(create_test_subnode_image(name = "common_inactive", owner = bob, active = false))
+        .op(create_test_subnode_image(name = "special_active", owner = bob, subnode_image_type = subnode_image_type.SPECIAL, cluster_name = "cluster"))
+        .op(create_test_subnode_image(name = "special_inactive", owner = bob, subnode_image_type = subnode_image_type.SPECIAL, active = false, cluster_name = "cluster"))
+        .run();
+
+    assert_equals(get_available_subnode_images_for_cluster("cluster"), [
+        subnode_image_data(name = "common_active", url = "url", digest = "digest", owner = bob.pubkey, description = "description"),
+        subnode_image_data(name = "special_active", url = "url", digest = "digest", owner = bob.pubkey, description = "description"),
+    ]);
+}
+
 function test_get_average_availability_on_a_providers_nodes(){
     val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
     val node_bob = ensure_node(provider_pubkey, node_pubkey_bob, true, "SE", 1, 1024, false);
@@ -692,4 +725,3 @@ function test_get_pool_account_id_query(){
 
     assert_equals(pool_account_id, x"ada12b87eab1c6fca6e99781a6059e1763e868baec5f5385dfca6c308cf1d605");
 }
-

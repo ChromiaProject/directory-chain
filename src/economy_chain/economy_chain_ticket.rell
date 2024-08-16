@@ -23,7 +23,7 @@ function receive_ticket_container_result_message(body: gtv) {
                     val cluster_name = message.cluster_name!!;
                     log("Successfully created container %s in cluster %s for ticket %s".format(container_name, cluster_name, message.ticket_id));
                     specific_ticket.container_name = container_name;
-                    create lease(
+                    val lease = create lease(
                         container_name = container_name,
                         account = ticket.account,
                         container_units = specific_ticket.container_units,
@@ -33,6 +33,9 @@ function receive_ticket_container_result_message(body: gtv) {
                         duration_millis = specific_ticket.duration_millis,
                         auto_renew = specific_ticket.auto_renew
                     );
+                    if (not specific_ticket.subnode_image_name.empty()) {
+                        create lease_subnode_image(lease, subnode_image @ { .name == specific_ticket.subnode_image_name });
+                    }
                 }
                 ticket_state.FAILURE -> {
                     log("Failed to create container for ticket %s".format(message.ticket_id));
@@ -56,6 +59,14 @@ function receive_ticket_container_result_message(body: gtv) {
                     val current_duration = current_lease.duration_millis;
                     val bridge_leases = delete_bridge_leases(current_lease);
                     val lease_dapp_providers = delete_lease_dapp_providers(current_lease);
+                    val maybe_lease_subnode_image = lease_subnode_image @? { current_lease };
+                    val current_subnode_image: subnode_image?;
+                    if (maybe_lease_subnode_image != null) {
+                        current_subnode_image = maybe_lease_subnode_image.subnode_image;
+                        delete maybe_lease_subnode_image;
+                    } else {
+                        current_subnode_image = null;
+                    }
                     delete current_lease;
                     val new_lease = create lease(
                         container_name = upgraded_container_name,
@@ -67,6 +78,9 @@ function receive_ticket_container_result_message(body: gtv) {
                         duration_millis = current_duration,
                         auto_renew = currently_auto_renewed
                     );
+                    if (current_subnode_image != null) {
+                        create lease_subnode_image(new_lease, current_subnode_image);
+                    }
                     transfer_bridge_leases_to_lease(new_lease, bridge_leases);
                     transfer_dapp_providers_to_lease(new_lease, lease_dapp_providers);
                 }
