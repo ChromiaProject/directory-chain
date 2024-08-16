@@ -100,6 +100,8 @@ function _staking_distribute_withdrawals() {
         .active and .staker_state.network == network.CHR and .finish_at <= _staking_last_known_time()
     } ( account = .staker_state.account, balance = .staker_state.balance );
 
+    log("Preparing to pay out % withdrawals.".format(open_withdrawals.size()));
+
     for (withdrawal in open_withdrawals) {
         // Send the balance back to them through ft4
         ft4.assets.Unsafe.transfer(
@@ -108,6 +110,7 @@ function _staking_distribute_withdrawals() {
                 get_asset(),
                 withdrawal.balance
             );
+        log("Withdrawal of amount % sent back to %.".format(withdrawal.balance, withdrawal.account));
     }
 
     var staker_states = staker_withdrawal_request @* {
