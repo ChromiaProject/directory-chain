@@ -13,11 +13,10 @@ function test_revoke_not_considered_proposal() {
     setup();
 
     // Propose something
-    propose_new_container();
+    val prop = propose_new_blockchain();
 
     // Asserting that we have a new proposal
-    val prop = proposal @? { proposal_state.PENDING };
-    assert_not_null(prop);
+    assert_equals(prop.state, proposal_state.PENDING);
     assert_not_null(pending_blockchain @? { prop });
     assert_not_null(vote @? { prop });
 
@@ -26,8 +25,8 @@ function test_revoke_not_considered_proposal() {
         revoke_proposal(rell.test.pubkeys.alice, prop.rowid)
     ).sign(rell.test.keypairs.alice).run();
 
-    // Asserting that proposal removed
-    assert_null(proposal @? { proposal_state.PENDING });
+    // Asserting that proposal is REVOKED
+    assert_equals(prop.state, proposal_state.REVOKED);
     assert_null(pending_blockchain @? {});
 }
 
@@ -35,35 +34,87 @@ function test_revoke_proposal_under_consideration() {
     setup();
 
     // Propose something
-    propose_new_container();
+    val prop = propose_new_blockchain();
 
     // Asserting that we have a new proposal
-    val prop = proposal @? { proposal_state.PENDING };
-    assert_not_null(prop);
+    assert_equals(prop.state, proposal_state.PENDING);
     assert_not_null(pending_blockchain @? { prop });
     assert_not_null(vote @? { prop });
 
     // Bob votes for the proposal
     vote_for_last_proposal(rell.test.keypairs.bob);
-    // Asserting that bob voted
-    val bob_vote = vote @? { prop, .provider.pubkey == rell.test.pubkeys.bob };
-    assert_not_null(bob_vote);
+    assert_not_null(vote @? { prop, .provider.pubkey == rell.test.pubkeys.bob });
 
     // Alice revokes the proposal
     rell.test.tx().op(
         revoke_proposal(rell.test.pubkeys.alice, prop.rowid)
     ).sign(rell.test.keypairs.alice).run();
 
-    // Asserting that proposal removed
-    assert_null(proposal @? { proposal_state.PENDING });
+    // Asserting that proposal is REVOKED
+    assert_equals(prop.state, proposal_state.REVOKED);
     assert_null(pending_blockchain @? {});
+}
+
+function test_revoke_applied_proposal() {
+    setup();
+
+    // Propose something
+    val prop = propose_new_blockchain();
+
+    // Asserting that we have a new proposal
+    assert_equals(prop.state, proposal_state.PENDING);
+    assert_not_null(pending_blockchain @? { prop });
+    assert_not_null(vote @? { prop });
+
+    // Bob votes for the proposal
+    vote_for_last_proposal(rell.test.keypairs.bob);
+    assert_not_null(vote @? { prop, .provider.pubkey == rell.test.pubkeys.bob });
+    // Trudy votes for the proposal
+    vote_for_last_proposal(rell.test.keypairs.trudy);
+    assert_not_null(vote @? { prop, .provider.pubkey == rell.test.pubkeys.trudy });
+
+    // Asserting that proposal APPROVED and applied
+    assert_equals(prop.state, proposal_state.APPROVED);
+    assert_null(pending_blockchain @? {});
+    assert_not_null(blockchain @? { "foo_chain" });
+
+    // Approved proposal can't be revoked
+    rell.test.tx().op(
+        revoke_proposal(rell.test.pubkeys.alice, prop.rowid)
+    ).sign(rell.test.keypairs.alice).run_must_fail("The proposal is already APPROVED");
+}
+
+function test_revoke_rejected_proposal() {
+    setup();
+
+    // Propose something
+    val prop = propose_new_blockchain();
+
+    // Asserting that we have a new proposal
+    assert_equals(prop.state, proposal_state.PENDING);
+    assert_not_null(pending_blockchain @? { prop });
+    assert_not_null(vote @? { prop });
+
+    // Bob votes against the proposal
+    vote_for_last_proposal(rell.test.keypairs.bob, false);
+    assert_not_null(vote @? { prop, .provider.pubkey == rell.test.pubkeys.bob });
+
+    // Asserting that proposal REJECTED and applied
+    assert_equals(prop.state, proposal_state.REJECTED);
+    assert_null(pending_blockchain @? {});
+    assert_null(blockchain @? { "foo_chain" });
+
+    // Rejected proposal can't be revoked
+    rell.test.tx().op(
+        revoke_proposal(rell.test.pubkeys.alice, prop.rowid)
+    ).sign(rell.test.keypairs.alice).run_must_fail("The proposal is already REJECTED");
 }
 
 function test_when_bob_revokes_alice_proposal_and_fails() {
     setup();
 
     // Propose something
-    propose_new_container();
+    propose_new_blockchain();
 
     // Asserting that we have a new proposal
     val prop = proposal @? { proposal_state.PENDING };
@@ -123,11 +174,12 @@ function add_provider_to_system_cluster(provider_pk: byte_array, approver: rell.
     assert_true(roles.has_system_access(prov));
 }
 
-function propose_new_container() {
+function propose_new_blockchain(): proposal {
     val alice = rell.test.pubkeys.alice;
     rell.test.tx().op(
         create_container(alice, "container", clusters.system, 0, [alice, rell.test.pubkeys.bob, rell.test.pubkeys.trudy]),
-        propose_blockchain(alice, apply_required_configuration_properties().to_gtv_pretty().to_bytes(),
-            "test", "container")
+        propose_blockchain(alice, apply_required_configuration_properties().to_gtv_pretty().to_bytes(), "foo_chain", "container")
     ).sign(rell.test.keypairs.alice).run();
+
+    return last_proposal();
 }

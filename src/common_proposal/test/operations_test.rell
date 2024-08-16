@@ -48,7 +48,7 @@ function test_revoke_proposal_fail_due_to_not_existing() {
     rell.test.tx().op(
         revoke_common_proposal(bob.pub, rowid(0)))
         .sign(bob)
-        .run_must_fail("Proposal not found");
+        .run_must_fail("Proposal 0 not found");
 }
 
 function test_revoke_proposal_fail_due_to_not_my_proposal() {
@@ -62,3 +62,34 @@ function test_revoke_proposal_fail_due_to_not_my_proposal() {
         .sign(bob)
         .run_must_fail("It is only allowed to revoke own proposals");
 }
+
+function test_revoke_proposal_fail_due_to_already_approved() {
+
+    rell.test.tx().op(
+        create_test_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
+    ).sign(alice).run();
+
+    rell.test.tx().op(
+        make_common_vote(alice.pub, get_latest_proposal_id(), true)
+    ).sign(alice).run();
+
+    rell.test.tx().op(
+        revoke_common_proposal(alice.pub, get_latest_proposal_id())
+    ).sign(alice).run_must_fail("The proposal is already APPROVED");
+}
+
+function test_revoke_proposal_fail_due_to_already_rejected() {
+
+    rell.test.tx().op(
+        create_test_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
+    ).sign(alice).run();
+
+    rell.test.tx().op(
+        make_common_vote(alice.pub, get_latest_proposal_id(), false)
+    ).sign(alice).run();
+
+    rell.test.tx().op(
+        revoke_common_proposal(alice.pub, get_latest_proposal_id())
+    ).sign(alice).run_must_fail("The proposal is already REJECTED");
+}
+
