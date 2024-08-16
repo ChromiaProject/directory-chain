@@ -56,7 +56,7 @@ function test_propose_subnode_image() {
         propose_subnode_image(initial_provider.pub, "subnode_image1", "url", "digest", subnode_image_type.COMMON, "")
     ).nop()
         .sign(initial_provider)
-        .run_must_fail("Subnode image with name subnode_image1 already exists");
+        .run_must_fail("Subnode image subnode_image1 already exists");
 
     rell.test.tx().op(
         propose_subnode_image(initial_provider.pub, "subnode_image2", "url2", "digest2", subnode_image_type.SPECIAL, "two")
@@ -70,7 +70,7 @@ function test_propose_subnode_image() {
         propose_subnode_image_state(initial_provider.pub, "subnode_image1", true)
     ).nop()
         .sign(initial_provider)
-        .run_must_fail("Subnode image with name subnode_image1 already active");
+        .run_must_fail("Subnode image subnode_image1 already active");
 
     rell.test.tx().op(
         propose_subnode_image_state(initial_provider.pub, "subnode_image1", false)
@@ -85,13 +85,13 @@ function test_propose_subnode_image() {
         propose_subnode_image_state(initial_provider.pub, "bogus", false)
     ).nop()
         .sign(initial_provider)
-        .run_must_fail("Subnode image with name bogus not found");
+        .run_must_fail("Subnode image bogus not found");
 
     rell.test.tx().op(
         propose_subnode_image_state(initial_provider.pub, "subnode_image1", false)
     ).nop()
         .sign(initial_provider)
-        .run_must_fail("Subnode image with name subnode_image1 already inactive");
+        .run_must_fail("Subnode image subnode_image1 already inactive");
 
     assert_true(get_cluster_subnode_images(cluster1.name).empty());
 
@@ -115,11 +115,11 @@ function test_propose_subnode_image() {
 
     rell.test.tx().op(
         propose_remove_cluster_subnode_image(initial_provider.pub, "cluster1", "subnode_image2")
-    ).nop().sign(initial_provider).run_must_fail("Subnode image with name subnode_image2 is not allowed by cluster cluster1");
+    ).nop().sign(initial_provider).run_must_fail("Subnode image subnode_image2 is not allowed by cluster cluster1");
 
     rell.test.tx().op(
         propose_update_subnode_image(initial_provider.pub, "subnode_image1", "url", "digest")
-    ).sign(initial_provider).run_must_fail("Subnode image with name subnode_image1 already up-to-date");
+    ).sign(initial_provider).run_must_fail("Subnode image subnode_image1 already up-to-date");
 
     rell.test.tx().op(
         propose_update_subnode_image(initial_provider.pub, "subnode_image1", "url", "digest2")

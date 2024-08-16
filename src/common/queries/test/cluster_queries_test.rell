@@ -5,15 +5,25 @@ import ^^^.*;
 import ^^^.operations.*;
 import ^^^.test.ops.*;
 import ^^^.test.setup.*;
+import ^^^.test.util.*;
 import direct_cluster.*;
 import direct_container.*;
 import model.*;
 import proposal_cluster.*;
 import proposal_container.*;
 import proposal_provider.*;
+import proposal_subnode_image.*;
 
 function test_get_operational_dapp_clusters() {
     setup_module();
+
+    rell.test.tx().op(
+        propose_subnode_image(initial_provider.pub, "subnode_image1", "url", "digest", subnode_image_type.SPECIAL, "one")
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        propose_subnode_image(initial_provider.pub, "subnode_image2", "url", "digest", subnode_image_type.SPECIAL, "two")
+    ).sign(initial_provider).run();
 
     // Create a new node
     rell.test.tx().op(
@@ -28,7 +38,7 @@ function test_get_operational_dapp_clusters() {
     ).sign(rell.test.keypairs.alice).run();
     val node = node @ { .pubkey == rell.test.pubkeys.bob };
 
-    val cluster_creation_data = cluster_creation_data(cluster_units = 2, extra_storage = 1024);
+    val cluster_creation_data = cluster_creation_data(cluster_units = 1, extra_storage = 1024);
 
     // Adding a new cluster
     rell.test.tx().op(
@@ -39,18 +49,47 @@ function test_get_operational_dapp_clusters() {
         add_node_to_cluster(rell.test.pubkeys.alice, node.pubkey, "cluster1")
     ).sign(rell.test.keypairs.alice).run();
 
-    val clusters = get_operational_dapp_clusters();
-    val expected_clusters = [
-        cluster_data(
-            name = "cluster1",
-            governor = voter_sets.system_p,
-            is_operational = true,
-            cluster_units = 2,
-            extra_storage = 1024,
-            number_of_nodes = 1,
-            container_units_available = 28,
-            extra_storage_available = 1024
-        )
-    ];
-    assert_equals(clusters, expected_clusters);
+    // Adding an other new cluster
+    rell.test.tx().op(
+        create_cluster_with_cluster_data(rell.test.pubkeys.alice, "cluster2", voter_sets.system_p, [rell.test.pubkeys.alice], cluster_creation_data)
+    ).sign(rell.test.keypairs.alice).run();
+
+    rell.test.tx().op(
+        add_node_to_cluster(rell.test.pubkeys.alice, node.pubkey, "cluster2")
+    ).sign(rell.test.keypairs.alice).run();
+
+    rell.test.tx().op(
+        propose_add_cluster_subnode_image(initial_provider.pub, "cluster2", "subnode_image1")
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        propose_add_cluster_subnode_image(initial_provider.pub, "cluster2", "subnode_image2")
+    ).sign(initial_provider).run();
+
+    val expected_cluster1 = cluster_data(
+        name = "cluster1",
+        governor = voter_sets.system_p,
+        is_operational = true,
+        cluster_units = 1,
+        extra_storage = 1024,
+        number_of_nodes = 1,
+        container_units_available = 12,
+        extra_storage_available = 1024,
+        subnode_images = [],
+    );
+    val expected_cluster2 = cluster_data(
+        name = "cluster2",
+        governor = voter_sets.system_p,
+        is_operational = true,
+        cluster_units = 1,
+        extra_storage = 1024,
+        number_of_nodes = 1,
+        container_units_available = 12,
+        extra_storage_available = 1024,
+        subnode_images = [ "subnode_image1", "subnode_image2" ],
+    );
+
+    assert_equals(get_operational_dapp_clusters(), [expected_cluster1, expected_cluster2]);
+    assert_equals(get_cluster_data("cluster1"), expected_cluster1);
+    assert_equals(get_cluster_data("cluster2"), expected_cluster2);
 }

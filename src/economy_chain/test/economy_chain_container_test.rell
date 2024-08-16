@@ -35,7 +35,35 @@ function test_create_container_success() {
         extra_storage_gib = 0,
         expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*3 + millis_per_week,
         expired = false,
-        auto_renew = false
+        auto_renew = false,
+        subnode_image_name = "",
+    );
+
+    val leases2 = get_leases_by_account(alice.id);
+    assert_equals(leases2.size(), 1);
+    assert_equals(leases2[0], expected_lease);
+
+    val lease_data = require(get_lease_by_container_name(container_name));
+    assert_equals(lease_data, expected_lease);
+}
+
+function test_create_container_with_subnode_image() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val bob = add_provider(rell.test.pubkeys.bob);
+    rell.test.tx().op(create_test_subnode_image(name = "subnode_image1", owner = bob)).run();
+    val container_name = do_create_container(
+        alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 10, cluster_name = cluster_name, container_units = 2, subnode_image_name = "subnode_image1");
+
+    val expected_lease = lease_data(
+        container_name = container_name,
+        cluster_name = cluster_name,
+        container_units = 2,
+        extra_storage_gib = 0,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*5 + millis_per_week,
+        expired = false,
+        auto_renew = false,
+        subnode_image_name = "subnode_image1",
     );
 
     val leases2 = get_leases_by_account(alice.id);
@@ -60,7 +88,8 @@ function test_create_container_with_auto_renew() {
         extra_storage_gib = 0,
         expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*3 + millis_per_week,
         expired = false,
-        auto_renew = true
+        auto_renew = true,
+        subnode_image_name = "",
     );
 
     val leases2 = get_leases_by_account(alice.id);
@@ -352,7 +381,38 @@ function test_upgrade_container_success() {
         extra_storage_gib = 0,
         expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*5 + millis_per_week,
         expired = false,
-        auto_renew = false
+        auto_renew = false,
+        subnode_image_name = "",
+    );
+
+    val leases2 = get_leases_by_account(alice.id);
+    assert_equals(leases2.size(), 1);
+    assert_equals(leases2[0], expected_lease);
+
+    val lease_data = require(get_lease_by_container_name(container_name));
+    assert_equals(lease_data, expected_lease);
+}
+
+function test_upgrade_container_with_subnode_image() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val bob = add_provider(rell.test.pubkeys.bob);
+    rell.test.tx().op(create_test_subnode_image(name = "subnode_image1", owner = bob)).run();
+    val container_name = do_create_container(
+        alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 10, container_units = 2, subnode_image_name = "subnode_image1");
+
+    val created_lease = lease @ { container_name };
+    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 6, ticket_id = ticket_id_after_init + 17, current_lease = created_lease, container_units = 3);
+
+    val expected_lease = lease_data(
+        container_name = container_name,
+        cluster_name = cluster_name,
+        container_units = 3, // Should be 3 now
+        extra_storage_gib = 0,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*7 + millis_per_week,
+        expired = false,
+        auto_renew = false,
+        subnode_image_name = "subnode_image1",
     );
 
     val leases2 = get_leases_by_account(alice.id);
@@ -378,7 +438,8 @@ function test_upgrade_container_failure() {
         extra_storage_gib = 0,
         expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*3 + millis_per_week,
         expired = false,
-        auto_renew = false
+        auto_renew = false,
+        subnode_image_name = "",
     );
 
     val leases2 = get_leases_by_account(alice.id);

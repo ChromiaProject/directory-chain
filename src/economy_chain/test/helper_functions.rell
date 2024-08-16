@@ -174,7 +174,8 @@ function do_create_container(
     ticket_id: integer,
     cluster_name: text = "Bob's cluster",
     container_units: integer = 2,
-    auto_renew: boolean = false): text {
+    auto_renew: boolean = false,
+    subnode_image_name: text = ""): text {
     val container_name = "container name";
 
     val tag = cluster @ { .name == cluster_name }.tag;
@@ -185,9 +186,9 @@ function do_create_container(
     val initial_lease_investment = total_lease_investment();
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(keypair.priv, create_container(keypair.pub, container_units, 1, 0, cluster_name, auto_renew))
+        ft4.test_utils.evm_auth_operation_for(keypair.priv, create_container_with_subnode_image(keypair.pub, container_units, 1, 0, cluster_name, auto_renew, subnode_image_name))
     ).op(
-        create_container(keypair.pub, container_units, 1, 0, cluster_name, auto_renew)
+        create_container_with_subnode_image(keypair.pub, container_units, 1, 0, cluster_name, auto_renew, subnode_image_name)
     ).run();
     val tx_rid = transaction @ {} (@sort_desc @omit .rowid, .tx_rid) limit 1;
 

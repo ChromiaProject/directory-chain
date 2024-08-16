@@ -18,8 +18,12 @@ struct cluster_data {
     number_of_nodes: integer?;
     container_units_available: integer?;
     extra_storage_available: integer?;
+    subnode_images: list<text>;
 }
 
+/**
+ * @returns information for a specified cluster, including any special subnode images supported by the cluster
+ */
 query get_cluster_data(name) {
     val cluster = require_cluster(name);
     return cluster_data(
@@ -30,21 +34,36 @@ query get_cluster_data(name) {
         extra_storage = cluster.extra_storage,
         number_of_nodes = number_of_nodes_in_cluster(cluster),
         container_units_available = get_available_container_units(cluster),
-        extra_storage_available = get_available_extra_storage(cluster)
+        extra_storage_available = get_available_extra_storage(cluster),
+        subnode_images = cluster_subnode_image @* { cluster } (.subnode_image.name),
     );
 }
 
+/**
+ * @returns information for all operational dapp clusters, including any special subnode images supported by the cluster
+ */
 query get_operational_dapp_clusters(): list<cluster_data> {
     val counts = map(cluster_node @* { .cluster.operational == true, .cluster.name != clusters.system } (@group .cluster, @sum 1));
-    return cluster @* { .operational == true, .name != clusters.system } (cluster_data(
+    return (cluster, @outer cluster_subnode_image @* { .cluster == cluster }) @* { .operational == true, .name != clusters.system } (
+        @group name = .name,
+        @group governor = .governance.name,
+        @group is_operational = .operational,
+        @group cluster_units = .cluster_units,
+        @group extra_storage = .extra_storage,
+        @group number_of_nodes = counts.get_or_default(cluster, 0),
+        @group container_units_available = get_available_container_units(cluster),
+        @group extra_storage_available = get_available_extra_storage(cluster),
+        @list subnode_images = cluster_subnode_image?.subnode_image?.name,
+    ) @* {} (cluster_data(
         name = .name,
-        governor = .governance.name,
-        is_operational = .operational,
+        governor = .governor,
+        is_operational = .is_operational,
         cluster_units = .cluster_units,
         extra_storage = .extra_storage,
-        number_of_nodes = counts.get_or_default($, 0),
-        container_units_available = get_available_container_units($),
-        extra_storage_available = get_available_extra_storage($)
+        number_of_nodes = .number_of_nodes,
+        container_units_available = .container_units_available,
+        extra_storage_available = .extra_storage_available,
+        subnode_images = .subnode_images @* { $ != null } ($!!),
     ));
 }
 
