@@ -1,0 +1,52 @@
+@test module;
+
+import ^^.*;
+import common.operations.*;
+import common.test.setup.*;
+import common.test.util.*;
+import direct_cluster.*;
+import direct_container.*;
+import proposal_cluster.*;
+
+function test_cm_get_removed_cluster_blockchains() {
+    setup_module();
+
+    var conf = apply_required_configuration_properties();
+    rell.test.tx().op(
+        create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "container")
+    ).sign(initial_provider).run();
+
+    val foo_brid = blockchain @ { .name == "foo_chain" }.rid;
+
+    assert_true(cm_get_removed_cluster_blockchains("system", 0).empty());
+
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, foo_brid, blockchain_action.remove)
+    ).sign(initial_provider).run();
+
+    assert_equals(cm_get_removed_cluster_blockchains("system", 0), [foo_brid]);
+    assert_true(cm_get_removed_cluster_blockchains("system", rell.test.last_block_time).empty());
+}
+
+function test_cm_get_removed_cluster_anchoring_chains() {
+    setup_module(system_anchoring_config = ["any": "value".to_gtv()], cluster_anchoring_config = ["any": "value".to_gtv()]);
+
+    val node = node @ { .provider == initial_provider() };
+    rell.test.tx().op(
+        update_node_with_units(initial_provider.pub, node.pubkey, cluster_units = 2),
+        create_cluster(initial_provider.pub, "cluster", voter_sets.system_p, [initial_provider.pub]),
+        add_node_to_cluster(initial_provider.pub, node.pubkey, "cluster")
+    ).sign(initial_provider).run();
+
+    val cac_brid = cm_get_cluster_info("cluster").anchoring_chain;
+
+    assert_true(cm_get_removed_cluster_anchoring_chains(0).empty());
+
+    rell.test.tx().op(
+        propose_remove_cluster(initial_provider.pub, "cluster")
+    ).sign(initial_provider).run();
+
+    assert_equals(cm_get_removed_cluster_anchoring_chains(0), [cac_brid]);
+    assert_true(cm_get_removed_cluster_anchoring_chains(rell.test.last_block_time).empty());
+}

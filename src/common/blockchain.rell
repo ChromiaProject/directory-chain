@@ -229,11 +229,13 @@ function store_configuration(blockchain, height: integer, configuration: byte_ar
 function remove_blockchain(blockchain) {
     before_delete_blockchain(blockchain);
     blockchain.state = blockchain_state.REMOVED;
-    delete container_blockchain @ { blockchain };
+    val container_blockchain = container_blockchain @ { blockchain };
+    val blockchain_cluster = container_blockchain.container.cluster.name;
+    delete container_blockchain;
     delete blockchain_replica_node @* { blockchain };
     delete blockchain_dependency @* { .me == blockchain };
     delete inactive_blockchain @? { blockchain };
-    create inactive_blockchain(blockchain, op_context.block_height);
+    create inactive_blockchain(blockchain, height = op_context.block_height, timestamp = op_context.last_block_time, blockchain_cluster);
 }
 
 @extend(before_remove_container) function remove_container_blockchains(container) {
