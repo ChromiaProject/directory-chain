@@ -63,8 +63,9 @@ function _apply_delete_blockchain(action: pending_blockchain_action, proposal) {
 
 function _apply_archive_blockchain(action: pending_blockchain_action, proposal) {
     action.blockchain.state = blockchain_state.ARCHIVED;
+    val blockchain_cluster = container_blockchain @ { action.blockchain }.container.cluster.name;
     delete blockchain_replica_node @* { action.blockchain };
-    create inactive_blockchain(action.blockchain, op_context.block_height);
+    create inactive_blockchain(action.blockchain, height = op_context.block_height, timestamp = op_context.last_block_time, blockchain_cluster);
 }
 
 function _apply_unarchive_blockchain(action: pending_blockchain_action, proposal) {

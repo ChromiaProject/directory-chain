@@ -4,7 +4,7 @@ import common.*;
 import model.*;
 
 /**
- * Cluster Management api used by postchain to get information about cluster anchoring chains
+ * Cluster Management api used by Postchain to get information about clusters in the network
  */
 
 struct cm_peer_info {
@@ -17,6 +17,12 @@ struct cm_cluster_info {
     anchoring_chain: byte_array;
     peers: list<cm_peer_info>;
 }
+
+/**
+ * Returns CM API Version
+ * CM API Version: 2
+ */
+query cm_api_version() = 2;
 
 query cm_get_cluster_info(name): cm_cluster_info {
     val cluster = require_cluster(name);
@@ -86,4 +92,28 @@ query cm_get_system_anchoring_chain(): byte_array? {
 
 query cm_get_system_chains(): list<byte_array> {
     return blockchain @* { .system }.rid;
+}
+
+/**
+ * Returns blockchains in cluster that has been removed
+ * CM API Version: 2
+ */
+query cm_get_removed_cluster_blockchains(cluster_name: text, removed_after: timestamp): list<byte_array> {
+    return inactive_blockchain @* {
+        cluster_name,
+        .timestamp > removed_after,
+        .blockchain.state == blockchain_state.REMOVED
+    }.blockchain.rid;
+}
+
+/**
+ * Returns CAC that has been removed
+ * CM API Version: 2
+ */
+query cm_get_removed_cluster_anchoring_chains(removed_after: timestamp): list<byte_array> {
+    return inactive_blockchain @* {
+        .timestamp > removed_after,
+        .blockchain.state == blockchain_state.REMOVED,
+        .cluster_anchoring_chain
+    }.blockchain.rid;
 }
