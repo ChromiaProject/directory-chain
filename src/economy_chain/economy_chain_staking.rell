@@ -31,6 +31,11 @@ function _staking_deposit_native_impl(amount: integer, delegate_to: pubkey? = nu
         _update_pending_token_time(ss);
         ss.balance += amount;
     } else {
+        // Find the latest staking state to provider for this user
+        // NOTE: This could be a delegation that is not yet active
+        val latest_staker_state_to_provider = staker_state_to_provider @? { .staker_state.account == staker } (@sort_desc @omit .timestamp, $) limit 1;
+
+        // Create a fresh staker state
         ss = create staker_state (
             staker,
             network.CHR,
@@ -38,9 +43,18 @@ function _staking_deposit_native_impl(amount: integer, delegate_to: pubkey? = nu
             last_update = _staking_last_known_time(),
             pending_token_time = 0
         );
+
+        // Create a new provider mapping to attached to this staker state
+        // with the same provider as before, or null provider if that is the case
+        create staker_state_to_provider(
+            timestamp = latest_staker_state_to_provider?.timestamp ?: _staking_last_known_time() - chain_context.args.staking_delegation_delay_ms,
+            staker_state = ss,
+            provider = latest_staker_state_to_provider?.provider ?: provider @ { get_null_account() }, 
+        );
     }
+
     if (delegate_to != null) {
-        val _provider = provider @ { .pubkey == delegate_to };
+        // Down this path everything is updated anyway
         _staking_delegate(staker, delegate_to);
     }
 }
@@ -54,9 +68,11 @@ function _staking_update_evm_state(staker: ft4.accounts.account, network, new_ba
         _update_pending_token_time(ss);
         ss.balance = new_balance;
     } else {
-        // It would be extraordinary for a delegation to exist before a stake.
-        // However this might happen if other logic is changed, so we will handle it correctly by checking.
-        val _provider = provider @ { .pubkey == staking_get_current_delegate(staker.id) ?: get_null_account() };
+        // Find the latest staking state to provider for this user
+        // NOTE: This could be a delegation that is not yet active
+        val latest_staker_state_to_provider = staker_state_to_provider @? { .staker_state.account == staker } (@sort_desc @omit .timestamp, $) limit 1;
+
+        // Create a fresh staker state
         ss = create staker_state (
             staker,
             network,
@@ -64,7 +80,14 @@ function _staking_update_evm_state(staker: ft4.accounts.account, network, new_ba
             last_update = _staking_last_known_time(),
             pending_token_time = 0
         );
-        _staking_delegate(staker, _provider.pubkey);
+
+        // Create a new provider mapping to attached to this staker state
+        // with the same provider as before, or null provider if that is the case
+        create staker_state_to_provider(
+            timestamp = latest_staker_state_to_provider?.timestamp ?: _staking_last_known_time() - chain_context.args.staking_delegation_delay_ms,
+            staker_state = ss,
+            provider = latest_staker_state_to_provider?.provider ?: provider @ { get_null_account() }, 
+        );
     }
 }
 
@@ -139,7 +162,7 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
     val staker_states_to_exclude = withdraw_requests @* { .staker_state.network != network.CHR } ( .staker_state );
 
     val new_provider = require(provider @? { provider_pubkey }, "No provider for this public key.");
-
+ 
     // Delegation from nothing happens without the delay
     val old_provider = staking_get_current_delegate(staker.id);
     val new_time_offset = if (empty(old_provider)) chain_context.args.staking_delegation_delay_ms else 0;
