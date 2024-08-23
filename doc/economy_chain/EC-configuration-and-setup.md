@@ -21,7 +21,8 @@ The Economy Chain has the following module args:
 | `staking_initial_reward_rate`       | Staking initial reward rate.                                                                                                             | decimal | :white_check_mark: |         |
 | `staking_rate_change_delay_ms`      | Amount of time required to pass between staking rate changes.                                                                            | int     | :white_check_mark: |         |
 | `staking_withdrawal_delay_ms`       | Amount of time required to pass between staking withdrawals.                                                                             | int     | :white_check_mark: |         |
-| `staking_payout_interval_ms`        | Amount of time required to pass between payouts.                                                                                         | int     | :white_check_mark: |         |
+| `staking_rewards_payout_interval_ms`        | Amount of time required to pass between reward payouts.                                                                                         | int     | :white_check_mark: |         |
+| `staking_withdrawals_payout_interval_ms`        | Amount of time required to pass between withdrawal payouts.                                                                                         | int     | :white_check_mark: |         |
 | `staking_rewards_start_time` | Time after which staking reward should begin to accumulate | timestamp | | 0 |
 | `pool_refill_limit_ms` | Amount of time required to pass between pool refills.                                                                                    | int     | :white_check_mark: |         |
 | `max_bridge_leases_per_container`   | Max amount of bridge leases per container.                                                                                               | int     | :white_check_mark: |         |
@@ -136,7 +137,8 @@ Example:
          staking_initial_reward_rate: 0.15
          staking_rate_change_delay_ms: 604800000
          staking_withdrawal_delay_ms: 1209600000
-         staking_payout_interval_ms: 31536000000 
+         staking_rewards_payout_interval_ms: 31536000000 
+         staking_withdrawals_payout_interval_ms: 31536000000 
          pool_refill_limit_ms: 86400000 
          max_bridge_leases_per_container: 10
          evm_transaction_submitters_bonus: 0.1

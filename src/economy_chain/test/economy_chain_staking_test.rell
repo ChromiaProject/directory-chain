@@ -21,7 +21,8 @@ struct module_args {
     admin_privkey: byte_array;
     staking_delegation_delay_ms: integer;
     staking_withdrawal_delay_ms: integer;
-    staking_payout_interval_ms: integer;
+    staking_rewards_payout_interval_ms: integer;
+    staking_withdrawals_payout_interval_ms: integer;
     amount_to_mint: big_integer = 1000000000;
 }
 
@@ -283,7 +284,7 @@ function test_withdrawal() {
     ).run();
 
     // Simple withdraw
-    rell.test.set_next_block_time_delta(chain_context.args.staking_payout_interval_ms);
+    rell.test.set_next_block_time_delta(chain_context.args.staking_withdrawals_payout_interval_ms);
     rell.test.block().run();
     rell.test.block().run();
 
@@ -316,7 +317,7 @@ function test_withdrawal() {
     .run_must_fail("Only one withdrawal request allowed at a time");
 
     // Run time toward and see that the withdrawal occurs
-    rell.test.set_next_block_time_delta(chain_context.args.staking_payout_interval_ms);
+    rell.test.set_next_block_time_delta(chain_context.args.staking_withdrawals_payout_interval_ms);
     rell.test.block().run();
     rell.test.block().run();
 
