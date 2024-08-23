@@ -131,6 +131,44 @@ function test_delegation() {
     assert_null(staking_get_current_delegate(test_account_alice.id)); // Change in a week
 }
 
+function test_delegation_bsc_only() {
+    rell.test.tx().op(init()).run();
+
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
+    do_evm_stake_update_bsc(alice_evm_address, 50 * units_per_asset);
+    val test_account_alice = require(do_create_account_using_ras_staking(rell.test.keypairs.alice));
+    assert_equals(staking_get_balance(test_account_alice.id), 50 * units_per_asset);
+
+    add_provider(rell.test.keypairs.charlie.pub);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.charlie.pub);
+
+    // First delegation is immediate
+    assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.ETH), null);
+    assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR), null);
+    assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC), rell.test.keypairs.charlie.pub);
+    assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.charlie.pub);
+
+    // Re-delegate
+    add_provider(rell.test.keypairs.dave.pub);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.dave.pub);
+
+    // Second delegation hasn't taken effect yet
+    assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.ETH), null);
+    assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR), null);
+    assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC), rell.test.keypairs.charlie.pub);
+    assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.charlie.pub);
+
+    // FFWD
+    rell.test.set_next_block_time_delta(millis_per_year);
+    rell.test.block().run();
+
+    // Second delegation will now have effect
+    assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.ETH), null);
+    assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR), null);
+    assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC), rell.test.keypairs.dave.pub);
+    assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.dave.pub);
+}
+
 function test_staking_deposit() {
     rell.test.tx().op(init()).run();
 
