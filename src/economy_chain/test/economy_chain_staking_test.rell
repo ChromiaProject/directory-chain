@@ -503,6 +503,21 @@ function test_evm_account_creation() {
     assert_equals(ft4.assets.get_asset_balance(test_account_alice, get_asset()), chain_context.args.amount_to_mint);
 }
 
+function test_evm_account_creation_multiple_network_stake() {
+    rell.test.tx().op(init()).run();
+
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
+
+    do_evm_stake_update_bsc(alice_evm_address, 50 * units_per_asset);
+
+   _do_evm_stake_update(alice_evm_address, 50 * units_per_asset, 1, x"");
+
+    val test_account_alice = do_create_account_using_ras_staking(rell.test.keypairs.alice)!!;
+    assert_equals(
+        staking_get_balance(test_account_alice.id), 100 * units_per_asset
+    );
+}
+
 function test_stats() {
     rell.test.tx().op(init()).run();
 
