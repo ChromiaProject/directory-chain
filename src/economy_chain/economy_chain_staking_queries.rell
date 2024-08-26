@@ -26,8 +26,10 @@ query staking_get_current_delegate_on_network(account_id: byte_array, network): 
         .staker_state.account.id == account_id and .staker_state.network == network and  
         (_staking_last_known_time() - chain_context.args.staking_delegation_delay_ms) >= .timestamp
     } ( @omit @sort_desc .timestamp, .provider.pubkey ) limit 1;
-    if (not exists(_provider_pubkey)) return null;
-    return if (_provider_pubkey == get_null_account()) null else _provider_pubkey;
+    return when {
+        empty(_provider_pubkey) or _provider_pubkey == get_null_account() -> null;
+        else -> _provider_pubkey;
+    };
 }
 
 /**
@@ -41,8 +43,10 @@ query staking_get_current_delegate(account_id: byte_array) {
         .staker_state.account.id == account_id
         and (_staking_last_known_time() - chain_context.args.staking_delegation_delay_ms) >= .timestamp
     } ( @omit @sort_desc .timestamp, .provider.pubkey ) limit 1;
-    if (not exists(_provider_pubkey)) return null;
-    return if (_provider_pubkey == get_null_account()) null else _provider_pubkey;
+    return when {
+        empty(_provider_pubkey) or _provider_pubkey == get_null_account() -> null;
+        else -> _provider_pubkey;
+    };
 }
 
 /**
