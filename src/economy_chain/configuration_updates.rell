@@ -1,42 +1,9 @@
-// Holds the last handled configuration update
-object configuration_updates {
-    mutable last_api_version: integer = 0;
-}
-
-@extendable
-function configuration_updated_handlers(): map<integer, () -> unit>;
-
-function add_configuration_updated_handler(version: integer, handler: () -> unit) = [version: handler];
-
 // The main entry point to the configuration updates handling
 function handle_configuration_update() {
-    for (version in range(configuration_updates.last_api_version + 1, api_version() + 1)) {
-        val handler = configuration_updated_handlers().get_or_null(version);
-        if (handler != null) {
-            log("Handling configuration update with api version %d".format(version));
-            handler();
-        }
-    }
-    configuration_updates.last_api_version = api_version();
+    _try_to_update_bsc_asset();
 }
 
-// api_version: 37
-@extend(configuration_updated_handlers)
-function () = add_configuration_updated_handler(37, configuration_update_37(*));
-
-function configuration_update_37() {
-    _register_and_link_bsc_asset();
-}
-
-// api_version: 39
-@extend(configuration_updated_handlers)
-function () = add_configuration_updated_handler(39, configuration_update_39(*));
-
-function configuration_update_39() {
-    _register_and_link_bsc_asset();
-}
-
-function _register_and_link_bsc_asset() {
+function _try_to_update_bsc_asset() {
     val asset = get_asset();
 
     val expected_bsc_asset = eif.hbridge.get_erc20_for_asset(asset.id) @? {
