@@ -175,8 +175,10 @@ function receive_cluster_node_update_message(body: gtv) {
             if (exists(cluster)) {
                 log("Deleting cluster_node for cluster %s and node %s".format(cluster.name, node.pubkey));
                 delete cluster_node @ { cluster, node };
+                create_reward_provider_deleted_node(node.provider, node.pubkey, [cluster]);
             } else {
                 log("Deleting cluster_node for node %s".format(node.pubkey));
+                create_reward_provider_deleted_node(node.provider, node.pubkey, cluster_node @* { node } ( .cluster ));
                 delete cluster_node @* { node };
             }
         }
@@ -237,5 +239,13 @@ function receive_cluster_subnode_image_update_message(body: gtv) {
     } else {
         log("Adding subnode image %s to cluster %s".format(message.subnode_image, message.cluster));
         create cluster_subnode_image(cluster, subnode_image);
+    }
+}
+
+function create_reward_provider_deleted_node(provider, node: pubkey, clusters: list<cluster>) {
+    for (cluster in clusters) {
+        if (not(exists(reward_provider_deleted_node @? { provider, node, cluster }))) {
+            create reward_provider_deleted_node(provider, node, cluster);
+        }
     }
 }

@@ -488,3 +488,26 @@ function test_subnode_image() {
     ).run();
     assert_true(empty(cluster_subnode_image @? { .cluster == cluster, .subnode_image.name == "subnode_image1" }));
 }
+
+function test_receive_cluster_node_update_message_delete_node() {
+
+    val provider_pubkey = rell.test.keypairs.bob.pub;
+    val node_pubkey = rell.test.pubkeys.charlie;
+
+    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
+    add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
+    add_cluster_node(cluster.name, node_pubkey, false);
+
+    rell.test.tx().op(
+        icmf_message_op(x"", cluster_node_update_topic, body = cluster_node_update_message(
+            name = cluster_name,
+            pubkey = node_pubkey,
+            replica_node = false,
+            deleted = true).to_gtv()
+        )
+    ).run();
+
+    assert_false(exists(cluster_node @* { cluster, node }));
+    assert_true(exists(reward_provider_deleted_node @? { provider @ { provider_pubkey }, node_pubkey, cluster.name == cluster_name }));
+}

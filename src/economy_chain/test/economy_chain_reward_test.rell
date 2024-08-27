@@ -419,6 +419,40 @@ function test_pay_reward_to_chromia_foundation() {
     assert_equals(get_pool_balance(), 0);
 }
 
+function test_pay_dapp_reward_include_removed_node() {
+
+    val deleted_node_pubkey = x"AABBCC";
+
+    val pa = run_pay_rewards(
+        pool_assets = 33090909,
+            calculate_system_reward = false,
+            reward_debt = 0,
+            node_availability = [deleted_node_pubkey: 0.7, node_pubkey: 0.3],
+            deleted_nodes = [deleted_node_pubkey]
+    );
+
+    assert_equals(get_account_balance(pa.account), 33090909);
+    assert_false(exists(reward_provider_deleted_node @? { deleted_node_pubkey }));
+}
+
+function test_pay_system_reward_include_removed_node() {
+
+    val deleted_node1_pubkey = x"AABBCC";
+    val deleted_node2_pubkey = x"DDEEFF";
+
+    val pa = run_pay_rewards(
+        pool_assets = 33090909,
+            calculate_system_reward = true,
+            reward_debt = 0,
+            node_availability = [deleted_node1_pubkey: 0.2, deleted_node2_pubkey: 0.5, node_pubkey: 0.3],
+            deleted_nodes = [deleted_node1_pubkey, deleted_node2_pubkey]
+    );
+
+    assert_equals(get_account_balance(pa.account), 33090909);
+    assert_false(exists(reward_provider_deleted_node @? { deleted_node1_pubkey }));
+    assert_false(exists(reward_provider_deleted_node @? { deleted_node2_pubkey }));
+}
+
 function test_pay_reward_new_account_and_empty_pool() {
 
     val alice = run_pay_reward(1000, false);
@@ -771,7 +805,13 @@ function run_calculate_reward(node_availability_report: node_availability_report
     }
 }
 
-function run_pay_rewards(pool_assets: big_integer = 0, calculate_system_reward: boolean, reward_debt: big_integer = 0) {
+function run_pay_rewards(
+    pool_assets: big_integer = 0,
+    calculate_system_reward: boolean,
+    reward_debt: big_integer = 0,
+    node_availability: map<byte_array, decimal> = [node_pubkey: 1.0],
+    deleted_nodes: list<pubkey> = []
+) {
 
     if (not state.initialized) rell.test.tx().op(init()).run();
 
@@ -781,10 +821,13 @@ function run_pay_rewards(pool_assets: big_integer = 0, calculate_system_reward: 
     val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
     val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
     val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
-    val node_availability_report = node_availability_report(start_time = 0, end_time = 0, [node_pubkey: 1.0]);
+    val node_availability_report = node_availability_report(start_time = 0, end_time = 0, node_availability);
 
     val calculate_cluster = if (calculate_system_reward) system_cluster else cluster;
     add_cluster_node(calculate_cluster.name, node_pubkey, false);
+    for (deleted_node in deleted_nodes) {
+        add_reward_provider_deleted_node(provider, deleted_node, calculate_cluster);
+    }
 
     rell.test.tx().op(
         set_pool_details_last_refill_millis_last_block_time_op()
@@ -976,4 +1019,28 @@ function test_dn_initial_mainnet_reward() {
     log("Reward: %s CHR".format(decimal(reward) / units_per_asset));
     log("Reward: %s USD".format((decimal(reward) / units_per_asset) / economy_constants.chr_per_usd));
     log("CHR per USD: %s".format(economy_constants.chr_per_usd));
+}
+
+function test_get_aggregated_node_availability_max() {
+
+    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
+
+    add_cluster_node(cluster.name, node_pubkey, false);
+    add_reward_provider_deleted_node(provider, x"01", cluster);
+
+    assert_equals(get_aggregated_node_availability([x"01": 0.5, node_pubkey: 0.65], node @ { node_pubkey }, cluster), 1);
+}
+
+function test_get_aggregated_node_availability_node_removed_and_added_again() {
+
+    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
+
+    add_cluster_node(cluster.name, node_pubkey, false);
+    add_reward_provider_deleted_node(provider, node_pubkey, cluster);
+
+    assert_equals(get_aggregated_node_availability([node_pubkey: 0.99], node @ { node_pubkey }, cluster), 0.99);
 }
