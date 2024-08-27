@@ -52,6 +52,7 @@ function validate_blockchain_configuration(config_data: byte_array, signers: boo
         }
 
         validate_sync_exts(config_map);
+        validate_sync_infra(config_map);
     }
 
     validate_compression(config_data);
@@ -111,6 +112,14 @@ function validate_sync_exts(config_map: map<text, gtv>) {
     require(
         configured_sync_exts == null or allowed_sync_exts.contains_all(list<text>.from_gtv(configured_sync_exts)),
         "Some of the configured synchronization infrastructure extensions are not in the allowed set %s".format(allowed_sync_exts)
+    );
+}
+
+function validate_sync_infra(config_map: map<text, gtv>) {
+    val configured_sync = config_map.get_or_null("sync");
+    require(
+        configured_sync == null,
+        "Configuration of synchronization infrastructure is not allowed"
     );
 }
 
