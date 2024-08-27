@@ -1,0 +1,40 @@
+economy_chain_config: &common_economy_chain
+  config_consensus_strategy: HEADER_HASH
+  revolt:
+    fast_revolt_status_timeout: 2000
+    revolt_when_should_build_block: true
+  sync_ext:
+    - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
+  gtx:
+    modules:
+      - "net.postchain.d1.icmf.IcmfReceiverGTXModule"
+      - "net.postchain.d1.icmf.IcmfSenderGTXModule"
+      - 'net.postchain.eif.EifGTXModule'
+      - "net.postchain.d1.iccf.IccfGTXModule"
+  icmf:
+    receiver:
+      anchoring:
+        topics:
+          - G_node_availability_report
+      directory-chain:
+        topics:
+          - L_create_cluster_error
+          - L_ticket_container_result
+          - L_cluster_update
+          - L_provider_update
+          - L_node_update
+          - L_cluster_node_update
+          - L_blockchain_rid_topic
+          - L_subnode_image_update
+          - L_cluster_subnode_image_update
+      global:
+        topics:
+          - G_evm_transaction_submitter_cost_topic
+          - G_token_price_changed
+      local:
+        - topic: L_evm_block_events
+          bc-rid: x"0000000000000000000000000000000000000000000000000000000000000000" # TODO Set to EVM receiver bcrid
+  eif:
+    snapshot:
+      levels_per_page: 2
+      snapshots_to_keep: 2
