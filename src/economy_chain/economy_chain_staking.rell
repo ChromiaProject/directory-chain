@@ -158,8 +158,11 @@ function _staking_distribute_withdrawals() {
 
 function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey) {
 
-    // get all staker states of user, and all related withdraw requests
-    val staker_states = staker_state @* { .account == staker };
+    val new_provider = require(provider @? { provider_pubkey }, "No provider for this public key.");
+
+    // get all staker states to change of user, and all related withdraw requests
+    val staker_states = (s: staker_state, p: staker_state_to_provider) @* {
+            p.staker_state == s and p.provider != new_provider and .account == staker } (s);
     val withdraw_requests = staker_withdrawal_request @* { .active and .staker_state in staker_states };
 
     // deactivate chromia withdraw requests
@@ -167,17 +170,14 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
     update withdraw_requests_chr ( .active = false );
 
     val staker_states_to_exclude = withdraw_requests @* { .staker_state.network != network.CHR } ( .staker_state );
-
-    val new_provider = require(provider @? { provider_pubkey }, "No provider for this public key.");
  
     // Delegation from nothing happens without the delay
     val old_provider = staking_get_current_delegate(staker.id);
     val new_time_offset = if (empty(old_provider)) chain_context.args.staking_delegation_delay_ms else 0;
 
     // Update appropriate staker states with new provider
-    val staker_states_to_update = staker_states @* {
-        $ not in staker_states_to_exclude
-    } (
+    val fresh_staker_state_to_provider = staker_states @* { $ not in staker_states_to_exclude }
+    (
         struct<staker_state_to_provider> (
             timestamp = _staking_last_known_time() - new_time_offset,
             staker_state = $,
@@ -185,7 +185,7 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
         )
     );
 
-    create staker_state_to_provider ( staker_states_to_update );
+    create staker_state_to_provider ( fresh_staker_state_to_provider );
 }
 
 
