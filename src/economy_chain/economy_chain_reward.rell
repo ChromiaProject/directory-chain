@@ -371,11 +371,11 @@ function reset_provider_reward_debt_impl(provider) {
 
 /**
  * Get the nodes availability and include deleted nodes availability in case the node was replaced since last reward
- * @param node_availability Map from dode availability report structure.
+ * @param node_availability_report Map from dode availability report structure.
  * @param node Node currently active in the cluster.
  * @param cluster Cluster to collect availability for.
  */
-function get_aggregated_node_availability(node_availability: map<byte_array, decimal>, node, cluster) {
+function get_aggregated_node_availability(node_availability_report: map<byte_array, decimal>, node, cluster) {
 
     val node_keys = set<pubkey>([node.pubkey]);
 
@@ -384,9 +384,21 @@ function get_aggregated_node_availability(node_availability: map<byte_array, dec
     }
 
     var availability: decimal = 0;
+    var node_availabilities = map<pubkey, decimal>();
 
     for (node_key in node_keys) {
-        availability += node_availability.get_or_default(node_key, 0);
+        val node_availability = node_availability_report.get_or_default(node_key, 0);
+        node_availabilities[node_key] = node_availability;
+        availability += node_availability;
+    }
+
+    if (node_availabilities.size() > 1) {
+        log("Availability for node %s is the sum from multiple nodes: %s".format(node.pubkey, node_availabilities));
+    }
+
+    if (availability > 1) {
+        log("Availability calculation %s for node %s is incorrect and too high and will be set to 1"
+            .format(availability, node.pubkey));
     }
 
     return min(availability, 1);
