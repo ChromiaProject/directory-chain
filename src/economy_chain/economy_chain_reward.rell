@@ -63,6 +63,8 @@ function pay_rewards(cluster: cluster, node_availability_report: node_availabili
     if (is_system_cluster){
         pay_out_chromia_foundation_reward();
     }
+
+    delete reward_provider_deleted_node @* { cluster };
 }
 
 function calculate_system_cluster_rewards(system_cluster: cluster, node_availability_report: node_availability_report): map<node, big_integer> {
@@ -76,7 +78,7 @@ function calculate_system_cluster_rewards(system_cluster: cluster, node_availabi
 
     val system_node_reward = map<node, big_integer>();
     for (system_cluster_node in system_cluster_nodes) {
-        val reported_availability = node_availability_report.node_availability.get_or_default(system_cluster_node.pubkey, 0);
+        val reported_availability = get_aggregated_node_availability(node_availability_report.node_availability, system_cluster_node, system_cluster);
         val availability_factor = adjusted_availability_factor(reported_availability);
         val system_provider_reward_per_node = max_system_provider_reward_per_node * availability_factor;
         log("Reward calculated for node %s in system cluster based on number_of_nodes_in_system_cluster: %s, sum_total_max_revenue_per_dapp_cluster: %s USD, total_cost_system_providers: %s USD, max_system_provider_reward_per_node: %s CHR, system_provider_risk_share: %s, system_provider_cost_share_per_node: %s, availability_factor: %s, chr_per_usd: %s, units_per_asset: %s, system_provider_fee_share: %s, system_provider_reward_per_node: %s, units_per_usd: %s"
@@ -116,7 +118,7 @@ function calculate_dapp_cluster_rewards(cluster: cluster, node_availability_repo
             // If availability report is completely empty then it could be that no chains are running in the cluster,
             // we choose to be nice and interpret this as 100% availability
             val reported_availability = if (node_availability_report.node_availability.empty())
-                1 else node_availability_report.node_availability.get_or_default(cluster_node.pubkey, 0);
+                1 else get_aggregated_node_availability(node_availability_report.node_availability, cluster_node, cluster);
             val availability_factor = adjusted_availability_factor(reported_availability);
             val dapp_provider_reward_per_node = max_dapp_provider_reward_per_node * availability_factor;
             log("Reward calculated for node %s in cluster %s based on max_dapp_provider_reward_per_node: %s CHR, occupancy_rate: %s, dapp_cluster_value: %s, number_of_nodes_per_dapp_cluster: %s, dapp_provider_risk_share: %s, availability_factor: %s, chr_per_usd: %s, units_per_asset: %s, system_provider_fee_share: %s, staking_reward_fee_share: %s, chromia_foundation_fee_share: %s, resource_pool_margin_fee_share: %s, dapp_provider_reward_per_node: %s"
@@ -365,4 +367,39 @@ function provider_meets_staking_requirements(provider, provider_account): boolea
 function reset_provider_reward_debt_impl(provider) {
     val pa = provider_account @ { provider };
     pa.reward_debt = 0;
+}
+
+/**
+ * Get the nodes availability and include deleted nodes availability in case the node was replaced since last reward
+ * @param node_availability_report Map from dode availability report structure.
+ * @param node Node currently active in the cluster.
+ * @param cluster Cluster to collect availability for.
+ */
+function get_aggregated_node_availability(node_availability_report: map<byte_array, decimal>, node, cluster) {
+
+    val node_keys = set<pubkey>([node.pubkey]);
+
+    for (old_node in reward_provider_deleted_node @* { node.provider, cluster }) {
+        node_keys.add(old_node.node);
+    }
+
+    var availability: decimal = 0;
+    var node_availabilities = map<pubkey, decimal>();
+
+    for (node_key in node_keys) {
+        val node_availability = node_availability_report.get_or_default(node_key, 0);
+        node_availabilities[node_key] = node_availability;
+        availability += node_availability;
+    }
+
+    if (node_availabilities.size() > 1) {
+        log("Availability for node %s is the sum from multiple nodes: %s".format(node.pubkey, node_availabilities));
+    }
+
+    if (availability > 1) {
+        log("Availability calculation %s for node %s is incorrect and too high and will be set to 1"
+            .format(availability, node.pubkey));
+    }
+
+    return min(availability, 1);
 }
