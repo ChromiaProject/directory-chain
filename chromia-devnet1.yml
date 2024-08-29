@@ -119,7 +119,46 @@ blockchains:
           imcf_headers_with_messages_query_limit: 3 # Good for testing limits
   economy_chain_devnet1:
     module: economy_chain_devnet1
-    config: !include chromia.yml#definitions.economy_chain_config
+    config:
+      config_consensus_strategy: HEADER_HASH
+      revolt:
+        fast_revolt_status_timeout: 2000
+        revolt_when_should_build_block: true
+      sync_ext:
+        - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
+      gtx:
+        modules:
+          - "net.postchain.d1.icmf.IcmfReceiverGTXModule"
+          - "net.postchain.d1.icmf.IcmfSenderGTXModule"
+          - 'net.postchain.eif.EifGTXModule'
+          - "net.postchain.d1.iccf.IccfGTXModule"
+      icmf:
+        receiver:
+          anchoring:
+            topics:
+              - G_node_availability_report
+          directory-chain:
+            topics:
+              - L_create_cluster_error
+              - L_ticket_container_result
+              - L_cluster_update
+              - L_provider_update
+              - L_node_update
+              - L_cluster_node_update
+              - L_blockchain_rid_topic
+              - L_subnode_image_update
+              - L_cluster_subnode_image_update
+          global:
+            topics:
+              - G_evm_transaction_submitter_cost_topic
+              - G_token_price_changed
+          local:
+            - topic: L_evm_block_events
+              bc-rid: x"0000000000000000000000000000000000000000000000000000000000000000" # TODO Set to EVM receiver bcrid
+      eif:
+        snapshot:
+          levels_per_page: 2
+          snapshots_to_keep: 2
     moduleArgs:
       # *economy_chain_ft4_module_args_devnet1
       lib.ft4.core.accounts:
@@ -172,7 +211,8 @@ blockchains:
         pool_amount_to_mint: 1000000000
         staking_withdrawal_delay_ms: 120000 # 2 min
         staking_delegation_delay_ms: 604800000
-        staking_payout_interval_ms: 86400000 # 1 day
+        staking_rewards_payout_interval_ms: 86400000 # 1 day
+        staking_withdrawals_payout_interval_ms: 30000 # 60 seconds (approximately every other block)
         staking_rewards_share: 0.1
         pool_refill_limit_ms: 86400000 # 1 day
         max_dapp_providers_per_lease: 2 # Good for testing
