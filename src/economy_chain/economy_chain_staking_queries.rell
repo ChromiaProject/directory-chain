@@ -25,7 +25,7 @@ query staking_get_current_delegate_on_network(account_id: byte_array, network): 
     val _provider_pubkey = staker_state_to_provider @? {
         .staker_state.account.id == account_id and .staker_state.network == network and  
         (_staking_last_known_time() - chain_context.args.staking_delegation_delay_ms) >= .timestamp
-    } ( @omit @sort_desc .timestamp, .provider.pubkey ) limit 1;
+    } ( @omit @sort_desc .timestamp, @omit @sort_desc .rowid, .provider.pubkey ) limit 1;
     return when {
         empty(_provider_pubkey) or _provider_pubkey == get_null_account() -> null;
         else -> _provider_pubkey;
@@ -42,7 +42,7 @@ query staking_get_current_delegate(account_id: byte_array) {
     val _provider_pubkey = staker_state_to_provider @? {
         .staker_state.account.id == account_id
         and (_staking_last_known_time() - chain_context.args.staking_delegation_delay_ms) >= .timestamp
-    } ( @omit @sort_desc .timestamp, .provider.pubkey ) limit 1;
+    } ( @omit @sort_desc .timestamp, @omit @sort_desc .rowid, .provider.pubkey ) limit 1;
     return when {
         empty(_provider_pubkey) or _provider_pubkey == get_null_account() -> null;
         else -> _provider_pubkey;
@@ -61,6 +61,7 @@ query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubk
         .staker_state.account == staker and .timestamp > (_staking_last_known_time() - chain_context.args.staking_delegation_delay_ms)
     } (
         @omit @sort_desc .timestamp,
+        @omit @sort_desc .rowid,
         pubkey = .provider.pubkey,
         time = .timestamp + chain_context.args.staking_delegation_delay_ms
     ) limit 1;
@@ -95,7 +96,7 @@ query staking_get_total_delegation_to(pubkey, network? = null) {
 /* @returns Total self staked CHR in  minor units
 */
 query staking_get_provider_stake(pubkey) {
-    val provider_id = provider_account @ {pubkey == .provider.pubkey} (.account.id);
+    val provider_id = provider_staking_account @ {pubkey == .provider.pubkey} (.staking_account.id);
     return if (pubkey == staking_get_current_delegate(provider_id) ?: get_null_account())
         staking_get_balance(provider_id)
         else 0;
@@ -108,7 +109,7 @@ query staking_get_provider_stake(pubkey) {
 /* Timestamp of the next withdrawal.
 /* 
 /* The true expected time will be slightly longer than this as withdrawal payouts trigger periodically.
-/* However the delay on a withdrawal payout should not be noticable in a production configuration.
+/* However the delay on a withdrawal payout should not be noticeable in a production configuration.
 /*
 /* @param account_id Given account's id
 /* @param network The network of the next withdrawal of interest. Defaults to CHR native.

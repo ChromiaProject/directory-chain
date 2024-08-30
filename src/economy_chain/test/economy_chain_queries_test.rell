@@ -629,13 +629,13 @@ function test_get_cluster_change_tag_proposal() {
 function test_get_provider_staking_status_approved() {
 
     val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
-    val provider_account = provider_account @ { provider };
+    val provider_staking_account = provider_staking_account @ { provider };
 
     rell.test.block().run();
     rell.test.tx().op(
         staking_init_op(),
-        add_staking(provider_account, 9999999999999),
-        set_last_approved_stake_requirements(provider_account, get_last_blocktime())
+        add_staking(provider_staking_account, 9999999999999),
+        set_last_approved_stake_requirements(provider_staking_account, get_last_blocktime())
     ).sign(provider_key).run();
 
     rell.test.set_next_block_time_delta(604800001);
@@ -643,6 +643,7 @@ function test_get_provider_staking_status_approved() {
 
     val staking_status = get_provider_staking_status(provider_pubkey);
     val expected = provider_staking_status(
+        staking_account_id = provider_staking_account.staking_account.id,
         own_staking_chr = 9999999999999,
         total_staking_chr = 9999999999999,
         approved = true,
@@ -663,6 +664,7 @@ function test_get_provider_staking_status_never_approved() {
 
     val staking_status = get_provider_staking_status(provider_pubkey);
     val expected = provider_staking_status(
+        staking_account_id = provider_account.account.id,
         own_staking_chr = 0,
         total_staking_chr = 0,
         approved = false,
@@ -675,12 +677,12 @@ function test_get_provider_staking_status_never_approved() {
 function test_get_provider_staking_status_not_approved() {
 
     val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
-    val provider_account = provider_account @ { provider };
+    val provider_staking_account = provider_staking_account @ { provider };
 
     rell.test.block().run();
     rell.test.tx().op(
         staking_init_op(),
-        set_last_approved_stake_requirements(provider_account, get_last_blocktime())
+        set_last_approved_stake_requirements(provider_staking_account, get_last_blocktime())
     ).sign(provider_key).run();
 
     rell.test.set_next_block_time_delta(604800001);
@@ -688,6 +690,7 @@ function test_get_provider_staking_status_not_approved() {
 
     val staking_status = get_provider_staking_status(provider_pubkey);
     val expected = provider_staking_status(
+        staking_account_id = provider_staking_account.staking_account.id,
         own_staking_chr = 0,
         total_staking_chr = 0,
         approved = false,

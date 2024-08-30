@@ -1,0 +1,57 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import ^.helper_operations.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+}
+
+function test_set_provider_staking_account_validation() {
+
+    // Provider and current staking account are both Alice
+
+    // Invalid - no such provider
+    rell.test.tx().op(
+        set_provider_staking_account(rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub)
+    )
+        .sign(rell.test.keypairs.alice, rell.test.keypairs.bob)
+        .run_must_fail("No provider found with pubkey");
+
+    // Invalid - not signed by new account
+    add_provider(rell.test.keypairs.alice.pub);
+    rell.test.tx().op(
+        set_provider_staking_account(rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub)
+    ).run_must_fail("Operation must be signed by %s".format(rell.test.keypairs.bob.pub));
+
+    // Invalid - not signed by old account key
+    rell.test.tx().op(
+        set_provider_staking_account(rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub)
+    ).sign(rell.test.keypairs.bob)
+    .run_must_fail("Operation must be signed by owner of account id ".format(rell.test.keypairs.alice.pub));
+
+    // Invalid - account is already in use
+    rell.test.tx().op(
+        set_provider_staking_account(rell.test.keypairs.alice.pub, rell.test.keypairs.alice.pub)
+    ).sign(rell.test.keypairs.alice, rell.test.keypairs.bob)
+        .run_must_fail("already in use");
+}
+
+function test_set_provider_staking_account() {
+
+    add_provider(rell.test.keypairs.alice.pub);
+
+    assert_true(exists(provider_staking_account @* {
+        .provider.pubkey == rell.test.keypairs.alice.pub,
+        .staking_account.id == ft4.accounts.get_account_id_from_signers([rell.test.keypairs.alice.pub]) }));
+
+    rell.test.tx().op(
+        set_provider_staking_account(rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub)
+    ).sign(rell.test.keypairs.alice, rell.test.keypairs.bob)
+        .run();
+
+    assert_true(exists(provider_staking_account @* {
+        .provider.pubkey == rell.test.keypairs.alice.pub,
+        .staking_account.id == ft4.accounts.get_account_id_from_signers([rell.test.keypairs.bob.pub]) }));
+}

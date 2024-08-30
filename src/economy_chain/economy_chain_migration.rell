@@ -1,0 +1,28 @@
+
+object migration_completed {
+    mutable provider_staking_account_entity: boolean = false;
+}
+
+function do_migrations() {
+
+    if (not migration_completed.provider_staking_account_entity) {
+        migration_completed.provider_staking_account_entity = true;
+        migrate_provider_staking_accounts();
+    }
+}
+
+/**
+  * Called once to create a provider_staking_account per provider with values copied from account and
+  * last_approved_stake_requirements to separate them from the ordinary provider account.
+  */
+function migrate_provider_staking_accounts() {
+
+    log("Migrate and create provider staking account entities...");
+
+    for (pa in provider_account @* {}) {
+        if (not(exists(provider_staking_account @? { pa.provider }))) {
+            log("Created provider_staking_account for provider %s".format(pa.provider.pubkey));
+            create provider_staking_account(pa.provider, pa.account, pa.last_approved_stake_requirements);
+        }
+    }
+}

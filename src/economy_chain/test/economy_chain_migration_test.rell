@@ -1,0 +1,33 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import ^.helper_operations.*;
+
+function test_migrate_provider_staking_accounts() {
+
+    // Create 3 providers and their accounts
+    add_provider(rell.test.pubkeys.alice, false, provider_tier.NODE_PROVIDER);
+    add_provider(rell.test.pubkeys.bob, false, provider_tier.NODE_PROVIDER);
+    add_provider(rell.test.pubkeys.charlie, false, provider_tier.NODE_PROVIDER);
+
+    // Purge all provider_staking_account entities and set migration to not be completed
+    rell.test.tx().op(
+        purge_provider_staking_account_entities(),
+        set_migrations_completed(false)
+    ).run();
+
+    // Migrate
+    rell.test.block().run();
+
+    // Make sure provider_staking_account entities were created
+    assert_equals(migration_completed.provider_staking_account_entity, true);
+    assert_equals(provider_staking_account @ {} ( @sum 1 ), 3);
+
+    for (pa in provider_account @* {}) {
+        assert_true(exists(provider_staking_account @? { pa.provider,
+            .staking_account.id == pa.account.id,
+            .last_approved_stake_requirements == pa.last_approved_stake_requirements
+        }));
+    }
+}

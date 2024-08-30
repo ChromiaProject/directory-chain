@@ -14,3 +14,10 @@ function require_dapp_cluster(cluster_name: text) = require(cluster_name != syst
 
 function require_provider(pubkey) = require(provider @? { pubkey }, "No provider found with pubkey %s".format(pubkey));
 
+function require_signed_by_account_id(account_id: byte_array) {
+    val signer_account_ids = list<byte_array>();
+    for (signer in op_context.get_signers()) {
+        signer_account_ids.add(ft4.accounts.get_account_id_from_signers([signer]));
+    }
+    require(signer_account_ids.contains(account_id), "Operation must be signed by owner of account id %s".format(account_id));
+}
