@@ -77,7 +77,7 @@ query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubk
 /* @returns Total CHR staked to the given provider in  minor units
 */
 query staking_get_total_delegation_to(pubkey, network? = null) {
-    return ( s1: staker_state_to_provider) @* {
+    return ( s1: staker_state_to_provider) @ {
         .provider.pubkey == pubkey and (s1.timestamp <= (_staking_last_known_time() - chain_context.args.staking_delegation_delay_ms)) and 
             (not exists(network) or .staker_state.network == network) and 
             not exists((s2:staker_state_to_provider) @* { 
@@ -86,7 +86,7 @@ query staking_get_total_delegation_to(pubkey, network? = null) {
                 or (s2.timestamp==s1.timestamp and s2 < s1) 
             }
         )
-    } ( @sum .staker_state.balance )[0];
+    } ( @sum .staker_state.balance );
 }
 
 /**
