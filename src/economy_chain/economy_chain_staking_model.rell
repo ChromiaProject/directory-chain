@@ -28,6 +28,7 @@ entity staker_state_to_provider {
     index timestamp;
     index staker_state;
     provider;
+    previous_provider: provider;
 }
 entity staking_payment {
     index timestamp;
@@ -35,18 +36,103 @@ entity staking_payment {
     ft4.accounts.account;
 }
 
-// @dev If this is changed so should `_update_pending_token_time_all`
+// @dev If this is changed so should `_update_pending_token_time_all` and the query `staking_rewards_claimable_for`.
+// @dev Please pay attention to the bits marked with ***.
 function _update_pending_token_time(staker_state) {
-    update staker_state (
-        pending_token_time = (.balance / units_per_asset) * max(0, _staking_last_known_time() - max(staking_get_rewards_start(), .last_update)),
+    update (
+        // Take all the states
+        s: staker_state,
+        // And attach to them the provider record
+        p: staker_state_to_provider
+    ) @* {
+            s == staker_state // *** For this staker state. Only want to do one. ***
+        and s == p.staker_state
+            // Is old enough to be active
+        and p.timestamp <= _staking_last_known_time()
+        and empty(
+            // And for which there is not also a state that meets that criteria...
+            (pp: staker_state_to_provider) @* {
+                pp.staker_state == s
+                and pp.timestamp <= _staking_last_known_time()
+                // ... and is is newer
+                and (
+                        pp.timestamp > p.timestamp
+                    or  (pp.rowid > p.rowid and pp.timestamp == p.timestamp)
+                )
+            }
+        )
+    } (
+        pending_token_time += (s.balance / units_per_asset) *
+        max(0, // No less than zero time
+            // We would like to start at ... 
+            when(p.provider.pubkey) {
+                // ... if we are transitioning to undelegated, the later of the undelegation time and now
+                get_null_account() -> min(_staking_last_known_time(), p.timestamp);
+                // ... or just the current time
+                else -> _staking_last_known_time();
+            }
+            // Start at the greatest of whole system start time or that for this stake
+            - max(
+                staking_get_rewards_start(),
+                when(p.previous_provider.pubkey) {
+                    // If we undelegated, the more recent of the last updated or the undelegation time
+                    get_null_account() -> max(p.timestamp, s.last_update);
+                    // ... if we don't unstake then just the last update time
+                    else -> s.last_update;
+                },
+            )
+        ),
         last_update = _staking_last_known_time()
     );
 }
 
-// @dev If this is changed so should `_update_pending_token_time`
+// @dev If this is changed so should `_update_pending_token_time` and the query `staking_rewards_claimable_for`.
+// @dev Please pay attention to the bits marked with ***.
 function _update_pending_token_time_all() {
-    update staker_state @* { } (
-        pending_token_time = (.balance / units_per_asset) * max(0, _staking_last_known_time() - max(staking_get_rewards_start(), .last_update)),
+    update (
+        // Take all the states
+        s: staker_state,
+        // And attach to them the provider record
+        p: staker_state_to_provider
+    // For this staker state
+    ) @* {
+            // There no staker_state restriction here. We want them all.
+            s == p.staker_state
+            // Is old enough to be active
+        and p.timestamp <= _staking_last_known_time()
+        and empty(
+            // And for which there is not also a state that meets that criteria...
+            (pp: staker_state_to_provider) @* {
+                pp.staker_state == s
+                and pp.timestamp <= _staking_last_known_time()
+                // ... and is is newer
+                and (
+                        pp.timestamp > p.timestamp
+                    or  (pp.rowid > p.rowid and pp.timestamp == p.timestamp)
+                )
+            }
+        )
+    } (
+        pending_token_time += (s.balance / units_per_asset) *
+        max(0, // No less than zero time
+            // We would like to start at ... 
+            when(p.provider.pubkey) {
+                // ... if we are transitioning to undelegated, the later of the undelegation time and now
+                get_null_account() -> min(_staking_last_known_time(), p.timestamp);
+                // ... or just the current time
+                else -> _staking_last_known_time();
+            }
+            // Start at the greatest of whole system start time or that for this stake
+            - max(
+                staking_get_rewards_start(),
+                when(p.previous_provider.pubkey) {
+                    // If we undelegated, the more recent of the last updated or the undelegation time
+                    get_null_account() -> max(p.timestamp, s.last_update);
+                    // ... if we don't unstake then just the last update time
+                    else -> s.last_update;
+                },
+            )
+        ),
         last_update = _staking_last_known_time()
     );
 }

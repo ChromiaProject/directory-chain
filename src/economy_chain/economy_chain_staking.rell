@@ -7,6 +7,7 @@ function _staking_offboard_provider(pubkey) {
         struct<staker_state_to_provider> (
             timestamp = _staking_last_known_time() - chain_context.args.staking_delegation_delay_ms,
             staker_state = .staker_state,
+            previous_provider = .provider,
             provider = null_provider
         )
     );
@@ -50,6 +51,7 @@ function _staking_deposit_native_impl(amount: integer, delegate_to: pubkey? = nu
             timestamp = latest_staker_state_to_provider?.timestamp ?: _staking_last_known_time() - chain_context.args.staking_delegation_delay_ms,
             staker_state = ss,
             provider = latest_staker_state_to_provider?.provider ?: provider @ { get_null_account() }, 
+            previous_provider = latest_staker_state_to_provider?.provider ?: provider @ { get_null_account() }, 
         );
     }
 
@@ -93,7 +95,8 @@ function _staking_update_evm_state(staker: ft4.accounts.account, network, new_ba
         create staker_state_to_provider(
             timestamp = latest_staker_state_to_provider?.timestamp ?: _staking_last_known_time() - chain_context.args.staking_delegation_delay_ms,
             staker_state = ss,
-            provider = latest_staker_state_to_provider?.provider ?: provider @ { get_null_account() }, 
+            previous_provider = latest_staker_state_to_provider?.provider ?: provider @ { get_null_account() }, 
+            provider = latest_staker_state_to_provider?.provider ?: provider @ { get_null_account() }
         );
     }
 }
@@ -115,9 +118,29 @@ function _staking_request_withdrawal(user: ft4.accounts.account, _network: netwo
     }
     require(ss.balance > 0, "Balance must be over 0");
 
-    _staking_delegate(user, get_null_account());
+    val null_provider = require(provider @? { get_null_account() }, "No provider for this public key.");
 
-    // Make a new request
+    // Get the native, non-unstaked staker states
+    val staker_states = (s: staker_state, p: staker_state_to_provider) @* {
+            p.staker_state == s
+        and p.provider != null_provider
+        and s.account == user
+        and s.network == network.CHR
+    };
+ 
+    // Update appropriate staker states with null provider
+    val fresh_staker_state_to_provider = staker_states @* {}
+    (
+        struct<staker_state_to_provider> (
+            timestamp = _staking_last_known_time(),
+            staker_state = .s,
+            provider = null_provider,
+            previous_provider = .p.provider
+        )
+    );
+    create staker_state_to_provider ( fresh_staker_state_to_provider );
+
+    // Make a new withdrawal request
     create staker_withdrawal_request (
         finish_at = _staking_last_known_time() + chain_context.args.staking_withdrawal_delay_ms,
         ss,
@@ -162,8 +185,8 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
 
     // get all staker states to change of user, and all related withdraw requests
     val staker_states = (s: staker_state, p: staker_state_to_provider) @* {
-            p.staker_state == s and p.provider != new_provider and .account == staker } (s);
-    val withdraw_requests = staker_withdrawal_request @* { .active and .staker_state in staker_states };
+            p.staker_state == s and p.provider != new_provider and s.account == staker };
+    val withdraw_requests = staker_withdrawal_request @* { .active and .staker_state in staker_states @* {} (.s) };
 
     // deactivate chromia withdraw requests
     val withdraw_requests_chr = withdraw_requests @* { .staker_state.network == network.CHR };
@@ -172,15 +195,17 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
     val staker_states_to_exclude = withdraw_requests @* { .staker_state.network != network.CHR } ( .staker_state );
  
     // Delegation from nothing happens without the delay
+    // TODO what happens if separate states on different networks .... ??
     val old_provider = staking_get_current_delegate(staker.id);
     val new_time_offset = if (empty(old_provider)) chain_context.args.staking_delegation_delay_ms else 0;
 
     // Update appropriate staker states with new provider
-    val fresh_staker_state_to_provider = staker_states @* { $ not in staker_states_to_exclude }
+    val fresh_staker_state_to_provider = staker_states @* { .s not in staker_states_to_exclude }
     (
         struct<staker_state_to_provider> (
             timestamp = _staking_last_known_time() - new_time_offset,
-            staker_state = $,
+            staker_state = .s,
+            previous_provider = .p.provider,
             provider = new_provider
         )
     );

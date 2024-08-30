@@ -243,7 +243,8 @@ operation add_staking(provider_staking_account, amount: integer) {
     create staker_state_to_provider (
         _staking_last_known_time(),
         ss,
-        provider_staking_account.provider
+        provider = provider_staking_account.provider,
+        previous_provider = provider @ { get_null_account() }
     );
 }
 
@@ -304,4 +305,12 @@ operation purge_provider_staking_account_entities() {
 
 operation do_migrations_op() {
     do_migrations();
+}
+
+operation poke_staker_state_update(staker_state) {
+    _update_pending_token_time(staker_state);
+}
+
+operation poke_staker_state_update_all() {
+    _update_pending_token_time_all();
 }

@@ -131,15 +131,61 @@ query staking_get_withdrawal_time(account_id: byte_array, network = network.CHR)
 /*
 /* @param account_id Account ID
 /* @returns Amount of CHR in minor units
+/* @dev If this is changed so should `_update_pending_token_time` and the query `_update_pending_token_time_all`.
+/* @dev Please pay attention to the bits marked with ***.
 */
 query staking_rewards_claimable_for(account_id: byte_array) {
     val rate = staking_get_current_rate() / millis_per_year;
     val staker = ft4.accounts.Account(account_id);
-    val ss = staker_state @* { .account == staker } ( .balance, .last_update, .pending_token_time );
+    val ss = (
+        // Take all the states
+        s: staker_state,
+        // And attach to them the provider record
+        p: staker_state_to_provider @* {
+                // That links to the staker state
+                s == p.staker_state
+                // Is old enough to be active
+            and p.timestamp <= _staking_last_known_time()
+            and empty(
+                // And for which there is not also a state that meets that criteria...
+                (pp: staker_state_to_provider) @* {
+                        pp.staker_state == s
+                    and pp.timestamp <= _staking_last_known_time()
+                    // ... and is is newer
+                    and (
+                            pp.timestamp > p.timestamp
+                        or  (pp.rowid > p.rowid and pp.timestamp == p.timestamp)
+                    )
+                }
+            )
+        }
+    // For this staker
+    ) @* { s.account == staker };
     var total_pending_token_time = 0;
     for (s in ss) {
         // @dev This needs to align with the logic in economy_chain_staking_model.rell .
-        total_pending_token_time += s.pending_token_time + (s.balance / units_per_asset) * max(0, _staking_last_known_time() - max(staking_get_rewards_start(), s.last_update));
+        val elapsed_time =
+        max(0, // No less than zero time
+            // We would like to start at ... 
+            when(s.p.provider.pubkey) {
+                // ... if we are transitioning to undelegated, the later of the undelegation time and now
+                get_null_account() -> min(_staking_last_known_time(), s.p.timestamp);
+                // ... or just the current time
+                else -> _staking_last_known_time();
+            }
+            // Start at the greatest of whole system start time or that for this stake
+            - max(
+                staking_get_rewards_start(),
+                when(s.p.previous_provider.pubkey) {
+                    // If we undelegated, the more recent of the last updated or the undelegation time
+                    get_null_account() -> max(s.p.timestamp, s.s.last_update);
+                    // ... if we don't unstake then just the last update time
+                    else -> s.s.last_update;
+                },
+            )
+        );
+        val balance_in_units = s.s.balance / units_per_asset;
+        total_pending_token_time += s.s.pending_token_time + (balance_in_units * elapsed_time);
     }
 
     // Operand ordering to prevent overflow
