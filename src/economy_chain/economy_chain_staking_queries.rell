@@ -55,7 +55,7 @@ query staking_get_current_delegate(account_id: byte_array) {
 /* @param account_id Given user
 /* @returns A tuple of the next to be delegated to provider and the timestamp the delegation will take effect. Or null if no re-delegation is scheduled.
 */
-query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubkey, time: integer)? {
+query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubkey?, time: integer)? {
     val staker = ft4.accounts.Account(account_id);
     val upcoming_delegations = staker_state_to_provider @* {
         .staker_state.account == staker and .timestamp > _staking_last_known_time()
@@ -67,7 +67,13 @@ query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubk
     ) limit 1;
     return if (exists(
         upcoming_delegations
-    )) (upcoming_delegations[0]) else null;
+    )) (
+        pubkey = when(upcoming_delegations[0].pubkey) {
+            get_null_account() -> null;
+            else -> upcoming_delegations[0].pubkey
+        },
+        time = upcoming_delegations[0].time
+    ) else null;
 }
 
 /**
@@ -166,9 +172,9 @@ query staking_rewards_claimable_for(account_id: byte_array) {
         // @dev This needs to align with the logic in economy_chain_staking_model.rell .
         val elapsed_time =
         max(0, // No less than zero time
-            // We would like to start at ... 
+            // We would like to end at ... 
             when(s.p.provider.pubkey) {
-                // ... if we are transitioning to undelegated, the later of the undelegation time and now
+                // ... if we are transitioning to undelegated, the earlier of the undelegation time and now
                 get_null_account() -> min(_staking_last_known_time(), s.p.timestamp);
                 // ... or just the current time
                 else -> _staking_last_known_time();
