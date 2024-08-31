@@ -166,7 +166,7 @@ query staking_rewards_claimable_for(account_id: byte_array) {
             )
         }
     // For this staker
-    ) @* { s.account == staker };
+    ) @* { s.account == staker }; // *** We want all of them but only for 1 account ***
     var total_pending_token_time = 0;
     for (s in ss) {
         // @dev This needs to align with the logic in economy_chain_staking_model.rell .
@@ -183,7 +183,7 @@ query staking_rewards_claimable_for(account_id: byte_array) {
             - max(
                 staking_get_rewards_start(),
                 when(s.p.previous_provider.pubkey) {
-                    // If we undelegated, the more recent of the last updated or the undelegation time
+                    // If we undelegating here, the more recent of the last updated or the undelegation time
                     get_null_account() -> max(s.p.timestamp, s.s.last_update);
                     // ... if we don't unstake then just the last update time
                     else -> s.s.last_update;
