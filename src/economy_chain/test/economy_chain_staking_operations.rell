@@ -19,23 +19,38 @@ function test_set_provider_staking_account_validation() {
         .sign(rell.test.keypairs.alice, rell.test.keypairs.bob)
         .run_must_fail("No provider found with pubkey");
 
-    // Invalid - not signed by new account
+    // Invalid - must be signed by provider
     add_provider(rell.test.keypairs.alice.pub);
     rell.test.tx().op(
         set_provider_staking_account(rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub)
-    ).run_must_fail("Operation must be signed by %s".format(rell.test.keypairs.bob.pub));
+    )
+        .sign(rell.test.keypairs.bob)
+        .run_must_fail("must be signed by provider");
 
-    // Invalid - not signed by old account key
+    // Invalid - not signed by new account
     rell.test.tx().op(
         set_provider_staking_account(rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub)
-    ).sign(rell.test.keypairs.bob)
-    .run_must_fail("Operation must be signed by owner of account id ".format(rell.test.keypairs.alice.pub));
+    )
+        .sign(rell.test.keypairs.alice)
+        .run_must_fail("Operation must be signed by %s".format(rell.test.keypairs.bob.pub));
 
     // Invalid - account is already in use
     rell.test.tx().op(
         set_provider_staking_account(rell.test.keypairs.alice.pub, rell.test.keypairs.alice.pub)
     ).sign(rell.test.keypairs.alice, rell.test.keypairs.bob)
         .run_must_fail("already in use");
+
+    // Change account to bob not be the same as provider key
+    rell.test.tx().op(
+        set_provider_staking_account(rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub)
+    ).sign(rell.test.keypairs.alice, rell.test.keypairs.bob)
+        .run();
+
+    // Invalid - not signed by old account key bob
+    rell.test.tx().op(
+        set_provider_staking_account(rell.test.keypairs.alice.pub, rell.test.keypairs.charlie.pub)
+    ).sign(rell.test.keypairs.alice, rell.test.keypairs.charlie)
+    .run_must_fail("Operation must be signed by owner of account id ".format(rell.test.keypairs.alice.pub));
 }
 
 function test_set_provider_staking_account() {
