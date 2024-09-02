@@ -1,0 +1,227 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import ^.helper_operations.*;
+
+namespace ft4 {
+    import lib.ft4.assets;
+    import test_utils: lib.ft4.test.utils;
+}
+
+val provider_key = rell.test.keypairs.bob;
+val provider_pubkey = provider_key.pub;
+val node_pubkey = rell.test.pubkeys.charlie;
+val cluster_name = "Bob's cluster";
+
+struct module_args {
+    auth_privkey: byte_array;
+}
+
+val auth_privkey = chain_context.args.auth_privkey;
+
+function test_calculate_evm_transaction_submitter_cost() {
+
+    rell.test.tx().op(
+        create_price_oracle_rates_op("tCHR", "Chromia Test", 1.00),
+        create_price_oracle_rates_op("ETH", "Ether", 2.00),
+        create_price_oracle_rates_op("BNB", "Binance smart chain", 10.00),
+        create_price_oracle_rates_op("MATIC", "Polygon", 0.01)
+    ).run();
+
+    assert_equals(
+        calculate_evm_transaction_submitter_cost(evm_transaction_submitter_cost(id = x"01", processed_by = x"", cost  = 10000L * units_per_txs_evm_cost, currency_symbol = "ETH", payer_chain = x"AA")),
+        22000000000);
+    assert_equals(
+        calculate_evm_transaction_submitter_cost(evm_transaction_submitter_cost(id = x"02", processed_by = x"", cost  = 10000L * units_per_txs_evm_cost, currency_symbol = "BNB", payer_chain = x"AA")),
+        110000000000);
+    assert_equals(
+        calculate_evm_transaction_submitter_cost(evm_transaction_submitter_cost(id = x"03", processed_by = x"", cost  = 10000L * units_per_txs_evm_cost, currency_symbol = "MATIC", payer_chain = x"AA")),
+        110000000);
+}
+
+function test_calculate_evm_transaction_submitter_cost_real_example_eth() {
+
+    rell.test.tx().op(
+        create_price_oracle_rates_op("tCHR", "Chromia Test", 0.25159185329855150584),
+        create_price_oracle_rates_op("ETH", "Ether", 3125.69818475089158878802),
+    ).run();
+
+    assert_equals(
+        calculate_evm_transaction_submitter_cost(evm_transaction_submitter_cost(id = x"01", processed_by = x"", cost  = 168588 * 6302265549, currency_symbol = "ETH", payer_chain = x"AA")),
+        14519996);
+}
+
+
+function test_calculate_evm_transactions_submitters_rewards_real_example_bnb() {
+
+    rell.test.tx().op(
+        create_price_oracle_rates_op("tCHR", "Chromia Test", 0.25159185329855150584),
+        create_price_oracle_rates_op("BNB", "B", 527.6200000777692305765),
+    ).run();
+
+    assert_equals(
+        calculate_evm_transaction_submitter_cost(evm_transaction_submitter_cost(id = x"01", processed_by = x"", cost  = 182081 * 1000000000, currency_symbol = "BNB", payer_chain = x"AA")),
+            420031);
+}
+
+function test_receive_evm_transaction_submitter_cost_message_and_pay_reward_and_charge_chain() {
+
+    rell.test.tx().op(init()).run();
+    update_staking_requirements_constants(staking_requirements_enabled = false);
+
+    val evm_transaction_submitter_bc_rid = x"1111";
+
+    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
+    add_cluster_node(cluster_name, node_pubkey, false);
+
+    // Add bridge lease and account for dapp chain to be charged for transaction
+    val payer_chain_brid = x"001122";
+    val payer_chain_keypair = rell.test.keypairs.charlie;
+    val payer_chain_account = require(do_create_account(payer_chain_keypair, auth_privkey));
+    val container_name = do_create_container(payer_chain_account, payer_chain_keypair, success = true, ticket_id = ticket_id_after_init + 16, cluster_name = cluster_name, container_units = 2);
+    val payer_chain_account_init_balance = get_account_balance(payer_chain_account);
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(payer_chain_keypair.priv, add_bridge_lease(container_name, payer_chain_brid, 1, "validator", "bridge", false)),
+        add_bridge_lease(container_name, payer_chain_brid, 1, "validator", "bridge", false)
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Add exchange rates
+    rell.test.tx().op(
+        create_price_oracle_rates_op("tCHR", "Chromia Test", 1.00),
+        create_price_oracle_rates_op("ETH", "Ether", 2.00)
+    ).run();
+
+    rell.test.tx().op(
+        icmf_message_op(x"", blockchain_rid_topic, body = blockchain_rid(
+            rid = evm_transaction_submitter_bc_rid,
+            name = "evm_transaction_submitter_chain").to_gtv())
+    ).run();
+
+    val expected_sender = sender_blockchain @ {};
+    assert_equals(expected_sender.rid, evm_transaction_submitter_bc_rid);
+    assert_equals(expected_sender.name, "evm_transaction_submitter_chain");
+
+    rell.test.tx().op(
+        icmf_message_op(evm_transaction_submitter_bc_rid, evm_transaction_submitter_cost_topic, body = evm_transaction_submitter_cost(
+            id = x"10",
+            processed_by = node.pubkey,
+            cost = 6L * units_per_txs_evm_cost,
+            currency_symbol = "ETH",
+            payer_chain = payer_chain_brid
+        ).to_gtv())
+    ).run();
+
+    val expected_tx_cost = 13200000;
+
+    // Verify chain cost
+    assert_equals(get_account_balance(payer_chain_account), payer_chain_account_init_balance - expected_tx_cost);
+
+    // Verify reward payout
+    assert_equals(node_payed_reward @ {} ( .value), expected_tx_cost);
+    val pa = provider_account @ { provider } ( .account );
+    assert_equals(get_account_balance(pa), expected_tx_cost);
+}
+
+/**
+  * We should stop the bridge if the chain account no longer has funds to cover the tx cost. And also start
+  * it again when the account has enough funds again.
+  */
+function test_receive_evm_transaction_submitter_cost_message_stop_and_start_bridge_on_insufficient_funds() {
+
+    rell.test.tx().op(init()).run();
+
+    val evm_transaction_submitter_bc_rid = x"1111";
+    val tx_cost = 13200000; // Equals to 6L * units_per_txs_evm_cost ETH
+    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
+    add_cluster_node(cluster_name, node_pubkey, false);
+
+    // Add bridge lease and account for dapp chain to be charged for transaction
+    val payer_chain_brid = x"001122";
+    val payer_chain_keypair = rell.test.keypairs.charlie;
+    val payer_chain_account = require(do_create_account(payer_chain_keypair, auth_privkey));
+    val container_name = do_create_container(payer_chain_account, payer_chain_keypair, success = true, ticket_id = ticket_id_after_init + 16, cluster_name = cluster_name, container_units = 2);
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(payer_chain_keypair.priv, add_bridge_lease(container_name, payer_chain_brid, 1, "validator", "bridge", false)),
+        add_bridge_lease(container_name, payer_chain_brid, 1, "validator", "bridge", false)
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Add exchange rates
+    rell.test.tx().op(
+        create_price_oracle_rates_op("tCHR", "Chromia Test", 1.00),
+        create_price_oracle_rates_op("ETH", "Ether", 2.00)
+    ).run();
+
+    // Whitelist TXS chain to send icmf cost messages
+    rell.test.tx().op(
+        icmf_message_op(x"", blockchain_rid_topic, body = blockchain_rid(
+            rid = evm_transaction_submitter_bc_rid,
+            name = "evm_transaction_submitter_chain").to_gtv())
+    ).run();
+
+    // Change account balance to not be able to cover tx cost
+    rell.test.tx().op(
+        set_account_balance_op(payer_chain_account, tx_cost - 10)
+    ).run();
+    assert_equals(get_account_balance(payer_chain_account), tx_cost - 10);
+
+    // Send TX cost message and process the cost
+    rell.test.tx().op(
+        icmf_message_op(evm_transaction_submitter_bc_rid, evm_transaction_submitter_cost_topic, body = evm_transaction_submitter_cost(
+            id = x"10",
+            processed_by = node.pubkey,
+            cost = 6L * units_per_txs_evm_cost,
+            currency_symbol = "ETH",
+            payer_chain = payer_chain_brid
+        ).to_gtv())
+    ).run();
+
+    // Account should be drained even if it didn't cover all of the fee
+    assert_equals(get_account_balance(payer_chain_account), 0);
+
+    // The fee not covered by the account is stored as debt
+    assert_equals(bridge_lease @ { payer_chain_brid } ( .tx_cost_debt ), 10);
+
+    // The bridge is removed from TXS (but entity is kept in EC)
+    assert_events(("icmf_message", (
+        topic = bridge_mapping_topic,
+        body = bridge_mapping_message(
+            blockchain_rid = payer_chain_brid,
+            validator_contract = "validator",
+            bridge_contract = "bridge",
+            evm_network_id = 1,
+            deleted = true
+        ).to_gtv()
+    ).to_gtv_pretty()));
+
+    // Transfer funds to account - this is not enough to cover the debt and will not start the
+    // bridge in TXS again.
+    rell.test.tx().op(
+        unsafe_transfer_op(get_pool_account(), payer_chain_account, 5)
+    ).run();
+    assert_events();
+
+    // Transfer funds to account - this should cover the debt and start the bridge again in TXS
+    rell.test.tx().op(
+        unsafe_transfer_op(get_pool_account(), payer_chain_account, 6)
+    ).run();
+
+    // Verify it is paused / deleted from TXS
+    assert_events(("icmf_message", (
+        topic = bridge_mapping_topic,
+        body = bridge_mapping_message(
+            blockchain_rid = payer_chain_brid,
+            validator_contract = "validator",
+            bridge_contract = "bridge",
+            evm_network_id = 1,
+            deleted = false
+        ).to_gtv()
+    ).to_gtv_pretty()));
+}
+

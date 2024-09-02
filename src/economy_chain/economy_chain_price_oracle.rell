@@ -59,7 +59,48 @@ function upsert_price_oracle_rate_entity(name, symbol: text,  price: decimal) {
     }
 }
 
-
 query get_price_oracle_rates() {
     return price_oracle_rates @* {} (price_oracle_rates_data(.symbol, .name, .price));
 }
+
+function price_oracle_convert(
+    amount: big_integer,
+    from_symbol: text,
+    from_units: big_integer,
+    to_symbol: text,
+    to_units: big_integer
+): big_integer? {
+
+    val currency_to_price = map<text, decimal>(
+        price_oracle_rates @* { .symbol in [from_symbol, to_symbol]} (.symbol, .price)
+    );
+
+    if (not currency_to_price.contains(from_symbol)) {
+        log("Warning: Currency %s does not exists in price oracle.".format(from_symbol));
+    } else if (not currency_to_price.contains(to_symbol)) {
+        log("Warning: Currency %s does not exists in price oracle.".format(to_symbol));
+    } else {
+
+        val from_amount_decimal = decimal(amount) / from_units;
+
+        val rate = currency_to_price[from_symbol] / currency_to_price[to_symbol];
+        val to_amount = (from_amount_decimal * rate * to_units).to_big_integer();
+
+        log("Converted %s %s to %s %s with rate %s".format(
+            amount,
+            from_symbol,
+            to_amount,
+            to_symbol,
+            rate
+        ));
+
+        return to_amount;
+    }
+
+    return null;
+}
+
+function convert_chr_to_usd(amount: big_integer) {
+    return decimal(amount) / economy_constants.chr_per_usd;
+}
+

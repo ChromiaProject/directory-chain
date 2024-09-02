@@ -18,6 +18,14 @@ operation empty_account_op(ft4.accounts.account) {
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), balance);
 }
 
+operation set_account_balance_op(ft4.accounts.account, amount: big_integer) {
+    update ft4.assets.balance @? { account, get_asset() } ( .amount = amount );
+}
+
+operation unsafe_transfer_op(from: ft4.accounts.account, to: ft4.accounts.account, amount: big_integer) {
+    ft4.assets.Unsafe.transfer(from, to, get_asset(), amount);
+}
+
 operation mint_to(account: ft4.accounts.account, amount: big_integer) {
     ft4.assets.Unsafe.mint(account, get_asset(), amount);
 }
@@ -318,4 +326,10 @@ operation poke_staker_state_update_all() {
 operation pay_everything() {
     _staking_distribute_withdrawals();
     _staking_distribute_rewards();
+}
+
+operation pay_evm_transaction_submitter_rewards_op(
+    evm_transaction_submitter_cost: evm_transaction_submitter_cost,
+    tx_cost: big_integer) {
+    pay_evm_transaction_submitter_rewards(evm_transaction_submitter_cost, tx_cost);
 }

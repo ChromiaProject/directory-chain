@@ -61,3 +61,20 @@ function test_receive_price_oracle_update_invalid_sender() {
         ).to_gtv())
     ).run_must_fail("0x that is not tracked by economy chain");
 }
+
+function test_price_oracle_convert() {
+    // Add exchange rates
+    rell.test.tx().op(
+        create_price_oracle_rates_op("CHR", "Chromia", 1.00),
+        create_price_oracle_rates_op("ETH", "Ether", 2.00)
+    ).run();
+
+    assert_null(price_oracle_convert(6L * units_per_txs_evm_cost, "no", units_per_txs_evm_cost, "CHR", units_per_asset));
+    assert_equals(price_oracle_convert(6L * units_per_txs_evm_cost, "ETH", units_per_txs_evm_cost, "CHR", units_per_asset), 12000000);
+    assert_equals(price_oracle_convert(12000000, "CHR", units_per_asset, "ETH", units_per_txs_evm_cost), 6L * units_per_txs_evm_cost);
+}
+
+function test_convert_chr_to_usd() {
+
+    assert_equals(convert_chr_to_usd(30), 6);
+}
