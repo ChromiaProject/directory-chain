@@ -239,6 +239,21 @@ entity provider_account {
     key provider, account: ft4.accounts.account;
     mutable last_reward_check: timestamp = 0;
     mutable reward_debt: big_integer = 0;
+
+    /** @deprecated: to be removed, no longer in used since it is moved to provider_staking_account */
+    mutable last_approved_stake_requirements: timestamp = 0;
+}
+
+/**
+  * Provider account to be used for staking only. It will by default point to the provider_account but
+  * can be changed to a different account when needed.
+  */
+entity provider_staking_account {
+    key provider;
+    key mutable staking_account: ft4.accounts.account;
+    key provider, staking_account;
+
+    /** Time of last valid amount of staking, what is required to receive rewards */
     mutable last_approved_stake_requirements: timestamp = 0;
 }
 
@@ -320,6 +335,7 @@ struct bridge_anomaly_detector_data {
 }
 
 struct provider_staking_status {
+    staking_account_id: pubkey;
     own_staking_chr: integer;
     total_staking_chr: integer;
     approved: boolean;

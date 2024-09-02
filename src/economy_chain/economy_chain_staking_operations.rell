@@ -139,3 +139,25 @@ function staking_import_evm_balance_auth_message(gtv): text {
 operation staking_import_evm_balance(address: byte_array, network_id: integer) {
     _staking_import_evm_balance_impl(address, network_id);
 }
+
+operation set_provider_staking_account(provider_pubkey: pubkey, new_account_pubkey: pubkey) {
+
+    val provider = require_provider_is_signer(provider_pubkey);
+    val provider_staking_account = provider_staking_account @ { provider };
+    val new_account_id = ft4.accounts.get_account_id_from_signers([new_account_pubkey]);
+
+    require_is_signer(new_account_pubkey);
+    require_signed_by_account_id(provider_staking_account.staking_account.id);
+    require(not(exists(provider_staking_account @? { .staking_account.id == new_account_id })),
+        "Account is already in use by a provider");
+
+    var new_account = ft4.accounts.account @? { new_account_id };
+
+    if (new_account == null) {
+        val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(new_account_pubkey, set(["A", "T"]));
+        new_account = ft4.accounts.create_account_with_auth(auth_descriptor);
+    }
+
+    _change_staking_account(provider_staking_account.staking_account, new_account);
+    provider_staking_account.staking_account = new_account;
+}

@@ -168,7 +168,7 @@ function pay_out_node_rewards(node_reward: map<node, big_integer>) {
         val provider = node.provider;
         val pa = provider_account @ { provider };
 
-        if (is_staking_approved(provider, pa, reward)) {
+        if (is_staking_approved(provider, reward)) {
             val pay_reward_result = pay_reward(pool, pool_balance, pa.account, pa.reward_debt, reward, "provider %s".format(pa.provider.pubkey));
 
             save_node_payed_reward(node.pubkey, pay_reward_result.payed_reward, op_context.last_block_time);
@@ -178,14 +178,17 @@ function pay_out_node_rewards(node_reward: map<node, big_integer>) {
     }
 }
 
-function is_staking_approved(provider, provider_account, reward: big_integer): boolean {
+function is_staking_approved(provider, reward: big_integer): boolean {
 
     if (economy_constants.staking_requirements_enabled) {
-        if (provider_meets_staking_requirements(provider, provider_account)) {
 
-            provider_account.last_approved_stake_requirements = op_context.last_block_time;
+        val provider_staking_account = provider_staking_account @ { provider };
+
+        if (provider_meets_staking_requirements(provider)) {
+
+            provider_staking_account.last_approved_stake_requirements = op_context.last_block_time;
         } else {
-            val (days_since_approved_staking, days_until_stopped_payout, pay_out_reward) = get_staking_requirement_payout_stop(provider_account);
+            val (days_since_approved_staking, days_until_stopped_payout, pay_out_reward) = get_staking_requirement_payout_stop(provider_staking_account);
 
             if (pay_out_reward) {
                 log("Provider %s do not meet staking requirements - payouts will be stopped in %d days".format(
@@ -326,8 +329,8 @@ function get_days_since(time: timestamp): integer {
     return (get_last_blocktime() - time) / DAY_MS;
 }
 
-function get_staking_requirement_payout_stop(provider_account): (integer, integer, boolean) {
-    val days_since_approved_staking = get_days_since(provider_account.last_approved_stake_requirements);
+function get_staking_requirement_payout_stop(provider_staking_account): (integer, integer, boolean) {
+    val days_since_approved_staking = get_days_since(provider_staking_account.last_approved_stake_requirements);
     val days_until_stopped_payout = economy_constants.staking_requirement_stop_payout_days - days_since_approved_staking;
     return (
         days_since_approved_staking,
@@ -336,7 +339,7 @@ function get_staking_requirement_payout_stop(provider_account): (integer, intege
     );
 }
 
-function provider_meets_staking_requirements(provider, provider_account): boolean {
+function provider_meets_staking_requirements(provider): boolean {
 
     val required_own = if (provider.system)
         economy_constants.staking_requirement_system_provider_own_stake_chr

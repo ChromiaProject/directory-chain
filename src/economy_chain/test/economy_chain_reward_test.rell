@@ -627,11 +627,10 @@ function test_staking_req_reward_fail_due_to_low_own() {
         staking_requirement_system_provider_own_stake_chr = 100000000000
     );
 
-    val pa = run_staking_pay_out();
+    val psa = run_staking_pay_out();
 
-    assert_equals(get_account_balance(pa.account), 0);
-    assert_equals(pa.reward_debt, 0);
-    assert_equals(pa.last_approved_stake_requirements, 0);
+    assert_equals(get_account_balance(psa.staking_account), 0);
+    assert_equals(psa.last_approved_stake_requirements, 0);
 }
 
 function test_staking_req_reward_fail_due_to_low_total() {
@@ -641,11 +640,10 @@ function test_staking_req_reward_fail_due_to_low_total() {
         staking_requirement_system_provider_total_stake_chr = 100000000000
     );
 
-    val pa = run_staking_pay_out();
+    val psa = run_staking_pay_out();
 
-    assert_equals(get_account_balance(pa.account), 0);
-    assert_equals(pa.reward_debt, 0);
-    assert_equals(pa.last_approved_stake_requirements, 0);
+    assert_equals(get_account_balance(psa.staking_account), 0);
+    assert_equals(psa.last_approved_stake_requirements, 0);
 }
 
 function test_staking_req_reward_successful() {
@@ -654,27 +652,25 @@ function test_staking_req_reward_successful() {
         staking_requirements_enabled = true
     );
 
-    val pa = run_staking_pay_out(
+    val psa = run_staking_pay_out(
         reward = 10,
         staking_amount = economy_constants.staking_requirement_system_provider_total_stake_chr + 100
     );
 
-    assert_equals(get_account_balance(pa.account), 11);
-    assert_equals(pa.reward_debt, 0);
-    assert_gt(pa.last_approved_stake_requirements, 0);
+    assert_equals(get_account_balance(psa.staking_account), 11);
+    assert_gt(psa.last_approved_stake_requirements, 0);
 }
 
 function test_staking_req_reward_successful_due_to_disabled() {
 
     update_staking_requirements_constants(staking_requirements_enabled = false);
 
-    val pa = run_staking_pay_out(
+    val psa = run_staking_pay_out(
         staking_amount = 0
     );
 
-    assert_equals(get_account_balance(pa.account), 10);
-    assert_equals(pa.reward_debt, 0);
-    assert_equals(pa.last_approved_stake_requirements, 0);
+    assert_equals(get_account_balance(psa.staking_account), 10);
+    assert_equals(psa.last_approved_stake_requirements, 0);
 }
 
 function test_staking_req_reward_successful_followed_by_stopped() {
@@ -688,17 +684,16 @@ function test_staking_req_reward_successful_followed_by_stopped() {
         staking_requirement_dapp_provider_total_stake_chr = 0
     );
 
-    var pa = run_staking_pay_out(
+    var psa = run_staking_pay_out(
         reward = 10,
         staking_amount = 10
     );
 
-    assert_equals(get_account_balance(pa.account), 11);
-    assert_equals(pa.reward_debt, 0);
-    assert_gt(pa.last_approved_stake_requirements, 0);
+    assert_equals(get_account_balance(psa.staking_account), 11);
+    assert_gt(psa.last_approved_stake_requirements, 0);
 
     val node = node @ { node_pubkey };
-    var last_approved_stake_requirements = pa.last_approved_stake_requirements;
+    var last_approved_stake_requirements = psa.last_approved_stake_requirements;
     val node_reward = map<node, big_integer>();
     node_reward[node] = 10;
 
@@ -713,11 +708,10 @@ function test_staking_req_reward_successful_followed_by_stopped() {
         pay_out_node_rewards_op(node_reward)
     ).nop().sign(provider_key).run();
 
-    pa = provider_account @ { provider @ { provider_pubkey } };
+    psa = provider_staking_account @ { provider @ { provider_pubkey } };
 
-    assert_equals(get_account_balance(pa.account), 22);
-    assert_equals(pa.reward_debt, 0);
-    assert_equals(pa.last_approved_stake_requirements, last_approved_stake_requirements);
+    assert_equals(get_account_balance(psa.staking_account), 22);
+    assert_equals(psa.last_approved_stake_requirements, last_approved_stake_requirements);
 
     // Staking not OK - do not pay reward since number of days passed
     rell.test.set_next_block_time_delta(2 * DAY_MS); // + 2 days (days limit passed)
@@ -728,11 +722,10 @@ function test_staking_req_reward_successful_followed_by_stopped() {
         pay_out_node_rewards_op(node_reward)
     ).sign(provider_key).run();
 
-    pa = provider_account @ { provider @ { provider_pubkey } };
+    psa = provider_staking_account @ { provider @ { provider_pubkey } };
 
-    assert_equals(get_account_balance(pa.account), 22);
-    assert_equals(pa.reward_debt, 0);
-    assert_equals(pa.last_approved_stake_requirements, last_approved_stake_requirements);
+    assert_equals(get_account_balance(psa.staking_account), 22);
+    assert_equals(psa.last_approved_stake_requirements, last_approved_stake_requirements);
 }
 
 ///////////////////
@@ -757,15 +750,14 @@ function run_staking_pay_out(
         register_provider_account_op(provider)
     ).sign(provider_key).run();
 
-    val pa = provider_account @ { provider @ { provider_pubkey } };
-    assert_equals(get_account_balance(pa.account), 0);
-    assert_equals(pa.reward_debt, 0);
-    assert_equals(pa.last_approved_stake_requirements, 0);
+    val psa = provider_staking_account @ { provider @ { provider_pubkey } };
+    assert_equals(get_account_balance(psa.staking_account), 0);
+    assert_equals(psa.last_approved_stake_requirements, 0);
 
     val node_reward = map<node, big_integer>();
     node_reward[node] = reward;
     rell.test.tx().op(
-        add_staking(pa, staking_amount)
+        add_staking(psa, staking_amount)
     ).sign(provider_key).run();
 
     rell.test.set_next_block_time_delta(chain_context.args.staking_delegation_delay_ms);
@@ -775,7 +767,7 @@ function run_staking_pay_out(
         pay_out_node_rewards_op(node_reward)
     ).sign(provider_key).run();
 
-    return provider_account @ { provider @ { provider_pubkey } };
+    return provider_staking_account @ { provider @ { provider_pubkey } };
 }
 
 function run_calculate_reward(node_availability_report: node_availability_report, create_lease_number: integer, calculate_system_reward: boolean) {

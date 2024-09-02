@@ -33,7 +33,7 @@ function _staking_deposit_native_impl(amount: integer, delegate_to: pubkey? = nu
     } else {
         // Find the latest staking state to provider for this user
         // NOTE: This could be a delegation that is not yet active
-        val latest_staker_state_to_provider = staker_state_to_provider @? { .staker_state.account == staker } (@sort_desc @omit .timestamp, $) limit 1;
+        val latest_staker_state_to_provider = get_latest_staker_state_to_provider(staker);
 
         // Create a fresh staker state
         ss = create staker_state (
@@ -59,6 +59,13 @@ function _staking_deposit_native_impl(amount: integer, delegate_to: pubkey? = nu
     }
 }
 
+function _change_staking_account(account: ft4.accounts.account, new_account: ft4.accounts.account) {
+    val count = staker_state @? { account } ( @omit @group .rowid, @sum 1 ) ?: 0;
+    update staker_state @* { account } ( .account = new_account );
+
+    log("Changed staking account from %s to %s and migrated %s staker states".format(
+        account.id, new_account.id, count));
+}
 
 // Legacy EVM events imports
 
@@ -70,7 +77,7 @@ function _staking_update_evm_state(staker: ft4.accounts.account, network, new_ba
     } else {
         // Find the latest staking state to provider for this user
         // NOTE: This could be a delegation that is not yet active
-        val latest_staker_state_to_provider = staker_state_to_provider @? { .staker_state.account == staker } (@sort_desc @omit .timestamp, $) limit 1;
+        val latest_staker_state_to_provider = get_latest_staker_state_to_provider(staker);
 
         // Create a fresh staker state
         ss = create staker_state (
@@ -123,7 +130,7 @@ function _staking_distribute_withdrawals() {
         .active and .staker_state.network == network.CHR and .finish_at <= _staking_last_known_time()
     } ( account = .staker_state.account, balance = .staker_state.balance );
 
-    log("Preparing to pay out % withdrawals.".format(open_withdrawals.size()));
+    log("Preparing to pay out %s withdrawals.".format(open_withdrawals.size()));
 
     for (withdrawal in open_withdrawals) {
         // Send the balance back to them through ft4

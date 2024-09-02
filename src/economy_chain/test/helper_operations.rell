@@ -232,9 +232,9 @@ operation register_provider_account_op(provider) {
 operation pay_out_node_rewards_op(node_reward: map<node, big_integer>) {
     pay_out_node_rewards(node_reward);
 }
-operation add_staking(provider_account, amount: integer) {
+operation add_staking(provider_staking_account, amount: integer) {
     val ss = create staker_state (
-        account = provider_account.account,
+        account = provider_staking_account.staking_account,
         network = network.CHR,
         balance = amount,
         last_update = 0,
@@ -243,7 +243,7 @@ operation add_staking(provider_account, amount: integer) {
     create staker_state_to_provider (
         _staking_last_known_time(),
         ss,
-        provider_account.provider
+        provider_staking_account.provider
     );
 }
 
@@ -251,8 +251,8 @@ operation staking_init_op() {
     __staking_init();
 }
 
-operation set_last_approved_stake_requirements(pa: provider_account, time: integer) {
-    pa.last_approved_stake_requirements = time;
+operation set_last_approved_stake_requirements(psa: provider_staking_account, time: integer) {
+    psa.last_approved_stake_requirements = time;
 }
 
 operation register_test_account(pubkey) {
@@ -292,4 +292,16 @@ operation update_staking_requirements_economy_constants(
 
 operation create_reward_provider_deleted_node_op(provider, node: pubkey, cluster: cluster) {
     create_reward_provider_deleted_node(provider, node, [cluster]);
+}
+
+operation set_migrations_completed(provider_staking_account_entity: boolean) {
+    migration_completed.provider_staking_account_entity = provider_staking_account_entity;
+}
+
+operation purge_provider_staking_account_entities() {
+    delete provider_staking_account @* {};
+}
+
+operation do_migrations_op() {
+    do_migrations();
 }
