@@ -195,9 +195,12 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
 
     val new_provider = require(provider @? { provider_pubkey }, "No provider for this public key.");
 
-    // get all staker states to change of user, and all related withdraw requests
+    // Get all staker states to change of user, and all related withdraw requests
     val staker_states = (s: staker_state, p: staker_state_to_provider) @* {
-            p.staker_state == s and p.provider != new_provider and s.account == staker };
+            p.staker_state == s
+        and p.provider != new_provider
+        and s.account == staker
+    };
     val withdraw_requests = staker_withdrawal_request @* { .active and .staker_state in staker_states @* {} (.s) };
 
     // deactivate chromia withdraw requests
