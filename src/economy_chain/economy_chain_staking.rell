@@ -128,7 +128,7 @@ function _staking_request_withdrawal(user: ft4.accounts.account, _network: netwo
         and s.network == _network
     };
  
-    // Update appropriate staker states with null provider
+    // Calculate fresh null staker states
     val fresh_staker_state_to_provider = staker_states @* {}
     (
         struct<staker_state_to_provider> (
@@ -138,6 +138,11 @@ function _staking_request_withdrawal(user: ft4.accounts.account, _network: netwo
             previous_provider = .p.provider
         )
     );
+
+    // Clear future delegation states
+    delete staker_state_to_provider @* {$ in staker_states @* {} (.p) and .timestamp >= _staking_last_known_time()};
+
+    // Update appropriate staker states with null provider
     create staker_state_to_provider ( fresh_staker_state_to_provider );
 
     // Make a new withdrawal request
