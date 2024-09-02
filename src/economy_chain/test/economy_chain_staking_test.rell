@@ -335,6 +335,7 @@ function test_three_networks_multiple_deposits_withdrawals_rewards() {
     // Run forwards 1 year + 1 week
     rell.test.set_next_block_time_delta(millis_per_year);
     rell.test.block().run();
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
 
     // Check we have ~3 rewards
     assert_equals(staking_rewards_claimable_for(test_account_alice.id) / units_per_asset, 3);
@@ -342,9 +343,11 @@ function test_three_networks_multiple_deposits_withdrawals_rewards() {
     // Payout out all withdrawals and rewards (remember how native sees the EVM withdrawals)
     do_pay_everything_native();
     do_evm_stake_update_bsc(alice_evm_address, 0);
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
 
     // Withdraw ETH
     do_evm_withdrawal_request_eth(test_account_alice);
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
     assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.ETH));
 
     // Run forwards 1 year + 1 week
@@ -378,6 +381,9 @@ function test_three_networks_multiple_deposits_withdrawals_rewards() {
 
     // No delegation
     assert_null(staking_get_current_delegate(test_account_alice.id));
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR));
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.ETH));
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
 
     // Start again by depositing the 16 rewards plus 4 on ETH
     do_staking_deposit_native(rell.test.keypairs.alice, 16 * units_per_asset, rell.test.keypairs.dave.pub);
@@ -388,6 +394,12 @@ function test_three_networks_multiple_deposits_withdrawals_rewards() {
     // Run forwards 1 year + 1 week
     rell.test.set_next_block_time_delta(millis_per_year + staking_delegation_delay_ms);
     rell.test.block().run();
+
+    // Dave delegation except on BSC
+    assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.dave.pub);
+    assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR), rell.test.keypairs.dave.pub);
+    assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.ETH), rell.test.keypairs.dave.pub);
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
 
     // Check we have ~2 rewards
     assert_equals(staking_rewards_claimable_for(test_account_alice.id) / units_per_asset, 2);
@@ -411,7 +423,10 @@ function test_three_networks_multiple_deposits_withdrawals_rewards() {
     // Clear out all
     do_pay_everything_native();
     assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR));
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
+    assert_null(staking_get_withdrawal_time(test_account_alice.id, network.CHR));
     do_evm_stake_update_eth(alice_evm_address, 0);
+    assert_null(staking_get_withdrawal_time(test_account_alice.id, network.ETH));
 
     // No next withdrawals
     assert_null(staking_get_withdrawal_time(test_account_alice.id));
@@ -420,9 +435,10 @@ function test_three_networks_multiple_deposits_withdrawals_rewards() {
     assert_null(staking_get_withdrawal_time(test_account_alice.id, network.BSC));
 
     // No delegation
+    assert_null(staking_get_current_delegate(test_account_alice.id));
     assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR));
     assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.ETH));
-    // BSC technically does have a delegation here
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
 
     // Re-reconcile
     assert_equals(
