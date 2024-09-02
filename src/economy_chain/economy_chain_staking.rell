@@ -76,6 +76,13 @@ function _staking_update_evm_state(staker: ft4.accounts.account, network, new_ba
     if (exists(ss)) {
         _update_pending_token_time(ss);
         ss.balance = new_balance;
+
+        // Handle the balance disappearing, eg. a withdrawal
+        if (0 == new_balance) {
+            update staker_withdrawal_request @* {
+                .active and .staker_state.network == network and .finish_at <= _staking_last_known_time( )
+            } ( .active = false);
+        }
     } else {
         // Find the latest staking state to provider for this user
         // NOTE: This could be a delegation that is not yet active
