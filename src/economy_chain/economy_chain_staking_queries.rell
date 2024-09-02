@@ -24,7 +24,7 @@ query staking_get_rewards_start(): timestamp = chain_context.args.staking_reward
 query staking_get_current_delegate_on_network(account_id: byte_array, network): byte_array? {
     val _provider_pubkey = staker_state_to_provider @? {
         .staker_state.account.id == account_id and .staker_state.network == network and  
-        (_staking_last_known_time() - chain_context.args.staking_delegation_delay_ms) >= .timestamp
+        _staking_last_known_time() >= .timestamp
     } ( @omit @sort_desc .timestamp, @omit @sort_desc .rowid, .provider.pubkey ) limit 1;
     return when {
         empty(_provider_pubkey) or _provider_pubkey == get_null_account() -> null;
@@ -33,15 +33,16 @@ query staking_get_current_delegate_on_network(account_id: byte_array, network): 
 }
 
 /**
-/* Gets the user's stake delegation for the native Chromia network. Any other stakes should be identical.
+/* Gets the user's most recent stake delegation across all network.
+/* Delegation of all stakes should be identical. This will break-down if withdrawals are not applied consistently.
 /*
 /* @param account_id Given user
-/* @returns Public key of the delegated to provider on Chromia mainet, or null if currently undelegated 
+/* @returns Public key of the last delegated to provider, or null if last undelegated 
 */
 query staking_get_current_delegate(account_id: byte_array) {
     val _provider_pubkey = staker_state_to_provider @? {
         .staker_state.account.id == account_id
-        and (_staking_last_known_time() - chain_context.args.staking_delegation_delay_ms) >= .timestamp
+        and _staking_last_known_time() >= .timestamp
     } ( @omit @sort_desc .timestamp, @omit @sort_desc .rowid, .provider.pubkey ) limit 1;
     return when {
         empty(_provider_pubkey) or _provider_pubkey == get_null_account() -> null;
@@ -55,19 +56,25 @@ query staking_get_current_delegate(account_id: byte_array) {
 /* @param account_id Given user
 /* @returns A tuple of the next to be delegated to provider and the timestamp the delegation will take effect. Or null if no re-delegation is scheduled.
 */
-query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubkey, time: integer)? {
+query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubkey?, time: integer)? {
     val staker = ft4.accounts.Account(account_id);
     val upcoming_delegations = staker_state_to_provider @* {
-        .staker_state.account == staker and .timestamp > (_staking_last_known_time() - chain_context.args.staking_delegation_delay_ms)
+        .staker_state.account == staker and .timestamp > _staking_last_known_time()
     } (
         @omit @sort_desc .timestamp,
         @omit @sort_desc .rowid,
         pubkey = .provider.pubkey,
-        time = .timestamp + chain_context.args.staking_delegation_delay_ms
+        time = .timestamp
     ) limit 1;
     return if (exists(
         upcoming_delegations
-    )) (upcoming_delegations[0]) else null;
+    )) (
+        pubkey = when(upcoming_delegations[0].pubkey) {
+            get_null_account() -> null;
+            else -> upcoming_delegations[0].pubkey
+        },
+        time = upcoming_delegations[0].time
+    ) else null;
 }
 
 /**
@@ -77,16 +84,16 @@ query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubk
 /* @returns Total CHR staked to the given provider in  minor units
 */
 query staking_get_total_delegation_to(pubkey, network? = null) {
-    return ( s1: staker_state_to_provider) @* {
-        .provider.pubkey == pubkey and (s1.timestamp <= (_staking_last_known_time() - chain_context.args.staking_delegation_delay_ms)) and 
+    return ( s1: staker_state_to_provider) @ {
+        .provider.pubkey == pubkey and (s1.timestamp <= _staking_last_known_time()) and 
             (not exists(network) or .staker_state.network == network) and 
             not exists((s2:staker_state_to_provider) @* { 
                 s2.staker_state ==s1.staker_state,
-                ((s2.timestamp <= (_staking_last_known_time() - chain_context.args.staking_delegation_delay_ms)) and (s2.timestamp>s1.timestamp)) 
+                ((s2.timestamp <= _staking_last_known_time()) and (s2.timestamp>s1.timestamp)) 
                 or (s2.timestamp==s1.timestamp and s2 < s1) 
             }
         )
-    } ( @sum .staker_state.balance )[0];
+    } ( @sum .staker_state.balance );
 }
 
 /**
@@ -131,15 +138,61 @@ query staking_get_withdrawal_time(account_id: byte_array, network = network.CHR)
 /*
 /* @param account_id Account ID
 /* @returns Amount of CHR in minor units
+/* @dev If this is changed so should `_update_pending_token_time` and the query `_update_pending_token_time_all`.
+/* @dev Please pay attention to the bits marked with ***.
 */
 query staking_rewards_claimable_for(account_id: byte_array) {
     val rate = staking_get_current_rate() / millis_per_year;
     val staker = ft4.accounts.Account(account_id);
-    val ss = staker_state @* { .account == staker } ( .balance, .last_update, .pending_token_time );
+    val ss = (
+        // Take all the states
+        s: staker_state,
+        // And attach to them the provider record
+        p: staker_state_to_provider @* {
+                // That links to the staker state
+                s == p.staker_state
+                // Is old enough to be active
+            and p.timestamp <= _staking_last_known_time()
+            and empty(
+                // And for which there is not also a state that meets that criteria...
+                (pp: staker_state_to_provider) @* {
+                        pp.staker_state == s
+                    and pp.timestamp <= _staking_last_known_time()
+                    // ... and is is newer
+                    and (
+                            pp.timestamp > p.timestamp
+                        or  (pp.rowid > p.rowid and pp.timestamp == p.timestamp)
+                    )
+                }
+            )
+        }
+    // For this staker
+    ) @* { s.account == staker }; // *** We want all of them but only for 1 account ***
     var total_pending_token_time = 0;
     for (s in ss) {
         // @dev This needs to align with the logic in economy_chain_staking_model.rell .
-        total_pending_token_time += s.pending_token_time + (s.balance / units_per_asset) * max(0, _staking_last_known_time() - max(staking_get_rewards_start(), s.last_update));
+        val elapsed_time =
+        max(0, // No less than zero time
+            // We would like to end at ... 
+            when(s.p.provider.pubkey) {
+                // ... if we are transitioning to undelegated, the earlier of the undelegation time and now
+                get_null_account() -> min(_staking_last_known_time(), s.p.timestamp);
+                // ... or just the current time
+                else -> _staking_last_known_time();
+            }
+            // Start at the greatest of whole system start time or that for this stake
+            - max(
+                staking_get_rewards_start(),
+                when(s.p.previous_provider.pubkey) {
+                    // If we undelegating here, the more recent of the last updated or the undelegation time
+                    get_null_account() -> max(s.p.timestamp, s.s.last_update);
+                    // ... if we don't unstake then just the last update time
+                    else -> s.s.last_update;
+                },
+            )
+        );
+        val balance_in_units = s.s.balance / units_per_asset;
+        total_pending_token_time += s.s.pending_token_time + (balance_in_units * elapsed_time);
     }
 
     // Operand ordering to prevent overflow

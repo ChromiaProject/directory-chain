@@ -105,7 +105,7 @@ function test_delegation() {
     rell.test.set_next_block_time_delta(1);
     rell.test.block().run();
 
-    // Should be near immediate as delegating from nothingx
+    // Should be near immediate as delegating from nothing
     assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR), rell.test.keypairs.charlie.pub);
     assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.charlie.pub);
 
@@ -129,6 +129,323 @@ function test_delegation() {
     rell.test.set_next_block_time_delta(staking_delegation_delay_ms);
     rell.test.block().run();
     assert_null(staking_get_current_delegate(test_account_alice.id)); // Change in a week
+}
+
+function test_delegation_across_measures() {
+    rell.test.tx().op(init()).run();
+
+    // Check rate is 0.1 decimal
+    assert_equals(staking_get_current_rate(), 0.1);
+
+    // Just one native account
+    val test_account_alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    rell.test.tx()
+        .op(mint_to(test_account_alice, 12000 * units_per_asset))
+    .sign(admin_privkey).run();
+
+    // Just one provider
+    add_provider(rell.test.keypairs.charlie.pub);
+
+    // Deposit 100
+    do_staking_deposit_native(rell.test.keypairs.alice, 100 * units_per_asset);
+
+    // Check undelegated and next is undelegated
+    assert_null(staking_get_current_delegate(test_account_alice.id));
+    assert_null(staking_get_next_delegation_change(test_account_alice.id));
+
+    // Leap forward a month
+    rell.test.set_next_block_time_delta(millis_per_month);
+    rell.test.block().run();
+
+    // Check undelegated and next is undelegated
+    assert_null(staking_get_current_delegate(test_account_alice.id));
+    assert_null(staking_get_next_delegation_change(test_account_alice.id));
+
+    // Check nothing earned
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id), 0);
+
+    // Native deposit 900 to make 1000 and delegate
+    do_staking_deposit_native(rell.test.keypairs.alice, 900 * units_per_asset, rell.test.keypairs.charlie.pub);
+
+    // Check delegation is provider
+    assert_equals(rell.test.keypairs.charlie.pub, staking_get_current_delegate(test_account_alice.id));
+
+    // No next delegation
+    assert_null(staking_get_next_delegation_change(test_account_alice.id));
+
+    // Advance 1/2 a year
+    rell.test.set_next_block_time_delta(millis_per_year / 2);
+    rell.test.block().run();
+
+    // Check that accumulated reward is ~50
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id) / units_per_asset, 50);
+
+    // Undelegate
+    rell.test.set_next_block_time_delta(888);
+    do_staking_undelegate(rell.test.keypairs.alice);
+
+    // Check still delegated
+    assert_equals(rell.test.keypairs.charlie.pub, staking_get_current_delegate(test_account_alice.id));
+
+    // Check next delegation is null, and time is + period
+    assert_null(staking_get_next_delegation_change(test_account_alice.id)?.pubkey);
+    val next_delegation_time = staking_get_next_delegation_change(test_account_alice.id)?.time;
+    assert_equals(
+        next_delegation_time,
+        _staking_last_known_time() + chain_context.args.staking_delegation_delay_ms - 888 /* test blocktime */
+    );
+ 
+    // Go to next delegation time minus 1 second
+    rell.test.set_next_block_time(require(next_delegation_time) - 1000);
+    rell.test.block().run();
+    assert_equals(next_delegation_time - 1000, _staking_last_known_time());
+
+    // Check delegated to provider
+    assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.charlie.pub);
+
+    // Check next delegation is null, and time is + period
+    assert_null(staking_get_next_delegation_change(test_account_alice.id)?.pubkey);
+    assert_equals(next_delegation_time, staking_get_next_delegation_change(test_account_alice.id)?.time);
+
+    // Advance 2 seconds
+    rell.test.set_next_block_time_delta(2000);
+    rell.test.block().run();
+
+    // Check undelegated
+    assert_null(staking_get_current_delegate(test_account_alice.id));
+
+    // Check next delegation is null
+    assert_null(staking_get_next_delegation_change(test_account_alice.id));
+
+    // Check that accumulated reward is ~50
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id) / units_per_asset, 50);
+
+    // Trigger payout on empty
+    rell.test.tx().op(staking_claim_rewards()).sign(admin_privkey).run();
+
+    // Check paid is 0
+    assert_equals(staking_get_rewards_paid(test_account_alice.id) / units_per_asset, 0);
+
+    // Check that accumulated reward is still ~50
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id) / units_per_asset, 50);
+
+    // Top up rewards pool
+    rell.test.tx()
+        .op(mint_to_pool(888 * units_per_asset))
+    .sign(admin_privkey).run();
+
+    // Trigger payout for real - not sure why we need a nop here :/
+    rell.test.tx().op(staking_claim_rewards()).nop().sign(admin_privkey).run();
+
+    // Check paid is 50
+    assert_equals(staking_get_rewards_paid(test_account_alice.id) / units_per_asset, 50);
+
+    // Check that accumulated reward is now zero
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id) / units_per_asset, 0);
+
+    // Advance 1 year
+    rell.test.set_next_block_time_delta(millis_per_year);
+    rell.test.block().run();
+
+    // Delegate to provider
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.charlie.pub);
+
+    // Advance 2 years + period
+    rell.test.set_next_block_time((2 * millis_per_year) + staking_get_cannot_change_before());
+    rell.test.block().run();
+
+    // Check accumulated is ~200
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id) / units_per_asset, 200);
+
+    // Deposit 2000 and delegate to another provider
+    do_staking_deposit_native(rell.test.keypairs.alice, 2000 * units_per_asset);
+    add_provider(rell.test.keypairs.dave.pub);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.dave.pub);
+
+    // Advance 1 year in 2 blocks
+    rell.test.set_next_block_time_delta(millis_per_year / 2);
+    rell.test.block().run();
+    rell.test.set_next_block_time_delta(millis_per_year / 2);
+    rell.test.block().run();
+
+    // Check accumulated is ~500
+    // 1000 for 2 years gave 200. The 3000 for 1 year gives 300.
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id) / units_per_asset, 500);
+}
+
+function test_three_networks_multiple_deposits_withdrawals_rewards() {
+
+    // Initialise and top-up rewards pool
+    rell.test.tx()
+        .op(init())
+        .op(mint_to_pool(888 * units_per_asset))
+    .sign(admin_privkey).run();
+    assert_equals(888 * units_per_asset, get_account_balance(get_pool_account()));
+
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
+    do_evm_stake_update_bsc(alice_evm_address, 10 * units_per_asset);
+    val test_account_alice = require(do_create_account_using_ras_staking(rell.test.keypairs.alice));
+    assert_equals(staking_get_balance(test_account_alice.id), 10 * units_per_asset);
+
+    val initial_alice_balance = get_account_balance(test_account_alice);
+
+    do_evm_stake_update_eth(alice_evm_address, 30 * units_per_asset);
+    assert_equals(staking_get_balance(test_account_alice.id), 40 * units_per_asset);
+
+    do_staking_deposit_native(rell.test.keypairs.alice, 50 * units_per_asset);
+    assert_equals(staking_get_balance(test_account_alice.id), 90 * units_per_asset);
+
+    // Delegate and run forwards 1 year + 1 week
+    add_provider(rell.test.keypairs.dave.pub);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.dave.pub);
+    rell.test.set_next_block_time_delta(millis_per_year + staking_delegation_delay_ms);
+    rell.test.block().run();
+
+    // Check that we now have 9 rewards in total.
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id) / units_per_asset, 9);
+
+    // Payout out all
+    rell.test.tx().op(staking_claim_rewards()).sign(admin_privkey).run();
+
+    // Withdraw native only
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_request_withdrawal())
+    ).op(
+        staking_request_withdrawal()
+    ).run();
+
+    // Run forwards 1 year + 1 week
+    rell.test.set_next_block_time_delta(millis_per_year + staking_delegation_delay_ms);
+    rell.test.block().run();
+
+    // Check we have ~4 rewards
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id) / units_per_asset, 4);
+
+    // Payout out all withdrawals and rewards
+    do_pay_everything_native();
+
+    // Withdraw BSC
+    do_evm_withdrawal_request_bsc(test_account_alice);
+
+    // Run forwards 1 week
+    rell.test.set_next_block_time_delta(staking_delegation_delay_ms + 2000);
+    rell.test.block().run();
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
+
+    // Run forwards 1 year + 1 week
+    rell.test.set_next_block_time_delta(millis_per_year);
+    rell.test.block().run();
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
+
+    // Check we have ~3 rewards
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id) / units_per_asset, 3);
+
+    // Payout out all withdrawals and rewards (remember how native sees the EVM withdrawals)
+    do_pay_everything_native();
+    do_evm_stake_update_bsc(alice_evm_address, 0);
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
+
+    // Withdraw ETH
+    do_evm_withdrawal_request_eth(test_account_alice);
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.ETH));
+
+    // Run forwards 1 year + 1 week
+    rell.test.set_next_block_time_delta(millis_per_year + staking_delegation_delay_ms);
+    rell.test.block().run();
+
+    // Check we have no rewards
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id) / units_per_asset, 0);
+
+    // Payout out all withdrawals and rewards
+    do_pay_everything_native();
+    do_evm_stake_update_eth(alice_evm_address, 0);
+
+    // Check empty
+    assert_equals(staking_get_balance(test_account_alice.id), 0);
+
+    // Reconcile
+    val rewards_balance = get_account_balance(test_account_alice) - initial_alice_balance;
+    assert_equals(rewards_balance /  units_per_asset, 16);
+    assert_equals(
+        888 * units_per_asset + initial_alice_balance,
+            get_account_balance(get_pool_account())
+        +   get_account_balance(test_account_alice)
+    );
+
+    // No next withdrawals
+    assert_null(staking_get_withdrawal_time(test_account_alice.id));
+    assert_null(staking_get_withdrawal_time(test_account_alice.id, network.CHR));
+    assert_null(staking_get_withdrawal_time(test_account_alice.id, network.BSC));
+    assert_null(staking_get_withdrawal_time(test_account_alice.id, network.ETH));
+
+    // No delegation
+    assert_null(staking_get_current_delegate(test_account_alice.id));
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR));
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.ETH));
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
+
+    // Start again by depositing the 16 rewards plus 4 on ETH
+    do_staking_deposit_native(rell.test.keypairs.alice, 16 * units_per_asset, rell.test.keypairs.dave.pub);
+    do_evm_stake_update_eth(alice_evm_address, 1 * units_per_asset); // Spurious, to see if query gets confused
+    do_evm_stake_update_eth(alice_evm_address, 4 * units_per_asset);
+    assert_equals(staking_get_balance(test_account_alice.id) / units_per_asset, 20);
+
+    // Run forwards 1 year + 1 week
+    rell.test.set_next_block_time_delta(millis_per_year + staking_delegation_delay_ms);
+    rell.test.block().run();
+
+    // Dave delegation except on BSC
+    assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.dave.pub);
+    assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR), rell.test.keypairs.dave.pub);
+    assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.ETH), rell.test.keypairs.dave.pub);
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
+
+    // Check we have ~2 rewards
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id) / units_per_asset, 2);
+
+    // Re-delegate immediately
+    add_provider(rell.test.keypairs.charlie.pub);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.charlie.pub);
+
+    // Withdraw on native and ETH
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_request_withdrawal())
+    ).op(
+        staking_request_withdrawal()
+    ).run();
+    do_evm_withdrawal_request_eth(test_account_alice);
+
+    // Run forwards a year
+    rell.test.set_next_block_time_delta(millis_per_year);
+    rell.test.block().run();
+
+    // Clear out all
+    do_pay_everything_native();
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR));
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
+    assert_null(staking_get_withdrawal_time(test_account_alice.id, network.CHR));
+    do_evm_stake_update_eth(alice_evm_address, 0);
+    assert_null(staking_get_withdrawal_time(test_account_alice.id, network.ETH));
+
+    // No next withdrawals
+    assert_null(staking_get_withdrawal_time(test_account_alice.id));
+    assert_null(staking_get_withdrawal_time(test_account_alice.id, network.CHR));
+    assert_null(staking_get_withdrawal_time(test_account_alice.id, network.ETH));
+    assert_null(staking_get_withdrawal_time(test_account_alice.id, network.BSC));
+
+    // No delegation
+    assert_null(staking_get_current_delegate(test_account_alice.id));
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR));
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.ETH));
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
+
+    // Re-reconcile
+    assert_equals(
+        888 * units_per_asset + initial_alice_balance,
+            get_account_balance(get_pool_account())
+        +   get_account_balance(test_account_alice)
+    );
 }
 
 function test_delegation_bsc_only() {
@@ -211,18 +528,18 @@ function test_yield_and_payout_crudely () {
     .sign(admin_privkey).run();
 
     // Check no yield
-//    assert_equals(staking_rewards_claimable_for(test_account_alice.id), 0);
-//    assert_equals(staking_rewards_claimable_for(test_account_bob.id), 0);
-//    assert_equals(staking_rewards_claimable_for(test_account_charlie.id), 0);
+   assert_equals(staking_rewards_claimable_for(test_account_alice.id), 0);
+   assert_equals(staking_rewards_claimable_for(test_account_bob.id), 0);
+   assert_equals(staking_rewards_claimable_for(test_account_charlie.id), 0);
 
     // FFWD
-//    rell.test.set_next_block_time_delta(millis_per_year);
-//    rell.test.block().run();
+   rell.test.set_next_block_time_delta(millis_per_year);
+   rell.test.block().run();
 
     // Check no yield
- //   assert_equals(staking_rewards_claimable_for(test_account_alice.id), 0);
- //   assert_equals(staking_rewards_claimable_for(test_account_bob.id), 0);
- //   assert_equals(staking_rewards_claimable_for(test_account_charlie.id), 0);
+   assert_equals(staking_rewards_claimable_for(test_account_alice.id), 0);
+   assert_equals(staking_rewards_claimable_for(test_account_bob.id), 0);
+   assert_equals(staking_rewards_claimable_for(test_account_charlie.id), 0);
 
     // Deposit 100 with A on native and stake to C
     do_staking_deposit_native(rell.test.keypairs.alice, 100 * units_per_asset);
@@ -246,8 +563,8 @@ function test_yield_and_payout_crudely () {
     assert_true(alice_amount > 0);
     assert_true(bob_amount > 0);
     assert_equals(staking_rewards_claimable_for(test_account_charlie.id), 0);
-    log("alice claimable amount: ", alice_amount);
-    log("bob claimable amount: ", bob_amount);
+    log("alice %s claimable amount: %s".format(test_account_alice.id, alice_amount));
+    log("bob %s claimable amount: %s".format(test_account_bob.id, bob_amount));
     assert_true(too_small_to_care >= abs(2 * alice_amount - bob_amount));
 
     // Check balances
@@ -271,7 +588,9 @@ function test_yield_and_payout_crudely () {
     rell.test.tx().op(staking_claim_rewards()).sign(admin_privkey).run();
 
     // Ensure there's no (more than a few seconds worth of) claimable yield after payout
+    log("Alice is ", test_account_alice.id);
     assert_true(too_small_to_care >= staking_rewards_claimable_for(test_account_alice.id));
+    log("Bob is ", test_account_bob.id);
     assert_true(too_small_to_care >= staking_rewards_claimable_for(test_account_bob.id));
     assert_true(too_small_to_care >= staking_rewards_claimable_for(test_account_charlie.id));
 
@@ -292,6 +611,88 @@ function test_yield_and_payout_crudely () {
 
     // Everything paid up
     assert_equals(staking_rewards_for(test_account_bob.id), staking_get_rewards_paid(test_account_bob.id) + staking_rewards_claimable_for(test_account_bob.id));
+}
+
+function test_potential_entity_join_issues_on_delegation() {
+    val too_small_to_care = 0.001 * units_per_asset;
+
+    rell.test.tx().op(init()).run();
+
+    // Start with two accounts.
+    
+    // One EVM + native.
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
+    do_evm_stake_update_bsc(alice_evm_address, 50 * units_per_asset);
+    val test_account_alice = require(do_create_account_using_ras_staking(rell.test.keypairs.alice));
+    do_staking_deposit_native(rell.test.keypairs.alice, 50 * units_per_asset);
+    assert_equals(staking_get_balance(test_account_alice.id), 100 * units_per_asset);
+
+    // One native.
+    val test_account_bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
+    do_staking_deposit_native(rell.test.keypairs.bob, 100 * units_per_asset);
+    assert_equals(staking_get_balance(test_account_bob.id), 100 * units_per_asset);
+
+    // Add two providers
+    add_provider(rell.test.keypairs.charlie.pub);
+    add_provider(rell.test.keypairs.dave.pub);
+
+    // Delegate both
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.charlie.pub);
+    do_staking_delegate(rell.test.keypairs.bob, rell.test.keypairs.charlie.pub);
+
+    // Run forward time
+    rell.test.set_next_block_time_delta(millis_per_year);
+    rell.test.block().run();
+
+    // Re-delegate the combined one
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.dave.pub);
+
+    // Run forward more time
+    rell.test.set_next_block_time_delta(millis_per_year);
+    rell.test.block().run();
+
+    // They should be the same
+    val alice_rewards = staking_rewards_claimable_for(test_account_alice.id);
+    val bob_rewards = staking_rewards_claimable_for(test_account_bob.id);
+    assert_true(too_small_to_care >= abs(alice_rewards - bob_rewards));
+
+    // Re-delegate the other one
+    do_staking_delegate(rell.test.keypairs.bob, rell.test.keypairs.dave.pub);
+
+    // Run forward more time
+    rell.test.set_next_block_time_delta(millis_per_year);
+    rell.test.block().run();
+
+    // They should be the same
+    val alice_rewards_2 = staking_rewards_claimable_for(test_account_alice.id);
+    val bob_rewards_2 = staking_rewards_claimable_for(test_account_bob.id);
+    assert_true(too_small_to_care >= abs(alice_rewards_2 - bob_rewards_2));
+
+    assert_equals(rell.test.keypairs.dave.pub, staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
+
+    // Now withdraw on native without doing it on EVM
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_request_withdrawal())
+    ).op(
+        staking_request_withdrawal()
+    ).run();
+
+    // Run forward more time
+    rell.test.set_next_block_time_delta(millis_per_year);
+    rell.test.block().run();
+
+    assert_equals(rell.test.keypairs.dave.pub, staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR));
+
+    // Both accounts should go up as EVM still staked on Alice
+    val alice_rewards_3 = staking_rewards_claimable_for(test_account_alice.id);
+    val bob_rewards_3 = staking_rewards_claimable_for(test_account_bob.id);
+    assert_true(alice_rewards_2 < alice_rewards_3);
+    assert_true(bob_rewards_2 < bob_rewards_3);
+
+    // But Alice should fall behind Bob
+    assert_true(alice_rewards_3 < bob_rewards_3);
+    assert_true(too_small_to_care <= abs(alice_rewards_3 - bob_rewards_3));
 }
 
 function test_withdrawal() {
@@ -427,6 +828,63 @@ function test_staking_get_total_delegation_to() {
     // Check that A has 26 delegated to it
     assert_equals(staking_get_total_delegation_to(rell.test.keypairs.alice.pub), 26 * units_per_asset);
     assert_equals(staking_get_total_delegation_to(rell.test.keypairs.bob.pub), 0);
+}
+
+function test_update_state_invariants() {
+
+    val too_small_to_care = 0.001 * units_per_asset;
+
+    rell.test.tx().op(init()).run();
+
+    // Take two accounts both the same with EVM and native
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
+    do_evm_stake_update_bsc(alice_evm_address, 50 * units_per_asset);
+    val test_account_alice = require(do_create_account_using_ras_staking(rell.test.keypairs.alice));
+    do_staking_deposit_native(rell.test.keypairs.alice, 50 * units_per_asset);
+    assert_equals(staking_get_balance(test_account_alice.id), 100 * units_per_asset);
+
+    val bob_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.bob.priv);
+    do_evm_stake_update_bsc(bob_evm_address, 50 * units_per_asset);
+    val test_account_bob = require(do_create_account_using_ras_staking(rell.test.keypairs.bob));
+    do_staking_deposit_native(rell.test.keypairs.bob, 50 * units_per_asset);
+    assert_equals(staking_get_balance(test_account_bob.id), 100 * units_per_asset);
+
+    // Run forward time
+    rell.test.set_next_block_time_delta(millis_per_year);
+    rell.test.block().run();
+
+    // Bash one of them with update update_state
+    var ss = staker_state @ { .account == test_account_alice and .network == network.BSC };
+    do_staker_state_update(ss);
+
+    // Run forward more time
+    rell.test.set_next_block_time_delta(millis_per_year);
+    rell.test.block().run();
+
+    // See that they're the same
+    assert_true(too_small_to_care >= abs(staking_rewards_claimable_for(test_account_alice.id) - staking_rewards_claimable_for(test_account_bob.id)));
+
+    // Run forward more time
+    rell.test.set_next_block_time_delta(millis_per_year);
+    rell.test.block().run();
+
+    // Bash both of them with update_all
+    do_update_pending_token_time_all();
+
+    // See that they're the same
+    val alice_amount = staking_rewards_claimable_for(test_account_alice.id);
+    val bob_amount = staking_rewards_claimable_for(test_account_bob.id);
+    assert_true(too_small_to_care >= abs(alice_amount - bob_amount));
+
+    // Trigger a payout
+    rell.test.tx().op(staking_claim_rewards()).sign(admin_privkey).run();
+
+    // Total it all back up
+    assert_equals(alice_amount, staking_get_rewards_paid(test_account_alice.id));
+    assert_equals(bob_amount, staking_get_rewards_paid(test_account_bob.id));
+
+    // Next to nothing to claim
+    assert_true(too_small_to_care >= staking_rewards_claimable_for(test_account_alice.id) + staking_rewards_claimable_for(test_account_bob.id));
 }
 
 function test_deposit_and_withdraw_via_evm() {

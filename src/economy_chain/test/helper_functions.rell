@@ -126,12 +126,13 @@ function add_assets_to_pool(amount: big_integer) {
 
 function do_staking_deposit_native(
     keypair: rell.test.keypair,
-    amount: integer
+    amount: integer,
+    provider_pubkey: pubkey? = null
 ) {
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(keypair.priv, staking_deposit_native(amount, null))
+        ft4.test_utils.evm_auth_operation_for(keypair.priv, staking_deposit_native(amount, provider_pubkey))
     ).op(
-        staking_deposit_native(amount, null)
+        staking_deposit_native(amount, provider_pubkey)
     ).run();
 }
 
@@ -404,10 +405,12 @@ function _do_evm_stake_update(evm_address: byte_array, balance: integer, network
             "NULL".hash(),
             [evm_event]
         )
-    ).run();
+    ).nop().run();
 }
 
-
+function do_evm_stake_update_eth(evm_address: byte_array, balance: integer) {
+    _do_evm_stake_update(evm_address, balance, 1, x"753218363422002DF74F3D0D8d67f6CB38bE32D0");
+}
 
 function do_evm_stake_update_bsc(evm_address: byte_array, balance: integer) {
     _do_evm_stake_update(evm_address, balance, 97, x"753218363422002DF74F3D0D8d67f6CB38bE32D0");
@@ -444,6 +447,31 @@ function do_evm_withdrawal_request_bsc(ft4.accounts.account) {
     ).nop().run();
 }
 
+function do_evm_withdrawal_request_eth(ft4.accounts.account) {
+    // Derive the EVM address of the FT4 account
+    val evm_address = ft4.accounts.auth_descriptor_signer @ {.account_auth_descriptor.account == account} ( @omit @sort .rowid, .id );
+
+    // Create an EVM event
+    val evm_event = eif.messaging.event_data(
+        tnx_hash = "NULL".hash(),
+        log_index = 0,
+        signature = "NULL".hash(),
+        contract_address = x"753218363422002DF74F3D0D8d67f6CB38bE32D0",
+        name = "WithdrawRequest",
+        indexed_values = [evm_address.to_gtv()],
+        non_indexed_values = [integer(-1).to_gtv()]
+    );
+
+    // Submit mock EVM block
+    rell.test.tx().op(
+        do_test_evm_block(
+            1, // network id
+            1,
+            "NULL".hash(),
+            [evm_event]
+        )
+    ).nop().run();
+}
 
 function create_provider_and_proposal(provider_key: rell.test.keypair, common_proposal_type: common_proposal_type) {
 
@@ -490,4 +518,22 @@ function add_reward_provider_deleted_node(provider, node: pubkey, cluster: clust
     rell.test.tx().op(
         create_reward_provider_deleted_node_op(provider, node, cluster))
         .run();
+}
+
+function do_staker_state_update(staker_state) {
+    rell.test.tx().op(
+        poke_staker_state_update(staker_state)
+    ).run();
+}
+
+function do_update_pending_token_time_all() {
+    rell.test.tx().op(
+        poke_staker_state_update_all()
+    ).run();
+}
+
+function do_pay_everything_native() {
+    rell.test.tx().op(
+        pay_everything()
+    ).nop().run();
 }
