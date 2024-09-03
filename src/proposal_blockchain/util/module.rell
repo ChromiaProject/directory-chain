@@ -15,7 +15,7 @@ struct module_args {
     require_add_primary_key_to_header: boolean = true;
 }
 
-function validate_blockchain_configuration(config_data: byte_array, signers: boolean, header_hash: boolean, system_chain: boolean) {
+function validate_blockchain_configuration(container, config_data: byte_array, signers: boolean, header_hash: boolean, system_chain: boolean) {
     val config_map = map<text, gtv>.from_gtv(gtv.from_bytes(config_data));
     if (signers) {
         require("signers" not in config_map, "Configuration must not contain \"signers\"");
@@ -46,12 +46,17 @@ function validate_blockchain_configuration(config_data: byte_array, signers: boo
 
     // Check modules and extensions for non system chains
     if (not system_chain) {
-        val configured_gtx = config_map.get_or_null("gtx");
-        if (configured_gtx != null) {
-            validate_gtx_modules(map<text, gtv>.from_gtv(configured_gtx));
+        val allowed_gtx_modules = set<text>.from_gtv(chain_context.args.allowed_dapp_chain_gtx_modules);
+        val allowed_sync_exts = set<text>.from_gtv(chain_context.args.allowed_dapp_chain_sync_exts);
+
+        val subnode_image = container_subnode_image @? { container } (.subnode_image);
+        if (subnode_image != null) {
+            if (not subnode_image.gtx_modules.empty()) allowed_gtx_modules.add_all(subnode_image.gtx_modules.split(','));
+            if (not subnode_image.sync_exts.empty()) allowed_sync_exts.add_all(subnode_image.sync_exts.split(','));
         }
 
-        validate_sync_exts(config_map);
+        validate_gtx_modules(config_map, allowed_gtx_modules);
+        validate_sync_exts(config_map, allowed_sync_exts);
         validate_sync_infra(config_map);
     }
 
@@ -97,17 +102,18 @@ function validate_revolt_config(revolt_config: map<text, gtv>) {
     }
 }
 
-function validate_gtx_modules(gtx_config: map<text, gtv>) {
-    val allowed_gtx_modules = set<text>.from_gtv(chain_context.args.allowed_dapp_chain_gtx_modules);
-    val configured_gtx_modules = gtx_config.get_or_null("modules");
-    require(
-        configured_gtx_modules == null or allowed_gtx_modules.contains_all(list<text>.from_gtv(configured_gtx_modules)),
-        "Some of the configured GTX modules are not in the allowed set %s".format(allowed_gtx_modules)
-    );
+function validate_gtx_modules(config_map: map<text, gtv>, allowed_gtx_modules: set<text>) {
+    val configured_gtx = config_map.get_or_null("gtx");
+    if (configured_gtx != null) {
+        val configured_gtx_modules = map<text, gtv>.from_gtv(configured_gtx).get_or_null("modules");
+        require(
+            configured_gtx_modules == null or allowed_gtx_modules.contains_all(list<text>.from_gtv(configured_gtx_modules)),
+            "Some of the configured GTX modules are not in the allowed set %s".format(allowed_gtx_modules)
+        );
+    }
 }
 
-function validate_sync_exts(config_map: map<text, gtv>) {
-    val allowed_sync_exts = set<text>.from_gtv(chain_context.args.allowed_dapp_chain_sync_exts);
+function validate_sync_exts(config_map: map<text, gtv>, allowed_sync_exts: set<text>) {
     val configured_sync_exts = config_map.get_or_null("sync_ext");
     require(
         configured_sync_exts == null or allowed_sync_exts.contains_all(list<text>.from_gtv(configured_sync_exts)),
