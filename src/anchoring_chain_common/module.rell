@@ -8,7 +8,7 @@ import messaging.configuration_update_message.*;
     block_rid: byte_array;
     block_header: byte_array;
     witness: byte_array;
-    anchoring_tx_op_index: integer;
+    anchoring_tx_op_index: integer; // For batch anchoring it's the index in the array of blocks
 }
 
 struct block_header {
@@ -25,6 +25,12 @@ struct anchoring_tx_with_op_index {
     tx_rid: byte_array;
     tx_data: byte_array;
     tx_op_index: integer;
+}
+
+struct block_to_anchor {
+    block_rid: byte_array;
+    block_header;
+    witness: byte_array;
 }
 
 operation __anchor_block_header(block_rid: byte_array, header: gtv, witness: byte_array) {
@@ -44,6 +50,28 @@ function anchor_block_header(block_rid: byte_array, header: gtv, witness: byte_a
     );
 
     after_anchoring_block(block_rid, decoded_header);
+}
+
+operation __batch_anchor_block_header(blocks_to_anchor: list<block_to_anchor>) {
+    val blocks = range(blocks_to_anchor.size()) @* {} (map_block_to_anchor_to_entity(blocks_to_anchor[$], $));
+    create anchor_block(blocks);
+
+    for (block_to_anchor in blocks_to_anchor) {
+        after_anchoring_block(block_to_anchor.block_rid, block_to_anchor.block_header);
+    }
+}
+
+function map_block_to_anchor_to_entity(block_to_anchor, batch_index: integer): struct<anchor_block> {
+    return struct<anchor_block>(
+        blockchain_rid = block_to_anchor.block_header.blockchain_rid,
+        block_height = block_to_anchor.block_header.height,
+        timestamp = block_to_anchor.block_header.timestamp,
+        block_rid = block_to_anchor.block_rid,
+        block_header = block_to_anchor.block_header.to_gtv().to_bytes(),
+        witness = block_to_anchor.witness,
+        anchoring_tx_op_index = batch_index,
+        transaction = op_context.transaction
+    );
 }
 
 query get_last_anchored_block(blockchain_rid: byte_array): struct<anchor_block>? {
