@@ -42,35 +42,38 @@ function calculate_evm_transaction_submitter_cost(evm_transaction_submitter_cost
 
 function deduct_tx_cost_from_dapp_user(evm_transaction_submitter_cost: evm_transaction_submitter_cost, tx_cost: big_integer) {
 
-    val bridge_lease = bridge_lease @? { .blockchain_rid == evm_transaction_submitter_cost.payer_chain };
-    if (exists(bridge_lease)) {
+    if (evm_transaction_submitter_cost.payer_chain != x"") {
 
-        val dapp_chain_account = bridge_lease.lease.account;
+        val bridge_lease = bridge_lease @? { .blockchain_rid == evm_transaction_submitter_cost.payer_chain };
+        if (exists(bridge_lease)) {
 
-        val account_balance = get_account_balance(dapp_chain_account);
-        if (account_balance >= tx_cost) {
+            val dapp_chain_account = bridge_lease.lease.account;
 
-            ft4.assets.Unsafe.transfer(dapp_chain_account, get_pool_account(), get_asset(), tx_cost);
+            val account_balance = get_account_balance(dapp_chain_account);
+            if (account_balance >= tx_cost) {
 
-            log("Transaction %s sent by dapp chain %s charged account %s the cost of %s %s".format(
-                evm_transaction_submitter_cost.id, evm_transaction_submitter_cost.payer_chain,
-                dapp_chain_account.id, tx_cost, chain_context.args.asset_symbol
-            ));
+                ft4.assets.Unsafe.transfer(dapp_chain_account, get_pool_account(), get_asset(), tx_cost);
+
+                log("Transaction %s sent by dapp chain %s charged account %s the cost of %s %s".format(
+                    evm_transaction_submitter_cost.id, evm_transaction_submitter_cost.payer_chain,
+                    dapp_chain_account.id, tx_cost, chain_context.args.asset_symbol
+                ));
+            } else {
+
+                val debt = tx_cost - account_balance;
+
+                log("Warning: Insufficient funds on account %s to cover cost of %s %s for transaction %s and chain %s. Account is charged %s and %s is kept as debt.".format(
+                    dapp_chain_account.id, tx_cost, chain_context.args.asset_symbol,
+                    evm_transaction_submitter_cost.id, evm_transaction_submitter_cost.payer_chain,
+                    account_balance, debt
+                ));
+
+                bridge_lease.tx_cost_debt = debt;
+                ft4.assets.Unsafe.transfer(dapp_chain_account, get_pool_account(), get_asset(), account_balance);
+            }
         } else {
-
-            val debt = tx_cost - account_balance;
-
-            log("Warning: Insufficient funds on account %s to cover cost of %s %s for transaction %s and chain %s. Account is charged %s and %s is kept as debt.".format(
-                dapp_chain_account.id, tx_cost, chain_context.args.asset_symbol,
-                evm_transaction_submitter_cost.id, evm_transaction_submitter_cost.payer_chain,
-                account_balance, debt
-            ));
-
-            bridge_lease.tx_cost_debt = debt;
-            ft4.assets.Unsafe.transfer(dapp_chain_account, get_pool_account(), get_asset(), account_balance);
+            log("Payer chain %s for transaction %s does not have any bridge lease and won't be charged".format(
+                evm_transaction_submitter_cost.payer_chain, evm_transaction_submitter_cost.id));
         }
-    } else {
-        log("Transaction %s sent from chain %s does not have any bridge lease and won't be charged - system chain?".format(
-            evm_transaction_submitter_cost.id, evm_transaction_submitter_cost.payer_chain));
     }
 }
