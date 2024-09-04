@@ -471,7 +471,7 @@ function test_pay_reward_mint_pool_account() {
     assert_equals(get_pool_balance(), 999999000);
 }
 
-function test_calculate_evm_transactions_submitters_rewards() {
+function test_pay_evm_transaction_submitter_rewards() {
     rell.test.tx().op(init()).run();
 
     val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
@@ -480,97 +480,15 @@ function test_calculate_evm_transactions_submitters_rewards() {
     add_cluster_node(cluster_name, node_pubkey, false);
 
     rell.test.tx().op(
-        create_price_oracle_rates_op("tCHR", "Chromia Test", 1.00),
-        create_price_oracle_rates_op("ETH", "Ether", 2.00),
-        create_price_oracle_rates_op("BNB", "Binance smart chain", 10.00),
-        create_price_oracle_rates_op("MATIC", "Polygon", 0.01)
+        pay_evm_transaction_submitter_rewards_op(
+            evm_transaction_submitter_cost(id = x"01", processed_by = node.pubkey, cost  = 182081 * 1000000000, currency_symbol = "BNB", payer_chain = x"AA"),
+            10123000
+        )
     ).run();
 
-    val result1 = calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost(id = x"01", processed_by = node_pubkey, cost  = 10000L * units_per_txs_evm_cost, currency_symbol = "ETH"));
-    val result2 = calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost(id = x"02", processed_by = node_pubkey, cost  = 10000L * units_per_txs_evm_cost, currency_symbol = "BNB"));
-    val result3 = calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost(id = x"03", processed_by = node_pubkey, cost  = 10000L * units_per_txs_evm_cost, currency_symbol = "MATIC"));
-
-    assert_equals(result1[node], 22000000000);
-    assert_equals(result2[node], 110000000000);
-    assert_equals(result3[node], 110000000);
-}
-
-function test_calculate_evm_transactions_submitters_rewards_real_example_eth() {
-    rell.test.tx().op(init()).run();
-
-    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
-    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
-    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
-    add_cluster_node(cluster_name, node_pubkey, false);
-
-    rell.test.tx().op(
-        create_price_oracle_rates_op("tCHR", "Chromia Test", 0.25159185329855150584),
-        create_price_oracle_rates_op("ETH", "Ether", 3125.69818475089158878802),
-    ).run();
-
-    val result1 = calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost(id = x"01", processed_by = node_pubkey, cost  = 168588 * 6302265549, currency_symbol = "ETH"));
-
-    assert_equals(result1[node], 14519996);
-}
-
-function test_calculate_evm_transactions_submitters_rewards_real_example_bnb() {
-    rell.test.tx().op(init()).run();
-
-    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
-    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
-    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
-    add_cluster_node(cluster_name, node_pubkey, false);
-
-    rell.test.tx().op(
-        create_price_oracle_rates_op("tCHR", "Chromia Test", 0.25159185329855150584),
-        create_price_oracle_rates_op("BNB", "B", 527.6200000777692305765),
-    ).run();
-
-    val result1 = calculate_evm_transaction_submitter_reward(evm_transaction_submitter_cost(id = x"01", processed_by = node_pubkey, cost = 182081 * 1000000000, currency_symbol = "BNB"));
-
-    assert_equals(result1[node], 420031);
-}
-
-function test_receive_evm_transaction_submitter_cost_message() {
-    rell.test.tx().op(init()).run();
-    update_staking_requirements_constants(staking_requirements_enabled = false);
-
-    val evm_transaction_submitter_bc_rid = x"1111";
-
-    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
-    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
-    val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
-    add_cluster_node(cluster_name, node_pubkey, false);
-
-    rell.test.tx().op(
-        register_provider_account_op(provider)
-    ).sign(provider_key).run();
-
-    rell.test.tx().op(
-        create_price_oracle_rates_op("tCHR", "Chromia Test", 1.00),
-        create_price_oracle_rates_op("ETH", "Ether", 2.00)
-    ).run();
-
-    rell.test.tx().op(
-        icmf_message_op(x"", blockchain_rid_topic, body = blockchain_rid(
-            rid = evm_transaction_submitter_bc_rid,
-            name = "evm_transaction_submitter_chain").to_gtv())
-    ).run();
-
-    val expected_sender = sender_blockchain @ {};
-    assert_equals(expected_sender.rid, evm_transaction_submitter_bc_rid);
-    assert_equals(expected_sender.name, "evm_transaction_submitter_chain");
-
-    rell.test.tx().op(
-        icmf_message_op(evm_transaction_submitter_bc_rid, evm_transaction_submitter_cost_topic, body = evm_transaction_submitter_cost(
-            id = x"10",
-            processed_by = node_pubkey,
-            cost = 6L * units_per_txs_evm_cost,
-            currency_symbol = "ETH"
-        ).to_gtv())
-    ).run();
-
-    assert_equals(node_payed_reward @ {} ( .value), 13200000);
+    assert_equals(node_payed_reward @ {} ( .value), 10123000);
+    val pa = provider_account @ { provider } ( .account );
+    assert_equals(get_account_balance(pa), 10123000);
 }
 
 function test_receive_evm_transaction_submitter_cost_invalid_sender() {
@@ -581,7 +499,8 @@ function test_receive_evm_transaction_submitter_cost_invalid_sender() {
             id = x"10",
             processed_by = node_pubkey,
             cost = 6L * units_per_txs_evm_cost,
-            currency_symbol = "ETH"
+            currency_symbol = "ETH",
+            payer_chain = x"",
         ).to_gtv())
     ).run();
     assert_true(node_payed_reward @? {} == null);
@@ -858,27 +777,6 @@ function run_pay_reward(reward: big_integer = 0, refill: boolean) {
     ).run();
 
     return alice;
-}
-
-function update_staking_requirements_constants(
-    staking_requirements_enabled: boolean? = null,
-    staking_requirement_stop_payout_days: integer? = null,
-    staking_requirement_system_provider_own_stake_chr: integer? = null,
-    staking_requirement_system_provider_total_stake_chr: integer? = null,
-    staking_requirement_dapp_provider_own_stake_chr: integer? = null,
-    staking_requirement_dapp_provider_total_stake_chr: integer? = null
-) {
-
-    rell.test.tx().op(
-        update_staking_requirements_economy_constants(
-            staking_requirements_enabled,
-            staking_requirement_stop_payout_days,
-            staking_requirement_system_provider_own_stake_chr,
-            staking_requirement_system_provider_total_stake_chr,
-            staking_requirement_dapp_provider_own_stake_chr,
-            staking_requirement_dapp_provider_total_stake_chr
-        )
-    ).sign(admin_privkey).run();
 }
 
 function test_reset_provider_rewards() {

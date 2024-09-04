@@ -5,5 +5,75 @@ function receive_evm_transaction_submitter_cost(sender: byte_array, body: gtv) {
         return;
     }
     val evm_transaction_submitter_cost = evm_transaction_submitter_cost.from_gtv(body);
-    pay_evm_transaction_submitter_rewards(evm_transaction_submitter_cost);
+
+    val tx_cost = calculate_evm_transaction_submitter_cost(evm_transaction_submitter_cost);
+    if (tx_cost > 0) {
+        deduct_tx_cost_from_dapp_user(evm_transaction_submitter_cost, tx_cost);
+        pay_evm_transaction_submitter_rewards(evm_transaction_submitter_cost, tx_cost);
+    }
+}
+
+/**
+  * Convert the EVM transaction cost into CHR.
+  */
+function calculate_evm_transaction_submitter_cost(evm_transaction_submitter_cost: evm_transaction_submitter_cost): big_integer {
+
+    val cost_in_chr = price_oracle_convert(
+            (decimal(evm_transaction_submitter_cost.cost) * (1 + chain_context.args.evm_transaction_submitters_bonus)).to_big_integer(),
+            evm_transaction_submitter_cost.currency_symbol, units_per_txs_evm_cost, chain_context.args.asset_symbol, units_per_asset);
+
+    if (cost_in_chr != null) {
+
+        log("Calculated TXS cost/reward for transaction %s, processed_by: %s, evm cost: %s (%s): %s %s".format(
+            evm_transaction_submitter_cost.id,
+            evm_transaction_submitter_cost.processed_by,
+            evm_transaction_submitter_cost.cost,
+            evm_transaction_submitter_cost.currency_symbol,
+            cost_in_chr,
+            chain_context.args.asset_symbol
+        ));
+
+        return cost_in_chr;
+    }
+
+    log("Warning: TX cost %s %s could not be converted to %s".format(evm_transaction_submitter_cost.cost, evm_transaction_submitter_cost.currency_symbol, chain_context.args.asset_symbol));
+    return 0;
+}
+
+function deduct_tx_cost_from_dapp_user(evm_transaction_submitter_cost: evm_transaction_submitter_cost, tx_cost: big_integer) {
+
+    if (evm_transaction_submitter_cost.payer_chain != x"") {
+
+        val bridge_lease = bridge_lease @? { .blockchain_rid == evm_transaction_submitter_cost.payer_chain };
+        if (exists(bridge_lease)) {
+
+            val dapp_chain_account = bridge_lease.lease.account;
+
+            val account_balance = get_account_balance(dapp_chain_account);
+            if (account_balance >= tx_cost) {
+
+                ft4.assets.Unsafe.transfer(dapp_chain_account, get_pool_account(), get_asset(), tx_cost);
+
+                log("Transaction %s sent by dapp chain %s charged account %s the cost of %s %s".format(
+                    evm_transaction_submitter_cost.id, evm_transaction_submitter_cost.payer_chain,
+                    dapp_chain_account.id, tx_cost, chain_context.args.asset_symbol
+                ));
+            } else {
+
+                val debt = tx_cost - account_balance;
+
+                log("Warning: Insufficient funds on account %s to cover cost of %s %s for transaction %s and chain %s. Account is charged %s and %s is kept as debt.".format(
+                    dapp_chain_account.id, tx_cost, chain_context.args.asset_symbol,
+                    evm_transaction_submitter_cost.id, evm_transaction_submitter_cost.payer_chain,
+                    account_balance, debt
+                ));
+
+                bridge_lease.tx_cost_debt = debt;
+                ft4.assets.Unsafe.transfer(dapp_chain_account, get_pool_account(), get_asset(), account_balance);
+            }
+        } else {
+            log("Payer chain %s for transaction %s does not have any bridge lease and won't be charged".format(
+                evm_transaction_submitter_cost.payer_chain, evm_transaction_submitter_cost.id));
+        }
+    }
 }

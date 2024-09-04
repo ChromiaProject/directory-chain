@@ -151,3 +151,33 @@ function test_bridge_leases_are_transferred_on_container_upgrade() {
     assert_not_null(bridge_lease @? { .lease == upgraded_container_lease });
 }
 
+function test_bridge_lease_add_required_funds() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, cluster_name = cluster_name, container_units = 2);
+
+    val container_lease = lease @ { container_name };
+
+    // Can't create due to insufficient account funds
+    rell.test.tx().op(
+        empty_account_op(alice)
+    ).run();
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)),
+        add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)
+    ).sign(rell.test.keypairs.alice)
+        .run_must_fail("An amount of %s is required on account to add a bridge lease".format(economy_constants.bridge_lease_add_min_balance_usd));
+
+    // Sufficient funds - add bridge contract
+    rell.test.tx().op(
+        mint_to(alice, (economy_constants.bridge_lease_add_min_balance_usd * economy_constants.chr_per_usd * units_per_asset).to_big_integer())
+    ).run();
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)),
+        add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)
+    ).sign(rell.test.keypairs.alice).run();
+
+    assert_not_null(bridge_lease @? { .lease == container_lease });
+}
