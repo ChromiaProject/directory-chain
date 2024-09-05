@@ -17,6 +17,7 @@ function staking_deposit_auth_message(gtv): text {
 /**
 /* Draws FT4 CHR tokens from the user's account on the Economy Chain into the staking deposit account
 /* controlled by the staking logic. It can only be withdrawn later after a delay.
+/* 
 /* @param amount CHR in minor tokens
 /* @param pubkey Optional public key of the active provider to delegate immediately on deposit
 **/
@@ -62,7 +63,8 @@ function staking_cancel_withdrawal_auth_message(gtv): text {
 }
 
 /**
-/* Cancel any unaction withdrawal request. This cancellation will allow rewards to continue accumulating.
+/* Cancel any unactioned withdrawal request.
+/* This cancellation will not re-delegate the user's stake.
 */
 operation staking_cancel_withdrawal() {
     val user = ft4.auth.authenticate();
@@ -111,8 +113,10 @@ function staking_undelegate_auth_message(gtv): text {
 
 /**
 /* Remove delegation from the user's stake on the given network.
-/* This will not withdraw their stake.
+/* This will not withdraw their stake, and is subject to the normal delegation delay.
 /* Undelegated stakes do not earn rewards.
+/*
+/* @param network The given network
 */
 operation staking_undelegate(network) {
     val staker = ft4.auth.authenticate();
@@ -140,6 +144,18 @@ function staking_import_evm_balance_auth_message(gtv): text {
 operation staking_import_evm_balance(address: byte_array, network_id: integer) {
     _staking_import_evm_balance_impl(address, network_id);
 }
+
+/**
+ * Set an alternative (optional account) for a staking provider.
+ * 
+ * The alternative account will be used for the provider's stake and reward pay-outs.
+ * 
+ * This transaction must be signed with the provider's main key, but is not FT4 authenticated.
+ * 
+ * 
+ * @param provider_pubkey The provider's main public key with which this transaction has been signed
+ * @param new_account_pubkey Main public key corresponding to the FT4 account the provider wishes to use
+ */
 
 operation set_provider_staking_account(provider_pubkey: pubkey, new_account_pubkey: pubkey) {
 
