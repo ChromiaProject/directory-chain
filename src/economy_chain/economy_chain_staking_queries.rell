@@ -22,12 +22,26 @@ query staking_get_rewards_start(): timestamp = chain_context.args.staking_reward
 /* @returns Public key of the delegated to provider, or null if currently undelegated
 */
 query staking_get_current_delegate_on_network(account_id: byte_array, network): byte_array? {
-    val _provider_pubkey = staker_state_to_provider @? {
-        .staker_state.account.id == account_id and .staker_state.network == network and  
-        _staking_last_known_time() >= .timestamp
-    } ( @omit @sort_desc .timestamp, @omit @sort_desc .rowid, .provider.pubkey ) limit 1;
+    /// @dev This query needs to amended at the same time as `staking_get_current_delegate`
+    val _provider_pubkey = (s: staker_state_to_provider) @? {
+            .staker_state.account.id == account_id // for this account
+        and _staking_last_known_time() >= .timestamp // that are active
+        and .provider.pubkey != get_null_account() // not undelegated
+        and .staker_state.network == network
+        and empty ( // not superceded
+            (ss: staker_state_to_provider) @* {
+                    ss.staker_state.account.id == s.staker_state.account.id
+                and _staking_last_known_time() >= ss.timestamp
+                and ss.timestamp > s.timestamp
+                and s.staker_state.network == ss.staker_state.network
+            }
+        )
+    } (
+        @omit @sort_desc .timestamp, @omit @sort_desc .rowid,
+        .provider.pubkey
+    ) limit 1;
     return when {
-        empty(_provider_pubkey) or _provider_pubkey == get_null_account() -> null;
+        empty(_provider_pubkey) -> null;
         else -> _provider_pubkey;
     };
 }
@@ -40,12 +54,25 @@ query staking_get_current_delegate_on_network(account_id: byte_array, network): 
 /* @returns Public key of the last delegated to provider, or null if last undelegated 
 */
 query staking_get_current_delegate(account_id: byte_array) {
-    val _provider_pubkey = staker_state_to_provider @? {
-        .staker_state.account.id == account_id
-        and _staking_last_known_time() >= .timestamp
-    } ( @omit @sort_desc .timestamp, @omit @sort_desc .rowid, .provider.pubkey ) limit 1;
+    /// @dev This query needs to amended at the same time as `staking_get_current_delegate_on_network`
+    val _provider_pubkey = (s: staker_state_to_provider) @? {
+            .staker_state.account.id == account_id // for this account
+        and _staking_last_known_time() >= .timestamp // that are active
+        and .provider.pubkey != get_null_account() // not undelegated
+        and empty ( // not superceded
+            (ss: staker_state_to_provider) @* {
+                    ss.staker_state.account.id == s.staker_state.account.id
+                and _staking_last_known_time() >= ss.timestamp
+                and ss.timestamp > s.timestamp
+                and s.staker_state.network == ss.staker_state.network
+            }
+        )
+    } (
+        @omit @sort_desc .timestamp, @omit @sort_desc .rowid,
+        .provider.pubkey
+    ) limit 1;
     return when {
-        empty(_provider_pubkey) or _provider_pubkey == get_null_account() -> null;
+        empty(_provider_pubkey) -> null;
         else -> _provider_pubkey;
     };
 }
