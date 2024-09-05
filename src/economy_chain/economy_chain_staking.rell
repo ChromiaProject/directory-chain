@@ -292,7 +292,9 @@ function _staking_distribute_rewards() {
 function _staking_shared_rewards(pay_reward_result) {
 
     // Do nothing if the start date has not passed
-    if (_staking_last_known_time() < staking_get_rewards_start()) return;
+    if (_staking_last_known_time() < staking_get_rewards_start()) {
+        return;
+    }
 
     // We ignore reward debt here as it will flow through the reward term after the pool is refreshed
     val total_shared_reward = chain_context.args.staking_rewards_share * pay_reward_result.payed_reward;
@@ -305,6 +307,7 @@ function _staking_shared_rewards(pay_reward_result) {
         log("Not provider public key for id: %s".format(pay_reward_result.payed_to.id));
         return;
     }
+
     val staker_delegations = ( s1: staker_state_to_provider) @* {
         .provider.pubkey == provider_pubkey and not exists(
             (s2:staker_state_to_provider) @* { 
@@ -313,15 +316,22 @@ function _staking_shared_rewards(pay_reward_result) {
                 (s2.timestamp==s1.timestamp and s2 < s1) 
             }
         )
-    } ( @group account = .staker_state.account, @sum balance = .staker_state.balance );
+    } (
+        @group account = .staker_state.account,
+        @sum balance = .staker_state.balance
+    );
+
     // Get total and divide through
-    val total_delegation = staker_delegations @* { } ( @sum .balance )[0];
+    val total_delegation = staker_delegations @ { } ( @sum .balance );
+
     // Zero delegation check (should not occur in normal useage.)
-    if (total_delegation == 0) return;
+    if (total_delegation == 0) {
+        return;
+    }
+
     // Run through and payout by share of delegation
     for (staker in staker_delegations) {
         val share_amount = integer(total_shared_reward * (staker.balance / total_delegation));
-
         ft4.assets.Unsafe.transfer(get_pool_account(), staker.account, get_asset(), share_amount);
         log(
             "Paid reward share of %s to %s. Based on a delegation of %s CHR."
