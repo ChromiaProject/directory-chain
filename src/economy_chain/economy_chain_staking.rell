@@ -136,32 +136,27 @@ function _staking_request_withdrawal(user: ft4.accounts.account, _network: netwo
     }
     require(ss.balance > 0, "Balance must be over 0");
 
+    // Get the native, non-unstaked staker states
+    val current_delegate = staking_get_current_delegate_on_network(user.id, _network);
+
+    // Clear future delegation states for *this* network
+    delete staker_state_to_provider @* {
+            .staker_state.account == user
+        and .timestamp > _staking_last_known_time()
+        and .staker_state.network == _network
+    };
+
     val null_provider = require(provider @? { get_null_account() }, "No provider for this public key.");
 
-    // Get the native, non-unstaked staker states
-    val staker_states = (s: staker_state, p: staker_state_to_provider) @* {
-            p.staker_state == s
-        and p.provider != null_provider
-        and s.account == user
-        and s.network == _network
-    };
- 
-    // Calculate fresh null staker states
-    val fresh_staker_state_to_provider = staker_states @* {}
-    (
+    // Update the appropriate staker states with null provider
+    create staker_state_to_provider (
         struct<staker_state_to_provider> (
             timestamp = _staking_last_known_time(),
-            staker_state = .s,
+            staker_state = ss,
             provider = null_provider,
-            previous_provider = .p.provider
+            previous_provider = provider @ { current_delegate ?: get_null_account() },
         )
     );
-
-    // Clear future delegation states
-    delete staker_state_to_provider @* {$ in staker_states @* {} (.p) and .timestamp >= _staking_last_known_time()};
-
-    // Update appropriate staker states with null provider
-    create staker_state_to_provider ( fresh_staker_state_to_provider );
 
     // Make a new withdrawal request
     create staker_withdrawal_request (

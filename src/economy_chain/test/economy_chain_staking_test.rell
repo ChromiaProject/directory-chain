@@ -344,11 +344,14 @@ function test_three_networks_multiple_deposits_withdrawals_rewards() {
     do_pay_everything_native();
     do_evm_stake_update_bsc(alice_evm_address, 0);
     assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR));
+    assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.ETH), rell.test.keypairs.dave.pub);
 
     // Withdraw ETH
     do_evm_withdrawal_request_eth(test_account_alice);
     assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
     assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.ETH));
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR));
 
     // Run forwards 1 year + 1 week
     rell.test.set_next_block_time_delta(millis_per_year + staking_delegation_delay_ms);
@@ -426,7 +429,8 @@ function test_three_networks_multiple_deposits_withdrawals_rewards() {
     assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
     assert_null(staking_get_withdrawal_time(test_account_alice.id, network.CHR));
     do_evm_stake_update_eth(alice_evm_address, 0);
-    assert_null(staking_get_withdrawal_time(test_account_alice.id, network.ETH));
+
+    assert_equals(staking_get_balance(test_account_alice.id), 0);
 
     // No next withdrawals
     assert_null(staking_get_withdrawal_time(test_account_alice.id));
@@ -435,10 +439,10 @@ function test_three_networks_multiple_deposits_withdrawals_rewards() {
     assert_null(staking_get_withdrawal_time(test_account_alice.id, network.BSC));
 
     // No delegation
-    assert_null(staking_get_current_delegate(test_account_alice.id));
     assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR));
     assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.ETH));
     assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
+    assert_null(staking_get_current_delegate(test_account_alice.id));
 
     // Re-reconcile
     assert_equals(
