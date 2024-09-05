@@ -197,7 +197,7 @@ function _staking_distribute_withdrawals() {
 
 // Delegation
 
-function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey) {
+function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey, _network: network? = null) {
 
     val new_provider = require(provider @? { provider_pubkey }, "No provider for this public key.");
 
@@ -207,6 +207,7 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
         and p.provider != new_provider
         and s.account == staker
         and s.balance != 0
+        and ( s.network == _network or empty(_network) )
     };
     val withdraw_requests = staker_withdrawal_request @* { .active and .staker_state in staker_states @* {} (.s) };
 
