@@ -169,10 +169,11 @@ function is_staking_approved(provider, reward: big_integer): boolean {
 function pay_reward(pool: ft4.accounts.account, pool_balance: big_integer, account: ft4.accounts.account, reward_debt:big_integer,  reward: big_integer, identity: text): pay_reward_result {
     var total_pool_balance = pool_balance;
     var total_reward_debt = reward + reward_debt;
+    var delegation_share = chain_context.args.staking_rewards_share;
 
     var amount_to_transfer = 0L;
     if (total_reward_debt > 0) {
-        if (pool_balance < total_reward_debt) {
+        if (pool_balance < total_reward_debt + total_reward_debt * delegation_share) {
             if (pool_details.last_refill_millis + chain_context.args.pool_refill_limit_ms > op_context.last_block_time) {
                 log("Pool account have already claimed %s %s within the last %s millis.".format(
                     chain_context.args.pool_amount_to_mint,
@@ -185,14 +186,14 @@ function pay_reward(pool: ft4.accounts.account, pool_balance: big_integer, accou
                 total_pool_balance += chain_context.args.pool_amount_to_mint;
             }
         }
-        if (total_pool_balance >= total_reward_debt) {
+        if (total_pool_balance >= total_reward_debt + total_reward_debt * delegation_share) {
             amount_to_transfer = total_reward_debt;
         } else if (total_pool_balance <= 0) { // No funds to pay reward
             log("Reward pool is empty!");
             amount_to_transfer = 0;
         } else { // Missing funds to pay full reward
             log("Reward pool does not have enough funds to transfer full reward.");
-            amount_to_transfer = total_pool_balance;
+            amount_to_transfer = (total_pool_balance / (delegation_share + 1)).to_big_integer(); //Ensure delegation share is covered in the pool
         }
         if (amount_to_transfer > 0) {
             log("Transfer reward %s to %s".format(amount_to_transfer, identity));
