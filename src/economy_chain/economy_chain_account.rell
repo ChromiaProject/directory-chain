@@ -55,6 +55,21 @@ function register_assets() {
     );
 }
 
+function refill_pool_account_if_possible() {
+    val pool = get_pool_account();
+    if (pool_details.last_refill_millis + chain_context.args.pool_refill_limit_ms > op_context.last_block_time) {
+        log("Pool account have already claimed %s %s within the last %s millis.".format(
+            chain_context.args.pool_amount_to_mint,
+            chain_context.args.asset_symbol,
+            chain_context.args.pool_refill_limit_ms));
+    } else {
+        log("Mint %s %s to pool account.".format(chain_context.args.pool_amount_to_mint, chain_context.args.asset_symbol));
+        ft4.assets.Unsafe.mint(pool, get_asset(), chain_context.args.pool_amount_to_mint);
+        pool_details.last_refill_millis = op_context.last_block_time;
+    }
+    return get_account_balance(pool);
+}
+
 query get_ft4_account_ids() {
     return [
         "pool_account_id": get_pool_account().id,

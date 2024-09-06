@@ -267,17 +267,7 @@ function _staking_distribute_rewards() {
     val pool = get_pool_account();
     var total_pool_balance = get_account_balance(pool);
     if (total_pool_balance < total_amount) {
-        if (pool_details.last_refill_millis + chain_context.args.pool_refill_limit_ms > op_context.last_block_time) {
-            log("Pool account have already claimed %s %s within the last %s millis.".format(
-                chain_context.args.pool_amount_to_mint,
-                chain_context.args.asset_symbol,
-                chain_context.args.pool_refill_limit_ms));
-        } else {
-            log("Mint %s %s to pool account.".format(chain_context.args.pool_amount_to_mint, chain_context.args.asset_symbol));
-            ft4.assets.Unsafe.mint(pool, get_asset(), chain_context.args.pool_amount_to_mint);
-            pool_details.last_refill_millis = op_context.last_block_time;
-            total_pool_balance += chain_context.args.pool_amount_to_mint;
-        }
+        total_pool_balance = refill_pool_account_if_possible();
         if (total_pool_balance < total_amount) {       
             log("Cannot pay rewards. Insufficient funds.");
             return;
