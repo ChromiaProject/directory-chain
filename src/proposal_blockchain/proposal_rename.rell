@@ -1,9 +1,7 @@
 entity pending_blockchain_rename {
     key proposal;
     blockchain;
-
-    /** The proposed new name of the blockchain */
-    name;
+    new_name: text;
 }
 
 struct pending_blockchain_rename_data {
@@ -20,7 +18,7 @@ function apply_blockchain_rename(proposal) {
 
     validate_blockchain_rename(details);
 
-    details.blockchain.name = details.name;
+    details.blockchain.name = details.new_name;
 }
 
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.blockchain_rename.name: delete_pending_blockchain_rename(*)];
@@ -45,8 +43,8 @@ operation propose_blockchain_rename(my_pubkey: pubkey, blockchain_rid: byte_arra
 }
 
 function validate_blockchain_rename(details: pending_blockchain_rename) {
-    validate_entity_name(details.name);
-    require(empty(blockchain @? { details.name, .state != blockchain_state.REMOVED }), "A blockchain with the same name already exists");
+    validate_entity_name(details.new_name);
+    require(empty(blockchain @? { details.new_name, .state != blockchain_state.REMOVED }), "A blockchain with the same name already exists");
     require(not(details.blockchain.system), "Renaming of system chains is not allowed: " + details.blockchain.rid);
 }
 
@@ -55,6 +53,6 @@ query get_blockchain_rename_proposal(rowid): pending_blockchain_rename_data {
     return pending_blockchain_rename_data(
         details.blockchain.rid,
         current_name = details.blockchain.name,
-        new_name = details.name
+        new_name = details.new_name
     );
 }
