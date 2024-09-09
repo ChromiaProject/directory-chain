@@ -260,9 +260,14 @@ function _staking_distribute_rewards() {
     log("Preparing to distribute %s rewards worth %s".format(rewards.size(), total_amount));
 
     // Do not start what we cannot finish
-    if (get_account_balance(get_pool_account()) < total_amount) {
-        log("Cannot pay rewards. Insufficient funds.");
-        return;
+    val pool = get_pool_account();
+    var total_pool_balance = get_account_balance(pool);
+    if (total_pool_balance < total_amount) {
+        total_pool_balance = refill_pool_account_if_possible();
+        if (total_pool_balance < total_amount) {       
+            log("Cannot pay rewards. Insufficient funds.");
+            return;
+        }
     }
     update staker_state @* { } ( .pending_token_time = 0 );
 
@@ -276,7 +281,7 @@ function _staking_distribute_rewards() {
             continue;
         }
 
-        ft4.assets.Unsafe.transfer(get_pool_account(), account, get_asset(), integer(amount));
+        ft4.assets.Unsafe.transfer(pool, account, get_asset(), integer(amount));
         log("Paid out %s to %s".format(amount, account.id));
 
         payments.add(struct<staking_payment>(timestamp = _staking_last_known_time(), amount = integer(amount), account));
@@ -296,6 +301,9 @@ function _staking_shared_rewards(pay_reward_result) {
         return;
     }
 
+    //Ignore rewards paid to Chromia foundation account
+    if (pay_reward_result.payed_to == get_chromia_foundation_account()) return;
+    
     // We ignore reward debt here as it will flow through the reward term after the pool is refreshed
     val total_shared_reward = chain_context.args.staking_rewards_share * pay_reward_result.payed_reward;
 

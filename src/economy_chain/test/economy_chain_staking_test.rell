@@ -220,22 +220,8 @@ function test_delegation_across_measures() {
     // Check that accumulated reward is ~50
     assert_equals(staking_rewards_claimable_for(test_account_alice.id) / units_per_asset, 50);
 
-    // Trigger payout on empty
+    // Trigger payout
     rell.test.tx().op(staking_claim_rewards()).sign(admin_privkey).run();
-
-    // Check paid is 0
-    assert_equals(staking_get_rewards_paid(test_account_alice.id) / units_per_asset, 0);
-
-    // Check that accumulated reward is still ~50
-    assert_equals(staking_rewards_claimable_for(test_account_alice.id) / units_per_asset, 50);
-
-    // Top up rewards pool
-    rell.test.tx()
-        .op(mint_to_pool(888 * units_per_asset))
-    .sign(admin_privkey).run();
-
-    // Trigger payout for real - not sure why we need a nop here :/
-    rell.test.tx().op(staking_claim_rewards()).nop().sign(admin_privkey).run();
 
     // Check paid is 50
     assert_equals(staking_get_rewards_paid(test_account_alice.id) / units_per_asset, 50);

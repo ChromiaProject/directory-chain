@@ -29,6 +29,7 @@ val base_reward: big_integer = 1360015000; // SCU = 16, extra_storage = 1024, 5 
 val system_node_reward: big_integer = 170000000; // system node reward = 34, 5 CHR/USD
 val base_time = 10000000000000;
 val cluster_name = "Bob's cluster";
+val delegation_share = 0.1;
 
 function test_asset_units() {
     assert_equals(units_per_asset, 1000000);
@@ -345,11 +346,11 @@ function test_calculate_dapp_cluster_rewards_with_resource_pool_margin_fee_share
 }
 
 function test_pay_rewards_dapp_cluster_full_reward_is_payed() {
-    val pa = run_pay_rewards(33090909, false);
+    val pa = run_pay_rewards(add_delegation_share(33090909), false);
 
     assert_equals(get_account_balance(pa.account), 33090909);
     assert_equals(pa.reward_debt, 0);
-    assert_equals(get_pool_balance(), 0);
+    assert_equals(get_pool_balance(), get_delegation_share(33090909));
     assert_equals(node_payed_reward @ {} ( .value), 33090909);
 }
 
@@ -365,58 +366,58 @@ function test_pay_rewards_dapp_cluster_empty_pool_balance() {
 
 function test_pay_rewards_dapp_cluster_not_enough_funds() {
 
-    val pa = run_pay_rewards(1, false);
+    val pa = run_pay_rewards(add_delegation_share(10), false);
 
-    assert_equals(get_account_balance(pa.account), 1);
-    assert_equals(pa.reward_debt, 33090909 - 1);
-    assert_equals(get_pool_balance(), 0);
-    assert_equals(node_payed_reward @ {} ( .value), 1);
+    assert_equals(get_account_balance(pa.account), 10);
+    assert_equals(pa.reward_debt, 33090909 - 10);
+    assert_equals(get_pool_balance(), get_delegation_share(10));
+    assert_equals(node_payed_reward @ {} ( .value), 10);
 }
 
 function test_pay_rewards_dapp_cluster_pay_full_debt() {
 
-    val pa = run_pay_rewards(33090909 + 100, false, 90);
+    val pa = run_pay_rewards(add_delegation_share(33090909) + 100, false, 90);
 
     assert_equals(get_account_balance(pa.account), 33090909 + 90);
     assert_equals(pa.reward_debt, 0);
-    assert_equals(get_pool_balance(), 10);
+    assert_equals(get_pool_balance(), get_delegation_share(33090909) + 10);
     assert_equals(node_payed_reward @ {} ( .value), 33090909 + 90);
 }
 
 function test_pay_rewards_dapp_cluster_pay_partialy_debt() {
 
-    val pa = run_pay_rewards(33090909 + 90, false, 100);
+    val pa = run_pay_rewards(add_delegation_share(33090909) + 90, false, 100);
 
-    assert_equals(get_account_balance(pa.account), 33090909 + 90);
-    assert_equals(pa.reward_debt, 10);
-    assert_equals(get_pool_balance(), 0);
-    assert_equals(node_payed_reward @ {} ( .value), 33090909 + 90);
+    assert_equals(get_account_balance(pa.account), remove_delegation_share(add_delegation_share(33090909) + 90));
+    assert_equals(pa.reward_debt, 10 + get_delegation_share(90));
+    assert_equals(get_pool_balance(), get_delegation_share(33090909 + 90));
+    assert_equals(node_payed_reward @ {} ( .value), remove_delegation_share(add_delegation_share(33090909) + 90));
 }
 
 function test_pay_reward_to_system_cluster() {
 
-    val pa = run_pay_rewards(3726650000, true);
+    val pa = run_pay_rewards(add_delegation_share(3726650000), true);
 
     val chromia_foundation_account = get_chromia_foundation_account();
 
     assert_equals(get_account_balance(pa.account), 3726650000);
     assert_equals(pa.reward_debt, 0);
-    assert_equals(get_account_balance(chromia_foundation_account), 0);
-    assert_equals(chromia_foundation.reward_debt, 6500000);
-    assert_equals(get_pool_balance(), 0);
+    assert_equals(get_account_balance(chromia_foundation_account), 6500000);
+    assert_equals(chromia_foundation.reward_debt, 0);
+    assert_equals(get_pool_balance(), get_delegation_share(3726650000) - 6500000);
 }
 
 function test_pay_reward_to_chromia_foundation() {
 
-    val pa = run_pay_rewards(3726650000 + 500000, true);
+    val pa = run_pay_rewards(add_delegation_share(3726650000) + 500000, true);
 
     val chromia_foundation_account = get_chromia_foundation_account();
 
     assert_equals(get_account_balance(pa.account), 3726650000);
     assert_equals(pa.reward_debt, 0);
-    assert_equals(get_account_balance(chromia_foundation_account), 500000);
-    assert_equals(chromia_foundation.reward_debt, 6000000);
-    assert_equals(get_pool_balance(), 0);
+    assert_equals(get_account_balance(chromia_foundation_account), 6500000);
+    assert_equals(chromia_foundation.reward_debt, 0);
+    assert_equals(get_pool_balance(), get_delegation_share(3726650000) + 500000 - 6500000);
 }
 
 function test_pay_dapp_reward_include_removed_node() {
@@ -424,7 +425,7 @@ function test_pay_dapp_reward_include_removed_node() {
     val deleted_node_pubkey = x"AABBCC";
 
     val pa = run_pay_rewards(
-        pool_assets = 33090909,
+        pool_assets = add_delegation_share(33090909),
             calculate_system_reward = false,
             reward_debt = 0,
             node_availability = [deleted_node_pubkey: 0.7, node_pubkey: 0.3],
@@ -441,7 +442,7 @@ function test_pay_system_reward_include_removed_node() {
     val deleted_node2_pubkey = x"DDEEFF";
 
     val pa = run_pay_rewards(
-        pool_assets = 33090909,
+        pool_assets = add_delegation_share(33090909),
             calculate_system_reward = true,
             reward_debt = 0,
             node_availability = [deleted_node1_pubkey: 0.2, deleted_node2_pubkey: 0.5, node_pubkey: 0.3],
@@ -647,6 +648,18 @@ function test_staking_req_reward_successful_followed_by_stopped() {
 
 ///////////////////
 // Helper functions
+
+function add_delegation_share(total: big_integer) {
+    return (total * (delegation_share + 1)).ceil().to_big_integer();
+}
+
+function get_delegation_share(total: big_integer) {
+    return (total * delegation_share).ceil().to_big_integer();
+}
+
+function remove_delegation_share(total: big_integer) {
+    return (total / (delegation_share + 1)).to_big_integer();
+}
 
 function run_staking_pay_out(
     reward: integer = 10,
