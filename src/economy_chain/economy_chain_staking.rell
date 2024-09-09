@@ -136,32 +136,27 @@ function _staking_request_withdrawal(user: ft4.accounts.account, _network: netwo
     }
     require(ss.balance > 0, "Balance must be over 0");
 
+    // Get the native, non-unstaked staker states
+    val current_delegate = staking_get_current_delegate_on_network(user.id, _network);
+
+    // Clear future delegation states for *this* network
+    delete staker_state_to_provider @* {
+            .staker_state.account == user
+        and .timestamp > _staking_last_known_time()
+        and .staker_state.network == _network
+    };
+
     val null_provider = require(provider @? { get_null_account() }, "No provider for this public key.");
 
-    // Get the native, non-unstaked staker states
-    val staker_states = (s: staker_state, p: staker_state_to_provider) @* {
-            p.staker_state == s
-        and p.provider != null_provider
-        and s.account == user
-        and s.network == _network
-    };
- 
-    // Calculate fresh null staker states
-    val fresh_staker_state_to_provider = staker_states @* {}
-    (
+    // Update the appropriate staker states with null provider
+    create staker_state_to_provider (
         struct<staker_state_to_provider> (
             timestamp = _staking_last_known_time(),
-            staker_state = .s,
+            staker_state = ss,
             provider = null_provider,
-            previous_provider = .p.provider
+            previous_provider = provider @ { current_delegate ?: get_null_account() },
         )
     );
-
-    // Clear future delegation states
-    delete staker_state_to_provider @* {$ in staker_states @* {} (.p) and .timestamp >= _staking_last_known_time()};
-
-    // Update appropriate staker states with null provider
-    create staker_state_to_provider ( fresh_staker_state_to_provider );
 
     // Make a new withdrawal request
     create staker_withdrawal_request (
@@ -202,7 +197,7 @@ function _staking_distribute_withdrawals() {
 
 // Delegation
 
-function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey) {
+function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey, _network: network? = null) {
 
     val new_provider = require(provider @? { provider_pubkey }, "No provider for this public key.");
 
@@ -212,6 +207,7 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
         and p.provider != new_provider
         and s.account == staker
         and s.balance != 0
+        and ( s.network == _network or empty(_network) )
     };
     val withdraw_requests = staker_withdrawal_request @* { .active and .staker_state in staker_states @* {} (.s) };
 
@@ -319,6 +315,7 @@ function _staking_shared_rewards(pay_reward_result) {
         log("Not provider public key for id: %s".format(pay_reward_result.payed_to.id));
         return;
     }
+
     val staker_delegations = ( s1: staker_state_to_provider) @* {
         .provider.pubkey == provider_pubkey and not exists(
             (s2:staker_state_to_provider) @* { 
@@ -327,15 +324,22 @@ function _staking_shared_rewards(pay_reward_result) {
                 (s2.timestamp==s1.timestamp and s2 < s1) 
             }
         )
-    } ( @group account = .staker_state.account, @sum balance = .staker_state.balance );
+    } (
+        @group account = .staker_state.account,
+        @sum balance = .staker_state.balance
+    );
+
     // Get total and divide through
-    val total_delegation = staker_delegations @* { } ( @sum .balance )[0];
+    val total_delegation = staker_delegations @ { } ( @sum .balance );
+
     // Zero delegation check (should not occur in normal useage.)
-    if (total_delegation == 0) return;
+    if (total_delegation == 0) {
+        return;
+    }
+
     // Run through and payout by share of delegation
     for (staker in staker_delegations) {
         val share_amount = integer(total_shared_reward * (staker.balance / total_delegation));
-
         ft4.assets.Unsafe.transfer(get_pool_account(), staker.account, get_asset(), share_amount);
         log(
             "Paid reward share of %s to %s. Based on a delegation of %s CHR."

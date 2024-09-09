@@ -15,7 +15,7 @@ query staking_get_rewards_start(): timestamp = chain_context.args.staking_reward
 
 /**
 /* The current delegation of the user's stake on one of the three blockchain networks.
-/* Ordinarily the user would be staked (or unstaked) identitically across the networks.
+/* Ordinarily the user would be staked (or unstaked) identitically across all networks.
 /*
 /* @param account_id User account ID (bytes32)
 /* @param network Network using the enum
@@ -48,7 +48,7 @@ query staking_get_current_delegate_on_network(account_id: byte_array, network): 
 
 /**
 /* Gets the user's most recent stake delegation across all network.
-/* Delegation of all stakes should be identical. This will break-down if withdrawals are not applied consistently.
+/* This can vary if a withdrawal has been made on a single chain.
 /*
 /* @param account_id Given user
 /* @returns Public key of the last delegated to provider, or null if last undelegated 
@@ -78,7 +78,8 @@ query staking_get_current_delegate(account_id: byte_array) {
 }
 
 /**
-/* Delegation changes do not take place immediately. This will return the next delegation change, or null if there is none.
+/*  This will return the next delegation change, or null if there is none.
+/*  Delegation changes do not take place immediately.
 /*
 /* @param account_id Given user
 /* @returns A tuple of the next to be delegated to provider and the timestamp the delegation will take effect. Or null if no re-delegation is scheduled.
@@ -105,10 +106,10 @@ query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubk
 }
 
 /**
-/* Total staked CHR across all networks and all users that had been delegated to the provider with that public key.
+/* Total staked CHR across all networks and all users that had been delegated to the provider
 /*
 /* @param pubkey Public key of the given provider
-/* @returns Total CHR staked to the given provider in  minor units
+/* @returns Total CHR staked to the given provider in minor units
 */
 query staking_get_total_delegation_to(pubkey, network? = null) {
     return ( s1: staker_state_to_provider) @ {
@@ -166,7 +167,7 @@ query staking_get_withdrawal_time(account_id: byte_array, network = network.CHR)
 /* @param account_id Account ID
 /* @returns Amount of CHR in minor units
 /* @dev If this is changed so should `_update_pending_token_time` and the query `_update_pending_token_time_all`.
-/* @dev Please pay attention to the bits marked with ***.
+/* @dev Please pay particular attention to the bits marked with ***.
 */
 query staking_rewards_claimable_for(account_id: byte_array) {
     val rate = staking_get_current_rate() / millis_per_year;
@@ -270,7 +271,7 @@ query staking_get_balance(
 );
 
 /**
-/* Native Ft4 Chromia balance of CHR (in minor units) staked by the user
+/* Native FT4 Chromia balance of CHR (in minor units) staked by the user
 /*
 /* @param account_id Account ID
 /* @returns Total balance of CHR in minor units
