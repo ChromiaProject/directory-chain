@@ -1,0 +1,60 @@
+@test module;
+
+import ^^.*;
+import common.test.ops.*;
+import common.test.setup.*;
+import direct_container.*;
+import ^.utils.*;
+
+function setup() {
+    setup_module();
+    rell.test.tx().op(create_test_provider("bob", rell.test.pubkeys.bob)).run();
+}
+
+function test_propose_blockchain_rename_success() {
+
+    setup();
+
+    val container = "container";
+    val chain_name = "first_name";
+
+    var conf_foo = apply_required_configuration_properties(["name" : "foo".to_gtv()]);
+    rell.test.tx().op(
+        create_container(rell.test.pubkeys.alice, container, clusters.system, 0, [rell.test.pubkeys.alice]),
+        propose_blockchain(rell.test.pubkeys.alice, conf_foo.to_gtv().to_bytes(), chain_name, container),
+    ).sign(rell.test.keypairs.alice).run();
+    val foo_chain = blockchain @ { chain_name };
+    val chain_rid = foo_chain.rid;
+
+    rell.test.tx().op(
+        propose_blockchain_rename(rell.test.pubkeys.alice, chain_rid, "second_name")
+    ).sign(rell.test.keypairs.alice).run();
+
+    blockchain @ { chain_rid, "second_name" };
+}
+
+function test_get_blockchain_rename_proposal() {
+
+    setup();
+
+    val container = "container";
+    val chain_name = "first_name";
+
+    var conf_foo = apply_required_configuration_properties(["name" : "foo".to_gtv()]);
+    rell.test.tx().op(
+        create_container(rell.test.pubkeys.alice, container, clusters.system, 0, [rell.test.pubkeys.alice, rell.test.pubkeys.bob]),
+        propose_blockchain(rell.test.pubkeys.alice, conf_foo.to_gtv().to_bytes(), chain_name, container),
+    ).sign(rell.test.keypairs.alice).run();
+    bob_votes();
+    val blockchain = blockchain @ { chain_name };
+
+    // Create a proposal which will not be applied
+    rell.test.tx().op(
+        propose_blockchain_rename(rell.test.pubkeys.alice, blockchain.rid, "second_name")
+    ).sign(rell.test.keypairs.alice).run();
+
+    val details = get_blockchain_rename_proposal(proposal @ {} ( @sort_desc .rowid ) limit 1);
+    assert_equals(details.blockchain_rid, blockchain.rid);
+    assert_equals(details.current_name, chain_name);
+    assert_equals(details.new_name, "second_name");
+}
