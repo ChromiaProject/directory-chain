@@ -1,0 +1,58 @@
+entity pending_blockchain_rename {
+    key proposal;
+    blockchain;
+    new_name: text;
+}
+
+struct pending_blockchain_rename_data {
+    blockchain_rid: byte_array;
+    current_name: text;
+    new_name: text;
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.blockchain_rename.name: apply_blockchain_rename(*)];
+
+function apply_blockchain_rename(proposal) {
+    val details = pending_blockchain_rename @? { proposal };
+    if (details == null) return;
+
+    validate_blockchain_rename(details);
+
+    details.blockchain.name = details.new_name;
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.blockchain_rename.name: delete_pending_blockchain_rename(*)];
+
+function delete_pending_blockchain_rename(proposal) {
+    delete pending_blockchain_rename @? { proposal };
+}
+
+/**
+  * Creates a proposal to rename a blockchain.
+  */
+operation propose_blockchain_rename(my_pubkey: pubkey, blockchain_rid: byte_array, name, description: text = "") {
+    val me = require_is_provider_with_rate_limit(my_pubkey);
+    val blockchain = require_blockchain(blockchain_rid);
+    val container = container_blockchain @ { blockchain } ( .container );
+    require_container_deployer(container, me);
+
+    val proposal = create_proposal(proposal_type.blockchain_rename, me, container.deployer, description);
+    val details = create pending_blockchain_rename(proposal, blockchain, name);
+    validate_blockchain_rename(details);
+    internal_vote(me, proposal, true);
+}
+
+function validate_blockchain_rename(details: pending_blockchain_rename) {
+    validate_entity_name(details.new_name);
+    require(empty(blockchain @? { details.new_name, .state != blockchain_state.REMOVED }), "A blockchain with the same name already exists");
+    require(not(details.blockchain.system), "Renaming of system chains is not allowed: " + details.blockchain.rid);
+}
+
+query get_blockchain_rename_proposal(rowid): pending_blockchain_rename_data {
+    val details = require(pending_blockchain_rename @? { require_proposal(rowid) }, "Proposal is not a blockchain rename type");
+    return pending_blockchain_rename_data(
+        details.blockchain.rid,
+        current_name = details.blockchain.name,
+        new_name = details.new_name
+    );
+}
