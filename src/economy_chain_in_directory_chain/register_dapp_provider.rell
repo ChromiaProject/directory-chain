@@ -13,12 +13,25 @@ function receive_register_dapp_provider_impl(body: gtv) {
     val register_dapp_provider_message = register_dapp_provider_message.from_gtv(body);
     val container_voter_set = container @? { .name == register_dapp_provider_message.container_name }.deployer;
 
-    try_call(register_and_enable_provider(
-        provider_info(register_dapp_provider_message.new_provider),
-        provider_tier.DAPP_PROVIDER,
-        null,
+    try_call(add_provider_and_propose_to_container_voterset(
+        register_dapp_provider_message.new_provider,
         container_voter_set,
-        true,
         *
     ));
+}
+
+function add_provider_and_propose_to_container_voterset(new_provider: pubkey, voter_set?) {
+    register_and_enable_provider(provider_info(new_provider), provider_tier.DAPP_PROVIDER, null, null, true);
+
+    val provider = require_provider(new_provider);
+    if (voter_set != null and empty(proposal @* { voter_set, proposal_state.PENDING })) {
+        val prop = create_proposal(
+            proposal_type.voter_set_update,
+            provider,
+            voter_set_governance @ { voter_set }.governor,
+            "Automatically generated proposal to add new provider %s that was created via economy chain".format(new_provider)
+        );
+        val voter_update = create pending_voter_set_update(prop, voter_set);
+        create voter_set_update.new_member(voter_update, provider);
+    }
 }
