@@ -136,27 +136,21 @@ function _staking_request_withdrawal(user: ft4.accounts.account, _network: netwo
     }
     require(ss.balance > 0, "Balance must be over 0");
 
-    // Get the native, non-unstaked staker states
-    val current_delegate = staking_get_current_delegate_on_network(user.id, _network);
+    // Clear future delegation states (not the current one)
+    delete staker_state_to_provider @* { .staker_state == ss and .timestamp > _staking_last_known_time() };
 
-    // Clear future delegation states for *this* network
-    delete staker_state_to_provider @* {
-            .staker_state.account == user
-        and .timestamp > _staking_last_known_time()
-        and .staker_state.network == _network
-    };
-
+    // Update appropriate staker states with null provider
     val null_provider = require(provider @? { get_null_account() }, "No provider for this public key.");
-
-    // Update the appropriate staker states with null provider
+    val current_delegate = staking_get_current_delegate_on_network(user.id, _network);
     create staker_state_to_provider (
-        struct<staker_state_to_provider> (
-            timestamp = _staking_last_known_time(),
-            staker_state = ss,
-            provider = null_provider,
-            previous_provider = provider @ { current_delegate ?: get_null_account() },
-        )
+        timestamp = _staking_last_known_time() + chain_context.args.staking_delegation_delay_ms,
+        staker_state = ss,
+        provider = null_provider,
+        previous_provider = provider @ { current_delegate ?: get_null_account() },
     );
+
+    // Let's consolidate as we've touched the delegation state
+    _update_pending_token_time(ss);
 
     // Make a new withdrawal request
     create staker_withdrawal_request (
@@ -218,7 +212,6 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
     val staker_states_to_exclude = withdraw_requests @* { .staker_state.network != network.CHR } ( .staker_state );
  
     // Delegation from nothing happens without the delay
-    // TODO what happens if separate states on different networks .... ??
     val old_provider = staking_get_current_delegate(staker.id);
     val new_time_offset = if (empty(old_provider)) 0 else chain_context.args.staking_delegation_delay_ms;
 
@@ -239,6 +232,7 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
 function _staking_clear_upcoming_delegations(ft4.accounts.account) {
     delete staker_state_to_provider @* { .staker_state.account == account and .timestamp > _staking_last_known_time()};  
 }
+
 
 // Rewards
 

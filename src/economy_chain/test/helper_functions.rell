@@ -538,6 +538,20 @@ function do_pay_everything_native() {
     ).nop().run();
 }
 
+function check_account_invariants(ft4.accounts.account) {
+    // Cannot have a delegation on a zero staked balance
+    if (staking_get_balance(account.id) == 0) {
+        assert_null(staking_get_current_delegate(account.id));
+    }
+
+    // An overall delegation needs to come from at least 1 network
+    if( empty((staking_get_current_delegate(account.id))) ) {
+        assert_null(staking_get_current_delegate_on_network(account.id, network.CHR));
+        assert_null(staking_get_current_delegate_on_network(account.id, network.BSC));
+        assert_null(staking_get_current_delegate_on_network(account.id, network.ETH));
+    }
+}
+
 function update_staking_requirements_constants(
     staking_requirements_enabled: boolean? = null,
     staking_requirement_stop_payout_days: integer? = null,
