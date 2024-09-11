@@ -49,6 +49,7 @@ function flush_provisional_stake_balance(account: ft4.accounts.account, address:
 }
 
 function __handle_staking_events(network_id: integer, events: list<eif.messaging.event_data>) {
+    log("Processing %s EVM events.".format(events.size()));
     for (event in events) {
         val evm_address = byte_array.from_gtv(event.indexed_values[0]);
 
@@ -60,6 +61,7 @@ function __handle_staking_events(network_id: integer, events: list<eif.messaging
 
         val ft4_account = eif.hbridge.find_ft4_account_for_address(evm_address, network_id);
 
+        log("Processing EVM event of %s for EVM address %s on network id %s".format(event.name, evm_address, network_id));
         if (event.name == "StakeUpdate") {
             val staked_balance = integer.from_gtv(event.non_indexed_values[0]);
 

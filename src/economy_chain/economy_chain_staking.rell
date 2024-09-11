@@ -51,9 +51,11 @@ function _staking_deposit_native_impl(amount: integer, delegate_to: pubkey? = nu
             timestamp = _staking_last_known_time(), // Immediate effect
             staker_state = ss,
             previous_provider = provider @ { get_null_account() },
-            provider = provider @ { current_delegation  ?: get_null_account() }
+            provider = provider @ { current_delegation ?: get_null_account() }
         );
     }
+
+    log("Processed a native CHR deposit of %s for %s".format(amount, staker.id));
 
     if (delegate_to != null) {
         // Down this path everything is updated anyway
@@ -73,6 +75,8 @@ function _change_staking_account(account: ft4.accounts.account, new_account: ft4
 // Legacy EVM events imports
 
 function _staking_update_evm_state(staker: ft4.accounts.account, network, new_balance: integer) {
+    log("Staking state update of %s to %s on network %s".format(staker.id, new_balance, network));
+
     var ss = staker_state @? { .account == staker and .network == network };
     if (exists(ss)) {
         _update_pending_token_time(ss);
@@ -107,6 +111,7 @@ function _staking_update_evm_state(staker: ft4.accounts.account, network, new_ba
 
     // Handle the balance disappearing, eg. a withdrawal
     if (0 == new_balance) {
+        log("Detected an EVM withdrawal for %s on network %s".format(staker.id, network));
         update staker_withdrawal_request @* {
                 .active
             and .staker_state.network == network
@@ -157,6 +162,8 @@ function _staking_request_withdrawal(user: ft4.accounts.account, _network: netwo
         ss,
         true
     );
+
+    log("Created a withdrawal request for %s on network %s".format(user.id, _network));
 }
 
 function _staking_distribute_withdrawals() {
