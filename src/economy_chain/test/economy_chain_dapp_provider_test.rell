@@ -15,6 +15,7 @@ import lib.auth;
 struct module_args {
     auth_privkey: byte_array;
     admin_privkey: byte_array;
+    dapp_provider_creation_cost: integer = 10;
 }
 
 val auth_privkey = chain_context.args.auth_privkey;
@@ -126,4 +127,26 @@ function test_max_dapp_providers_limit() {
         ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, register_dapp_provider(container_name, rell.test.pubkeys.charlie)),
         register_dapp_provider(container_name, rell.test.pubkeys.charlie)
     ).sign(rell.test.keypairs.alice).run_must_fail("No more dapp providers can be added to lease, maximum limit 2 exceeded");
+}
+
+function test_register_dapp_provider_with_payment() {
+    rell.test.tx().op(init()).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+
+    val initial_balance = get_account_balance(alice);
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, register_dapp_provider_with_payment(rell.test.pubkeys.bob)),
+        register_dapp_provider_with_payment(rell.test.pubkeys.bob)
+    ).sign(rell.test.keypairs.alice).run();
+
+    assert_events(("icmf_message", (
+        topic = register_dapp_provider_topic,
+        body = register_dapp_provider_message(
+        "",
+        new_provider = rell.test.pubkeys.bob
+    ).to_gtv()
+    ).to_gtv_pretty()));
+
+    assert_equals(get_account_balance(alice), initial_balance - chain_context.args.dapp_provider_creation_cost);
 }

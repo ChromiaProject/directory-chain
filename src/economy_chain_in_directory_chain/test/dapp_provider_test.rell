@@ -36,6 +36,26 @@ function test_register_dapp_provider() {
     assert_not_null(voter_set_member @? { .voter_set == container.deployer, .provider == dapp_provider });
 }
 
+function test_register_dapp_provider_without_container_name() {
+    setup_module();
+
+    val conf = apply_required_configuration_properties();
+    rell.test.tx().op(
+        init_economy_chain(initial_provider.pub, conf.to_gtv().to_bytes()),
+    ).sign(initial_provider).run();
+
+    val dapp_provider_key = rell.test.pubkeys.bob;
+    rell.test.tx().op(
+        register_dapp_provider_op(register_dapp_provider_message(
+            "",
+            dapp_provider_key
+        ).to_gtv())
+    ).run();
+
+    val dapp_provider = provider @ { .pubkey == dapp_provider_key };
+    assert_null(voter_set_update.new_member @? { .provider == dapp_provider }.pending_voter_set_update.proposal);
+}
+
 function test_change_dapp_providers_state() {
     setup_module();
 
