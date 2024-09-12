@@ -60,13 +60,7 @@ function __handle_staking_events(network_id: integer, events: list<eif.messaging
 
         val ft4_account = eif.hbridge.find_ft4_account_for_address(evm_address, network_id);
 
-        if (event.name == "WithdrawRequest") {
-            if (exists(ft4_account)) {
-                _staking_request_withdrawal(ft4_account, current_network);
-            } else {
-                delete provisional_stake_balance @? { evm_address, current_network };
-            }
-        } else if (event.name == "StakeUpdate") {
+        if (event.name == "StakeUpdate") {
             val staked_balance = integer.from_gtv(event.non_indexed_values[0]);
 
             if (exists(ft4_account)) {
@@ -83,6 +77,8 @@ function __handle_staking_events(network_id: integer, events: list<eif.messaging
                     );
                 }
             }
+        } else {
+            log("Unknown EVM event: %s".format(event.name));
         }
     }
 }
