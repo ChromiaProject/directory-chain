@@ -11,7 +11,8 @@
 
 function receive_register_dapp_provider_impl(body: gtv) {
     val register_dapp_provider_message = register_dapp_provider_message.from_gtv(body);
-    val container_voter_set = container @? { .name == register_dapp_provider_message.container_name }.deployer;
+    val container_name = register_dapp_provider_message.container_name;
+    val container_voter_set = if (container_name != "") container @? { .name == container_name }.deployer else null;
 
     try_call(add_provider_and_propose_to_container_voterset(
         register_dapp_provider_message.new_provider,
