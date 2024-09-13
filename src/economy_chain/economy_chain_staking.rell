@@ -69,6 +69,7 @@ function _change_staking_account(account: ft4.accounts.account, new_account: ft4
         account.id, new_account.id, count));
 }
 
+
 // Legacy EVM events imports
 
 function _staking_update_evm_state(staker: ft4.accounts.account, network, new_balance: integer) {
@@ -90,7 +91,7 @@ function _staking_update_evm_state(staker: ft4.accounts.account, network, new_ba
         );
     }
 
-    if(ss.balance == 0 and new_balance > 0) {
+    if (ss.balance == 0 and new_balance > 0) {
         // Find the current delegation at time of deposit and immediately apply it
         val current_delegation = staking_get_current_delegate(staker.id);
 
@@ -113,10 +114,21 @@ function _staking_update_evm_state(staker: ft4.accounts.account, network, new_ba
         } (
             .active = false
         );
+
+        // Immediately delegate to null
+        val current_delegate = staking_get_current_delegate_on_network(ss.account.id, network);
+        create staker_state_to_provider (
+            timestamp = _staking_last_known_time(),
+            staker_state = ss,
+            provider = provider @ { get_null_account() },
+            previous_provider = provider @ { current_delegate ?: get_null_account() },
+        );
     }
 
     ss.balance = new_balance;
+
     _staking_clear_upcoming_delegations(staker);
+
 }
 
 
@@ -136,19 +148,6 @@ function _staking_request_withdrawal(user: ft4.accounts.account, _network: netwo
     }
     require(ss.balance > 0, "Balance must be over 0");
 
-    // Clear future delegation states (not the current one)
-    delete staker_state_to_provider @* { .staker_state == ss and .timestamp > _staking_last_known_time() };
-
-    // Update appropriate staker states with null provider
-    val null_provider = require(provider @? { get_null_account() }, "No provider for this public key.");
-    val current_delegate = staking_get_current_delegate_on_network(user.id, _network);
-    create staker_state_to_provider (
-        timestamp = _staking_last_known_time() + chain_context.args.staking_delegation_delay_ms,
-        staker_state = ss,
-        provider = null_provider,
-        previous_provider = provider @ { current_delegate ?: get_null_account() },
-    );
-
     // Let's consolidate as we've touched the delegation state
     _update_pending_token_time(ss);
 
@@ -163,29 +162,44 @@ function _staking_request_withdrawal(user: ft4.accounts.account, _network: netwo
 function _staking_distribute_withdrawals() {
     val open_withdrawals = staker_withdrawal_request @* {
         .active and .staker_state.network == network.CHR and .finish_at <= _staking_last_known_time()
-    } ( account = .staker_state.account, balance = .staker_state.balance );
+    };
 
     log("Preparing to pay out %s withdrawals.".format(open_withdrawals.size()));
 
+    // Find all the staker states concerned
+    var staker_states = staker_withdrawal_request @* {
+        .active and .staker_state.network == network.CHR and .finish_at <= _staking_last_known_time( )
+    } ( .staker_state );
+
+    // Clear future delegation states (not the current one)
+    delete staker_state_to_provider @* { .staker_state in staker_states and .timestamp > _staking_last_known_time() };
+
+    // Process each withdrawal
     for (withdrawal in open_withdrawals) {
         // Send the balance back to them through ft4
         ft4.assets.Unsafe.transfer(
                 get_deposit_account(),
-                withdrawal.account,
+                withdrawal.staker_state.account,
                 get_asset(),
-                withdrawal.balance
+                withdrawal.staker_state.balance
             );
-        log("Withdrawal of amount %s sent back to %s.".format(withdrawal.balance, withdrawal.account));
+        log("Withdrawal of amount %s sent back to %s.".format(withdrawal.staker_state.balance, withdrawal.staker_state.account));
+
+        // Immediately delegate to null
+        val current_delegate = staking_get_current_delegate_on_network(withdrawal.staker_state.account.id, network.CHR);
+        create staker_state_to_provider (
+            timestamp = _staking_last_known_time(),
+            staker_state = withdrawal.staker_state,
+            provider = provider @ { get_null_account() },
+            previous_provider = provider @ { current_delegate ?: get_null_account() },
+        );
     }
 
-    var staker_states = staker_withdrawal_request @* {
-        .active and .staker_state.network == network.CHR and .finish_at <= _staking_last_known_time( )
-    } ( .staker_state );
     update staker_states ( .balance = 0 );
     update staker_withdrawal_request @* {
         .active and .staker_state.network == network.CHR and .finish_at <= _staking_last_known_time( )
     } ( .active = false);
-    
+ 
 }
 
 
