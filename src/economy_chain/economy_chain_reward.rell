@@ -113,10 +113,9 @@ function pay_out_chromia_foundation_reward() {
         .format(sum_total_max_revenue_per_dapp_cluster, economy_constants.chromia_foundation_fee_share, economy_constants.chr_per_usd, units_per_asset, chromia_foundation_reward));
 
     val pool = get_pool_account();
-    var pool_balance = get_account_balance(pool);
     val chromia_foundation_account = get_chromia_foundation_account();
 
-    val pay_reward_result = pay_reward(pool, pool_balance, chromia_foundation_account, chromia_foundation.reward_debt, chromia_foundation_reward, "Chromia Foundation");
+    val pay_reward_result = pay_reward(pool, chromia_foundation_account, chromia_foundation.reward_debt, chromia_foundation_reward, "Chromia Foundation");
 
     chromia_foundation.reward_debt = pay_reward_result.reward_debt;
 }
@@ -124,18 +123,16 @@ function pay_out_chromia_foundation_reward() {
 function pay_out_node_rewards(node_reward: map<node, big_integer>) {
 
     val pool = get_pool_account();
-    var pool_balance = get_account_balance(pool);
 
     for ((node, reward) in node_reward) {
         val provider = node.provider;
         val pa = provider_account @ { provider };
 
         if (is_staking_approved(provider, reward)) {
-            val pay_reward_result = pay_reward(pool, pool_balance, pa.account, pa.reward_debt, reward, "provider %s".format(pa.provider.pubkey));
+            val pay_reward_result = pay_reward(pool, pa.account, pa.reward_debt, reward, "provider %s".format(pa.provider.pubkey));
 
             save_node_payed_reward(node.pubkey, pay_reward_result.payed_reward, op_context.last_block_time);
             pa.reward_debt = pay_reward_result.reward_debt;
-            pool_balance = pay_reward_result.pool_balance;
         }
     }
 }
@@ -166,45 +163,45 @@ function is_staking_approved(provider, reward: big_integer): boolean {
     return true;
 }
 
-function pay_reward(pool: ft4.accounts.account, pool_balance: big_integer, account: ft4.accounts.account, reward_debt:big_integer,  reward: big_integer, identity: text): pay_reward_result {
-    var total_pool_balance = pool_balance;
+function pay_reward(pool: ft4.accounts.account, account: ft4.accounts.account, reward_debt:big_integer,  reward: big_integer, identity: text): pay_reward_result {
+    var pool_balance = get_account_balance(pool);
     var total_reward_debt = reward + reward_debt;
     // Ensure pool funds cover additional delegation rewards in _staking_shared_rewards
-    val delegation_share = if(account == get_chromia_foundation_account()) 0 else chain_context.args.staking_rewards_share;
+    val delegation_share = if (account == get_chromia_foundation_account()) 0 else chain_context.args.staking_rewards_share;
 
     var amount_to_transfer = 0L;
     if (total_reward_debt > 0) {
         if (pool_balance < total_reward_debt + total_reward_debt * delegation_share) {
-            total_pool_balance = refill_pool_account_if_possible();
+            pool_balance = refill_pool_account_if_possible();
         }
-        if (total_pool_balance >= total_reward_debt + total_reward_debt * delegation_share) {
+        if (pool_balance >= total_reward_debt + total_reward_debt * delegation_share) {
             amount_to_transfer = total_reward_debt;
-        } else if (total_pool_balance <= 0) { // No funds to pay reward
+        } else if (pool_balance <= 0) { // No funds to pay reward
             log("Reward pool is empty!");
             amount_to_transfer = 0;
         } else { // Missing funds to pay full reward
             log("Reward pool does not have enough funds to transfer full reward.");
-            amount_to_transfer = (total_pool_balance / (delegation_share + 1)).to_big_integer(); //Ensure delegation share is covered in the pool
+            amount_to_transfer = (pool_balance / (delegation_share + 1)).to_big_integer(); //Ensure delegation share is covered in the pool
         }
         if (amount_to_transfer > 0) {
             log("Transfer reward %s to %s".format(amount_to_transfer, identity));
             if (transfer_reward(pool, account, amount_to_transfer)) {
                 total_reward_debt -= amount_to_transfer;
-                total_pool_balance -= amount_to_transfer;
+                pool_balance -= amount_to_transfer;
             } else {
                 log("Unable to transfer reward to %s".format(identity));
             }
         }
     }
 
-    val pay_reward_result = pay_reward_result(payed_reward = amount_to_transfer, payed_to = account, pool_balance = total_pool_balance, reward_debt = total_reward_debt);
+    val pay_reward_result = pay_reward_result(payed_reward = amount_to_transfer, payed_to = account, reward_debt = total_reward_debt);
 
     log("Pay reward result for %s: payed_reward = %s, reward_debt = %s, payed_to = %s, pool_balance = %s".format(
         identity,
         pay_reward_result.payed_reward,
         pay_reward_result.reward_debt,
         pay_reward_result.payed_to.id,
-        pay_reward_result.pool_balance
+        pool_balance
     ));
 
     after_pay_reward(pay_reward_result);
