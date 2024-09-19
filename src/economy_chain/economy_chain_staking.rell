@@ -354,20 +354,19 @@ function _staking_shared_rewards(pay_reward_result) {
 
     // Run through and payout by share of delegation
     for (staker in staker_delegations) {
-        if (staker.balance > 0) {
-            val share_amount = integer(total_shared_reward * (staker.balance / total_delegation));
-            ft4.assets.Unsafe.transfer(get_pool_account(), staker.account, get_asset(), share_amount);
-            log(
-                "Paid reward share of %s to %s. Based on a delegation of %s CHR."
-                    .format(
-                        share_amount,
-                        staker
-                            .account
-                            .id,
-                        staker
-                            .balance
-                    )
-            );
-        }
+        val share_amount = integer(total_shared_reward * (staker.balance / total_delegation));
+        if(share_amount == 0) continue;
+        ft4.assets.Unsafe.transfer(get_pool_account(), staker.account, get_asset(), share_amount);
+        log(
+            "Paid reward share of %s to %s. Based on a delegation of %s CHR."
+                .format(
+                    share_amount,
+                    staker
+                        .account
+                        .id,
+                    staker
+                        .balance
+                )
+        );
     }
 }
