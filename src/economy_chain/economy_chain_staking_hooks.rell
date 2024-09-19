@@ -7,10 +7,8 @@ function(
 );
 
 @extend(after_pay_reward)
-function(pay_reward_result) { 
-    if (not try_call(_staking_shared_rewards(pay_reward_result, *))) {
-        log("Failed to distribute staking rewards for reward to %s".format(pay_reward_result.payed_to.id));
-    }
+function(pay_reward_result) {
+    _staking_shared_rewards(pay_reward_result, *);
 }
 
 function __staking_begin_block(height: integer) {
@@ -18,14 +16,14 @@ function __staking_begin_block(height: integer) {
         (_staking_last_known_time() - _staking_state.last_reward_distribution) > chain_context.args.staking_rewards_payout_interval_ms
     ) {
         log("Scheduled staking reward distribution started.");
-        if (not try_call(__staking_begin_block_reward_payouts(*))) log("Failed staking reward distribution.");
+        __staking_begin_block_reward_payouts(*);
         log("Scheduled staking reward distribution ended.");
     }
     if (
         (_staking_last_known_time() - _staking_state.last_withdrawal_distribution) > chain_context.args.staking_withdrawals_payout_interval_ms
     ) {
         log("Scheduled staking withdrawals started.");
-        if (not try_call(__staking_begin_block_withdrawals(*))) log("Failed staking withdrawals distribution.");
+        __staking_begin_block_withdrawals(*);
         log("Scheduled staking withdrawals ended.");
     }
 }
