@@ -22,6 +22,14 @@ query get_upgrade_container_ticket_by_id(ticket_id: integer): container_ticket_d
         upgrade_container_ticket @? { .ticket.rowid == rowid(ticket_id) }
             (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
 
+query get_assign_subnode_image_to_container_ticket_by_transaction(tx_rid: byte_array): container_ticket_data? =
+        assign_subnode_image_to_container_ticket @? { .ticket.transaction.tx_rid == tx_rid }
+            (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
+
+query get_assign_subnode_image_to_container_ticket_by_id(ticket_id: integer): container_ticket_data? =
+        assign_subnode_image_to_container_ticket @? { .ticket.rowid == rowid(ticket_id) }
+            (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
+
 query get_leases_by_account(account_id: byte_array): list<lease_data> =
         (lease, @outer lease_subnode_image) @* { .account.id == account_id } (lease_data(
                 container_name = .container_name,
@@ -282,7 +290,7 @@ query get_all_bridge_leases_for_container(container_name: text) = (bridge_lease,
 );
 
 /**
- * @returns all common subnode images which are available for all clusters
+ * @return all common subnode images which are available for all clusters
  */
 query get_available_subnode_images_for_all_clusters(): list<subnode_image_data> =
     (subnode_image) @*
@@ -290,7 +298,7 @@ query get_available_subnode_images_for_all_clusters(): list<subnode_image_data> 
     ( subnode_image_data(name = .name, url = .url, digest = .digest, owner = .owner.pubkey, description = .description) );
 
 /**
- * @returns all subnode images which are available for a specific cluster (common and special for this cluster)
+ * @return all subnode images which are available for a specific cluster (common and special for this cluster)
  */
 query get_available_subnode_images_for_cluster(cluster_name: text): list<subnode_image_data> =
     (subnode_image, @outer cluster_subnode_image @* { .subnode_image == subnode_image, .cluster.name == cluster_name }) @*

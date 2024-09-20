@@ -126,6 +126,44 @@ function create_container_impl(
 
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(assign_subnode_image_to_container).mount_name,
+    flags = ["T"],
+    message = assign_subnode_image_to_container_auth_message(*)
+);
+
+function assign_subnode_image_to_container_auth_message(gtv): text {
+    val args = struct<assign_subnode_image_to_container>.from_gtv(gtv);
+    return "Please sign the message\nto assign subnode image %s\nto container %s\non account {account_id}".format(
+        args.container_name,
+        args.subnode_image_name,
+    );
+}
+
+function assign_subnode_image_to_container_impl(container_name: text, subnode_image_name: text) {
+    require_initialized();
+    val lease = require_lease(container_name);
+    require(not subnode_image_name.empty(), "Subnode image name cannot be empty");
+    require(not has_pending_subnode_image_assignment(container_name), "Container %s already has a pending subnode image assignment".format(container_name));
+    require(empty(lease_subnode_image @? { lease }), "Container %s already has a custom subnode image".format(container_name));
+
+    val account = ft4.auth.authenticate();
+    ft4.accounts.Account(account.id);
+    require(lease.account == account, "Lease for container %s was not created by you".format(container_name));
+
+    val ticket = create ticket(type = ticket_type.ASSIGN_SUBNODE_IMAGE_TO_CONTAINER, account);
+    create assign_subnode_image_to_container_ticket(ticket,
+        container_name = container_name,
+        subnode_image_name = subnode_image_name,
+    );
+    send_message(assign_subnode_image_to_container_topic, assign_subnode_image_to_container_message(
+        ticket_id = ticket.rowid.to_integer(),
+        container_name = container_name,
+        subnode_image_name = subnode_image_name,
+    ).to_gtv());
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
     scope = "upgrade_container",
     flags = ["T"],
     message = upgrade_container_auth_message(*)

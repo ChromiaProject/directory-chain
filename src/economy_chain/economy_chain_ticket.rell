@@ -3,6 +3,11 @@ function has_pending_upgrade(container_name: text): boolean {
     return upgrade_ticket != null and upgrade_ticket.ticket.state == ticket_state.PENDING;
 }
 
+function has_pending_subnode_image_assignment(container_name: text): boolean {
+    val subnode_image_assignment_ticket = assign_subnode_image_to_container_ticket @? { container_name };
+    return subnode_image_assignment_ticket != null and subnode_image_assignment_ticket.ticket.state == ticket_state.PENDING;
+}
+
 function receive_ticket_container_result_message(body: gtv) {
     val message = ticket_container_result_message.from_gtv(body);
     val ticket = ticket @? { .rowid == rowid(message.ticket_id) };
@@ -45,6 +50,7 @@ function receive_ticket_container_result_message(body: gtv) {
                 }
             }
         }
+
         ticket_type.UPGRADE_CONTAINER -> {
             val specific_ticket = upgrade_container_ticket @ { ticket };
             val cluster = cluster @ { .name == specific_ticket.cluster_name };
@@ -89,6 +95,22 @@ function receive_ticket_container_result_message(body: gtv) {
 
                     ft4.assets.Unsafe.transfer(get_pool_account(), ticket.account, get_asset(), specific_ticket.cost);
                     create lease_refund(ticket.account, specific_ticket.cost);
+                }
+            }
+        }
+
+        ticket_type.ASSIGN_SUBNODE_IMAGE_TO_CONTAINER -> {
+            val specific_ticket = assign_subnode_image_to_container_ticket @ { ticket };
+            when (ticket.state) {
+                ticket_state.SUCCESS -> {
+                    log("Successfully assigned subnode image % to container %s for ticket %s".format(
+                        specific_ticket.subnode_image_name, specific_ticket.container_name, message.ticket_id));
+                    val lease = lease @ { .container_name == specific_ticket.container_name };
+                    create lease_subnode_image(lease, subnode_image @ { .name == specific_ticket.subnode_image_name });
+                }
+                ticket_state.FAILURE -> {
+                    log("Failed to assign subnode image % to container %s for ticket %s".format(
+                        specific_ticket.subnode_image_name, specific_ticket.container_name, message.ticket_id));
                 }
             }
         }
