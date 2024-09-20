@@ -60,8 +60,7 @@ function test_send_node_availability_report() {
     );
 }
 
-
-function test_calculate_node_availability_given_one_blockchain_and_four_nodes() {
+function test_fetch_blocks_and_calculate_node_availability_given_one_blockchain_and_four_nodes() {
     rell.test.tx().op(
         create_anchor_block(
             blockchain_rid = BLOCKCHAIN_RID_1,
@@ -88,12 +87,12 @@ function test_calculate_node_availability_given_one_blockchain_and_four_nodes() 
             byte_array.from_hex('035676109C54B9A16D271ABEB4954316A40A32BCCE023AC14C8E26E958AA68FBA9'): 1.0
         ];
 
-    val node_availability = calculate_node_availability(9, 12, 1);
+    val node_availability = fetch_blocks_and_calculate_node_availability(9, 12, 1);
 
     assert_equals(node_availability, expected_node_availability);
 }
 
-function test_calculate_node_availability_given_one_blockchain_and_four_nodes_with_2_chains() {
+function test_fetch_blocks_and_calculate_node_availability_given_two_blockchains_and_four_nodes() {
     rell.test.tx().op(
         create_anchor_block(
             blockchain_rid = BLOCKCHAIN_RID_1,
@@ -137,33 +136,105 @@ function test_calculate_node_availability_given_one_blockchain_and_four_nodes_wi
             byte_array.from_hex('035676109C54B9A16D271ABEB4954316A40A32BCCE023AC14C8E26E958AA68FBA9'): 1.0
         ];
 
-    val node_availability = calculate_node_availability(9, 12, 1);
+    val node_availability = fetch_blocks_and_calculate_node_availability(9, 12, 1);
+
+    assert_equals(node_availability, expected_node_availability);
+}
+
+function test_calculate_node_availability_given_one_blockchain_and_four_nodes() {
+    val anchored_blocks: list<(blockchain_rid: byte_array, witness: byte_array, primary_extra_header: gtv?)> = [
+        (
+            blockchain_rid = BLOCKCHAIN_RID_1,
+            witness = WITNESS_COUNT_4,
+            primary_extra_header = null,
+        ),
+        (
+            blockchain_rid = BLOCKCHAIN_RID_1,
+            witness = WITNESS_COUNT_3,
+            primary_extra_header = null,
+        ),
+    ];
+
+    val expected_node_availability = [
+            byte_array.from_hex('03F811D3E806E6D093A4BCCE49C145BA78F9A4B2FBD167753ECAB2A13530B081F8'): 0.5,
+            byte_array.from_hex('0350FE40766BC0CE8D08B3F5B810E49A8352FDD458606BD5FAFE5ACDCDC8FF3F57'): 1.0,
+            byte_array.from_hex('03EF3F5BE98D499B048BA28B247036B611A1CED7FCF87C17C8B5CA3B3CE1EE23A4'): 1.0,
+            byte_array.from_hex('035676109C54B9A16D271ABEB4954316A40A32BCCE023AC14C8E26E958AA68FBA9'): 1.0
+        ];
+
+    val node_availability = calculate_node_availability(anchored_blocks, 1);
+
+    assert_equals(node_availability, expected_node_availability);
+}
+
+function test_calculate_node_availability_given_two_blockchains_and_four_nodes() {
+    val anchored_blocks: list<(blockchain_rid: byte_array, witness: byte_array, primary_extra_header: gtv?)> = [
+        (
+            blockchain_rid = BLOCKCHAIN_RID_1,
+            witness = WITNESS_COUNT_4,
+            primary_extra_header = null,
+        ),
+        (
+            blockchain_rid = BLOCKCHAIN_RID_1,
+            witness = WITNESS_COUNT_3,
+            primary_extra_header = null,
+        ),
+        (
+            blockchain_rid = BLOCKCHAIN_RID_2,
+            witness = WITNESS_COUNT_4,
+            primary_extra_header = null,
+        ),
+        (
+            blockchain_rid = BLOCKCHAIN_RID_2,
+            witness = WITNESS_COUNT_3,
+            primary_extra_header = null,
+        ),
+    ];
+
+    // Extracted example from devnet
+    val expected_node_availability = [
+            byte_array.from_hex('03F811D3E806E6D093A4BCCE49C145BA78F9A4B2FBD167753ECAB2A13530B081F8'): 0.5,
+            byte_array.from_hex('0350FE40766BC0CE8D08B3F5B810E49A8352FDD458606BD5FAFE5ACDCDC8FF3F57'): 1.0,
+            byte_array.from_hex('03EF3F5BE98D499B048BA28B247036B611A1CED7FCF87C17C8B5CA3B3CE1EE23A4'): 1.0,
+            byte_array.from_hex('035676109C54B9A16D271ABEB4954316A40A32BCCE023AC14C8E26E958AA68FBA9'): 1.0
+        ];
+
+    val node_availability = calculate_node_availability(anchored_blocks, 1);
+
+    assert_equals(node_availability, expected_node_availability);
+}
+
+function test_calculate_node_availability_with_many_blocks() {
+    val anchored_blocks = list<(blockchain_rid: byte_array, witness: byte_array, primary_extra_header: gtv?)>();
+
+    for (i in range(350000)) {
+        anchored_blocks.add((
+            blockchain_rid = if (i % 2 == 0) BLOCKCHAIN_RID_1 else BLOCKCHAIN_RID_2,
+            witness = if (i % 2 == 0) WITNESS_COUNT_4 else WITNESS_COUNT_3,
+            primary_extra_header = null,
+        ));
+    }
+
+    val expected_node_availability = [
+            byte_array.from_hex('03F811D3E806E6D093A4BCCE49C145BA78F9A4B2FBD167753ECAB2A13530B081F8'): 0.5,
+            byte_array.from_hex('0350FE40766BC0CE8D08B3F5B810E49A8352FDD458606BD5FAFE5ACDCDC8FF3F57'): 1.0,
+            byte_array.from_hex('03EF3F5BE98D499B048BA28B247036B611A1CED7FCF87C17C8B5CA3B3CE1EE23A4'): 1.0,
+            byte_array.from_hex('035676109C54B9A16D271ABEB4954316A40A32BCCE023AC14C8E26E958AA68FBA9'): 1.0
+        ];
+
+    val node_availability = calculate_node_availability(anchored_blocks, 1);
 
     assert_equals(node_availability, expected_node_availability);
 }
 
 function test_node_availability_from_primary_header_field() {
-    val block_header = block_header(
-        blockchain_rid = BLOCKCHAIN_RID_1,
-        previous_block_rid = BLOCKCHAIN_RID_1,
-        merkle_root_hash = BLOCKCHAIN_RID_1,
-        timestamp = 10,
-        height = 0,
-        dependencies = null.to_gtv(),
-        extra = ["primary": byte_array.from_hex("03F811D3E806E6D093A4BCCE49C145BA78F9A4B2FBD167753ECAB2A13530B081F8").to_gtv()]
-    ).to_gtv().to_bytes();
-
-    rell.test.tx().op(
-        create_anchor_block(
+    val anchored_blocks: list<(blockchain_rid: byte_array, witness: byte_array, primary_extra_header: gtv?)> = [
+        (
             blockchain_rid = BLOCKCHAIN_RID_1,
-            block_height = 0,
-            timestamp = 10,
-            block_rid = BLOCK_RID_1,
-            block_header = block_header,
             witness = WITNESS_COUNT_3,
-            anchoring_tx_op_index = 0
-        )
-    ).run();
+            primary_extra_header = byte_array.from_hex('03F811D3E806E6D093A4BCCE49C145BA78F9A4B2FBD167753ECAB2A13530B081F8').to_gtv(),
+        ),
+    ];
 
     val expected_node_availability = [
         byte_array.from_hex('03F811D3E806E6D093A4BCCE49C145BA78F9A4B2FBD167753ECAB2A13530B081F8'): 1.0, // 1 even though not in witness
@@ -172,7 +243,7 @@ function test_node_availability_from_primary_header_field() {
         byte_array.from_hex('035676109C54B9A16D271ABEB4954316A40A32BCCE023AC14C8E26E958AA68FBA9'): 1.0
     ];
 
-    val node_availability = calculate_node_availability(9, 12, 1);
+    val node_availability = calculate_node_availability(anchored_blocks, 1);
 
     assert_equals(node_availability, expected_node_availability);
 }
@@ -189,4 +260,12 @@ function test_extract_signers() {
     val signers = extract_signers_from_witness(WITNESS_COUNT_4);
 
     assert_equals(set(signers), expected_signers);
+}
+
+function test_parse_integer() {
+    assert_equals(parse_integer(x"00000000", 0), 0);
+    assert_equals(parse_integer(x"00000001", 0), 1);
+    assert_equals(parse_integer(x"01000000", 0), 0x1000000);
+    assert_equals(parse_integer(x"01010101", 0), 0x1000000 + 0x10000 + 0x100 + 1);
+    assert_equals(parse_integer(x"0001010101", 1), 0x1000000 + 0x10000 + 0x100 + 1);
 }
