@@ -1,0 +1,71 @@
+entity pending_container_subnode_image {
+    key proposal;
+    key container;
+    subnode_image_name: text;
+}
+
+@extend(is_container_available_for_removal) function(container) = 
+if (exists(pending_container_subnode_image @* { container })) 
+    "Container %s has pending proposals and can't be deleted. Resolve proposals first".format(container.name) 
+else null;
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.container_subnode_image.name: apply_container_subnode_image(*)];
+
+function apply_container_subnode_image(proposal) {
+    val pcsi = pending_container_subnode_image @? { proposal };
+    if (pcsi == null) return;
+    val subnode_image = validate_container_subnode_image_proposal(pcsi);
+    create container_subnode_image(pcsi.container, subnode_image);
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.container_subnode_image.name: delete_pending_container_subnode_image(*)];
+
+function delete_pending_container_subnode_image(proposal) {
+    delete pending_container_subnode_image @? { proposal };
+}
+
+operation propose_container_subnode_image(my_pubkey: pubkey, container_name: text, subnode_image: text, description: text = "") {
+    // check that provider authority and that it is cluster's deployer
+    val me = require_provider(my_pubkey);
+    require_provider_auth_with_rate_limit(me);
+    val container = require_container(container_name);
+    require_cluster_governor(container.cluster, me);
+    
+    val prop = create_proposal(proposal_type.container_subnode_image, me, container.cluster.governance, description);
+    val pcl = create pending_container_subnode_image(
+        prop,
+        container,
+        subnode_image,
+    );
+    validate_container_subnode_image_proposal(pcl);
+    internal_vote(me, prop, true);
+}
+
+query get_container_subnode_image_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.container_subnode_image);
+    if (proposal == null) return null;
+    val pcl = pending_container_subnode_image @ { proposal };
+    return (
+        container = pcl.container.name,
+        subnode_image = pcl.subnode_image_name,
+    );
+}
+
+@extend(before_remove_container) function(container) {
+    val pcls = pending_container_subnode_image @* { container };
+    for (pcl in pcls) {
+        pcl.proposal.state = proposal_state.REVOKED;
+        delete pcl;
+    }
+}
+
+function validate_container_subnode_image_proposal(proposal_details: pending_container_subnode_image): subnode_image {
+    val subnode_image = require_subnode_image(proposal_details.subnode_image_name);
+    require(subnode_image.active, "Subnode image %s is not active".format(proposal_details.subnode_image_name));
+    require(subnode_image.subnode_image_type == subnode_image_type.COMMON or not empty(cluster_subnode_image @? { proposal_details.container.cluster, subnode_image }),
+        "Subnode image %s is not compatible with cluster %s".format(proposal_details.subnode_image_name, proposal_details.container.cluster.name));
+
+    require(empty(container_subnode_image @? { proposal_details.container }), "Container already has a subnode image");
+
+    return subnode_image;
+}
