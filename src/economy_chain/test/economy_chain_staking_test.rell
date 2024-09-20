@@ -1023,7 +1023,7 @@ function test_deposit_and_withdraw_via_evm() {
         ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_request_withdrawal())
     )
     .op(staking_request_withdrawal())
-        .run_must_fail("No staker state for %s".format(test_account_alice.id));
+    .run_must_fail("No staker state for %s".format(test_account_alice.id));
 
     // Wait a period
     rell.test.set_next_block_time_delta(staking_delegation_delay_ms);
@@ -1168,6 +1168,75 @@ function test_set_provider_staking_account_and_transfer_staking_states() {
         .staking_account.id == new_provider_account_id}));
 }
 
+function test_evm_withdrawal_with_small_native_balance() {
+    rell.test.tx().op(init()).run();
+
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
+    do_evm_stake_update_bsc(alice_evm_address, 50 * units_per_asset);
+    val test_account_alice = do_create_account_using_ras_staking(rell.test.keypairs.alice)!!;
+
+    // Make tiny native deposit
+    do_staking_deposit_native(rell.test.keypairs.alice, 2);
+
+    // Delegate (immediate as from undelegated)
+    add_provider(rell.test.keypairs.bob.pub);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.bob.pub);
+
+    // Set a future delegation
+    add_provider(rell.test.keypairs.charlie.pub);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.charlie.pub);
+
+    // Withdraw all on EVM
+    do_evm_stake_update_bsc(alice_evm_address, 0);
+
+    // Should still be delegated overall, and on native
+    assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.bob.pub);
+    assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR), rell.test.keypairs.bob.pub);
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
+
+    // And this should still be true in a year
+    rell.test.set_next_block_time_delta(millis_per_year);
+    rell.test.block().run();
+    assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.bob.pub);
+    assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR), rell.test.keypairs.bob.pub);
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
+}
+
+function test_stake_on_evm_carry_over_to_native_withdraw_evm() {
+    rell.test.tx().op(init()).run();
+
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
+    do_evm_stake_update_bsc(alice_evm_address, 50 * units_per_asset);
+    val test_account_alice = do_create_account_using_ras_staking(rell.test.keypairs.alice)!!;
+
+    // Delegate (immediate as from undelegated)
+    add_provider(rell.test.keypairs.bob.pub);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.bob.pub);
+
+    // Make tiny native deposit
+    do_staking_deposit_native(rell.test.keypairs.alice, 2);
+
+    // Set a future delegation
+    add_provider(rell.test.keypairs.charlie.pub);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.charlie.pub);
+    assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC), rell.test.keypairs.bob.pub);
+    assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR), rell.test.keypairs.bob.pub);
+
+    // Withdraw all on EVM
+    do_evm_stake_update_bsc(alice_evm_address, 0);
+
+    // Should still be delegated overall, and on native
+    assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.bob.pub);
+    assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR), rell.test.keypairs.bob.pub);
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
+
+    // And this should still be true in a year
+    rell.test.set_next_block_time_delta(millis_per_year);
+    rell.test.block().run();
+    assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.bob.pub);
+    assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR), rell.test.keypairs.bob.pub);
+    assert_null(staking_get_current_delegate_on_network(test_account_alice.id, network.BSC));
+}
 function test_flush_stuck_evm_stake() {
     rell.test.tx().op(init()).run();
 
