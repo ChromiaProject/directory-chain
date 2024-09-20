@@ -91,58 +91,16 @@ function staking_delegate_auth_message(gtv): text {
 /*
 /* @param pubkey Public key of a provider registered and active in the Directory Chain.
 */
-operation staking_delegate(pubkey) {
-    val new_provider = require(provider @? { pubkey }, "No provider for this public key.");
+operation staking_delegate(pubkey?) {
+    val provider_pubkey = pubkey ?: get_null_account();
+    val new_provider = require(provider @? { provider_pubkey }, "No provider for this public key.");
     val staker = ft4.auth.authenticate();
     require(staking_get_balance(staker.id) > 0, "Need stake to delegate.");
-    _staking_delegate(staker, pubkey);
-}
-
-@extend(ft4.auth.auth_handler)
-function () = ft4.auth.add_auth_handler(
-        scope = "staking_undelegate",
-        flags = [],
-        message = staking_undelegate_auth_message(*)
-    );
-
-function staking_undelegate_auth_message(gtv): text {
-    val args = struct<staking_undelegate>.from_gtv(gtv);
-    return "Please sign the message to undelegate.";
-}
-
-/**
-/* Remove delegation from the user's stake on the given network.
-/* This will not withdraw their stake, and is subject to the normal delegation delay.
-/* Undelegated stakes do not earn rewards.
-/*
-/* @param network The given network
-*/
-operation staking_undelegate(network) {
-    val staker = ft4.auth.authenticate();
-    _staking_delegate(staker, get_null_account(), network);
+    _staking_delegate(staker, provider_pubkey);
 }
 
 
-// EVM Bridge
-
-@extend(ft4.auth.auth_handler)
-function () = ft4.auth.add_auth_handler(
-    scope = "staking_import_evm_balance",
-    flags = [],
-    message = staking_import_evm_balance_auth_message(*)
-);
-
-function staking_import_evm_balance_auth_message(gtv): text {
-    val args = struct<staking_import_evm_balance>.from_gtv(gtv);
-    return "Please sign the message to bridge from EVM.";
-}
-
-/**
- * This operation is unnecessary as we use `after_evm_account_linked` hook to flush the provisional stake balance. 
-*/
-operation staking_import_evm_balance(address: byte_array, network_id: integer) {
-    _staking_import_evm_balance_impl(address, network_id);
-}
+// Provider Account
 
 /**
  * Set an alternative (optional account) for a staking provider.
