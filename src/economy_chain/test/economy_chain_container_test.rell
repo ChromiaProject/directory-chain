@@ -21,30 +21,50 @@ val auth_privkey = chain_context.args.auth_privkey;
 val cluster_name = "Bob's cluster";
 
 
-function test_create_container_success() {
+function test_create_container_and_assign_subnode_image_later_success() {
     rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
     val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
-    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, cluster_name = cluster_name, container_units = 2);
+    val bob = add_provider(rell.test.pubkeys.bob);
+    rell.test.tx().op(create_test_subnode_image(name = "subnode_image1", owner = bob)).run();
+    val container_name = do_create_container(
+        alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init+11, cluster_name = cluster_name, container_units = 2);
 
-    assert_false(lease @ { container_name } (.auto_renew));
+    val lease = lease @ { container_name };
+    assert_false(lease.auto_renew);
 
     val expected_lease = lease_data(
         container_name = container_name,
         cluster_name = cluster_name,
         container_units = 2,
         extra_storage_gib = 0,
-        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*3 + millis_per_week,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*5 + millis_per_week,
         expired = false,
         auto_renew = false,
         subnode_image_name = "",
     );
 
-    val leases2 = get_leases_by_account(alice.id);
-    assert_equals(leases2.size(), 1);
-    assert_equals(leases2[0], expected_lease);
+    val leases = get_leases_by_account(alice.id);
+    assert_equals(leases.size(), 1);
+    assert_equals(leases[0], expected_lease);
 
     val lease_data = require(get_lease_by_container_name(container_name));
     assert_equals(lease_data, expected_lease);
+
+    do_assign_subnode_image_to_container(
+        rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init+15, current_lease = lease, subnode_image_name = "subnode_image1");
+
+    val expected_lease2 = lease_data(
+        container_name = container_name,
+        cluster_name = cluster_name,
+        container_units = 2,
+        extra_storage_gib = 0,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*5 + millis_per_week,
+        expired = false,
+        auto_renew = false,
+        subnode_image_name = "subnode_image1",
+    );
+    val lease_data2 = require(get_lease_by_container_name(container_name));
+    assert_equals(lease_data2, expected_lease2);
 }
 
 function test_create_container_with_subnode_image() {
@@ -54,6 +74,8 @@ function test_create_container_with_subnode_image() {
     rell.test.tx().op(create_test_subnode_image(name = "subnode_image1", owner = bob)).run();
     val container_name = do_create_container(
         alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 11, cluster_name = cluster_name, container_units = 2, subnode_image_name = "subnode_image1");
+
+    val lease = lease @ { container_name };
 
     val expected_lease = lease_data(
         container_name = container_name,
@@ -66,12 +88,18 @@ function test_create_container_with_subnode_image() {
         subnode_image_name = "subnode_image1",
     );
 
-    val leases2 = get_leases_by_account(alice.id);
-    assert_equals(leases2.size(), 1);
-    assert_equals(leases2[0], expected_lease);
+    val leases = get_leases_by_account(alice.id);
+    assert_equals(leases.size(), 1);
+    assert_equals(leases[0], expected_lease);
 
     val lease_data = require(get_lease_by_container_name(container_name));
     assert_equals(lease_data, expected_lease);
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, assign_subnode_image_to_container(container_name, "subnode_image1"))
+    ).op(
+        assign_subnode_image_to_container(container_name, "subnode_image1")
+    ).run_must_fail("Container %s already has a custom subnode image".format(container_name));
 }
 
 function test_create_container_with_auto_renew() {
