@@ -1,0 +1,156 @@
+/**
+ * Return provider performance metrics.
+ *
+ * @param pubkey  provider pubkey
+ * @param start  collect metrics from this time
+ */
+query get_provider_performance_metrics(pubkey, start: timestamp): provider_performance_metrics {
+    val provider = require_provider(pubkey);
+    val provider_nodes = node @* { provider } ( .pubkey );
+
+    val availabilities = get_provider_availabilities(provider_nodes, start);
+    val payed_rewards = get_provider_payed_rewards(provider_nodes, start);
+
+    return provider_performance_metrics(
+        availabilities,
+        payed_rewards
+    );
+}
+
+/**
+ * Return provider performance metrics over the last 7 days.
+ *
+ * @param pubkey  provider pubkey
+ */
+query get_provider_performance_metrics_last_7_days(pubkey): provider_performance_metrics {
+    return get_provider_performance_metrics(pubkey, get_last_blocktime() - millis_per_week);
+}
+
+/**
+ * Return provider performance metrics over the last 30 days.
+ *
+ * @param pubkey  provider pubkey
+ */
+query get_provider_performance_metrics_last_30_days(pubkey): provider_performance_metrics {
+    return get_provider_performance_metrics(pubkey, get_last_blocktime() - millis_per_month);
+}
+
+/**
+ * Return provider performance metrics over the last 365 days.
+ *
+ * @param pubkey  provider pubkey
+ */
+query get_provider_performance_metrics_last_365_days(pubkey): provider_performance_metrics {
+    return get_provider_performance_metrics(pubkey, get_last_blocktime() - millis_per_year);
+}
+
+/**
+ * Return economy metrics.
+ *
+ * @param pubkey  provider pubkey
+ */
+query get_economy_metrics(pubkey): economy_metrics {
+    val provider = require_provider(pubkey);
+    val provider_nodes = node @* { provider };
+    val provider_nodes_pubkeys = node @* { provider } ( .pubkey );
+
+    val average_availability_on_a_providers_nodes = get_average_availability_on_a_providers_nodes_in_the_last_24h(provider_nodes_pubkeys);
+    val total_number_of_nodes_per_provider = get_total_number_of_nodes_per_provider(provider_nodes);
+    val total_number_of_scus_per_provider = get_total_number_of_scus_per_provider(provider_nodes);
+    val average_occupancy_rate_of_a_providers_scus = get_average_occupancy_rate_of_a_providers_scus(provider_nodes);
+    val amount_of_the_last_reward_payout = get_total_reward_payed_in_the_last_24h(provider_nodes_pubkeys);
+
+    return economy_metrics(
+        average_availability_on_a_providers_nodes,
+        total_number_of_nodes_per_provider,
+        total_number_of_scus_per_provider,
+        average_occupancy_rate_of_a_providers_scus,
+        amount_of_the_last_reward_payout
+    );
+}
+
+function get_average_availability_on_a_providers_nodes_in_the_last_24h(provider_nodes: list<pubkey>): decimal {
+    val provider_availabilities = get_provider_availabilities(provider_nodes, get_last_blocktime() - millis_per_day);
+    val number_of_availabilities = provider_availabilities.size();
+    var total_availability = 0.0;
+    for (availability in provider_availabilities) {
+        total_availability += availability.availability;
+    }
+    return if (number_of_availabilities != 0 ) total_availability / number_of_availabilities  else 0.0;
+}
+
+function get_provider_availabilities(provider_nodes: list<pubkey>, start: timestamp): list<provider_availability> {
+    val result = list<provider_availability>();
+    val availabilities = node_availability @* { .node in provider_nodes  and .end_time >= start };
+    var days_to_availabilities = map<integer, list<decimal>>();
+    for (availability in availabilities) {
+        val day = (availability.start_time - start) / millis_per_day;
+        if (not days_to_availabilities.contains(day)) {
+            days_to_availabilities[day] = [availability.availability];
+        } else {
+            days_to_availabilities[day].add(availability.availability);
+        }
+    }
+    for ((day, day_availabilities) in days_to_availabilities) {
+        val provider_availability_average = day_availabilities @ {} (@sum $) / day_availabilities.size();
+        result.add(
+            provider_availability(
+                availability = provider_availability_average,
+                start_time = start + day * millis_per_day,
+                end_time = start + (day + 1) * millis_per_day - 1
+            )
+        );
+    }
+    return result;
+}
+
+function get_total_number_of_nodes_per_provider(provider_nodes: list<node>): integer {
+    return provider_nodes.size();
+}
+
+function get_total_number_of_scus_per_provider(provider_nodes: list<node>): integer {
+    var provider_nodes_total_cluster_units = 0;
+    for (node in provider_nodes) {
+        provider_nodes_total_cluster_units += node.cluster_units;
+    }
+    return provider_nodes_total_cluster_units * standard_cluster_unit.container_units;
+}
+
+function get_average_occupancy_rate_of_a_providers_scus(provider_nodes: list<node>): decimal {
+    var occupancy_rate = 0.0;
+    var dapp_nodes = 0;
+    for (node in provider_nodes) {
+        val node_dapp_clusters = cluster_node @* { node, .cluster.name != system_cluster_name } ( .cluster );
+        // Node is only part of system cluster, ignore it for occupancy rate calculations
+        if (node_dapp_clusters.empty() and exists(cluster_node @? { node, .cluster.name == system_cluster_name })) {
+            continue;
+        }
+        dapp_nodes++;
+
+        var node_occupancy_rate = 0.0;
+        for (cluster in node_dapp_clusters) {
+            node_occupancy_rate += occupancy_rate(cluster);
+        }
+        occupancy_rate += if (node_dapp_clusters.empty()) 0.0 else node_occupancy_rate / node_dapp_clusters.size();
+    }
+    return if (dapp_nodes == 0) 0.0 else occupancy_rate / dapp_nodes;
+}
+
+function get_total_reward_payed_in_the_last_24h(provider_nodes: list<pubkey>) {
+    val provider_payed_rewards = get_provider_payed_rewards(provider_nodes, get_last_blocktime() - millis_per_day);
+    var total_reward = 0L;
+    for (provider_payed_reward in provider_payed_rewards) {
+        total_reward += provider_payed_reward.value;
+    }
+    return total_reward;
+}
+
+function get_provider_payed_rewards(provider_nodes: list<pubkey>, start: timestamp): list<provider_payed_reward> {
+    val result = list<provider_payed_reward>();
+    val provider_payed_rewards = node_payed_reward @* { .node in provider_nodes and .time >= start }
+        ( @group .time, @sum total_reward = .value );
+    for (provider_payed_reward in provider_payed_rewards) {
+        result.add(provider_payed_reward(provider_payed_reward.time, provider_payed_reward.total_reward));
+    }
+    return result;
+}

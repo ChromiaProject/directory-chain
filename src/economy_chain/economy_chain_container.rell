@@ -31,7 +31,7 @@ function expire_lease(lease) {
 
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
-    scope = "create_container",
+    scope = rell.meta(create_container).mount_name,
     flags = ["T"],
     message = create_container_auth_message(*)
 );
@@ -50,9 +50,23 @@ function create_container_auth_message(gtv): text {
         if (args.auto_renew) "with auto-renewal\n" else "");
 }
 
+/**
+ * Request creation of a container with standard subnode image.
+ *
+ * If enough tokens are available on the users account an ICMF message will be sent to DC for creation of the container.
+ * A lease is setup for the request amount of weeks and the cost is deducted from the users account.
+ *
+ * @param provider_pubkey  pubkey of provider
+ * @param container_units  number of container_units
+ */
+operation create_container(provider_pubkey: pubkey, container_units: integer,
+    duration_weeks: integer, extra_storage_gib: integer, cluster_name: text, auto_renew: boolean) {
+    create_container_impl(provider_pubkey, container_units, duration_weeks, extra_storage_gib, cluster_name, auto_renew, "");
+}
+
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
-    scope = "create_container_with_subnode_image",
+    scope = rell.meta(create_container_with_subnode_image).mount_name,
     flags = ["T"],
     message = create_container_with_subnode_image_auth_message(*)
 );
@@ -70,6 +84,21 @@ function create_container_with_subnode_image_auth_message(gtv): text {
         ft4.assets.format_amount_with_decimals(cost, chain_context.args.asset_decimals),
         chain_context.args.asset_symbol,
         if (args.auto_renew) "with auto-renewal\n" else "");
+}
+
+/**
+ * Request creation of a container with custom subnode image.
+ *
+ * If enough tokens are available on the users account an ICMF message will be sent to DC for creation of the container.
+ * A lease is setup for the request amount of weeks and the cost is deducted from the users account.
+ *
+ * @param provider_pubkey  pubkey of provider
+ * @param container_units  number of container_units
+ * @param subnode_image_name  subnode image to use, or "" to use default subnode image
+ */
+operation create_container_with_subnode_image(provider_pubkey: pubkey, container_units: integer,
+    duration_weeks: integer, extra_storage_gib: integer, cluster_name: text, auto_renew: boolean, subnode_image_name: text) {
+    create_container_impl(provider_pubkey, container_units, duration_weeks, extra_storage_gib, cluster_name, auto_renew, subnode_image_name);
 }
 
 function create_container_impl(
@@ -139,7 +168,15 @@ function assign_subnode_image_to_container_auth_message(gtv): text {
     );
 }
 
-function assign_subnode_image_to_container_impl(container_name: text, subnode_image_name: text) {
+/**
+ * Request assign a custom subnode image to an existing container.
+ *
+ * An ICMF message will be sent to DC for updating of the container.
+ *
+ * @param container_name  container name
+ * @param subnode_image_name  subnode image to use
+ */
+operation assign_subnode_image_to_container(container_name: text, subnode_image_name: text) {
     require_initialized();
     val lease = require_lease(container_name);
     require(not subnode_image_name.empty(), "Subnode image name cannot be empty");
@@ -164,7 +201,7 @@ function assign_subnode_image_to_container_impl(container_name: text, subnode_im
 
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
-    scope = "upgrade_container",
+    scope = rell.meta(upgrade_container).mount_name,
     flags = ["T"],
     message = upgrade_container_auth_message(*)
 );
@@ -186,12 +223,13 @@ function upgrade_container_auth_message(gtv): text {
     );
 }
 
-function upgrade_container_impl(
-    container_name: text,
-    upgraded_container_units: integer,
-    upgraded_extra_storage_gib: integer,
-    upgraded_cluster_name: text
-) {
+/**
+ * If possible upgrade the container to requested specifications.
+ *
+ * @param container_name  container name
+ */
+operation upgrade_container(container_name: text, upgraded_container_units: integer,
+    upgraded_extra_storage_gib: integer, upgraded_cluster_name: text) {
     require_initialized();
     val lease = require_lease(container_name);
     require(not has_pending_upgrade(container_name), "Container already has a pending upgrade");
@@ -238,7 +276,7 @@ function upgrade_container_impl(
 
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
-    scope = "renew_container",
+    scope = rell.meta(renew_container).mount_name,
     flags = ["T"],
     message = renew_container_auth_message(*)
 );
@@ -257,7 +295,13 @@ function renew_container_auth_message(gtv): text {
         chain_context.args.asset_symbol);
 }
 
-function renew_container_impl(container_name: text, duration_weeks: integer) {
+/**
+ * Renew container lease.
+ *
+ * @param container_name  container name
+ * @param duration_weeks  lease duration in weeks
+ */
+operation renew_container(container_name: text, duration_weeks: integer) {
     require_initialized();
     require_lease_duration(duration_weeks);
 
@@ -271,7 +315,7 @@ function renew_container_impl(container_name: text, duration_weeks: integer) {
 
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
-    scope = "auto_renew_container",
+    scope = rell.meta(auto_renew_container).mount_name,
     flags = ["T"],
     message = auto_renew_container_auth_message(*)
 );
@@ -289,7 +333,12 @@ function auto_renew_container_auth_message(gtv): text {
         chain_context.args.asset_symbol);
 }
 
-function auto_renew_container_impl(container_name: text) {
+/**
+ * Turn on auto-renewal of lease for container.
+ *
+ * @param container_name  container name
+ */
+operation auto_renew_container(container_name: text) {
     require_initialized();
 
     val account = ft4.auth.authenticate();
@@ -308,7 +357,7 @@ function auto_renew_container_impl(container_name: text) {
 
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
-    scope = "cancel_renew_container",
+    scope = rell.meta(cancel_renew_container).mount_name,
     flags = ["T"],
     message = cancel_renew_container_auth_message(*)
 );
@@ -322,7 +371,12 @@ function cancel_renew_container_auth_message(gtv): text {
         args.container_name);
 }
 
-function cancel_renew_container_impl(container_name: text) {
+/**
+ * Cancel auto-renewal of lease.
+ *
+ * @param container_name  container name
+ */
+operation cancel_renew_container(container_name: text) {
     require_initialized();
 
     val account = ft4.auth.authenticate();
@@ -393,4 +447,190 @@ function refund_lease(lease: lease) {
         }
     }
 
+}
+
+/**
+ * Returns ticket information for the create container ticket by transaction RID.
+ *
+ * @param tx_rid  transaction RID
+ */
+query get_create_container_ticket_by_transaction(tx_rid: byte_array): container_ticket_data? =
+        create_container_ticket @? { .ticket.transaction.tx_rid == tx_rid }
+            (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
+
+/**
+ * Returns ticket information for the create container ticket by ticket ID.
+ *
+ * @param ticket_id  ticket ID
+ */
+query get_create_container_ticket_by_id(ticket_id: integer): container_ticket_data? =
+        create_container_ticket @? { .ticket.rowid == rowid(ticket_id) }
+            (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
+
+/**
+ * Returns ticket information for the upgrade container ticket by transaction RID.
+ *
+ * @param tx_rid  transaction RID
+ */
+query get_upgrade_container_ticket_by_transaction(tx_rid: byte_array): container_ticket_data? =
+        upgrade_container_ticket @? { .ticket.transaction.tx_rid == tx_rid }
+            (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
+
+/**
+ * Returns ticket information for the upgrade container ticket by ticket ID.
+ *
+ * @param ticket_id  ticket ID
+ */
+query get_upgrade_container_ticket_by_id(ticket_id: integer): container_ticket_data? =
+        upgrade_container_ticket @? { .ticket.rowid == rowid(ticket_id) }
+            (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
+
+/**
+ * Returns ticket information for assigning subnode image to container ticket by transaction RID.
+ *
+ * @param tx_rid  transaction RID
+ */
+query get_assign_subnode_image_to_container_ticket_by_transaction(tx_rid: byte_array): container_ticket_data? =
+        assign_subnode_image_to_container_ticket @? { .ticket.transaction.tx_rid == tx_rid }
+            (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
+
+/**
+ * Returns ticket information for assigning subnode image to container ticket by ticket ID.
+ *
+ * @param ticket_id  ticket ID
+ */
+query get_assign_subnode_image_to_container_ticket_by_id(ticket_id: integer): container_ticket_data? =
+        assign_subnode_image_to_container_ticket @? { .ticket.rowid == rowid(ticket_id) }
+            (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
+
+/**
+ * Get leases for an account.
+ */
+query get_leases_by_account(account_id: byte_array): list<lease_data> =
+        (lease, @outer lease_subnode_image) @* { .account.id == account_id } (lease_data(
+                container_name = .container_name,
+                cluster_name = .cluster.name,
+                container_units = .container_units,
+                extra_storage_gib = .extra_storage_gib,
+                expire_time_millis = .start_time + .duration_millis,
+                .expired,
+                .auto_renew,
+                subnode_image_name = .subnode_image?.name ?: ""
+        ));
+
+/**
+ * Get current lease for a container.
+ *
+ * @param container_name  container name
+ */
+query get_lease_by_container_name(container_name: text): lease_data? =
+        (lease, @outer lease_subnode_image) @? { container_name } (lease_data(
+                container_name = .container_name,
+                cluster_name = .cluster.name,
+                container_units = .container_units,
+                extra_storage_gib = .extra_storage_gib,
+                expire_time_millis = .start_time + .duration_millis,
+                .expired,
+                .auto_renew,
+                 subnode_image_name = .subnode_image?.name ?: ""
+        ));
+
+/**
+ * Get minimum lease time in weeks.
+ */
+query get_min_lease_duration(): integer = economy_constants.min_lease_time_weeks;
+
+/**
+ * Get maximum lease time in weeks.
+ */
+query get_max_lease_duration(): integer = economy_constants.max_lease_time_weeks;
+
+query get_lease_purchases(page_size: integer?, page_cursor: text?): ft4.utils.paged_result {
+    val before_rowid = ft4.utils.before_rowid(page_cursor);
+
+    val paginated_result = lease_purchase @* {
+        .rowid > (before_rowid ?: rowid(0))
+    } (
+        ft4.utils.pagination_result(
+            data = lease_purchase_data(
+                account_id = .account.id,
+                duration_millis = .duration_millis,
+                container_units = .container_units,
+                extra_storage_gib = .extra_storage_gib,
+                price = .price,
+                type = .type,
+                timestamp = .transaction.block.timestamp,
+                tx_rid = .transaction.tx_rid
+            ).to_gtv_pretty(),
+            rowid = .rowid
+        )
+    ) limit ft4.utils.fetch_data_size(page_size);
+
+    return ft4.utils.make_page(paginated_result, page_size);
+}
+
+query get_lease_refunds(page_size: integer?, page_cursor: text?): ft4.utils.paged_result {
+    val before_rowid = ft4.utils.before_rowid(page_cursor);
+
+    val paginated_result = lease_refund @* {
+        .rowid > (before_rowid ?: rowid(0))
+    } (
+        ft4.utils.pagination_result(
+            data = lease_refund_data(
+                .account.id,
+                .amount
+            ).to_gtv_pretty(),
+            rowid = .rowid
+        )
+    ) limit ft4.utils.fetch_data_size(page_size);
+
+    return ft4.utils.make_page(paginated_result, page_size);
+}
+
+query get_lease_purchases_by_account(account_id: byte_array, page_size: integer?, page_cursor: text?): ft4.utils.paged_result {
+    val before_rowid = ft4.utils.before_rowid(page_cursor);
+
+    val paginated_result = lease_purchase @* {
+        .account.id == account_id,
+        .rowid > (before_rowid ?: rowid(0))
+    } (
+        ft4.utils.pagination_result(
+            data = lease_purchase_data(
+                account_id = account_id,
+                duration_millis = .duration_millis,
+                container_units = .container_units,
+                extra_storage_gib = .extra_storage_gib,
+                price = .price,
+                type = .type,
+                timestamp = .transaction.block.timestamp,
+                tx_rid = .transaction.tx_rid
+            ).to_gtv_pretty(),
+            rowid = .rowid
+        )
+    ) limit ft4.utils.fetch_data_size(page_size);
+
+    return ft4.utils.make_page(paginated_result, page_size);
+}
+
+query get_lease_refunds_by_account(account_id: byte_array, page_size: integer?, page_cursor: text?): ft4.utils.paged_result {
+    val before_rowid = ft4.utils.before_rowid(page_cursor);
+
+    val paginated_result = lease_refund @* {
+        .account.id == account_id,
+        .rowid > (before_rowid ?: rowid(0))
+    } (
+        ft4.utils.pagination_result(
+            data = lease_refund_data(
+                account_id,
+                .amount
+            ).to_gtv_pretty(),
+            rowid = .rowid
+        )
+    ) limit ft4.utils.fetch_data_size(page_size);
+
+    return ft4.utils.make_page(paginated_result, page_size);
+}
+
+query total_lease_investment(): integer {
+    return lease_purchase @ {} (@sum .price) - lease_refund @ {} (@sum .amount);
 }
