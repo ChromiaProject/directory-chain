@@ -1,35 +1,77 @@
+/**
+ * Get a list of all tags.
+ */
 query get_tags(): list<tag_data> = tag @* {} (tag_data(.name, .scu_price, .extra_storage_price));
 
+/**
+ * Get a tag by name.
+ */
 query get_tag_by_name(name): tag_data? = tag @? { name } (tag_data(.name, .scu_price, .extra_storage_price));
 
+/**
+ * Returns current balance of reward pool.
+ */
 query get_pool_balance(): big_integer = get_account_balance(get_pool_account());
 
 query get_pool_account_id_query() = get_pool_account_id();
 
+/**
+ * Returns ticket information for the create container ticket by transaction RID.
+ * 
+ * @param tx_rid  transaction RID
+ */
 query get_create_container_ticket_by_transaction(tx_rid: byte_array): container_ticket_data? =
         create_container_ticket @? { .ticket.transaction.tx_rid == tx_rid }
             (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
 
+/**
+ * Returns ticket information for the create container ticket by ticket ID.
+ * 
+ * @param ticket_id  ticket ID
+ */
 query get_create_container_ticket_by_id(ticket_id: integer): container_ticket_data? =
         create_container_ticket @? { .ticket.rowid == rowid(ticket_id) }
             (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
 
+/**
+ * Returns ticket information for the upgrade container ticket by transaction RID.
+ * 
+ * @param tx_rid  transaction RID
+ */
 query get_upgrade_container_ticket_by_transaction(tx_rid: byte_array): container_ticket_data? =
         upgrade_container_ticket @? { .ticket.transaction.tx_rid == tx_rid }
             (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
 
+/**
+ * Returns ticket information for the upgrade container ticket by ticket ID.
+ * 
+ * @param ticket_id  ticket ID
+ */
 query get_upgrade_container_ticket_by_id(ticket_id: integer): container_ticket_data? =
         upgrade_container_ticket @? { .ticket.rowid == rowid(ticket_id) }
             (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
 
+/**
+ * Returns ticket information for assigning subnode image to container ticket by transaction RID.
+ *
+ * @param tx_rid  transaction RID
+ */
 query get_assign_subnode_image_to_container_ticket_by_transaction(tx_rid: byte_array): container_ticket_data? =
         assign_subnode_image_to_container_ticket @? { .ticket.transaction.tx_rid == tx_rid }
             (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
 
+/**
+ * Returns ticket information for assigning subnode image to container ticket by ticket ID.
+ *
+ * @param ticket_id  ticket ID
+ */
 query get_assign_subnode_image_to_container_ticket_by_id(ticket_id: integer): container_ticket_data? =
         assign_subnode_image_to_container_ticket @? { .ticket.rowid == rowid(ticket_id) }
             (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
 
+/**
+ * Get leases for an account.
+ */
 query get_leases_by_account(account_id: byte_array): list<lease_data> =
         (lease, @outer lease_subnode_image) @* { .account.id == account_id } (lease_data(
                 container_name = .container_name,
@@ -42,6 +84,11 @@ query get_leases_by_account(account_id: byte_array): list<lease_data> =
                 subnode_image_name = .subnode_image?.name ?: ""
         ));
 
+/**
+ * Get current lease for a container.
+ * 
+ * @param container_name  container name
+ */
 query get_lease_by_container_name(container_name: text): lease_data? =
         (lease, @outer lease_subnode_image) @? { container_name } (lease_data(
                 container_name = .container_name,
@@ -54,23 +101,43 @@ query get_lease_by_container_name(container_name: text): lease_data? =
                  subnode_image_name = .subnode_image?.name ?: ""
         ));
 
+/**
+ * Get minimum lease time in weeks.
+ */
 query get_min_lease_duration(): integer = economy_constants.min_lease_time_weeks;
 
+/**
+ * Get maximum lease time in weeks.
+ */
 query get_max_lease_duration(): integer = economy_constants.max_lease_time_weeks;
 
+/**
+ * Get information about the CHR asset.
+ */
 query get_chr_asset() = ft4.assets.map_asset(get_asset());
 
+/**
+ * Get balance of the account.
+ */
 query get_balance(account_id: byte_array): big_integer {
     val account = ft4.accounts.Account(account_id);
     return get_account_balance(account);
 }
 
+/**
+ * Get provider account id.
+ * 
+ * @param provider_pubkey  pubkey of provider.
+ */
 query get_provider_account_id(provider_pubkey: pubkey): byte_array? {
     val provider = require(provider @? { provider_pubkey }, "No provider found with pubkey %s".format(provider_pubkey));
     val account = provider_account @? { provider }.account;
     return account?.id;
 }
 
+/**
+ * Get economy constants.
+ */
 query get_economy_constants(): economy_constants_data = economy_constants_data(
     min_lease_time_weeks = economy_constants.min_lease_time_weeks,
     max_lease_time_weeks = economy_constants.max_lease_time_weeks,
@@ -92,6 +159,9 @@ query get_economy_constants(): economy_constants_data = economy_constants_data(
     bridge_lease_add_min_balance_usd = economy_constants.bridge_lease_add_min_balance_usd,
 );
 
+/**
+ * Get a list of all clusters.
+ */
 query get_clusters(): list<cluster_data> {
     return cluster @* {} (
         cluster_data(
@@ -100,6 +170,9 @@ query get_clusters(): list<cluster_data> {
         ));
 }
 
+/**
+ * Get a cluster by name.
+ */
 query get_cluster_by_name(name): cluster_data? = cluster @? { name } (
     cluster_data(
         name = .name,
@@ -107,6 +180,10 @@ query get_cluster_by_name(name): cluster_data? = cluster @? { name } (
     )
 );
 
+/**
+ * See if the cluster was created successfully, is still pending, or failed to be created.
+ * If the cluster does not exist, the creation status will be unknown.
+ */
 query get_cluster_creation_status(name): cluster_creation_status {
     var status = cluster_creation_status.SUCCESS;
     val cluster = cluster @? { name };
@@ -125,6 +202,12 @@ query get_cluster_creation_status(name): cluster_creation_status {
     return status;
 }
 
+/**
+ * Return provider performance metrics.
+ * 
+ * @param pubkey  provider pubkey
+ * @param start  collect metrics from this time
+ */
 query get_provider_performance_metrics(pubkey, start: timestamp): provider_performance_metrics {
     val provider = require_provider(pubkey);
     val provider_nodes = node @* { provider } ( .pubkey );
@@ -138,18 +221,38 @@ query get_provider_performance_metrics(pubkey, start: timestamp): provider_perfo
     );
 }
 
+/**
+ * Return provider performance metrics over the last 7 days.
+ * 
+ * @param pubkey  provider pubkey
+ */
 query get_provider_performance_metrics_last_7_days(pubkey): provider_performance_metrics {
     return get_provider_performance_metrics(pubkey, get_last_blocktime() - millis_per_week);
 }
 
+/**
+ * Return provider performance metrics over the last 30 days.
+ * 
+ * @param pubkey  provider pubkey
+ */
 query get_provider_performance_metrics_last_30_days(pubkey): provider_performance_metrics {
     return get_provider_performance_metrics(pubkey, get_last_blocktime() - millis_per_month);
 }
 
+/**
+ * Return provider performance metrics over the last 365 days.
+ * 
+ * @param pubkey  provider pubkey
+ */
 query get_provider_performance_metrics_last_365_days(pubkey): provider_performance_metrics {
     return get_provider_performance_metrics(pubkey, get_last_blocktime() - millis_per_year);
 }
 
+/**
+ * Return economy metrics.
+ * 
+ * @param pubkey  provider pubkey
+ */
 query get_economy_metrics(pubkey): economy_metrics {
     val provider = require_provider(pubkey);
     val provider_nodes = node @* { provider };
@@ -256,6 +359,12 @@ function get_provider_payed_rewards(provider_nodes: list<pubkey>, start: timesta
     return result;
 }
 
+/**
+ * Return bridge lease for blockchain.
+ * 
+ * @param blockchain_rid  blockchain RID
+ * @param evm_network_id  the EVM network id
+ */
 query get_bridge_lease_for_blockchain(blockchain_rid: byte_array, evm_network_id: integer) = bridge_lease @? { blockchain_rid, evm_network_id } (
     bridge_lease_data(
         blockchain_rid = blockchain_rid,
@@ -267,6 +376,11 @@ query get_bridge_lease_for_blockchain(blockchain_rid: byte_array, evm_network_id
     )
 );
 
+/**
+ * Return all bridge leases for blockchain.
+ * 
+ * @param blockchain_rid  blockchain RID
+ */
 query get_all_bridge_leases_for_blockchain(blockchain_rid: byte_array) = bridge_lease @* { blockchain_rid } (
     bridge_lease_data(
         blockchain_rid = blockchain_rid,
@@ -278,6 +392,11 @@ query get_all_bridge_leases_for_blockchain(blockchain_rid: byte_array) = bridge_
     )
 );
 
+/**
+ * Return all bridge leases for container.
+ * 
+ * @param container_name  container name
+ */
 query get_all_bridge_leases_for_container(container_name: text) = (bridge_lease, lease) @* { lease.container_name == container_name, bridge_lease.lease == lease } (
     bridge_lease_data(
         blockchain_rid = .blockchain_rid,
@@ -290,7 +409,7 @@ query get_all_bridge_leases_for_container(container_name: text) = (bridge_lease,
 );
 
 /**
- * @return all common subnode images which are available for all clusters
+ * Get all common subnode images which are available for all clusters.
  */
 query get_available_subnode_images_for_all_clusters(): list<subnode_image_data> =
     (subnode_image) @*
@@ -298,13 +417,18 @@ query get_available_subnode_images_for_all_clusters(): list<subnode_image_data> 
     ( subnode_image_data(name = .name, url = .url, digest = .digest, owner = .owner.pubkey, description = .description) );
 
 /**
- * @return all subnode images which are available for a specific cluster (common and special for this cluster)
+ * Get all subnode images which are available for a specific cluster (common and special for this cluster).
+ *
+ * @param cluster_name  name of cluster
  */
 query get_available_subnode_images_for_cluster(cluster_name: text): list<subnode_image_data> =
     (subnode_image, @outer cluster_subnode_image @* { .subnode_image == subnode_image, .cluster.name == cluster_name }) @*
     { .active, (.subnode_image_type == subnode_image_type.COMMON or .subnode_image == subnode_image) }
     ( subnode_image_data(name = .name, url = .url, digest = .digest, owner = .owner.pubkey, description = .description) );
 
+/**
+ * Return all blockchains with bridge and anomaly detector info.
+ */
 query get_blockchains_with_bridge_and_anomaly_detection() = bridge_lease @* { .anomaly_detection } (
     bridge_anomaly_detector_data(
         blockchain_rid = .blockchain_rid,
@@ -313,6 +437,11 @@ query get_blockchains_with_bridge_and_anomaly_detection() = bridge_lease @* { .a
     )
 );
 
+/**
+ * Get provider staking status.
+
+ * @param pubkey  provider pubkey
+ */
 query get_provider_staking_status(pubkey) {
     val provider = require_provider(pubkey);
     val provider_staking_account = provider_staking_account @ { provider };
@@ -421,6 +550,6 @@ query total_lease_investment(): integer {
     return lease_purchase @ {} (@sum .price) - lease_refund @ {} (@sum .amount);
 }
 
-function get_last_blocktime(){
+function get_last_blocktime() {
     return block @ {} (@max .timestamp) ?: 0;
 }
