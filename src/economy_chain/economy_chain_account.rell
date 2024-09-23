@@ -10,8 +10,21 @@ function register_provider_account(provider) {
     }
 }
 
+/**
+ * Get balance of the account.
+ */
+query get_balance(account_id: byte_array): big_integer {
+    val account = ft4.accounts.Account(account_id);
+    return get_account_balance(account);
+}
+
 function get_account_balance(ft4.accounts.account): big_integer =
         (ft4.assets.balance @? { account, get_asset() }.amount) ?: 0L;
+
+/**
+ * Get information about the CHR asset.
+ */
+query get_chr_asset() = ft4.assets.map_asset(get_asset());
 
 function get_asset(): ft4.assets.asset {
     val asset_id = (chain_context.args.asset_name, chain_context.blockchain_rid).hash();
@@ -21,7 +34,14 @@ function get_asset(): ft4.assets.asset {
 function create_pool_account() =
     ft4.accounts.create_account_without_auth(get_pool_account_id(), pool_account_type);
 
+/**
+ * Returns current balance of reward pool.
+ */
+query get_pool_balance(): big_integer = get_account_balance(get_pool_account());
+
 function get_pool_account() = ft4.accounts.account_by_id(get_pool_account_id());
+
+query get_pool_account_id_query() = get_pool_account_id();
 
 function get_pool_account_id() = (pool_account_type + chain_context.blockchain_rid).hash();
 

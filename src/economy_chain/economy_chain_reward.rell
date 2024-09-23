@@ -250,7 +250,7 @@ function try_transfer_reward(pool: ft4.accounts.account, account: ft4.accounts.a
 
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
-    scope = "transfer_to_pool",
+    scope = rell.meta(transfer_to_pool).mount_name,
     flags = ["T"],
     message = transfer_to_pool_auth_message(*)
 );
@@ -261,6 +261,15 @@ function transfer_to_pool_auth_message(gtv): text {
     return "Please sign the message\nto transfer %s %s from account {account_id} \nto pool account.".format(
         ft4.assets.format_amount_with_decimals(args.amount, chain_context.args.asset_decimals),
         chain_context.args.asset_symbol);
+}
+
+/**
+ * Transfer tokens to the common pool account.
+ *
+ * @param amount  amount of tokens to transfer
+ */
+operation transfer_to_pool(amount: big_integer) {
+    transfer_to_pool_impl(amount);
 }
 
 function transfer_to_pool_impl(amount: big_integer) {
@@ -316,6 +325,12 @@ function provider_meets_staking_requirements(provider): boolean {
     }
 
     return true;
+}
+
+operation reset_provider_reward_debt(provider_pubkey: pubkey) {
+    require(op_context.is_signer(provider_pubkey), "Operation must be signed by " + provider_pubkey);
+    val provider = require_provider(provider_pubkey);
+    reset_provider_reward_debt_impl(provider);
 }
 
 function reset_provider_reward_debt_impl(provider) {

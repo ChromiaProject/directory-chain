@@ -1,0 +1,17 @@
+/**
+ * Get all common subnode images which are available for all clusters.
+ */
+query get_available_subnode_images_for_all_clusters(): list<subnode_image_data> =
+    (subnode_image) @*
+    { .active, .subnode_image_type == subnode_image_type.COMMON }
+    ( subnode_image_data(name = .name, url = .url, digest = .digest, owner = .owner.pubkey, description = .description) );
+
+/**
+ * Get all subnode images which are available for a specific cluster (common and special for this cluster).
+ *
+ * @param cluster_name  name of cluster
+ */
+query get_available_subnode_images_for_cluster(cluster_name: text): list<subnode_image_data> =
+    (subnode_image, @outer cluster_subnode_image @* { .subnode_image == subnode_image, .cluster.name == cluster_name }) @*
+    { .active, (.subnode_image_type == subnode_image_type.COMMON or .subnode_image == subnode_image) }
+    ( subnode_image_data(name = .name, url = .url, digest = .digest, owner = .owner.pubkey, description = .description) );

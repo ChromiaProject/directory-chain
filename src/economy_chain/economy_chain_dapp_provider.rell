@@ -1,6 +1,6 @@
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
-    scope = "register_dapp_provider",
+    scope = rell.meta(register_dapp_provider).mount_name,
     flags = ["T"],
     message = register_dapp_provider_auth_message(*)
 );
@@ -11,6 +11,16 @@ function register_dapp_provider_auth_message(gtv) {
         args.container_name,
         args.new_provider
     );
+}
+
+/**
+ * Register a new dapp provider, will be proposed to be added to the container deployer voter set. Must be called by container lease owner.
+ *
+ * @param container_name  container name
+ * @param new_provider  pubkey of provider to register
+ */
+operation register_dapp_provider(container_name: text, new_provider: pubkey) {
+    register_dapp_provider_impl(container_name, new_provider);
 }
 
 function register_dapp_provider_impl(container_name: text, new_provider: pubkey) {
@@ -51,6 +61,15 @@ function register_dapp_provider_with_payment_auth_message(gtv) {
         args.new_provider,
         chain_context.args.dapp_provider_creation_cost
     );
+}
+
+/**
+ * Register a new dapp provider for a fee.
+ *
+ * @param new_provider  pubkey of provider to register
+ */
+operation register_dapp_provider_with_payment(new_provider: pubkey) {
+    register_dapp_provider_with_payment_impl(new_provider);
 }
 
 function register_dapp_provider_with_payment_impl(new_provider: pubkey) {
@@ -105,4 +124,15 @@ function transfer_dapp_providers_to_lease(lease, providers: list<pubkey>) {
     for (provider in providers) {
         create lease_dapp_provider(lease, provider);
     }
+}
+
+/**
+ * Get provider account id.
+ *
+ * @param provider_pubkey  pubkey of provider.
+ */
+query get_provider_account_id(provider_pubkey: pubkey): byte_array? {
+    val provider = require(provider @? { provider_pubkey }, "No provider found with pubkey %s".format(provider_pubkey));
+    val account = provider_account @? { provider }.account;
+    return account?.id;
 }
