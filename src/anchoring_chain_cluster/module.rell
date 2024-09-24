@@ -6,21 +6,11 @@ import lib.icmf.constants.*;
 val DEFAULT_HEADERS_WITH_MESSAGES_QUERY_LIMIT = 100;
 
 struct module_args {
-    node_availability_report_interval_ms: integer = 86400000; // 1000 * 60 * 60 * 24 - 1 day
+    node_availability_calculation_interval_ms: integer = 1000 * 60 * 60; // 1 hour
+    node_availability_report_interval_ms: integer = 1000 * 60 * 60 * 24; // 1 day
     imcf_headers_with_messages_query_limit: integer = DEFAULT_HEADERS_WITH_MESSAGES_QUERY_LIMIT; // Soft limit, may return more to not cut off in the middle of a height
 }
 
 operation __begin_block(height: integer) {
-    val current_number_of_signers = extract_number_of_signers_from_current_configuration();
-    update_maximum_number_of_nodes_in_cluser_since_last_report(current_number_of_signers);
-
-    if (is_time_to_send_availability_report()) {
-        send_node_availability_report();
-        reset_node_availability_report_stat(current_number_of_signers);
-    }
-}
-
-function extract_number_of_signers_from_current_configuration(): integer {
-    val config = map<text, gtv>.from_gtv(chain_context.raw_config);
-    return list<byte_array>.from_gtv(config["signers"]).size();
+    do_availability_reporting();
 }

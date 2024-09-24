@@ -6,7 +6,13 @@ val PRIMARY_HEADER_KEY = "primary";
 
 object node_availability_report_stat {
     mutable last_node_availability_report: integer = 0;
+    mutable last_node_availability_report_calculation: integer = 0;
     mutable maximum_number_of_signers_since_last_report: integer = 0;
+}
+
+entity node_availability {
+    key start_time: integer, end_time: integer;
+    node_availability_map: byte_array;
 }
 
 struct current_range {
@@ -17,6 +23,47 @@ struct current_range {
 struct range_statistic {
     mutable total_ranges: integer = 0;
     number_of_active_ranges: map<byte_array, integer> = map<byte_array, integer>();
+}
+
+function do_availability_reporting() {
+    val current_number_of_signers = extract_number_of_signers_from_current_configuration();
+    update_maximum_number_of_nodes_in_cluser_since_last_report(current_number_of_signers);
+
+    if (is_time_to_calculate_availability_report()) {
+        fetch_blocks_and_calculate_and_store_node_availability(
+            if (node_availability_report_stat.last_node_availability_report_calculation == 0)
+                node_availability_report_stat.last_node_availability_report
+            else
+                node_availability_report_stat.last_node_availability_report_calculation,
+            op_context.last_block_time,
+            node_availability_report_stat.maximum_number_of_signers_since_last_report
+        );
+
+        node_availability_report_stat.maximum_number_of_signers_since_last_report = current_number_of_signers;
+        node_availability_report_stat.last_node_availability_report_calculation = op_context.last_block_time;
+    }
+
+    if (is_time_to_send_availability_report()) {
+        send_node_availability_report();
+        node_availability_report_stat.last_node_availability_report = op_context.last_block_time;
+    }
+}
+
+function extract_number_of_signers_from_current_configuration(): integer {
+    val config = map<text, gtv>.from_gtv(chain_context.raw_config);
+    return list<byte_array>.from_gtv(config["signers"]).size();
+}
+
+function is_time_to_calculate_availability_report(): boolean {
+    // Initial block
+    if (op_context.last_block_time == -1) return false;
+    // Second block, set last report to now to avoid sending initial empty report
+    if (node_availability_report_stat.last_node_availability_report_calculation == 0) {
+        node_availability_report_stat.last_node_availability_report_calculation = op_context.last_block_time;
+        return false;
+    }
+
+    return op_context.last_block_time - node_availability_report_stat.last_node_availability_report_calculation >= chain_context.args.node_availability_calculation_interval_ms;
 }
 
 function is_time_to_send_availability_report(): boolean {
@@ -37,16 +84,13 @@ function update_maximum_number_of_nodes_in_cluser_since_last_report(current_numb
     }
 }
 
-function send_node_availability_report() {
-    val node_availability = fetch_blocks_and_calculate_node_availability(node_availability_report_stat.last_node_availability_report, op_context.last_block_time, node_availability_report_stat.maximum_number_of_signers_since_last_report);
-    val node_availability_report = node_availability_report(start_time = node_availability_report_stat.last_node_availability_report, end_time = op_context.last_block_time, node_availability);
-
-    send_message(node_availability_report_topic, node_availability_report.to_gtv());
-}
-
-function reset_node_availability_report_stat(current_number_of_signers: integer) {
-    node_availability_report_stat.last_node_availability_report = op_context.last_block_time;
-    node_availability_report_stat.maximum_number_of_signers_since_last_report = current_number_of_signers;
+function fetch_blocks_and_calculate_and_store_node_availability(start_time: integer, end_time: integer, block_range_size: integer) {
+    val report = fetch_blocks_and_calculate_node_availability(start_time, end_time, block_range_size);
+    create node_availability(
+        start_time = node_availability_report_stat.last_node_availability_report_calculation,
+        end_time = op_context.last_block_time,
+        node_availability_map = report.to_gtv().to_bytes(),
+    );
 }
 
 function fetch_blocks_and_calculate_node_availability(start_time: integer, end_time: integer, block_range_size: integer): map<byte_array, decimal> {
@@ -106,6 +150,37 @@ function calculate_node_availability(anchored_blocks: list<(blockchain_rid: byte
     }
 
     return node_availability;
+}
+
+function send_node_availability_report() {
+    val node_availability_report = node_availability_report(
+        start_time = node_availability_report_stat.last_node_availability_report,
+        end_time = op_context.last_block_time,
+        node_availability = fetch_aggregated_node_availability(),
+    );
+    send_message(node_availability_report_topic, node_availability_report.to_gtv());
+    clean_up_node_availabiliy();
+}
+
+function fetch_aggregated_node_availability(): map<byte_array, decimal> {
+    val all_node_availabilities = node_availability @* { }
+        (@sort @omit .start_time, map<byte_array, decimal>.from_gtv(gtv.from_bytes(.node_availability_map)));
+
+    val aggregated_node_availability = map<byte_array, decimal>();
+    for (node_availability in all_node_availabilities) {
+        for (node in node_availability.keys()) {
+            aggregated_node_availability[node] = aggregated_node_availability.get_or_default(node, 0) + node_availability[node];
+        }
+    }
+    for ((node, availability) in aggregated_node_availability) {
+        aggregated_node_availability[node] /= all_node_availabilities.size();
+    }
+
+    return aggregated_node_availability;
+}
+
+function clean_up_node_availabiliy() {
+    delete node_availability @* { };
 }
 
 function extract_signers_from_witness(witness: byte_array): list<byte_array> {
