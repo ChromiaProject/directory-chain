@@ -135,3 +135,21 @@ operation set_provider_staking_account(provider_pubkey: pubkey, new_account_pubk
     _change_staking_account(provider_staking_account.staking_account, new_account);
     provider_staking_account.staking_account = new_account;
 }
+
+operation import_stuck_evm_balances() {
+    require_initialized();
+
+    val addresses = provisional_stake_balance @* { .staked_balance > 0 } (.address);
+    require(addresses.size() > 0, "No provisional stake balances found");
+
+    val eoa_links = eif.hbridge.evm_eoa_account_link @* { .address in addresses } (.account, .address);
+    val sc_links = eif.hbridge.evm_sc_account_link @* { .address in addresses } (.account, .address);
+
+    for (link in eoa_links) {
+        flush_provisional_stake_balance(link.account, link.address);
+    }
+    for (link in sc_links) {
+        flush_provisional_stake_balance(link.account, link.address);
+    }
+    log("Flushed stuck evm balances for " + eoa_links.size() + "eoa accounts and " + sc_links.size() + "sc accounts");
+}
