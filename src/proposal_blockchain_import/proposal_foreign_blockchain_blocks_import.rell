@@ -7,6 +7,13 @@ entity pending_foreign_blockchain_blocks_import {
 @extend(apply_voting_result_handlers) function() = [proposal_type.foreign_blockchain_blocks_import.name: apply_foreign_blockchain_blocks_import(*)];
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.foreign_blockchain_blocks_import.name: delete_pending_foreign_blockchain_blocks_import(*)];
 
+/**
+ * Propose import foreign blockchain blocks.
+ * 
+ * Permission: container deployer
+ * 
+ * Rate limit: actions
+ */
 operation propose_foreign_blockchain_blocks_import(
     my_pubkey: pubkey, blockchain_rid: byte_array, final_height: integer, description: text = "Propose import foreign blockchain blocks"
 ) {
@@ -45,6 +52,9 @@ function delete_pending_foreign_blockchain_blocks_import(proposal) {
     delete pending_foreign_blockchain_blocks_import @? { proposal };
 }
 
+/**
+ * Returns foreign blockchain blocks import proposal.
+ */
 query get_foreign_blockchain_blocks_import_proposal(rowid?): (blockchain_rid: byte_array, final_height: integer)? {
     val proposal = get_latest_proposal(rowid, proposal_type.foreign_blockchain_blocks_import);
     if (proposal == null) return null;
@@ -73,4 +83,3 @@ function validate_foreign_blockchain_blocks_import_proposal(proposal_details: pe
 
     return (fbi, nodes);
 }
-

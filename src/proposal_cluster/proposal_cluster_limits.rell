@@ -23,6 +23,15 @@ function delete_pending_cluster_limits(proposal) {
 }
 
 // The operation is mostly needed to make rell-maven-plugin generate code for enum `cluster_resource_limit_type`
+/**
+ * Propose cluster limits.
+ *
+ * Permission: cluster governor
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation propose_cluster_limits(my_pubkey: pubkey, cluster_name: text, cluster_units: integer? = null, extra_storage: integer? = null, description: text = "") {
     val me = require_provider(my_pubkey);
     // check that provider authority and that it is a cluster governor
@@ -40,6 +49,9 @@ operation propose_cluster_limits(my_pubkey: pubkey, cluster_name: text, cluster_
     internal_vote(me, prop, true);
 }
 
+/**
+ * Returns cluster limits proposal.
+ */
 query get_cluster_limits_proposal(rowid) {
     val proposal = get_latest_proposal(rowid, proposal_type.cluster_limits);
     if (proposal == null) return null;

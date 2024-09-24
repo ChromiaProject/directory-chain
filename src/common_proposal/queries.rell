@@ -12,6 +12,9 @@ struct common_proposal_voter {
     vote: boolean;
 }
 
+/**
+ * Returns common proposal rowid, proposal_type and state.
+ */
 query get_common_proposals_range(from: timestamp, until: timestamp, only_pending: boolean) {
     return common_proposal @* {
         .timestamp >= from,
@@ -20,6 +23,11 @@ query get_common_proposals_range(from: timestamp, until: timestamp, only_pending
     } (.rowid, proposal_type = .proposal_type, .state);
 }
 
+/**
+ * Returns relevant common proposal rowid, proposal_type and state for voter pubkey.
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 query get_relevant_common_proposals(from: timestamp, until: timestamp, only_pending: boolean, my_pubkey: pubkey) {
     return (common_proposal, common_voter_set_member) @* {
         common_voter_set_member.voter_set == common_proposal.voter_set,
@@ -30,6 +38,9 @@ query get_relevant_common_proposals(from: timestamp, until: timestamp, only_pend
     } (common_proposal.rowid, proposal_type = common_proposal.proposal_type, common_proposal.state);
 }
 
+/**
+ * Returns common proposal info.
+ */
 query get_common_proposal(id: rowid?): (id: rowid, timestamp: integer, type: common_proposal_type, proposed_by: pubkey, description: text, state: common_proposal_state)? {
     val result = if (id == null) common_proposal @? {} (@sort_desc @omit .rowid, $) limit 1 else common_proposal @? { id };
     if (result == null) return null;
@@ -43,6 +54,9 @@ query get_common_proposal(id: rowid?): (id: rowid, timestamp: integer, type: com
     );
 }
 
+/**
+ * Returns common proposal voting results.
+ */
 query get_common_proposal_voting_results(rowid): common_proposal_voting_results {
     val proposal = require_common_proposal(rowid);
     require(proposal.state == common_proposal_state.PENDING, "This proposal is closed as %s. For info about voting use get_proposal_voter_info query.".format(proposal.state));
@@ -54,11 +68,17 @@ query get_common_proposal_voting_results(rowid): common_proposal_voting_results 
     return common_proposal_voting_results(positive_votes, negative_votes, max_votes, threshold, status);
 }
 
+/**
+ * Returns common proposal voting info.
+ */
 query get_common_proposal_voter_info(rowid): list<common_proposal_voter> {
     val proposal = require_common_proposal(rowid);
     return common_vote @* { .proposal.rowid == rowid } (common_proposal_voter(.pubkey, .vote));
 }
 
+/**
+ * Returns common proposal and votes by criteria.
+ */
 query get_common_pubkey_votes(from: timestamp, until: timestamp, pubkey) {
     return (common_proposal, common_vote) @* {
         common_vote.pubkey == pubkey,

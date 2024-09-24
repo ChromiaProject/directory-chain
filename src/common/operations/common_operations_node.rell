@@ -27,6 +27,15 @@ function register_node_impl_dep(my_pubkey: pubkey, node_pubkey: pubkey, host: te
     register_node_impl(my_pubkey, node_data);
 }
 
+/**
+ * Register provider node.
+ * 
+ * Permission: self
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation register_node_with_node_data(my_pubkey: pubkey, node_data: register_node_data) {
     register_node_impl(my_pubkey, node_data);
 }
@@ -70,6 +79,15 @@ function replace_node_with_units_impl(my_pubkey: pubkey, old_node_key: pubkey, n
     replace_node_with_node_data_impl(my_pubkey, node_data);
 }
 
+/**
+ * Replace node with node data.
+ * 
+ * Permission: node provider (owner)
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation replace_node_with_node_data(my_pubkey: pubkey, node_data: replace_node_data) {
     replace_node_with_node_data_impl(my_pubkey, node_data);
 }
@@ -144,6 +162,15 @@ function _require_replace_extra_storage(old_node: node, node_data: replace_node_
     }
 }    
 
+/**
+ * Change node state to active.
+ * 
+ * Permission: node provider (owner)
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation enable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
     log("------------- Enable-Node: %s --------------".format(node_pubkey));
     val provider = require_is_provider_with_rate_limit(my_pubkey);
@@ -155,6 +182,15 @@ operation enable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
     log("-----------------------------------");
 }
 
+/**
+ * Disable node and remove node and its replicas from cluster.
+ * 
+ * Permission: node provider: (SP, NP, SP > NP)
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation disable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
     val provider = require_provider(my_pubkey);
     require_provider_auth_with_rate_limit(provider);
@@ -185,6 +221,15 @@ operation disable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
     delete blockchain_replica_node @* { .node.pubkey == node_pubkey };
 }
 
+/**
+ * Remove node.
+ * 
+ * Permission: node provider (owner)
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation remove_node(my_pubkey: pubkey, node_pubkey: pubkey) {
     log("------------- Remove-Node: %s --------------".format(node_pubkey));
     val provider = require_provider(my_pubkey);

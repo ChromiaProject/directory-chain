@@ -22,6 +22,15 @@ function delete_pending_subnode_image_state(proposal) {
     delete pending_subnode_image_state @? { proposal };
 }
 
+/**
+ * Propose enable or disable subnode image.
+ * 
+ * Permission: system provider
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation propose_subnode_image_state(my_pubkey: pubkey, name, active: boolean, description: text = "") {
     val me = require_provider(my_pubkey);
     require_provider_auth_with_rate_limit(me);
@@ -37,6 +46,9 @@ operation propose_subnode_image_state(my_pubkey: pubkey, name, active: boolean, 
     internal_vote(me, prop, true);
 }
 
+/**
+ * Returns enable/disable subnode image proposal.
+ */
 query get_subnode_image_state_proposal(rowid) {
     val proposal = get_latest_proposal(rowid, proposal_type.subnode_image);
     if (proposal == null) return null;

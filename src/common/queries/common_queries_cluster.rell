@@ -1,6 +1,12 @@
 
+/**
+ * Returns cluster by name.
+ */
 query get_cluster(name) = cluster @ { name };
 
+/**
+ * Returns all clusters.
+ */
 query get_clusters() {
     return cluster @* {} (
         name = .name,
@@ -22,7 +28,7 @@ struct cluster_data {
 }
 
 /**
- * @return information for a specified cluster, including any special subnode images supported by the cluster
+ * Returns information for a specified cluster, including any special subnode images supported by the cluster.
  */
 query get_cluster_data(name) {
     val cluster = require_cluster(name);
@@ -40,7 +46,7 @@ query get_cluster_data(name) {
 }
 
 /**
- * @return information for all operational dapp clusters, including any special subnode images supported by the cluster
+ * Returns information for all operational dapp clusters, including any special subnode images supported by the cluster.
  */
 query get_operational_dapp_clusters(): list<cluster_data> {
     val counts = map(cluster_node @* { .cluster.operational == true, .cluster.name != clusters.system } (@group .cluster, @sum 1));
@@ -67,16 +73,25 @@ query get_operational_dapp_clusters(): list<cluster_data> {
     ));
 }
 
+/**
+ * Returns subnode images for a cluster.
+ */
 query get_cluster_subnode_images(name): list<(name:text, url:text, digest:text)> {
     val cluster = require_cluster(name);
     return cluster_subnode_image @* { cluster } (name = .subnode_image.name, url = .subnode_image.url, digest = .subnode_image.digest);
 }
 
+/**
+ * Returns providers by cluster name.
+ */
 query get_cluster_providers(name): list<(name:text, pubkey:pubkey)> {
     val cluster = require_cluster(name);
     return cluster_provider @* { cluster } (name = .provider.name, pubkey = .provider.pubkey);
 }
 
+/**
+ * Returns nodes by cluster name.
+ */
 query get_cluster_nodes(name) {
     val cluster = require_cluster(name);
     return cluster_node @* { cluster } (
@@ -88,6 +103,9 @@ query get_cluster_nodes(name) {
     );
 }
 
+/**
+ * Returns cluster replica nodes by cluster name.
+ */
 query get_cluster_replica_nodes(name) {
     val cluster = require_cluster(name);
     return cluster_replica_node @* { cluster } (
@@ -99,13 +117,21 @@ query get_cluster_replica_nodes(name) {
     );
 }
 
+/**
+ * Returns cluster containers by cluster name.
+ */
 query get_cluster_containers(cluster_name: text): list<(name:text, deployer:text)> {
     return container @* { .cluster.name == cluster_name } ( @sort name = .name, deployer = .deployer.name);
 }
 
+/**
+ * Returns cluster's blockchains ids by cluster name.
+ */
 query get_cluster_blockchains(name) = cm_get_cluster_blockchains(name);
 
+/**
+ * Returns cluster nodes api urls.
+ */
 query get_cluster_api_urls(name) {
     return (cluster_node, cluster) @* { cluster.name == name and cluster == cluster_node.cluster } ( cluster_node.node.api_url );
 }
-

@@ -7,6 +7,15 @@ entity pending_blockchain_move_finish {
     final_height: integer;
 }
 
+/**
+ * Propose blockchain move finish.
+ * 
+ * Permission: container deployer
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation propose_blockchain_move_finish(my_pubkey: pubkey, blockchain_rid: byte_array, final_height: integer, description: text = "") {
     val me = require_is_provider_with_rate_limit(my_pubkey);
     val blockchain = require_active_blockchain(blockchain_rid);
@@ -17,6 +26,9 @@ operation propose_blockchain_move_finish(my_pubkey: pubkey, blockchain_rid: byte
     internal_vote(me, prop, true);
 }
 
+/**
+ * Returns blockchain move finish proposal.
+ */
 query get_blockchain_move_finish_proposal(rowid?):
         (blockchain_rid: byte_array, blockchain_name: text, cluster: text, container: text, final_height: integer)? {
     val proposal = get_latest_proposal(rowid, proposal_type.blockchain_import);

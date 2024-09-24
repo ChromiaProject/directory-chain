@@ -1,4 +1,7 @@
 
+/**
+ * Returns node.
+ */
 query get_node(pubkey) = node @ { pubkey };
 
 struct node_data {
@@ -14,6 +17,9 @@ struct node_data {
     extra_storage: integer?;
 }
 
+/**
+ * Returns node data.
+ */
 query get_node_data(pubkey) {
     val node = require_node(pubkey);
     return node_data(
@@ -30,11 +36,17 @@ query get_node_data(pubkey) {
     );
 }
 
+/**
+ * Returns clusters of node.
+ */
 query list_clusters_of_node(pubkey): list<text> {
     val node = require_node(pubkey);
     return cluster_node @* { node }.cluster.name;
 }
 
+/**
+ * Returns containers of node's clusters.
+ */
 query get_node_containers(pubkey): list<(cluster:text, name:text, deployer:text)> {
     val node = require_node(pubkey);
     val clusters = cluster_node @* { node } .cluster;
@@ -68,6 +80,9 @@ struct node_info {
     territory: text?;
 }
 
+/**
+ * Returns all nodes.
+ */
 query get_all_nodes(include_inactive: boolean) {
     val nodes = if (include_inactive) node @* {} else node @* { .active };
     return nodes @* {} (

@@ -20,15 +20,15 @@ function delete_pending_provider_state(proposal) {
     delete pending_provider_state @? { proposal };
 }
 
-/*
-    The provider with type in line can (+) / can not (-) change the state of the other one in the column:
-
-         | DP | NP  | SP
-    -----|-----|-----|-----
-     DP |  -  |  -  |  -
-     NP  |  +  |  -  |  -
-     SP  |  +  |  +  |  +
-*/
+/**
+ * Propose provider change state to another provider. NP can enable/disable DP without voting.
+ * 
+ * Permission: SP > [SP, NP, DP], NP > DP
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation propose_provider_state(my_pubkey: pubkey, provider_pubkey: pubkey, active: boolean, description: text = "") {
     val me = require_provider(my_pubkey);
     require_provider_auth_with_rate_limit(me);
@@ -58,6 +58,9 @@ function update_provider_state(provider, active: boolean) {
     }
 }
 
+/**
+ * Returns provider state proposal.
+ */
 query get_provider_state_proposal(rowid) {
     val proposal = get_latest_proposal(rowid, proposal_type.provider_state);
     if (proposal == null) return null;

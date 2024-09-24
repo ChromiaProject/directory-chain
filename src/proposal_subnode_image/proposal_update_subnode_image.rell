@@ -24,6 +24,15 @@ function delete_pending_update_subnode_image(proposal) {
     delete pending_update_subnode_image @? { proposal };
 }
 
+/**
+ * Propose update subnode image.
+ * 
+ * Permission: system provider
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation propose_update_subnode_image(my_pubkey: pubkey, name, url: text, digest: text, description: text = "") {
     val me = require_provider(my_pubkey);
     require_provider_auth_with_rate_limit(me);
@@ -44,6 +53,9 @@ operation propose_update_subnode_image(my_pubkey: pubkey, name, url: text, diges
     internal_vote(me, prop, true);
 }
 
+/**
+ * Returns update subnode image proposal.
+ */
 query get_update_subnode_image_proposal(rowid) {
     val proposal = get_latest_proposal(rowid, proposal_type.update_subnode_image);
     if (proposal == null) return null;

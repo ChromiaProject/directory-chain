@@ -36,10 +36,28 @@ function delete_pending_container(proposal) {
     delete pending_container @? { proposal };
 }
 
+/**
+ * Propose container creation.
+ * 
+ * Permission: cluster governor
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation propose_container(my_pubkey: pubkey, cluster_name: text, name, deployer_name: text, description: text = "") {
     propose_container_impl(my_pubkey, cluster_name, name, deployer_name, null, description);
 }
 
+/**
+ * Propose container creation with custom subnode image.
+ * 
+ * Permission: cluster governor
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation propose_container_with_subnode_image(my_pubkey: pubkey, cluster_name: text, name, deployer_name: text, subnode_image: text, description: text = "") {
     propose_container_impl(my_pubkey, cluster_name, name, deployer_name, subnode_image, description);
 }
@@ -67,6 +85,9 @@ function propose_container_impl(my_pubkey: pubkey, cluster_name: text, name, dep
     internal_vote(me, prop, true);
 }
 
+/**
+ * Returns container proposal.
+ */
 query get_container_proposal(rowid) {
     val proposal = get_latest_proposal(rowid, proposal_type.container);
     if (proposal == null) return null;
