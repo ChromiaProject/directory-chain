@@ -26,9 +26,16 @@ function delete_pending_configuration_at(proposal) {
     delete pending_configuration_at @? { proposal };
 }
 
-/*
- * Proposes a new configuration for a blockchain.
- * NB: Only the deployer of the container the blockchain is running in can perform operation
+/**
+ * Propose new blockchain configuration at height. Use force flag to override existing configuration at height.
+ *
+ * Only allowed for chain0 (directory chain).
+ *
+ * Permission: container deployer
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
  */
 operation propose_configuration_at(my_pubkey: pubkey, blockchain_rid: byte_array, config_data: byte_array, height: integer, force: boolean, description: text = "") {
     val me = require_is_provider_with_rate_limit(my_pubkey);
@@ -62,6 +69,9 @@ struct pending_blockchain_configuration_at_data {
     force: boolean;
 }
 
+/**
+ * Returns blockchain configuration proposal at.
+ */
 query get_configuration_proposal_at(rowid?): (
     current_conf:blockchain_configuration_data,
     proposed_conf:pending_blockchain_configuration_at_data

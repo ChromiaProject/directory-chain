@@ -31,6 +31,15 @@ function delete_pending_container_limits(proposal) {
     delete pending_container_limits @? { proposal };
 }
 
+/**
+ * Propose update container limits.
+ * 
+ * Permission: cluster governor
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation propose_container_limits(my_pubkey: pubkey, container_name: text, limits: map<container_resource_limit_type, integer>, description: text = "") {
     if (limits.contains(container_resource_limit_type.container_units)) {
         val proposed_container_units = limits[container_resource_limit_type.container_units];
@@ -62,6 +71,9 @@ operation propose_container_limits(my_pubkey: pubkey, container_name: text, limi
     internal_vote(me, prop, true);
 }
 
+/**
+ * Returns container limits proposal.
+ */
 query get_container_limits_proposal(rowid) {
     val proposal = get_latest_proposal(rowid, proposal_type.container_limits);
     if (proposal == null) return null;

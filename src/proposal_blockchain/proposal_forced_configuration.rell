@@ -11,6 +11,15 @@ entity forced_configuration {
     config_hash: byte_array;
 }
 
+/**
+ * Propose forcing a new configuration for a PAUSED blockchain at height.
+ * 
+ * Permission: container deployer
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation propose_forced_configuration(my_pubkey: pubkey, blockchain_rid: byte_array, config_data: byte_array, height: integer, description: text = "") {
     val provider = require_is_provider_with_rate_limit(my_pubkey);
     val blockchain = require_active_blockchain(blockchain_rid);
@@ -75,6 +84,9 @@ struct forced_configuration_data {
     config_hash: byte_array;
 }
 
+/**
+ * Returns forced blockchain configuration proposal.
+ */
 query get_proposed_forced_configuration(rowid?): (
     current_conf: blockchain_configuration_data,
     forced_conf: proposed_forced_configuration_data
@@ -93,6 +105,9 @@ query get_proposed_forced_configuration(rowid?): (
     );
 }
 
+/**
+ * Returns forced blockchain configuration by blockchain rid.
+ */
 query get_forced_configuration(blockchain_rid: byte_array): list<forced_configuration_data> {
     val blockchain = require_blockchain(blockchain_rid);
     return forced_configuration @* { blockchain } (

@@ -1,3 +1,6 @@
+/**
+ * Returns proposals by criteria.
+ */
 query get_proposals_range(from: timestamp, until: timestamp, only_pending: boolean) {
     return proposal @* {
         .timestamp >= from,
@@ -6,6 +9,11 @@ query get_proposals_range(from: timestamp, until: timestamp, only_pending: boole
     } (.rowid, .proposal_type, .state);
 }
 
+/**
+ * Returns proposals by criteria.
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 query get_relevant_proposals(from: timestamp, until: timestamp, only_pending: boolean, my_pubkey: pubkey) {
     return (proposal, voter_set_member) @* {
         voter_set_member.voter_set == proposal.voter_set,
@@ -16,6 +24,9 @@ query get_relevant_proposals(from: timestamp, until: timestamp, only_pending: bo
     } (proposal.rowid, proposal.proposal_type, proposal.state);
 }
 
+/**
+ * Returns proposals by rowId.
+ */
 query get_proposal(id: rowid?): (id: rowid, timestamp: integer, type: proposal_type, proposed_by: pubkey, description: text, state: proposal_state)? {
     val result = if (id == null) proposal @? {} (@sort_desc @omit .rowid, $) limit 1 else proposal @? { id };
     if (result == null) return null;
@@ -41,6 +52,9 @@ struct proposal_voting_results {
     voting_result;
 }
 
+/**
+ * Returns proposals voting results.
+ */
 query get_proposal_voting_results(rowid): proposal_voting_results {
     val proposal = require_proposal(rowid);
     require(proposal.state == proposal_state.PENDING, "This proposal is closed as %s. For info about voting use get_proposal_voter_info query.".format(proposal.state));
@@ -58,6 +72,9 @@ struct proposal_voter {
     vote: boolean;
 }
 
+/**
+ * Returns proposal voters info.
+ */
 query get_proposal_voter_info(rowid): list<proposal_voter> {
     val proposal = require_proposal(rowid);
     return vote @* { .proposal.rowid == rowid } (proposal_voter(.provider.pubkey, .provider.name, .vote));
@@ -68,9 +85,15 @@ struct blockchain_configuration_attempt_data {
     applied_at_height: integer;
 }
 
+/**
+ * Returns blockchain configuration update attempt by tx rid.
+ */
 query get_blockchain_configuration_update_attempt_state_by_tx_rid(tx_rid: byte_array): blockchain_configuration_attempt_data? =
     blockchain_configuration_update_attempt @? { .proposal.transaction.tx_rid == tx_rid } (blockchain_configuration_attempt_data(.state, .applied_at_height));
 
+/**
+ * Returns blockchain configuration update attempt by proposal.
+ */
 query get_blockchain_configuration_update_attempt_state_by_proposal(rowid): blockchain_configuration_attempt_data? =
     blockchain_configuration_update_attempt @? { .proposal.rowid == rowid } (blockchain_configuration_attempt_data(.state, .applied_at_height));
 

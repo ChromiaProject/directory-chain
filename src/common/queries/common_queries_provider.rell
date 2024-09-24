@@ -8,6 +8,9 @@ struct provider_node_data {
     territory: text?;
 }
 
+/**
+ * Returns nodes data by provider pubkey.
+ */
 query get_nodes_by_provider(pubkey) {
     return node @* { provider @ { pubkey } } (
         provider_node_data(
@@ -22,10 +25,16 @@ query get_nodes_by_provider(pubkey) {
     );
 }
 
+/**
+ * Returns actions rate limit points.
+ */
 query get_provider_points(pubkey): integer {
     return provider_rl_state @ {provider @ { pubkey }} .points;
 }
 
+/**
+ * Returns clusters of a provider.
+ */
 query get_provider_clusters(pubkey) : list<text> {
     return cluster_provider @* { provider @ {pubkey} }.cluster.name;
 }
@@ -34,10 +43,16 @@ query get_provider_data (pubkey) {
     return provider @ { pubkey } ($.to_struct());
 }
 
+/**
+ * Returns all providers.
+ */
 query get_all_providers(): list<struct<provider>> {
     return provider @* {} ($.to_struct());
 }
 
+/**
+ * Returns providers by criteria.
+ */
 query get_providers(tier: provider_tier, system: boolean, require_active: boolean): list<struct<provider>> {
     if (system) {
         require(tier == provider_tier.NODE_PROVIDER, "System providers are always node providers");
@@ -49,6 +64,9 @@ query get_providers(tier: provider_tier, system: boolean, require_active: boolea
      } ($.to_struct());
 }
 
+/**
+ * Returns provider quotas.
+ */
 query get_provider_quotas(): list<struct<provider_quota>> {
     return provider_quota @* {} ($.to_struct());
 }

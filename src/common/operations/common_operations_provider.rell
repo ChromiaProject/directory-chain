@@ -1,12 +1,13 @@
-/*
-    The provider with type in line can (+) / can not (-) register a provider with the type in the column:
-
-         | DP | NP
-    -----|-----|-----
-     DP |  +  |  -
-     NP  |  +  |  -
-     SP  |  +  |  +
-*/
+/**
+ * SP can register NP, DP; NP can register DP; DP can register DP.
+ * 
+ * Permission: SP > [NP, DP], NP > [DP], DP > [DP]
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ * @param provider_tier provider tiers
+ */
 operation register_provider(my_pubkey: pubkey, pubkey, provider_tier) {
     val me = require_provider(my_pubkey);
     require_node_access(me);
@@ -29,6 +30,15 @@ operation register_provider(my_pubkey: pubkey, pubkey, provider_tier) {
     }
 }
 
+/**
+ * Promote a Dapp Provider to Node Provider, only a System Provider can do this.
+ * 
+ * Permission: system provider
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation promote_node_provider(my_pubkey: pubkey, provider_pubkey: pubkey) { // TODO: Should be able to demote
     val me = require_is_provider_with_rate_limit(my_pubkey);
     require_is_system_provider(my_pubkey);
@@ -39,6 +49,13 @@ operation promote_node_provider(my_pubkey: pubkey, provider_pubkey: pubkey) { //
     after_provider_updated(p);
 }
 
+/**
+ * Transfer action points from one provider to another.
+ * 
+ * Permission: any to any
+ * 
+ * Rate limit: actions
+ */
 operation transfer_action_points(from: pubkey, to: pubkey, amount: integer) {
     val _from = require_is_provider_with_rate_limit(from);
     val _to = require_provider(to);
@@ -48,6 +65,17 @@ operation transfer_action_points(from: pubkey, to: pubkey, amount: integer) {
     update provider_rl_state @ { _to } ( .points += amount );
 }
 
+/**
+ * Update name and/or url of provider.
+ * 
+ * Permission: self
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey  pubkey of provider
+ * @param name  updated name, or null to not update
+ * @param url  updated url, or null to not update
+ */
 operation update_provider(my_pubkey: pubkey, name?, url: text?) {
     val me = require_provider(my_pubkey);
     require_provider_auth_with_rate_limit(me);

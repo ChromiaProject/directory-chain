@@ -8,6 +8,15 @@ entity pending_configuration_import {
 @extend(apply_voting_result_handlers) function() = [proposal_type.configuration_import.name: apply_configuration_import(*)];
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.configuration_import.name: delete_pending_configuration_import(*)];
 
+/**
+ * Propose import configuration.
+ * 
+ * Permission: container deployer
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation propose_import_configuration(my_pubkey: pubkey, blockchain_rid: byte_array, height: integer, config_data: byte_array,
                                        description: text = "Propose import configuration") {
     val me = require_is_provider_with_rate_limit(my_pubkey);
@@ -39,6 +48,9 @@ function delete_pending_configuration_import(proposal) {
     delete pending_configuration_import @? { proposal };
 }
 
+/**
+ * Returns blockchain configuration import proposal.
+ */
 query get_configuration_import_proposal(rowid?):
     (blockchain_rid: byte_array, height: integer, config_data: byte_array)?
 {

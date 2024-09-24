@@ -110,11 +110,29 @@ function _apply_unarchive_blockchain(action: pending_blockchain_action, proposal
     delete inactive_blockchain @? { action.blockchain };
 }
 
+/**
+ * Propose a blockchain action (pause, resume, remove, archive).
+ * 
+ * Permission: container deployer
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation propose_blockchain_action(my_pubkey: pubkey, blockchain_rid: byte_array, action: blockchain_action, description: text = "") {
     require(action != blockchain_action.unarchive, "Use propose_blockchain_unarchive_action() for unarchive operation");
     propose_blockchain_action_impl(my_pubkey, blockchain_rid, action, x"", description);
 }
 
+/**
+ * Propose blockchain unarchive action.
+ * 
+ * Permission: container deployer
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation propose_blockchain_unarchive_action(my_pubkey: pubkey, blockchain_rid: byte_array, destination_container: text, final_height: integer, description: text = "") {
     val args = unarchive_args(destination_container, final_height);
     propose_blockchain_action_impl(my_pubkey, blockchain_rid, blockchain_action.unarchive, args.to_bytes(), description);
@@ -153,6 +171,9 @@ function propose_blockchain_action_impl(my_pubkey: pubkey, blockchain_rid: byte_
     internal_vote(me, prop, true);
 }
 
+/**
+ * Returns blockchain action proposal.
+ */
 query get_blockchain_action_proposal(rowid) {
     val proposal = get_latest_proposal(rowid, proposal_type.blockchain_action);
     if (proposal == null) return null;
@@ -164,6 +185,9 @@ query get_blockchain_action_proposal(rowid) {
     );
 }
 
+/**
+ * Returns blockchain unarchive action proposal.
+ */
 query get_blockchain_unarchive_action_proposal(rowid) {
     val proposal = get_latest_proposal(rowid, proposal_type.blockchain_action);
     if (proposal == null) return null;

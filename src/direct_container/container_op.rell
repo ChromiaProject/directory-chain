@@ -1,41 +1,76 @@
 /**
- * consensus_threshold: majority (-1), super majority (0) or custom (1, ...)
+ * Creates container.
+ * 
+ * Permission: cluster governor
+ * 
+ * Rate limit: actions
+ *
+ * @param consensus_threshold  majority (-1), super majority (0) or custom (1, ...)
  */
 operation create_container(me: pubkey, name, cluster_name: text, consensus_threshold: integer, deployers: list<pubkey>) {
     create_container_with_resource_limits_impl(me, name, cluster_name, consensus_threshold, deployers, empty_container_resource_limits());
 }
 
 /**
- * consensus_threshold: majority (-1), super majority (0) or custom (1, ...)
+ * @param  consensus_threshold  majority (-1), super majority (0) or custom (1, ...)
+ *
  * @deprecated use create_container_with_resource_limits()
  */
 operation create_container_with_units(me: pubkey, name, cluster_name: text, consensus_threshold: integer, deployers: list<pubkey>, container_units: integer) {
     create_container_with_resource_limits_impl(me, name, cluster_name, consensus_threshold, deployers, [container_resource_limit_type.container_units : container_units]);
 }
 
+/**
+ * Creates container with resource limits.
+ * 
+ * Permission: cluster governor
+ * 
+ * Rate limit: actions
+ */
 operation create_container_with_resource_limits(me: pubkey, name, cluster_name: text, consensus_threshold: integer, deployers: list<pubkey>, resource_limits: map<container_resource_limit_type, integer>) {
     create_container_with_resource_limits_impl(me, name, cluster_name, consensus_threshold, deployers, resource_limits);
 }
 
 /**
- * consensus_threshold: majority (-1), super majority (0) or custom (1, ...)
+ * Creates container with voters set.
+ * 
+ * Permission: cluster governor
+ * 
+ * Rate limit: actions
+ * 
+ * @param  consensus_threshold  majority (-1), super majority (0) or custom (1, ...)
  */
 operation create_container_from(me: pubkey, name, cluster_name: text, consensus_threshold: integer, voter_set_name: text) {
     create_container_from_with_resource_limits_impl(me, name, cluster_name, consensus_threshold, voter_set_name, empty_container_resource_limits());
 }
 
 /**
- * consensus_threshold: majority (-1), super majority (0) or custom (1, ...)
+ * @param  consensus_threshold  majority (-1), super majority (0) or custom (1, ...)
+ *
  * @deprecated use create_container_from_with_container_units()
  */
 operation create_container_from_with_units(me: pubkey, name, cluster_name: text, consensus_threshold: integer, voter_set_name: text, container_units: integer) {
     create_container_from_with_resource_limits_impl(me, name, cluster_name, consensus_threshold, voter_set_name, [container_resource_limit_type.container_units : container_units]);
 }
 
+/**
+ * Creates container with voters set and resource limits.
+ * 
+ * Permission: cluster governor
+ * 
+ * Rate limit: actions
+ */
 operation create_container_from_with_resource_limits(me: pubkey, name, cluster_name: text, consensus_threshold: integer, voter_set_name: text, resource_limits: map<container_resource_limit_type, integer>) {
     create_container_from_with_resource_limits_impl(me, name, cluster_name, consensus_threshold, voter_set_name, resource_limits);
 }
 
+/**
+ * Creates container deployer.
+ * 
+ * Permission: cluster governor
+ * 
+ * Rate limit: actions
+ */
 operation add_container_deployer(me: pubkey, container_name: text, deployer_pubkey: pubkey) {
     val provider = require_is_provider_with_rate_limit(me);
     val container = require_container(container_name);
@@ -44,6 +79,13 @@ operation add_container_deployer(me: pubkey, container_name: text, deployer_pubk
     create voter_set_member(container.deployer, deployer);
 }
 
+/**
+ * Remove container deployer.
+ * 
+ * Permission: cluster governor
+ * 
+ * Rate limit: actions
+ */
 operation remove_container_deployer(me: pubkey, container_name: text, deployer_pubkey: pubkey) {
     val provider = require_is_provider_with_rate_limit(me);
     val container = require_container(container_name);
@@ -80,6 +122,13 @@ function get_resource_limits_or_defaults(resource_limits: map<container_resource
     resource_limits.get_or_default(container_resource_limit_type.extra_storage, standard_container_defaults.extra_storage)
 );
 
+/**
+ * Remove container.
+ * 
+ * Permission: cluster provider governor
+ * 
+ * Rate limit: actions
+ */
 operation remove_container(me: pubkey, container_name: text) {
     val provider = require_is_provider_with_rate_limit(me);
     val container = require_container(container_name);

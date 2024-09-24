@@ -42,6 +42,15 @@ function delete_pending_provider_batch(proposal) {
     delete pending_provider_batch @? { proposal };
 }
 
+/**
+ * Propose providers.
+ * 
+ * Permission: system provider
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation propose_providers(my_pubkey: pubkey, provider_infos: list<provider_info>, tier: provider_tier, system: boolean, active: boolean, description: text = "") {
     val me = require_is_provider_with_rate_limit(my_pubkey);
     require_is_system_provider(my_pubkey);
@@ -77,6 +86,9 @@ operation propose_providers(my_pubkey: pubkey, provider_infos: list<provider_inf
     internal_vote(me, prop, true);
 }
 
+/**
+ * Returns provider batch proposal.
+ */
 query get_provider_batch_proposal(rowid) {
     val proposal = get_latest_proposal(rowid, proposal_type.provider_batch);
     if (proposal == null) return null;

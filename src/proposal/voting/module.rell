@@ -18,9 +18,17 @@ function create_voter_set_internal(name, threshold: integer = 0, governor: voter
 }
 
 /**
+ * Create a voter set.
+ *
  * Governance semantics:
  * Anybody can create a new voter_set directly, but it consumes an action point.
  * voter_set can be updated. If voter_set_governance is defined, it will control voter set, otherwise, it is the voter set itself.
+ *
+ * Permission: any
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
  */
 operation create_voter_set(my_pubkey: pubkey, name, threshold: integer, initials: list<pubkey>?, governor: text?) {
     require_is_provider_with_rate_limit(my_pubkey);
@@ -35,6 +43,15 @@ operation create_voter_set(my_pubkey: pubkey, name, threshold: integer, initials
     }
 }
 
+/**
+ * Vote for proposal.
+ * 
+ * Permission: voter set member
+ * 
+ * Rate limit: no
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation make_vote(my_pubkey: pubkey, proposal_id: integer, vote: boolean) {
     require_is_signer(my_pubkey);
     val provider = require_provider(my_pubkey);
@@ -45,6 +62,15 @@ operation make_vote(my_pubkey: pubkey, proposal_id: integer, vote: boolean) {
     internal_vote(provider, prop, vote);
 }
 
+/**
+ * Delete vote for proposal.
+ * 
+ * Permission: voter set member
+ * 
+ * Rate limit: no
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation retract_vote(my_pubkey: pubkey, proposal_id: integer) {
     require_is_signer(my_pubkey);
     val provider = require_provider(my_pubkey);

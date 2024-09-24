@@ -18,6 +18,15 @@ function delete_pending_cluster_remove(proposal) {
     delete pending_remove_cluster @? { proposal };
 }
 
+/**
+ * Propose remove cluster with no dapp containers.
+ * 
+ * Permission: cluster governor AND empty cluster
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation propose_remove_cluster(my_pubkey: pubkey, name, description: text = "") {
     val me = require_provider(my_pubkey);
     require_provider_auth_with_rate_limit(me);
@@ -30,6 +39,9 @@ operation propose_remove_cluster(my_pubkey: pubkey, name, description: text = ""
     internal_vote(me, prop, true);
 }
 
+/**
+ * Returns cluster remove proposal.
+ */
 query get_cluster_remove_proposal(rowid) {
     val proposal = get_latest_proposal(rowid, proposal_type.cluster_remove);
     if (proposal == null) return null;

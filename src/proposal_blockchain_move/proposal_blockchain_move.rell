@@ -6,6 +6,15 @@ entity pending_blockchain_move {
     destination: container;
 }
 
+/**
+ * Propose blockchain move.
+ * 
+ * Permission: container deployer
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
 operation propose_blockchain_move(my_pubkey: pubkey, blockchain_rid: byte_array, destination_container: text, description: text = "") {
     val me = require_is_provider_with_rate_limit(my_pubkey);
     val blockchain = require(blockchain @? { blockchain_rid }, "Unknown blockchain " + blockchain_rid);
@@ -19,6 +28,9 @@ operation propose_blockchain_move(my_pubkey: pubkey, blockchain_rid: byte_array,
     internal_vote(me, prop, true);
 }
 
+/**
+ * Returns blockchain move proposal.
+ */
 query get_blockchain_move_proposal(rowid?):
         (blockchain_rid: byte_array, blockchain_name: text, container: text, cluster: text)? {
     val proposal = get_latest_proposal(rowid, proposal_type.blockchain_import);
