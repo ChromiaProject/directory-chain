@@ -139,12 +139,11 @@ operation set_provider_staking_account(provider_pubkey: pubkey, new_account_pubk
 operation import_stuck_evm_balances() {
     require_initialized();
 
-    val addresses = provisional_stake_balance @* { .staked_balance > 0 } (.address);
-    val eoa_links = eif.hbridge.evm_eoa_account_link @* { .address in addresses } (.account, .address);
-    val sc_links = eif.hbridge.evm_sc_account_link @* { .address in addresses } (.account, .address);
+    val eoa_links = (eif.hbridge.evm_eoa_account_link, provisional_stake_balance) @* { provisional_stake_balance.address == evm_eoa_account_link.address and provisional_stake_balance.staked_balance > 0 } (address = evm_eoa_account_link.address, account = evm_eoa_account_link.account);
+    val sc_links = (eif.hbridge.evm_sc_account_link, provisional_stake_balance) @* { provisional_stake_balance.address == evm_sc_account_link.address and provisional_stake_balance.staked_balance > 0 } (address = evm_sc_account_link.address, account = evm_sc_account_link.account);
 
     require(eoa_links.size() > 0 or sc_links.size() > 0, "No stuck evm balances found");
-    
+
     for (link in eoa_links) {
         flush_provisional_stake_balance(link.account, link.address);
     }
