@@ -139,16 +139,49 @@ operation set_provider_staking_account(provider_pubkey: pubkey, new_account_pubk
 operation import_stuck_evm_balances() {
     require_initialized();
 
-    val eoa_links = (eif.hbridge.evm_eoa_account_link, provisional_stake_balance) @* { provisional_stake_balance.address == evm_eoa_account_link.address and provisional_stake_balance.staked_balance > 0 } (address = evm_eoa_account_link.address, account = evm_eoa_account_link.account);
-    val sc_links = (eif.hbridge.evm_sc_account_link, provisional_stake_balance) @* { provisional_stake_balance.address == evm_sc_account_link.address and provisional_stake_balance.staked_balance > 0 } (address = evm_sc_account_link.address, account = evm_sc_account_link.account);
+    val eoa_stakes = (
+        provisional_stake_balance,
+        eif
+            .hbridge
+            .evm_eoa_account_link
+    ) @* {
+        provisional_stake_balance.address == evm_eoa_account_link.address and provisional_stake_balance.staked_balance > 0
+    } (
+        address = evm_eoa_account_link.address,
+        account = evm_eoa_account_link.account,
+        network = provisional_stake_balance.network,
+        balance = provisional_stake_balance.staked_balance,
+        provisional_stake = provisional_stake_balance
+    );
+    val sc_stakes = (
+        provisional_stake_balance,
+        eif
+            .hbridge
+            .evm_sc_account_link
+    ) @* {
+        provisional_stake_balance.address == evm_sc_account_link.address and provisional_stake_balance.staked_balance > 0
+    } (
+        address = evm_sc_account_link.address,
+        account = evm_sc_account_link.account,
+        network = provisional_stake_balance.network,
+        balance = provisional_stake_balance.staked_balance,
+        provisional_stake = provisional_stake_balance
+    );
 
-    require(eoa_links.size() > 0 or sc_links.size() > 0, "No stuck evm balances found");
+    require(eoa_stakes.size() > 0 or sc_stakes.size() > 0, "No stuck evm balances found");
 
-    for (link in eoa_links) {
-        flush_provisional_stake_balance(link.account, link.address);
+    for (stake in eoa_stakes) {
+        if (not exists(staker_state @? { stake.account, stake.network })) {
+            _staking_update_evm_state(stake.account, stake.network, stake.balance);
+        }
+        delete stake.provisional_stake;
     }
-    for (link in sc_links) {
-        flush_provisional_stake_balance(link.account, link.address);
+    for (stake in sc_stakes) {
+        if (not exists(staker_state @? { stake.account, stake.network })) {
+            _staking_update_evm_state(stake.account, stake.network, stake.balance);
+        }
+        delete stake.provisional_stake;
     }
-    log("Flushed stuck evm balances for " + eoa_links.size() + "eoa accounts and " + sc_links.size() + "sc accounts");
+    
+    log("Flushed stuck evm balances for " + eoa_stakes.size() + " eoa stakes and " + sc_stakes.size() + " sc stakes");
 }
