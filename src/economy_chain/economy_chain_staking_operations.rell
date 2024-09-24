@@ -140,11 +140,11 @@ operation import_stuck_evm_balances() {
     require_initialized();
 
     val addresses = provisional_stake_balance @* { .staked_balance > 0 } (.address);
-    require(addresses.size() > 0, "No provisional stake balances found");
-
     val eoa_links = eif.hbridge.evm_eoa_account_link @* { .address in addresses } (.account, .address);
     val sc_links = eif.hbridge.evm_sc_account_link @* { .address in addresses } (.account, .address);
 
+    require(eoa_links.size() > 0 or sc_links.size() > 0, "No stuck evm balances found");
+    
     for (link in eoa_links) {
         flush_provisional_stake_balance(link.account, link.address);
     }
