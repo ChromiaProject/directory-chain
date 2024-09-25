@@ -7,7 +7,10 @@ import common.test.setup.*;
 import common.test.util.*;
 import proposal_blockchain.*;
 import proposal_provider.*;
+import proposal.voting.test.ops.*;
 import direct_container.*;
+import delay.test.helper_operations.*;
+import common.test.helper_operations.*;
 
 function test_revoke_not_considered_proposal() {
     setup();
@@ -82,6 +85,37 @@ function test_revoke_applied_proposal() {
     rell.test.tx().op(
         revoke_proposal(rell.test.pubkeys.alice, prop.rowid)
     ).sign(rell.test.keypairs.alice).run_must_fail("The proposal is already APPROVED");
+}
+
+function test_revoke_applied_but_delayed_proposal() {
+
+    setup();
+
+    val cl = system_cluster();
+    val container = "container";
+    val alice = provider @ { rell.test.pubkeys.alice };
+    val bob = provider @ { rell.test.pubkeys.bob };
+
+    var conf = apply_required_configuration_properties(["name" : "chain".to_gtv()]);
+    rell.test.tx().op(
+        create_container(alice.pubkey, container, clusters.system, 0, [alice.pubkey, bob.pubkey]),
+        propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "chain", container),
+    ).sign(rell.test.keypairs.alice).run();
+    vote_for_last_proposal(rell.test.keypairs.bob, true);
+    val blockchain = blockchain @ { "chain" };
+
+    rell.test.tx().op(
+        set_blockchain_config_delay_op(blockchain, 100),
+        propose_configuration(rell.test.pubkeys.alice, blockchain.rid, conf.to_gtv().to_bytes())
+    ).sign(rell.test.keypairs.alice).run();
+
+    val proposal_id = proposal @ {} ( @sort_desc .rowid ) limit 1;
+
+    rell.test.tx().op(
+        revoke_proposal(rell.test.pubkeys.alice, proposal_id)
+    ).sign(rell.test.keypairs.alice).run();
+
+    assert_equals(proposal @ { .rowid == proposal_id } ( .state ), proposal_state.REVOKED);
 }
 
 function test_revoke_rejected_proposal() {

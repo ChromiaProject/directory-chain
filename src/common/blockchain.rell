@@ -1,6 +1,11 @@
 val COMPRESSED_ROOTS_CONFIG_KEY = "compressed_roots";
+val DIRECTORY_CHAIN_CONFIG_KEY = "directory_chain";
+val DIRECTORY_CHAIN_CONFIG_DELAY_CONFIG_KEY = "config_delay";
 
 function allow_blockchain_dependencies() = chain_context.args.allow_blockchain_dependencies;
+
+@extendable function before_delete_blockchain(blockchain) {}
+@extendable function before_store_blockchain_configuration(blockchain, config_map: map<text, gtv>) {}
 
 function add_blockchain(
     base_configuration: byte_array,
@@ -203,6 +208,9 @@ function compress_root(root: map<text, gtv>, path: list<text>, compressed_keys: 
 
 function compress_and_store_configuration(blockchain, height: integer, configuration: byte_array, overwrite: boolean = false) {
     val config_map = map<text, gtv>.from_gtv(gtv.from_bytes(configuration));
+
+    before_store_blockchain_configuration(blockchain, config_map);
+
     if (not config_map.contains(COMPRESSED_ROOTS_CONFIG_KEY)) {
         store_configuration(blockchain, height, configuration, overwrite);
     } else {
@@ -245,4 +253,18 @@ function remove_blockchain(blockchain) {
     }
 }
 
-@extendable function before_delete_blockchain(blockchain) {}
+@extend(before_store_blockchain_configuration)
+function set_latest_blockchain_configuration_values(blockchain, config_map: map<text, gtv>) {
+
+    delete latest_blockchain_configuration_values @? { blockchain };
+    val latest_values = create latest_blockchain_configuration_values(blockchain);
+
+    if (config_map.contains(DIRECTORY_CHAIN_CONFIG_KEY)) {
+
+        val dc_map = map<text, gtv>.from_gtv_pretty(config_map[DIRECTORY_CHAIN_CONFIG_KEY]);
+
+        if (dc_map.contains(DIRECTORY_CHAIN_CONFIG_DELAY_CONFIG_KEY)) {
+            latest_values.config_delay = integer.from_gtv_pretty(dc_map[DIRECTORY_CHAIN_CONFIG_DELAY_CONFIG_KEY]);
+        }
+    }
+}

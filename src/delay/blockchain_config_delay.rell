@@ -1,0 +1,38 @@
+
+function is_blockchain_config_delayed(blockchain_rid: byte_array): boolean {
+
+    return get_blockchain_config_delay(blockchain_rid) > 0;
+}
+
+function get_blockchain_config_delay(blockchain_rid: byte_array?): integer {
+
+    return get_blockchain_config_delay_value(blockchain_rid) ?: 0;
+}
+
+function get_blockchain_config_delay_value(blockchain_rid: byte_array?): integer? {
+
+    return latest_blockchain_configuration_values @? { .blockchain.rid == blockchain_rid } ( .config_delay );
+}
+
+/**
+ * Takes a list of blockchains and returns a map with delay enabled blockchains and the time.
+ *
+ * @return A map of blockchains and their delay value.
+ */
+function get_blockchains_config_delay_value(blockchains: list<blockchain>): map<blockchain, integer> {
+
+    val delays = latest_blockchain_configuration_values @* {
+        .config_delay > 0,
+        .blockchain in blockchains
+    } ( .blockchain, .config_delay );
+
+    val result = map<blockchain, integer>();
+    for (delay in delays) {
+        result[delay.blockchain] = delay.config_delay;
+    }
+    return result;
+}
+
+function blockchain_config_delay_time_handler(blockchain?) {
+    return (blockchain, get_blockchain_config_delay(blockchain?.rid));
+}

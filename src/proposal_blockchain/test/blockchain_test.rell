@@ -9,6 +9,7 @@ import proposal_container.*;
 import proposal_subnode_image.*;
 import direct_container.*;
 import ^.utils.*;
+import delay.test.helper_operations.*;
 
 function setup() {
     setup_module();
@@ -160,7 +161,6 @@ function propose_config_at(brid: byte_array, conf: map<text, gtv>, height: integ
     ).sign(initial_provider);
 }
 
-
 function test_forced_configuration() {
     setup();
 
@@ -203,6 +203,39 @@ function test_forced_configuration() {
     val forced_configuration_data = get_forced_configuration(bc.rid);
     assert_equals(forced_configuration_data.size(), 1);
     assert_equals(forced_configuration_data[0], forced_configuration_data(bc, 10, actual_config_bytes.hash()));
+}
+
+function test_forced_configuration_delay() {
+    setup();
+
+    val cl = system_cluster();
+    val container = "container";
+    val alice = provider @ { rell.test.pubkeys.alice };
+    val bob = provider @ { rell.test.pubkeys.bob };
+    rell.test.tx().op(add_test_member(system_p_voter_set(), bob)).run();
+
+    var conf = apply_required_configuration_properties();
+    // Proposing blockchain to a non-system container
+    rell.test.tx().op(
+        create_container(alice.pubkey, container, clusters.system, 0, [alice.pubkey, bob.pubkey]),
+        propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "foo_chain", container)
+    ).sign(rell.test.keypairs.alice).run();
+    bob_votes();
+
+    val bc = blockchain @ { .name == "foo_chain" };
+    assert_equals(bc.state, blockchain_state.RUNNING);
+
+    rell.test.tx().op(
+        set_blockchain_config_delay_op(bc, 100)
+    ).run();
+
+    alice_proposes_action(bc, blockchain_action.pause);
+    bob_votes();
+    assert_equals(bc.state, blockchain_state.PAUSED);
+
+    conf["nonce"] = (10).to_gtv();
+    conf["name"] = "testConf".to_gtv();
+    force_config(bc.rid, conf, 10).run_must_fail("only allowed on chain with configuration delay disabled");
 }
 
 function force_config(brid: byte_array, conf: map<text, gtv>, height: integer) {

@@ -1,3 +1,5 @@
+@extend(delayed_event_callback) function() = [delay_type.PROPOSAL: proposal_delayed_apply(*)];
+
 // NB: check authority before calling this function
 function internal_vote(provider, proposal, vote: boolean) {
     require(voter_set_member @? { proposal.voter_set, provider }, provider.pubkey + " must be a member of the voter set");
@@ -19,12 +21,50 @@ function try_to_apply_proposal(prop: proposal) {
         approved -> {
             log("proposal approved:", prop_str);
             prop.state = proposal_state.APPROVED;
-            apply_voting_result_handlers()[prop.proposal_type.name](prop);
-            delete_proposal(prop);
+            val (blockchain, proposal_delay) = get_proposal_delay(prop);
+
+            if (blockchain != null and proposal_delay > 0) {
+                log("Proposal %s is delayed and will be applied in %s ms".format(prop.rowid, proposal_delay));
+                add_delayed_event(delay_type.PROPOSAL, proposal_delay, prop.rowid);
+                set_delayed_event_state(delay_type.PROPOSAL, prop.rowid, blockchain.state == blockchain_state.RUNNING);
+            } else {
+                apply_voting_result_handlers()[prop.proposal_type.name](prop);
+                delete_proposal(prop);
+            }
         }
     }
+}
+
+/**
+ * Callback for delayed proposals to run the proposals apply function.
+ */
+function proposal_delayed_apply(proposal_id: rowid) {
+    val prop = proposal @? { .rowid == proposal_id };
+    if (prop != null) {
+        apply_voting_result_handlers()[prop.proposal_type.name](prop);
+        delete_proposal(prop);
+    }
+}
+
+/**
+ * Call extended handler to get delay for the proposal type.
+ */
+function get_proposal_delay(proposal): (blockchain?, integer) {
+    val handlers = proposal_delay_time_handlers();
+    if (handlers.contains(proposal.proposal_type.name)) {
+        return handlers[proposal.proposal_type.name](proposal);
+    }
+    return (null, 0);
 }
 
 @extendable function apply_voting_result_handlers(): map<text, (proposal) -> unit>;
 
 @extendable function proposal_str(prop: proposal): text? = "%s:%d".format(prop.proposal_type, prop.rowid);
+
+/**
+ * Extend to set a handler to return the delay for a proposal type. This feature adds a delay in between
+ * the proposal is approved and actually applied.
+ *
+ * @return The handler returns the blockchain and delay value.
+ */
+@extendable function proposal_delay_time_handlers(): map<text, (proposal) -> (blockchain?, integer)>;

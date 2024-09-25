@@ -1,3 +1,5 @@
+import delay.*;
+
 entity pending_configuration {
     key proposal;
     blockchain;
@@ -5,6 +7,23 @@ entity pending_configuration {
 }
 
 @extend(apply_voting_result_handlers) function() = [proposal_type.configuration.name: apply_configuration(*)];
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.configuration.name: delete_pending_configuration(*)];
+@extend(proposal_delay_time_handlers) function() = [proposal_type.configuration.name: configuration_proposal_delay_time_handler(*)];
+@extend(proposal_delay_ids_handlers) function() = [proposal_type.configuration.name: configuration_proposal_delay_ids_handler(*)];
+
+/**
+ * Handler to enable and return the delay (if any) for this blockchain and this proposal type.
+ */
+function configuration_proposal_delay_time_handler(proposal): (blockchain?, integer) {
+    return blockchain_config_delay_time_handler(pending_configuration @? { proposal } ( .blockchain ));
+}
+
+/**
+ * Handler to return all active proposals for blockchain with delay
+ */
+function configuration_proposal_delay_ids_handler(blockchain): list<rowid> {
+    return pending_configuration @* { blockchain } ( .proposal.rowid );
+}
 
 function apply_configuration(proposal) {
     val pc = pending_configuration @? { proposal };
@@ -14,11 +33,9 @@ function apply_configuration(proposal) {
     if (is_chain0) {
         apply_configuration_chain0(pc);
     } else {
-        apply_configuration_regular(pc, proposal);
+        apply_configuration_regular(pc);
     }
 }
-
-@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.configuration.name: delete_pending_configuration(*)];
 
 function delete_pending_configuration(proposal) {
     delete pending_configuration @? { proposal };
@@ -33,7 +50,7 @@ function apply_configuration_chain0(pc: pending_configuration) {
     add_dependencies(unique_base_config, pc.blockchain.rid, apply_at_height);
 }
 
-function apply_configuration_regular(pc: pending_configuration, proposal) {
+function apply_configuration_regular(pc: pending_configuration) {
     val last_configuration_height = (blockchain_configuration @? { pc.blockchain } (@sort_desc .height) limit 1) ?: 0;
     val last_pending_configuration = pending_blockchain_configuration @? { pc.blockchain } (@sort_desc @omit .minimum_height, $) limit 1;
     val (minimum_height, signers) = if (last_pending_configuration != null)
@@ -53,7 +70,7 @@ function apply_configuration_regular(pc: pending_configuration, proposal) {
         signers
     );
     create blockchain_configuration_update_attempt(
-        proposal,
+        pc.proposal,
         config_hash
     );
 }

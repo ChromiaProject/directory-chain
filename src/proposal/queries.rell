@@ -1,3 +1,15 @@
+struct proposal_data {
+    id: rowid;
+    timestamp: integer;
+    type: proposal_type;
+    proposed_by: pubkey;
+    description: text;
+    state: proposal_state;
+
+    /** If proposal is approved and the delay mechanism is enabled this will contain the time it will be applied  */
+    apply_at: timestamp?;
+}
+
 /**
  * Returns proposals by criteria.
  */
@@ -11,7 +23,7 @@ query get_proposals_range(from: timestamp, until: timestamp, only_pending: boole
 
 /**
  * Returns proposals by criteria.
- * 
+ *
  * @param my_pubkey pubkey of provider
  */
 query get_relevant_proposals(from: timestamp, until: timestamp, only_pending: boolean, my_pubkey: pubkey) {
@@ -27,16 +39,17 @@ query get_relevant_proposals(from: timestamp, until: timestamp, only_pending: bo
 /**
  * Returns proposals by rowId.
  */
-query get_proposal(id: rowid?): (id: rowid, timestamp: integer, type: proposal_type, proposed_by: pubkey, description: text, state: proposal_state)? {
+query get_proposal(id: rowid?): proposal_data? {
     val result = if (id == null) proposal @? {} (@sort_desc @omit .rowid, $) limit 1 else proposal @? { id };
     if (result == null) return null;
-    return (
+    return proposal_data(
         id = result.rowid,
         timestamp = result.timestamp,
         type = result.proposal_type,
         proposed_by = result.proposed_by.pubkey,
         description = result.description,
-        state = result.state
+        state = result.state,
+        apply_at = get_delayed_event_time(delay_type.PROPOSAL, result.rowid),
     );
 }
 

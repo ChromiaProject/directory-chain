@@ -1,0 +1,99 @@
+@test module;
+
+import ^^.*;
+import ^.helper_operations.*;
+
+function test_add_and_delete_delay_event() {
+
+    rell.test.tx().op(
+        add_delayed_event_op(delay_type.PROPOSAL, 100, rowid(1))
+    ).run();
+
+    assert_true(exists(delayed_event @? { .type == delay_type.PROPOSAL, .ref_id == rowid(1)}));
+
+    rell.test.tx().op(
+        delete_delayed_event_op(delay_type.PROPOSAL, rowid(1))
+    ).run();
+
+    assert_true(empty(delayed_event @? { .type == delay_type.PROPOSAL, .ref_id == rowid(1)}));
+}
+
+function test_add_and_run_delay_event() {
+
+    rell.test.set_next_block_time(1);
+    rell.test.tx().op(
+        add_delayed_event_op(delay_type.PROPOSAL, 100, rowid(1))
+    ).run();
+
+    // Trigger time will be 99 due to first "last block time" is -1
+    assert_true(exists(delayed_event @? { .type == delay_type.PROPOSAL, .time == 99, .ref_id == rowid(1)}));
+
+    rell.test.set_next_block_time_delta(50);
+    rell.test.block().run();
+
+    // Still not executed and removed
+    assert_true(exists(delayed_event @? { .type == delay_type.PROPOSAL, .ref_id == rowid(1)}));
+
+    rell.test.set_next_block_time_delta(50);
+    rell.test.tx().op(
+        delete_delayed_event_op(delay_type.PROPOSAL, rowid(1))
+    ).run();
+
+    assert_true(empty(delayed_event @? { .type == delay_type.PROPOSAL, .ref_id == rowid(1)}));
+}
+
+function test_pause_and_unpause_delayed_event() {
+
+    val init_time = 5000000;
+
+    // Set time and delta for each block built
+    rell.test.set_next_block_time(init_time);
+    rell.test.block().run();
+
+    // Add delayed event
+    rell.test.set_next_block_time_delta(5);
+    rell.test.tx().op(
+        add_delayed_event_op(delay_type.PROPOSAL, 100, rowid(1))
+    ).run();
+
+    // Trigger time will be 99 due to first "last block time" is -1
+    assert_true(exists(delayed_event @? { .type == delay_type.PROPOSAL, .time == init_time + 100, .ref_id == rowid(1)}));
+
+    // Lets pause
+    rell.test.set_next_block_time_delta(5);
+    rell.test.tx().op(
+        set_delayed_event_state_op(delay_type.PROPOSAL, rowid(1), false)
+    ).run();
+
+    // Trigger time should not be set to the time left, not the actual execution time. Time left should be 95ms
+    assert_true(exists(delayed_event @? { .type == delay_type.PROPOSAL, .time == 95, .ref_id == rowid(1)}));
+
+    // Pausing for some time now
+    rell.test.set_next_block_time_delta(4000000);
+    rell.test.block().run();
+
+    // Since event is still paused, nothing has changed
+    assert_true(exists(delayed_event @? { .type == delay_type.PROPOSAL, .time == 95, .ref_id == rowid(1)}));
+
+    // Lets unpause
+    rell.test.set_next_block_time_delta(5);
+    rell.test.tx().op(
+        set_delayed_event_state_op(delay_type.PROPOSAL, rowid(1), true)
+    ).run();
+
+    // Now the delayed event should have the actual time set for when to be triggered
+
+    assert_true(exists(delayed_event @? { .type == delay_type.PROPOSAL,
+        .time == init_time + 4000000 + 100 + 5, .ref_id == rowid(1)}));
+
+    // Wait 90ms - no trigger - should be 5ms left
+    rell.test.set_next_block_time_delta(90);
+    rell.test.block().run();
+    assert_true(exists(delayed_event @? { .type == delay_type.PROPOSAL,
+        .time == init_time + 4000000 + 100 + 5, .ref_id == rowid(1)}));
+
+    // Wait 5ms - the delayed event should have been waiting a total of 100ms now and be triggered
+    rell.test.set_next_block_time_delta(5);
+    rell.test.block().run();
+    assert_false(exists(delayed_event @? { .type == delay_type.PROPOSAL, .ref_id == rowid(1)}));
+}
