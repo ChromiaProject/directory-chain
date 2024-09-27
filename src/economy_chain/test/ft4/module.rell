@@ -1,0 +1,20 @@
+// Copied from https://bitbucket.org/chromawallet/ft3-lib/src/development/rell/src/lib/ft4/test/core/module.rell
+
+@test module;
+
+import .accounts.*;
+import .auth.*;
+import .assets.*;
+
+/**
+ * Returns the transaction that was stored in the latest block that was built.
+ * 
+ * Note: this function would typically fail as there could potentially be many
+ * transactions within a single block. However, since this function is only
+ * available in a test context, where there is an implicit one to one mapping
+ * between blocks and transactions, it works as advertised.
+ */
+function get_last_transaction(): transaction {
+    val last_block = block @ {} (@omit @sort_desc .block_height, $) limit 1;
+    return transaction @ { last_block };
+}

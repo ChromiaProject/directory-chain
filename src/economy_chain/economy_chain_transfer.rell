@@ -1,0 +1,152 @@
+import lib.ft4.accounts;
+import lib.ft4.assets;
+import lib.ft4.crosschain;
+import lib.ft4.auth;
+
+val MEMO_MAX_LENGTH = 50;
+
+entity memo_account {
+    key accounts.account;
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(enable_transfer_memo).mount_name,
+    flags = ["A"],
+    message = enable_transfer_memo_auth_message(*)
+);
+
+function enable_transfer_memo_auth_message(gtv) {
+    return "Please sign the message\nto enable transfer memo for this account\nand start refusing transfers without a memo\n";
+}
+
+/**
+ * Enable transfer memos for this FT4 account.
+ */
+operation enable_transfer_memo() {
+    val account = auth.authenticate();
+    require(not account_require_memo(account), "Memo is already enabled for this account");
+    create memo_account(account);
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(disable_transfer_memo).mount_name,
+    flags = ["A"],
+    message = disable_transfer_memo_auth_message(*)
+);
+
+function disable_transfer_memo_auth_message(gtv) {
+    return "Please sign the message\nto disable transfer memo for this account\nand stop accepting transfers with a memo\n";
+}
+
+/**
+ * Disable transfer memos for this FT4 account.
+ */
+operation disable_transfer_memo() {
+    val account = auth.authenticate();
+    require(account_require_memo(account), "Memo is not enabled for this account");
+    delete memo_account @ { account };
+}
+
+/**
+ * Check if an FT4 account requires memo when transferring assets to it.
+ */
+query does_account_require_memo(account_id: byte_array): boolean {
+    val account = accounts.Account(account_id);
+    return account_require_memo(account);
+}
+
+function account_require_memo(accounts.account): boolean = exists(memo_account @? { account });
+
+function account_id_require_memo(account_id: byte_array): boolean = exists(memo_account @? { .account.id == account_id });
+
+@extend(assets.before_transfer)
+function (from: accounts.account, to: accounts.account, assets.asset, amount: big_integer) {
+    if (account_require_memo(to)) {
+        val all_ops = op_context.get_all_operations();
+        val curr_idx = op_context.op_index;
+
+        // for all preceding operations in the transaction
+        for (i in range(curr_idx - 1, -1, -1)) {
+            // fetch the operation
+            val prev_op = all_ops[i];
+
+            // auth ops must be in between memo and transfer, could be one or two
+            if (not auth.is_auth_op(prev_op)) {
+                // before any auth ops, there must be memo
+                require(
+                    prev_op.name == rell.meta(memo).mount_name,
+                    "Transfers to account %s require a memo".format(to.id)
+                );
+
+                // we're done, all is good
+                return;
+            }
+        }
+
+        // if we still didn't find the transfer, throw
+        require(false, "Transfers to account %s require a memo".format(to.id));
+    }
+}
+
+@extend(crosschain.before_apply_transfer)
+function (
+    sender_blockchain_rid: byte_array,
+    sender_account_id: byte_array,
+    recipient_id: byte_array,
+    assets.asset,
+    amount: big_integer,
+    hop_index: integer,
+    is_final: boolean,
+) {
+    require(not(account_id_require_memo(recipient_id) and is_final),
+        "Cannot cross-chain transfer to memo account %s".format(recipient_id));
+}
+
+/**
+ * Add a memo to an FT4 transfer.
+ *
+ * Can only be used in a transaction with an `ft4.transfer` operation,
+ * and only when the recipient account has memo enabled.
+ *
+ * @param text  memo text, has to be at least 1 character and at most 50 characters
+ */
+operation memo(text) {
+    require(text.size() > 0, "Memo cannot be empty");
+    require(text.size() <= MEMO_MAX_LENGTH, "Memo is too long, only %d characters allowed".format(MEMO_MAX_LENGTH));
+
+    val all_ops = op_context.get_all_operations();
+    val curr_idx = op_context.op_index;
+
+    // for all subsequent operations in the transaction
+    for (i in range(curr_idx + 1, all_ops.size())) {
+        // there must be an operation - at least transfer
+        require(
+            all_ops.size() > i,
+            "Operation memo can only be used in transfers to memo account"
+        );
+        // fetch the operation
+        val next_op = all_ops[i];
+
+        // auth ops must be in between memo and transfer, could be one or two
+        if (not auth.is_auth_op(next_op)) {
+            // after any auth ops, there must be transfer
+            require(
+                next_op.name == rell.meta(assets.external.transfer).mount_name,
+                "Operation memo can only be used in transfers to memo account"
+            );
+            // transfer must be towards memo account
+            val recipient_id = byte_array.from_gtv(next_op.args[0]);
+            require(
+                account_id_require_memo(recipient_id),
+                "Operation memo can only be used in transfers to memo account"
+            );
+            // we're done, all is good
+            return;
+        }
+    }
+
+    // if we still didn't find the transfer, throw
+    require(false, "Operation memo can only be used in transfers to memo account");
+}

@@ -1,0 +1,180 @@
+// Copied from https://bitbucket.org/chromawallet/ft3-lib/src/development/rell/src/lib/ft4/test/core/auth.rell
+
+@test module;
+
+import lib.ft4.auth;
+import lib.ft4.admin;
+import lib.ft4.core.accounts;
+import lib.ft4.accounts.strategies;
+import lib.ft4.accounts.strategies.open;
+import lib.ft4.utils.{ derive_nonce };
+import test_accounts: ^.accounts;
+
+struct module_args {
+    admin_priv_key: byte_array? = null;
+}
+
+/**
+ * Returns the pubkey configured in the `module_args` field of this module.
+ */
+function admin_priv_key() = chain_context.args.admin_priv_key!!;
+
+/**
+ * Creates an `ft_auth` operation for a specific signer.
+ * If more than one auth descriptor exists for the signer, first one found is chosen.
+ * 
+ * @param signer    the public key of the keypair that will be used to sign the transaction in which this operation is contained
+ */
+function ft_auth_operation_for(signer: byte_array) {
+    val descriptor = require(
+        accounts.auth_descriptor_signer @? { signer }.account_auth_descriptor limit 1,
+        "No auth descriptor found for signer %s".format(signer)
+    );
+
+    return auth.external.ft_auth(descriptor.account.id, descriptor.id);
+}
+
+/**
+ * Creates an `evm_auth` operation by signing an operation using [evm_sign].
+ * The associated account is derived from the evm privkey.
+ * If more than one auth_descriptor exists the first one will be chosen.
+ * 
+ * @param evm_privkey   the private key that will be used to sign the operation
+ * @param op            the operation to sign
+ */
+function evm_auth_operation_for(evm_privkey: byte_array, op: rell.test.op) {
+    val evm_address = crypto.eth_privkey_to_address(evm_privkey);
+    val descriptor = require(
+        accounts.auth_descriptor_signer @? { evm_address }.account_auth_descriptor limit 1,
+        "No auth descriptor found for address %s".format(evm_address)
+    );
+    val evm_message = create_evm_auth_message_for_account(op, descriptor, descriptor.ctr);
+    val evm_signature = evm_sign(evm_message, evm_privkey);
+    return auth.external.evm_auth(descriptor.account.id, descriptor.id, [evm_signature]);
+}
+
+/**
+ * Create the message to be signed with [evm_sign].
+ * 
+ * @param op            the operation that this message is regarding
+ * @param descriptor    the auth descriptor that will be used to sign this message
+ * @param ctr           current counter value of the auth descriptor
+ */
+function create_evm_auth_message_for_account(
+        op: rell.test.op,
+        descriptor: accounts.account_auth_descriptor,
+        ctr: integer = 0
+) = auth.create_message_from_template(
+        auth.evm_auth_args(
+            account = descriptor.account,
+            descriptor,
+            signatures = []
+        ),
+        auth.get_auth_message_template(op.name, op.args.to_gtv()),
+        op.args,
+        derive_nonce(op.to_gtx_operation(), ctr)
+    );
+
+/**
+ * Create the message to be signed with [evm_sign].
+ * 
+ * @param op                the operation which the generated message is concerning
+ * 
+ * @param evm_account_data  if the message tempate contains an account id and auth descriptor id placeholder,
+ *                          this value will be used to populate those placeholders. If not provided, these placeholders will remain untouched.
+ *
+ * @param ctr               the counter value of the auth descriptor which will be used to sign the message.
+ *                          Only required if `account_data` parameter is passed and that auth descriptor has a counter value other than 0.
+ */
+function create_evm_auth_message(op: rell.test.op, test_accounts.evm_account_data? = null, ctr: integer = 0) {
+    val message = auth.get_auth_message_template(op.name, op.args.to_gtv())
+        .replace(
+            auth.BLOCKCHAIN_RID_PLACEHOLDER,
+            chain_context.blockchain_rid.to_hex().upper_case()
+        )
+        .replace(auth.NONCE_PLACEHOLDER, derive_nonce(op.to_gtx_operation(), ctr));
+
+    if (not empty(evm_account_data)) {
+        return message.
+            replace(auth.ACCOUNT_ID_PLACEHOLDER, evm_account_data.account.id.to_hex().upper_case())
+            .replace(auth.AUTH_DESCRIPTOR_ID_PLACEHOLDER, evm_account_data.auth_descriptor_id.to_hex().upper_case());
+    }
+
+    return message;
+}
+
+/**
+ * Signs a message using an EVM key.
+ * 
+ * @see create_evm_auth_message for an easy way to create auth messages
+ * 
+ * @param message       the message to sign
+ * @param evm_privkey   the key to use when signing the message
+ * 
+ * @return the signature on (r, s, v) form. Where `v` value is either 26 or 27
+ */
+function evm_sign(message: text, evm_privkey: byte_array): auth.signature {
+    val sig = crypto.eth_sign(
+            auth._evm_message_hash(message),
+            evm_privkey
+        );
+
+    return auth.signature(
+        r=sig[0],
+        s=sig[1],
+        v=sig[2] + 27
+    );
+}
+
+/**
+ * Inserts an `ft_auth` operation before the provided operation, allowing
+ * it to be passed to a transaction which is signed using ft signatures. 
+ * 
+ * @param account_id            the account which the operation should be authorized against
+ * @param auth_descriptor_id    the id of the auth descriptor which will be used to authenticate the operation
+ * @param op                    the operation to authorize
+ * 
+ * @return an array containing the ft_auth operation and the operation to authorize
+ */
+function ft_auth(
+    account_id: byte_array, 
+    auth_descriptor_id: byte_array, 
+    op: rell.test.op
+) = [
+    auth.external.ft_auth(account_id, auth_descriptor_id),
+    op
+];
+
+/**
+ * Inserts a signed `evm_auth` operation before the provided operation, allowing
+ * it to be passed to a transaction and be executed as it was already signed. 
+ * 
+ * @param keypair               the keypair that belongs to the auth descriptor that will sign the operation
+ * @param account_id            the account which the operation should be authorized against
+ * @param auth_descriptor_id    the id of the auth descriptor which will be used to authenticate the operation
+ * @param op                    the operation to authorize
+ * 
+ * @return an array containing the evm_auth operation and the operation to authorize
+ */
+function evm_auth(
+    rell.test.keypair,
+    account_id: byte_array,
+    auth_descriptor_id: byte_array,
+    op: rell.test.op
+) {
+    val message = auth.get_auth_message_template(op.name, op.args.to_gtv())
+        .replace(
+            auth.BLOCKCHAIN_RID_PLACEHOLDER,
+            chain_context.blockchain_rid.to_hex().upper_case()
+        )
+        .replace(auth.NONCE_PLACEHOLDER, derive_nonce(op.to_gtx_operation(), 0))
+        .replace(auth.ACCOUNT_ID_PLACEHOLDER, account_id.to_hex().upper_case())
+        .replace(auth.AUTH_DESCRIPTOR_ID_PLACEHOLDER, auth_descriptor_id.to_hex().upper_case());
+    
+    val signature = evm_sign(message, keypair.priv);
+
+    return [
+        auth.external.evm_auth(account_id, auth_descriptor_id, [signature]),
+        op
+    ];
+}
