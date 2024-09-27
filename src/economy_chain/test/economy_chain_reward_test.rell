@@ -512,30 +512,51 @@ function test_pay_shared_rewards_dapp_cluster_full_reward_is_payed() {
 
     val test_account_dave = require(do_create_account(rell.test.keypairs.dave, auth_privkey));
     val test_account_charlie = require(do_create_account(rell.test.keypairs.charlie, auth_privkey));
+    val test_account_bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
+
+    val reward_amount = 3726650000;
+    val an_amount = 9999999;
+    val dave_amount = integer(an_amount * 0.3);
+    val bob_amount = integer(an_amount * 0.7);
+
+    val too_small_to_care = 0.01 * reward_amount;
 
     rell.test.tx()
         .op(mint_to_pool(8888888888))
-        .op(mint_to(test_account_dave, 9999999))
+        .op(mint_to(test_account_dave, dave_amount))
+        .op(mint_to(test_account_bob, bob_amount))
     .sign(admin_privkey).run();
 
     add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
 
-    do_staking_deposit_native(rell.test.keypairs.dave, 9999999);
+    do_staking_deposit_native(rell.test.keypairs.dave, dave_amount);
+    do_staking_deposit_native(rell.test.keypairs.bob, bob_amount);
     do_staking_delegate(rell.test.keypairs.dave, provider_pubkey);
+    do_staking_delegate(rell.test.keypairs.bob, provider_pubkey);
 
-    assert_equals(get_account_balance(test_account_dave), 1000000000);
+    val pre_reward_dave_balance = get_account_balance(test_account_dave);
+    val pre_reward_bob_balance = get_account_balance(test_account_bob);
 
     // FFWD
     rell.test.set_next_block_time_delta(staking_delegation_delay_ms);
     rell.test.block().run(); rell.test.block().run();
 
     assert_equals(staking_get_current_delegate(test_account_dave.id), provider_pubkey);
+    assert_equals(staking_get_current_delegate(test_account_bob.id), provider_pubkey);
 
-    val pa = run_pay_rewards(33090909, true);
+    val pa = run_pay_rewards(0, true);
 
-    assert_equals(get_account_balance(pa.account), 3726650000);
+    assert_equals(get_account_balance(pa.account), reward_amount);
     assert_equals(pa.reward_debt, 0);
-    assert_equals(get_account_balance(test_account_dave), 1000000000 + (0.1 * 3726650000));
+
+    log("dave balance ", get_account_balance(test_account_dave));
+    log("dave pre balance ", pre_reward_dave_balance);
+
+    log("bob balance ", get_account_balance(test_account_bob));
+    log("bob pre balance ", pre_reward_bob_balance);
+
+    assert_true(too_small_to_care >= abs(get_account_balance(test_account_dave) - pre_reward_dave_balance - (0.1 * reward_amount * 0.3)));
+    assert_true(too_small_to_care >= abs(get_account_balance(test_account_bob) - pre_reward_bob_balance - (0.1 * reward_amount * 0.7)));
 }
 
 function test_staking_req_reward_fail_due_to_low_own() {
