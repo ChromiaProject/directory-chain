@@ -1,0 +1,154 @@
+@test module;
+
+import lib.ft4.accounts;
+import lib.ft4.assets;
+import ^^.*;
+import test: ^.ft4;
+import ^.helper_operations.*;
+
+val MEMO_ERROR = "Operation memo can only be used in transfers to memo account";
+val cluster_name = "test_cluster";
+
+function test_enable_and_disable_memo() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+
+    val eve = test.register_eve();
+
+    assert_false(does_account_require_memo(eve.account.id));
+
+    rell.test.tx()
+        .op(test.ft_auth_operation_for(eve.keypair.pub))
+        .op(disable_transfer_memo())
+        .sign(eve.keypair)
+        .run_must_fail("Memo is not enabled for this account");
+
+    rell.test.tx()
+        .op(test.ft_auth_operation_for(eve.keypair.pub))
+        .op(enable_transfer_memo())
+        .sign(eve.keypair)
+        .run();
+
+    assert_true(does_account_require_memo(eve.account.id));
+
+    rell.test.tx()
+        .op(test.ft_auth_operation_for(eve.keypair.pub))
+        .op(enable_transfer_memo())
+        .nop()
+        .sign(eve.keypair)
+        .run_must_fail("Memo is already enabled for this account");
+
+    rell.test.tx()
+        .op(test.ft_auth_operation_for(eve.keypair.pub))
+        .op(disable_transfer_memo())
+        .sign(eve.keypair)
+        .run();
+
+    assert_false(does_account_require_memo(eve.account.id));
+}
+
+function test_transfer_to_memo_account_succeeds_with_memo() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+
+    val alice = test.register_alice();
+    val eve = test.register_eve();
+    rell.test.tx()
+        .op(test.ft_auth_operation_for(eve.keypair.pub))
+        .op(enable_transfer_memo())
+        .sign(eve.keypair)
+        .run();
+
+    val asset = test.create_asset("test", "TEST", 1);
+    test.mint(alice.account, asset, 10);
+
+    rell.test.tx()
+        .op(memo("some memo"))
+        .op(test.ft_auth_operation_for(alice.keypair.pub))
+        .op(assets.external.transfer(eve.account.id, asset.id, 9))
+        .sign(alice.keypair)
+        .run();
+}
+
+function test_transfer_to_regular_account_succeeds_without_memo() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+
+    val alice = test.register_alice();
+    val bob = test.register_bob();
+
+    val asset = test.create_asset("test", "TEST", 1);
+    test.mint(alice.account, asset, 10);
+
+    rell.test.tx()
+        .op(test.ft_auth_operation_for(alice.keypair.pub))
+        .op(assets.external.transfer(bob.account.id, asset.id, 9))
+        .sign(alice.keypair)
+        .run();
+}
+
+function test_transfer_to_memo_account_fails_without_memo() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+
+    val alice = test.register_alice();
+    val eve = test.register_eve();
+    rell.test.tx()
+        .op(test.ft_auth_operation_for(eve.keypair.pub))
+        .op(enable_transfer_memo())
+        .sign(eve.keypair)
+        .run();
+
+    val asset = test.create_asset("test", "TEST", 1);
+    test.mint(alice.account, asset, 10);
+
+    rell.test.tx()
+        .op(test.ft_auth_operation_for(alice.keypair.pub))
+        .op(assets.external.transfer(eve.account.id, asset.id, 9))
+        .sign(alice.keypair)
+        .run_must_fail("Transfers to account %s require a memo".format(eve.account.id));
+}
+
+function test_transfer_to_regular_account_fails_with_memo() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+
+    val alice = test.register_alice();
+    val bob = test.register_bob();
+
+    val asset = test.create_asset("test", "TEST", 1);
+    test.mint(alice.account, asset, 10);
+
+    rell.test.tx()
+        .op(memo("some memo"))
+        .op(test.ft_auth_operation_for(alice.keypair.pub))
+        .op(assets.external.transfer(bob.account.id, asset.id, 9))
+        .sign(alice.keypair)
+        .run_must_fail(MEMO_ERROR);
+}
+
+function test_memo_fails_without_transfer() {
+    val alice = test.register_alice();
+
+    rell.test.tx()
+        .op(memo("some memo"))
+        .sign(alice.keypair)
+        .run_must_fail(MEMO_ERROR);
+}
+
+function test_memo_fails_with_only_auth() {
+    val alice = test.register_alice();
+
+    rell.test.tx()
+        .op(memo("some memo"))
+        .op(test.ft_auth_operation_for(alice.keypair.pub))
+        .sign(alice.keypair)
+        .run_must_fail(MEMO_ERROR);
+}
+
+function test_memo_fails_with_empty_text() {
+    rell.test.tx()
+        .op(memo(""))
+        .run_must_fail("Memo cannot be empty");
+}
+
+function test_memo_fails_with_too_long_text() {
+    rell.test.tx()
+        .op(memo("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc mattis interdum sapien quis pellentesque. Ut augue ligula, efficitur ut neque non, posuere aliquet ante. Nulla sed erat non lacus gravida euismod ac vel sem."))
+        .run_must_fail("Memo is too long");
+}
