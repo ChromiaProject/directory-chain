@@ -53,9 +53,10 @@ function () = ft4.auth.add_auth_handler(
 
 function register_dapp_provider_with_payment_auth_message(gtv) {
     val args = struct<register_dapp_provider_with_payment>.from_gtv(gtv);
-    return "Please sign the message\nto add dapp provider with public key %s\ncosting %s".format(
+    return "Please sign the message\nto add dapp provider with public key %s\ncosting %s %s".format(
         args.new_provider,
-        chain_context.args.dapp_provider_creation_cost
+        ft4.assets.format_amount_with_decimals(chain_context.args.dapp_provider_creation_cost, chain_context.args.asset_decimals),
+        chain_context.args.asset_symbol
     );
 }
 
@@ -128,3 +129,5 @@ query get_provider_account_id(provider_pubkey: pubkey): byte_array? {
     val account = provider_account @? { provider }.account;
     return account?.id;
 }
+
+query get_dapp_provider_creation_cost() = chain_context.args.dapp_provider_creation_cost;
