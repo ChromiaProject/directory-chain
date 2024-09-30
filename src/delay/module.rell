@@ -19,7 +19,7 @@ entity delayed_event {
     type: delay_type;
 
     /** Reference id do distinguish callbacks of the same type */
-    ref_id: rowid;
+    ref_id: integer;
 
     /** When event is active this is the time to be triggered, otherwise the time left until it should be triggered */
     index mutable time: timestamp;
@@ -31,7 +31,7 @@ entity delayed_event {
 /**
  * Extendable callback function. Is called at the time of the event.
  */
-@extendable function delayed_event_callback(): map<delay_type, (rowid) -> unit>;
+@extendable function delayed_event_callback(): map<delay_type, (integer) -> unit>;
 
 @extend(before_begin_block)
 function begin_block_delay(height: integer) {
@@ -50,11 +50,11 @@ function begin_block_delay(height: integer) {
     }
 }
 
-function get_delayed_event_time(type: delay_type, ref_id: rowid) {
+function get_delayed_event_time(type: delay_type, ref_id: integer) {
     return delayed_event @? { type, .ref_id == ref_id } ( .time );
 }
 
-function delete_delayed_event(type: delay_type, ref_id: rowid) {
+function delete_delayed_event(type: delay_type, ref_id: integer) {
 
     val event = delayed_event @? { .type == type, .ref_id == ref_id };
 
@@ -70,9 +70,9 @@ function delete_delayed_event(type: delay_type, ref_id: rowid) {
  * @param delay Time to delay event in milliseconds.
  * @param ref_id Reference id to keep track of the delayed event in callback.
  */
-function add_delayed_event(type: delay_type, delay: integer, ref_id: rowid) {
+function add_delayed_event(type: delay_type, delay: integer, ref_id: integer) {
 
-    val event = create delayed_event(type, op_context.last_block_time + delay, ref_id);
+    val event = create delayed_event(type, time = op_context.last_block_time + delay, ref_id = ref_id);
 
     log("Delay event created for %s in %sms and ref id %s. Will be run at %s".format(type, delay, ref_id, event.time));
 }
@@ -80,7 +80,7 @@ function add_delayed_event(type: delay_type, delay: integer, ref_id: rowid) {
 /**
  * Pause/unpause scheduled event.
  */
-function set_delayed_event_state(type: delay_type, ref_id: rowid, active: boolean) {
+function set_delayed_event_state(type: delay_type, ref_id: integer, active: boolean) {
 
     val event = delayed_event @? { .type == type, .ref_id == ref_id };
 

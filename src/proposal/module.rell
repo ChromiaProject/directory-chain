@@ -86,7 +86,7 @@ operation revoke_proposal(my_pubkey: pubkey, proposal_rowid: rowid) {
 
     require(
         prop.state == proposal_state.PENDING or
-        (prop.state == proposal_state.APPROVED and get_delayed_event_time(delay_type.PROPOSAL, prop.rowid) != null),
+        (prop.state == proposal_state.APPROVED and get_delayed_event_time(delay_type.PROPOSAL, prop.rowid.to_integer()) != null),
         "The proposal is already %s".format(prop.state));
     require(prop.proposed_by == me, "It is only allowed to revoke own proposals");
     prop.state = proposal_state.REVOKED;
@@ -99,7 +99,7 @@ function create_proposal(proposal_type, proposed_by: provider, deployer: voter_s
 }
 
 function delete_proposal(prop: proposal) {
-    delete_delayed_event(delay_type.PROPOSAL, prop.rowid);
+    delete_delayed_event(delay_type.PROPOSAL, prop.rowid.to_integer());
     delete_proposal_handlers()[prop.proposal_type.name](prop);
 }
 
@@ -111,7 +111,7 @@ function delete_proposal(prop: proposal) {
 function set_blockchain_proposal_delay_states(blockchain, active: boolean) {
 
     for (proposal_id in get_blockchain_proposal_delay_ids(blockchain)) {
-        set_delayed_event_state(delay_type.PROPOSAL, proposal_id, active);
+        set_delayed_event_state(delay_type.PROPOSAL, proposal_id.to_integer(), active);
     }
 }
 
