@@ -99,7 +99,7 @@ function fetch_blocks_and_calculate_node_availability(start_time: integer, end_t
         (@sort @omit .timestamp, .blockchain_rid, .witness,
             primary_extra_header = block_header.from_gtv(gtv.from_bytes(.block_header)).extra.get_or_null(PRIMARY_HEADER_KEY)
         );
-    log("Fetched %d blocks from DB".format(anchored_blocks.size()));
+    log("Fetched %d blocks from DB for availability calculation".format(anchored_blocks.size()));
     val report = calculate_node_availability(anchored_blocks, block_range_size);
     log("Node availability calculation completed");
     return report;
@@ -156,16 +156,20 @@ function send_node_availability_report() {
     val node_availability_report = node_availability_report(
         start_time = node_availability_report_stat.last_node_availability_report,
         end_time = op_context.last_block_time,
-        node_availability = fetch_aggregated_node_availability(),
+        node_availability = fetch_aggregated_node_availability(
+            node_availability_report_stat.last_node_availability_report, op_context.last_block_time
+        ),
     );
     send_message(node_availability_report_topic, node_availability_report.to_gtv());
     clean_up_node_availabiliy();
 }
 
-function fetch_aggregated_node_availability(): map<byte_array, decimal> {
+function fetch_aggregated_node_availability(start_time: integer, end_time: integer): map<byte_array, decimal> {
+    log("Aggregating node availability, between timestamps %d and %d".format(start_time, end_time));
     val all_node_availabilities = node_availability @* { }
         (@sort @omit .start_time, map<byte_array, decimal>.from_gtv(gtv.from_bytes(.node_availability_map)));
 
+    log("Fetched %d ranges from DB for availability aggregation".format(all_node_availabilities.size()));
     val aggregated_node_availability = map<byte_array, decimal>();
     for (node_availability in all_node_availabilities) {
         for (node in node_availability.keys()) {
@@ -175,6 +179,7 @@ function fetch_aggregated_node_availability(): map<byte_array, decimal> {
     for ((node, availability) in aggregated_node_availability) {
         aggregated_node_availability[node] /= all_node_availabilities.size();
     }
+    log("Node availability aggregation completed");
 
     return aggregated_node_availability;
 }
