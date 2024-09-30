@@ -15,7 +15,7 @@ import lib.auth;
 struct module_args {
     auth_privkey: byte_array;
     admin_privkey: byte_array;
-    dapp_provider_creation_cost: integer = 10;
+    dapp_provider_creation_cost: integer = 10000000;
 }
 
 val auth_privkey = chain_context.args.auth_privkey;
@@ -149,4 +149,16 @@ function test_register_dapp_provider_with_payment() {
     ).to_gtv_pretty()));
 
     assert_equals(get_account_balance(alice), initial_balance - chain_context.args.dapp_provider_creation_cost);
+}
+
+function test_dapp_provider_creation_auth_messages() {
+    assert_equals(
+        register_dapp_provider_auth_message(["test".to_gtv(), rell.test.keypairs.alice.pub.to_gtv()].to_gtv()),
+        "Please sign the message\nto add dapp provider to container lease test\nwith public key %s\n".format(rell.test.keypairs.alice.pub)
+    );
+
+    assert_equals(
+        register_dapp_provider_with_payment_auth_message([rell.test.keypairs.alice.pub.to_gtv()].to_gtv()),
+        "Please sign the message\nto add dapp provider with public key %s\ncosting 10.000000 tCHR".format(rell.test.keypairs.alice.pub)
+    );
 }
