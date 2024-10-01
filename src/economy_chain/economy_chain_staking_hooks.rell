@@ -16,9 +16,12 @@ function(pay_reward_result) {
 function __staking_begin_block(height: integer) {
     if (
         (_staking_last_known_time() - _staking_state.last_reward_distribution) > chain_context.args.staking_rewards_payout_interval_ms
+        or
+        // if all batches are not done, call payout
+        (height-_staking_state.reward_distribution_block) < _staking_state.reward_distribution_batches
     ) {
         log("Scheduled staking reward distribution started.");
-        if (not try_call(__staking_begin_block_reward_payouts(*))) log("Failed staking reward distribution.");
+        if (not try_call(__staking_begin_block_reward_payouts(height, *))) log("Failed staking reward distribution.");
         log("Scheduled staking reward distribution ended.");
     }
     if (
@@ -28,9 +31,13 @@ function __staking_begin_block(height: integer) {
     }
 }
 
-function __staking_begin_block_reward_payouts() : unit {
-    _staking_distribute_rewards();
-    _staking_state.last_reward_distribution = _staking_last_known_time();
+function __staking_begin_block_reward_payouts(height: integer): unit {
+    _staking_distribute_rewards(height);
+    if (height - _staking_state.reward_distribution_block > _staking_state.reward_distribution_batches) {
+        // if its the first batch, set the last reward distribution time
+        _staking_state.last_reward_distribution = _staking_last_known_time();
+        _staking_state.reward_distribution_block = height;
+    }
 }
 
 function __staking_begin_block_withdrawals() : unit {

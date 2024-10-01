@@ -256,10 +256,7 @@ function _staking_clear_upcoming_delegations(ft4.accounts.account) {
     delete staker_state_to_provider @* { .staker_state.account == account and .timestamp > _staking_last_known_time()};  
 }
 
-
-// Rewards
-
-function _staking_distribute_rewards() {
+function _staking_distribute_rewards(block_height: integer) {
     val rate = staking_get_current_rate() / millis_per_year;
 
     // Get a list of payouts
@@ -272,6 +269,13 @@ function _staking_distribute_rewards() {
         ) * rate * units_per_asset
         )
     );
+
+    val n_batch = block_height - _staking_state.reward_distribution_block;
+
+    val current_batch = rewards @* {
+        (integer.from_hex(.account.id.to_hex().sub(4))%_staking_state.reward_distribution_batches) == n_batch
+    };
+
 
     val total_amount = rewards @ {} (@sum .amount);
     log("Preparing to distribute %s rewards worth %s".format(rewards.size(), total_amount));
