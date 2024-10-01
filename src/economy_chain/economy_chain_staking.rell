@@ -256,12 +256,15 @@ function _staking_clear_upcoming_delegations(ft4.accounts.account) {
     delete staker_state_to_provider @* { .staker_state.account == account and .timestamp > _staking_last_known_time()};  
 }
 
-function _staking_distribute_rewards(block_height: integer) {
+// default to -1, meaning batching is not used
+function _staking_distribute_rewards(n_batch: integer = -1) {
     val rate = staking_get_current_rate() / millis_per_year;
 
     // Get a list of payouts
-    _update_pending_token_time_all();
-    val rewards = staker_state @* { } (
+    if (n_batch == 0) {
+        _update_pending_token_time_all();
+    }
+    var rewards = staker_state @* { } (
         @group account = .account,
         @sum amount = integer (
             (
@@ -270,14 +273,14 @@ function _staking_distribute_rewards(block_height: integer) {
         )
     );
 
-    val n_batch = block_height - _staking_state.reward_first_distribution_block;
+    if (n_batch != -1) {
+        rewards = rewards @* {
+            (integer.from_hex(.account.id.to_hex().sub(4))%_staking_state.reward_distribution_batches) == n_batch
+        };
+    }
 
-    val current_rewards_batch = rewards @* {
-        (integer.from_hex(.account.id.to_hex().sub(4))%_staking_state.reward_distribution_batches) == n_batch
-    };
-
-    val total_amount = current_rewards_batch @ { } ( @sum .amount );
-    log("Preparing to distribute %s rewards worth %s".format(current_rewards_batch.size(), total_amount));
+    val total_amount = rewards @ { } ( @sum .amount );
+    log("Preparing to distribute %s rewards worth %s".format(rewards.size(), total_amount));
 
     // Do not start what we cannot finish
     val pool = get_pool_account();
@@ -293,7 +296,7 @@ function _staking_distribute_rewards(block_height: integer) {
 
     // Send payouts
     var payments = list<struct<staking_payment>>();
-    for ((account, amount) in current_rewards_batch) {
+    for ((account, amount) in rewards) {
 
         /// @dev This can be removed once Rell supports a HAVING equivalent.
         if (integer(amount) == 0) {
