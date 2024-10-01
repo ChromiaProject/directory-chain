@@ -272,13 +272,12 @@ function _staking_distribute_rewards(block_height: integer) {
 
     val n_batch = block_height - _staking_state.reward_distribution_block;
 
-    val current_batch = rewards @* {
+    val current_rewards_batch = rewards @* {
         (integer.from_hex(.account.id.to_hex().sub(4))%_staking_state.reward_distribution_batches) == n_batch
     };
 
-
-    val total_amount = rewards @ {} (@sum .amount);
-    log("Preparing to distribute %s rewards worth %s".format(rewards.size(), total_amount));
+    val total_amount = current_rewards_batch @ { } ( @sum .amount );
+    log("Preparing to distribute %s rewards worth %s".format(current_rewards_batch.size(), total_amount));
 
     // Do not start what we cannot finish
     val pool = get_pool_account();
@@ -294,7 +293,7 @@ function _staking_distribute_rewards(block_height: integer) {
 
     // Send payouts
     var payments = list<struct<staking_payment>>();
-    for ( (account, amount) in rewards ) {
+    for ((account, amount) in current_rewards_batch) {
 
         /// @dev This can be removed once Rell supports a HAVING equivalent.
         if (integer(amount) == 0) {
