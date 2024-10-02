@@ -2,7 +2,7 @@
  * Returns NM API Version
  * NM API Version: 1
  */
-query nm_api_version() = 20;
+query nm_api_version() = 21;
 
 /**
  * Returns peer info list
@@ -28,6 +28,20 @@ query nm_find_next_configuration_height(blockchain_rid: byte_array, height: inte
     if (conf_h == null) return sign_h;
     if (sign_h == null) return conf_h;
     return min(conf_h, sign_h);
+}
+
+/**
+ * Configuration updates are found in two tables. Both must be checked to get previous configuration height.
+ * NM API Version: 21
+ */
+query nm_find_previous_configuration_height(blockchain_rid: byte_array, height: integer): integer? {
+    val bc = blockchain @? { blockchain_rid };
+    if (bc == null) return null;
+    val conf_h = blockchain_configuration @? { bc, .height < height } (@sort_desc .height) limit 1;
+    val sign_h = blockchain_configuration_signers @? { bc, .height < height } (@sort_desc .height) limit 1;
+    if (conf_h == null) return sign_h;
+    if (sign_h == null) return conf_h;
+    return max(conf_h, sign_h);
 }
 
 /**
