@@ -39,7 +39,12 @@ function __staking_begin_block_reward_payouts(height: integer): unit {
         _staking_state.reward_first_distribution_block = height;
 
         var total_staker_states = staker_state @* { } ( @group account = .account ).size();
-        _staking_state.reward_distribution_batches = total_staker_states / 1000 + 1; // NOTE Change to config variable
+        _staking_state
+            .reward_distribution_batches = (
+            total_staker_states / chain_context
+                .args
+                .staking_rewards_payout_batch_size
+        ) + 1;
         n_batch = 0;
     }
     _staking_distribute_rewards(n_batch);
