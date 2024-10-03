@@ -96,19 +96,34 @@ query get_proposal_voter_info(rowid): list<proposal_voter> {
 struct blockchain_configuration_attempt_data {
     state: blockchain_configuration_update_state;
     applied_at_height: integer;
+    blockchain_rid: byte_array?;
 }
 
 /**
  * Returns blockchain configuration update attempt by tx rid.
  */
-query get_blockchain_configuration_update_attempt_state_by_tx_rid(tx_rid: byte_array): blockchain_configuration_attempt_data? =
-    blockchain_configuration_update_attempt @? { .proposal.transaction.tx_rid == tx_rid } (blockchain_configuration_attempt_data(.state, .applied_at_height));
+query get_blockchain_configuration_update_attempt_state_by_tx_rid(tx_rid: byte_array): blockchain_configuration_attempt_data? {
+    val attempt = blockchain_configuration_update_attempt @? { .proposal.transaction.tx_rid == tx_rid };
+    if (attempt == null) return null;
+    return blockchain_configuration_attempt_data(
+        attempt.state,
+        attempt.applied_at_height,
+        if (attempt.blockchain_rid.empty()) null else attempt.blockchain_rid
+    );
+}
 
 /**
  * Returns blockchain configuration update attempt by proposal.
  */
-query get_blockchain_configuration_update_attempt_state_by_proposal(rowid): blockchain_configuration_attempt_data? =
-    blockchain_configuration_update_attempt @? { .proposal.rowid == rowid } (blockchain_configuration_attempt_data(.state, .applied_at_height));
+query get_blockchain_configuration_update_attempt_state_by_proposal(rowid): blockchain_configuration_attempt_data? {
+    val attempt = blockchain_configuration_update_attempt @? { .proposal.rowid == rowid };
+    if (attempt == null) return null;
+    return blockchain_configuration_attempt_data(
+        attempt.state,
+        attempt.applied_at_height,
+        if (attempt.blockchain_rid.empty()) null else attempt.blockchain_rid
+    );
+}
 
 query get_proposal_ids_by_tx_rid(tx_rid: byte_array): list<rowid> {
     return proposal @* { .transaction.tx_rid == tx_rid } (.rowid);

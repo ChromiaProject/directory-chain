@@ -86,6 +86,8 @@ struct forced_configuration_data {
 
 /**
  * Returns forced blockchain configuration proposal.
+ *
+ * @deprecated use get_forced_configuration_proposal_v64 instead
  */
 query get_proposed_forced_configuration(rowid?): (
     current_conf: blockchain_configuration_data,
@@ -102,6 +104,35 @@ query get_proposed_forced_configuration(rowid?): (
     return (
         current_conf = blockchain_configuration_data(current.height, config.blockchain, current.config),
         forced_conf = config
+    );
+}
+
+struct forced_configuration_proposal_data {
+    blockchain_rid: byte_array;
+    current_height: integer;
+    current_configuration: byte_array;
+    proposed_height: integer;
+    proposed_configuration: byte_array;
+}
+
+/**
+ * Returns forced blockchain configuration proposal.
+ */
+query get_forced_configuration_proposal_v64(rowid?): forced_configuration_proposal_data? {
+    val proposal = get_latest_proposal(rowid, proposal_type.force_configuration);
+    if (proposal == null) return null;
+    val proposal_details = proposed_forced_configuration @? { require_proposal(proposal.rowid) }
+        (.blockchain, .height, config = decompress_configuration(.config_data));
+    if (proposal_details == null) return null;
+
+    val current = get_latest_blockchain_configuration_data(proposal_details.blockchain);
+
+    return forced_configuration_proposal_data(
+        blockchain_rid = proposal_details.blockchain.rid,
+        current_height = current.height,
+        current_configuration = current.config,
+        proposed_height = proposal_details.height,
+        proposed_configuration = proposal_details.config,
     );
 }
 
