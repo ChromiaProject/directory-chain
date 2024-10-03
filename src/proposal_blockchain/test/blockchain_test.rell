@@ -109,8 +109,48 @@ function test_blockchain_configuration_validation() {
         .run_must_fail("Some of the configured synchronization infrastructure extensions are not in the allowed set");
 }
 
+function test_propose_configuration() {
+    setup();
+    val bob = provider @ { rell.test.pubkeys.bob };
+    rell.test.tx().op(add_test_member(system_p_voter_set(), bob)).run();
+
+    var conf = apply_required_configuration_properties();
+    rell.test.tx().op(
+        create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub])
+    ).sign(initial_provider).run();
+
+    // NB: Proposing config at a specific chain for non-chain0 can not be tested due to limitations of Rell Test Framework
+    val directory_chain = blockchain @ { blockchains.directory_chain };
+
+    conf["nonce"] = (17).to_gtv();
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, directory_chain.rid, conf.to_gtv().to_bytes())
+    ).sign(initial_provider).run();
+    val cp = get_configuration_proposal_v64(null)!!;
+    assert_equals(cp.blockchain_rid, directory_chain.rid);
+    assert_equals(cp.current_height, 0);
+    assert_equals(cp.current_configuration,
+        decompress_configuration(blockchain_configuration @? { directory_chain, 0 } (.data)!!));
+    assert_equals(cp.proposed_configuration, conf.to_gtv().to_bytes());
+
+    val proposal_id = last_proposal().rowid;
+    rell.test.tx().op(
+        make_vote(bob.pubkey, proposal_id.to_integer(), true)
+    ).sign(rell.test.keypairs.bob).run();
+    val attempt = get_blockchain_configuration_update_attempt_state_by_proposal(proposal_id)!!;
+    assert_equals(attempt.state, blockchain_configuration_update_state.PENDING);
+    assert_equals(attempt.applied_at_height, -1);
+    assert_equals(attempt.blockchain_rid, directory_chain.rid);
+
+    val actual_config_bytes = pending_blockchain_configuration @ { directory_chain, 1 } (.base_config);
+    val actual_config = map<text, gtv>.from_gtv(gtv.from_bytes(actual_config_bytes));
+    assert_equals(actual_config["nonce"], (17).to_gtv());
+}
+
 function test_propose_configuration_at() {
-    setup_module();
+    setup();
+    val bob = provider @ { rell.test.pubkeys.bob };
+    rell.test.tx().op(add_test_member(system_p_voter_set(), bob)).run();
 
     var conf = apply_required_configuration_properties();
     rell.test.tx().op(
@@ -124,10 +164,21 @@ function test_propose_configuration_at() {
     // 1.1. at height 10
     conf["nonce"] = (10).to_gtv();
     propose_config_at(directory_chain.rid, conf, 10, false).run();
+    val cpa = get_configuration_proposal_at_v64(null)!!;
+    assert_equals(cpa.blockchain_rid, directory_chain.rid);
+    assert_equals(cpa.current_height, 0);
+    assert_equals(cpa.proposed_height, 10);
+    assert_equals(cpa.proposed_force, false);
+    assert_equals(cpa.current_configuration,
+        decompress_configuration(blockchain_configuration @? { directory_chain, 0 } (.data)!!));
+    assert_equals(cpa.proposed_configuration, conf.to_gtv().to_bytes());
+
+    bob_votes();
     assert_not_null(blockchain_configuration @? { directory_chain, 10 });
     // 1.2. before 10
     conf["nonce"] = (8).to_gtv();
     propose_config_at(directory_chain.rid, conf, 8, false).run();
+    bob_votes();
     assert_not_null(blockchain_configuration @? { directory_chain, 8 });
 
     // assert unique configurations
@@ -147,6 +198,7 @@ function test_propose_configuration_at() {
     var conf2 = apply_required_configuration_properties();
     conf2["name"] = "conf2".to_gtv();
     propose_config_at(directory_chain.rid, conf2, 8, true).run();
+    bob_votes();
     val actual_config_bytes = blockchain_configuration @ { directory_chain, 8 } (.data);
     val actual_config = map<text, gtv>.from_gtv(gtv.from_bytes(actual_config_bytes));
     assert_equals(actual_config["name"], "conf2".to_gtv());
@@ -171,10 +223,11 @@ function test_forced_configuration() {
     rell.test.tx().op(add_test_member(system_p_voter_set(), bob)).run();
 
     var conf = apply_required_configuration_properties();
+    val initial_configuration = conf.to_gtv().to_bytes();
     // Proposing blockchain to a non-system container
     rell.test.tx().op(
         create_container(alice.pubkey, container, clusters.system, 0, [alice.pubkey, bob.pubkey]),
-        propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "foo_chain", container)
+        propose_blockchain(alice.pubkey, initial_configuration, "foo_chain", container)
     ).sign(rell.test.keypairs.alice).run();
     bob_votes();
 
@@ -188,10 +241,12 @@ function test_forced_configuration() {
     conf["nonce"] = (10).to_gtv();
     conf["name"] = "testConf".to_gtv();
     force_config(bc.rid, conf, 10).run();
-    val pfc = get_proposed_forced_configuration(null);
-    assert_equals(pfc?.forced_conf?.proposal?.proposal_type, proposal_type.force_configuration);
-    assert_equals(pfc?.forced_conf?.height, 10);
-    assert_equals(pfc?.forced_conf?.blockchain, bc);
+    val fcp = get_forced_configuration_proposal_v64(null)!!;
+    assert_equals(fcp.blockchain_rid, bc.rid);
+    assert_equals(fcp.current_height, 0);
+    assert_equals(fcp.proposed_height, 10);
+    assert_equals(fcp.current_configuration, initial_configuration);
+    assert_equals(fcp.proposed_configuration, conf.to_gtv().to_bytes());
     bob_votes();
 
     val actual_config_bytes = blockchain_configuration @ { bc, 10 } (.data);
