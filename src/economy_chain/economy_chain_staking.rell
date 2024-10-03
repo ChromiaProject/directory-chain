@@ -300,7 +300,8 @@ function _staking_distribute_rewards(n_batch: integer = -1) {
             return;
         }
     }
-    update staker_state @* { } ( .pending_token_time = 0 );
+    val rewarded_accounts = rewards @* { } ( .account );
+    update staker_state @* { .account in rewarded_accounts } ( .pending_token_time = 0 );
 
     // Send payouts
     var payments = list<struct<staking_payment>>();

@@ -24,6 +24,7 @@ struct module_args {
     staking_rewards_payout_interval_ms: integer;
     staking_withdrawals_payout_interval_ms: integer;
     amount_to_mint: big_integer = 1000000000;
+    staking_rewards_payout_batch_size: integer = 1;
 }
 
 val auth_privkey = chain_context.args.auth_privkey;
@@ -689,6 +690,135 @@ function test_yield_and_payout_crudely () {
 
     // Everything paid up
     assert_equals(staking_rewards_for(test_account_bob.id), staking_get_rewards_paid(test_account_bob.id) + staking_rewards_claimable_for(test_account_bob.id));
+}
+
+function test_yield_and_batch_payout() {
+    log("Rate per year: ", staking_get_current_rate());
+
+    val too_small_to_care = 10 * units_per_asset;
+
+    // Basic initialisation
+    rell.test.tx()
+        .op(init())
+        .op(mint_to_pool(888 * units_per_asset))
+        .sign(admin_privkey).run();
+
+    val test_account_alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+
+    // Make Bob with an existing 100 BSC stake
+    val bob_evm_address = crypto.eth_pubkey_to_address(rell.test.keypairs.bob.pub);
+    do_evm_stake_update_bsc(bob_evm_address, 100 * units_per_asset);
+    val test_account_bob = require(do_create_account_using_ras_staking(rell.test.keypairs.bob));
+
+    val test_account_charlie = require(do_create_account(rell.test.keypairs.charlie, auth_privkey));
+
+    add_provider(rell.test.keypairs.charlie.pub);
+
+    rell.test.tx()
+        .op(mint_to(test_account_alice, 1000 * units_per_asset))
+        .sign(admin_privkey).run();
+
+    // Check no yield
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id), 0);
+    assert_equals(staking_rewards_claimable_for(test_account_bob.id), 0);
+    assert_equals(staking_rewards_claimable_for(test_account_charlie.id), 0);
+
+    // FFWD
+    rell.test.set_next_block_time_delta(millis_per_year);
+    rell.test.block().run();
+
+    // Check no yield
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id), 0);
+    assert_equals(staking_rewards_claimable_for(test_account_bob.id), 0);
+    assert_equals(staking_rewards_claimable_for(test_account_charlie.id), 0);
+
+    // Deposit 100 with A on native and stake to C
+    do_staking_deposit_native(rell.test.keypairs.alice, 100 * units_per_asset);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.charlie.pub);
+
+    // Deposit an additional 100 with B (total 200) on BSC+native and stake to C
+    do_staking_deposit_native(rell.test.keypairs.bob, 100 * units_per_asset);
+    do_staking_delegate(rell.test.keypairs.bob, rell.test.keypairs.charlie.pub);
+
+    // Check balances
+    assert_equals(staking_get_balance(test_account_alice.id), 100 * units_per_asset);
+    assert_equals(staking_get_balance(test_account_bob.id), 200 * units_per_asset);
+
+    // FFWD
+    rell.test.set_next_block_time_delta(millis_per_year);
+    rell.test.block().run();
+
+    // Check that there is a yield and that B is twice of A (allow for rounding)
+    val alice_amount = staking_rewards_claimable_for(test_account_alice.id);
+    val bob_amount = staking_rewards_claimable_for(test_account_bob.id);
+    assert_true(alice_amount > 0);
+    assert_true(bob_amount > 0);
+    assert_equals(staking_rewards_claimable_for(test_account_charlie.id), 0);
+    log("alice %s claimable amount: %s".format(test_account_alice.id, alice_amount));
+    log("bob %s claimable amount: %s".format(test_account_bob.id, bob_amount));
+    assert_true(too_small_to_care >= abs(2 * alice_amount - bob_amount));
+
+    // Check balances
+    assert_equals(staking_get_balance(test_account_alice.id), 100 * units_per_asset);
+    assert_equals(staking_get_balance(test_account_bob.id), 200 * units_per_asset);
+
+    // FFWD
+    rell.test.set_next_block_time_delta(millis_per_year);
+    rell.test.block().run();
+
+    // Check both numbers have doubled (allow for rounding)
+    val alice_amount_2 = staking_rewards_for(test_account_alice.id);
+    val bob_amount_2 = staking_rewards_for(test_account_bob.id);
+    log("Alice amount 2: ", alice_amount_2);
+    log("Bob amount 2: ", bob_amount_2);
+    assert_true(too_small_to_care >= abs(alice_amount_2 - 2 * alice_amount));
+    assert_true(too_small_to_care >= abs(bob_amount_2 - 2 * bob_amount));
+    assert_equals(staking_rewards_for(test_account_charlie.id), 0);
+
+    // Do payout batch 0
+    rell.test.tx().op(staking_claim_rewards(0)).sign(admin_privkey).run();
+    // Do payout batch 1
+    rell.test.tx().op(staking_claim_rewards(1)).sign(admin_privkey).run();
+    rell.test.tx().op(staking_claim_rewards(2)).sign(admin_privkey).run();
+    rell.test.tx().op(staking_claim_rewards(3)).sign(admin_privkey).run();
+
+    // Ensure there's no (more than a few seconds worth of) claimable yield after payout
+    log("Alice is ", test_account_alice.id);
+    assert_true(too_small_to_care >= staking_rewards_claimable_for(test_account_alice.id));
+    log("Bob is ", test_account_bob.id);
+    assert_true(too_small_to_care >= staking_rewards_claimable_for(test_account_bob.id));
+    assert_true(too_small_to_care >= staking_rewards_claimable_for(test_account_charlie.id));
+
+    // Run the clock forward a 6 months and check we have claimable rewards
+    rell.test.set_next_block_time_delta(integer(millis_per_year / 2));
+    rell.test.block().run();
+    rell.test.block().run();
+    assert_true(staking_rewards_claimable_for(test_account_alice.id) > 1 * units_per_asset);
+    assert_true(staking_rewards_claimable_for(test_account_bob.id) > 1 * units_per_asset);
+
+    // Run the clock forward another 24 months and see that payout has triggered
+    rell.test.set_next_block_time_delta(integer(millis_per_year * 2));
+    rell.test.block().run();
+    assert_true(staking_get_rewards_paid(test_account_alice.id) > 1 * units_per_asset);
+    assert_true(staking_get_rewards_paid(test_account_bob.id) > 1 * units_per_asset);
+
+    // However the total amount ever earned is not going to be 
+    assert_true(staking_rewards_for(test_account_bob.id) > 1 * units_per_asset);
+
+    // Everything paid up
+    assert_equals(
+        staking_rewards_for(
+            test_account_bob
+                .id
+        ),
+        staking_get_rewards_paid(
+            test_account_bob
+                .id
+        ) + staking_rewards_claimable_for(
+            test_account_bob
+                .id
+        )
+    );
 }
 
 function test_potential_entity_join_issues_on_delegation() {
