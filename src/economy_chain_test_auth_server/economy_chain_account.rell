@@ -21,11 +21,26 @@ operation register_account(pubkey) {
     register_account_impl(pubkey);
 }
 
+operation register_multisig_account(signers: list<pubkey>) {
+    register_multisig_account_impl(signers);
+}
+
 function register_account_impl(pubkey) {
 
     require(op_context.is_signer(chain_context.args.admin_pubkey), "Expected admin signature");
 
     val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(pubkey, set(["A", "T"]));
+
+    before_account_registration(auth_descriptor);
+    val account = ft4.accounts.create_account_with_auth(auth_descriptor);
+    after_account_registration(account, auth_descriptor);
+}
+
+function register_multisig_account_impl(signers: list<pubkey>) {
+
+    require(op_context.is_signer(chain_context.args.admin_pubkey), "Expected admin signature");
+
+    val auth_descriptor = ft4.accounts.multi_sig_auth_descriptor(signers, signers.size(), set(["A", "T"]));
 
     before_account_registration(auth_descriptor);
     val account = ft4.accounts.create_account_with_auth(auth_descriptor);
