@@ -777,12 +777,13 @@ function test_yield_and_batch_payout() {
 
     // Do payout batch 0
     rell.test.tx().op(staking_claim_rewards(0)).sign(admin_privkey).run();
-    // Do payout batch 1
-    rell.test.tx().op(staking_claim_rewards(1)).sign(admin_privkey).run();
-
     // Ensure there's no (more than a few seconds worth of) claimable yield after payout
     log("Alice is ", test_account_alice.id);
     assert_true(too_small_to_care >= staking_rewards_claimable_for(test_account_alice.id));
+    assert_false(too_small_to_care >= staking_rewards_claimable_for(test_account_bob.id));
+
+    // Do payout batch 1
+    rell.test.tx().op(staking_claim_rewards(1)).sign(admin_privkey).run();
     log("Bob is ", test_account_bob.id);
     assert_true(too_small_to_care >= staking_rewards_claimable_for(test_account_bob.id));
     assert_true(too_small_to_care >= staking_rewards_claimable_for(test_account_charlie.id));
