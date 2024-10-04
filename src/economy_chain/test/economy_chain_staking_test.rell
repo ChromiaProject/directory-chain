@@ -24,7 +24,7 @@ struct module_args {
     staking_rewards_payout_interval_ms: integer;
     staking_withdrawals_payout_interval_ms: integer;
     amount_to_mint: big_integer = 1000000000;
-    staking_rewards_payout_batch_size: integer = 1;
+    staking_rewards_payout_batch_size: integer = 10;
 }
 
 val auth_privkey = chain_context.args.auth_privkey;
@@ -779,14 +779,9 @@ function test_yield_and_batch_payout() {
     rell.test.tx().op(staking_claim_rewards(0)).sign(admin_privkey).run();
     // Ensure there's no (more than a few seconds worth of) claimable yield after payout
     log("Alice is ", test_account_alice.id);
-    assert_true(too_small_to_care >= staking_rewards_claimable_for(test_account_alice.id));
-    assert_false(too_small_to_care >= staking_rewards_claimable_for(test_account_bob.id));
-
-    // Do payout batch 1
-    rell.test.tx().op(staking_claim_rewards(1)).sign(admin_privkey).run();
     log("Bob is ", test_account_bob.id);
+    assert_true(too_small_to_care >= staking_rewards_claimable_for(test_account_alice.id));
     assert_true(too_small_to_care >= staking_rewards_claimable_for(test_account_bob.id));
-    assert_true(too_small_to_care >= staking_rewards_claimable_for(test_account_charlie.id));
 
     // Run the clock forward a 6 months and check we have claimable rewards
     rell.test.set_next_block_time_delta(integer(millis_per_year / 2));
@@ -880,9 +875,24 @@ function test_yield_and_batch_payout_many() {
     rell.test.block().run();
 
     // Do all batch payouts
-    for (i in range(0,staked_accounts.size())) {
+    for (i in range(0,staked_accounts.size()/chain_context.args.staking_rewards_payout_batch_size)) {
         rell.test.tx().op(staking_claim_rewards(i)).sign(admin_privkey).run();
-        assert_true(too_small_to_care >= staking_rewards_claimable_for(staked_accounts[i].id));
+        for (j in range(0,chain_context.args.staking_rewards_payout_batch_size)) {
+            if (i * chain_context.args.staking_rewards_payout_batch_size + j >= staked_accounts.size()) {
+                break;
+            }
+            assert_true(
+                too_small_to_care >= staking_rewards_claimable_for(
+                    staked_accounts[i * chain_context
+                            .args
+                            .staking_rewards_payout_batch_size + j]
+                        .id
+                )
+            );
+        }
+        if ((i+1) * chain_context.args.staking_rewards_payout_batch_size >= staked_accounts.size()) {
+            break;
+        }
     }
     
     // Run the clock forward 6 months and check we have claimable rewards
