@@ -1,9 +1,20 @@
-// This is a generic proposal and voting module using pubkeys instead of provider entities
+/**
+ * This is a generic proposal and voting module using pubkeys as voter set members. However provider
+ * keys can be used for actual voting.
+ */
 
 module;
 
-function create_common_voter_set_internal(name, threshold: integer = 0, governor: common_voter_set? = null) {
-    val vs = create common_voter_set(name, threshold);
+import common_consensus.*;
+import provider_auth.*;
+
+function create_common_voter_set_internal(
+    name,
+    threshold: integer = 0,
+    governor: common_voter_set? = null,
+    vote_type: common_proposal_vote_type
+) {
+    val vs = create common_voter_set(name, threshold, vote_type);
     if (exists(governor)) {
         create common_voter_set_governance(voter_set = vs, governor = governor);
     } else {

@@ -160,6 +160,10 @@ operation receive_provider_update_message_op(provider_update_message) {
     receive_provider_update_message(provider_update_message.to_gtv());
 }
 
+operation receive_provider_auth_update_message_op(provider_auth_update_message) {
+    receive_provider_auth_update_message(provider_auth_update_message.to_gtv());
+}
+
 operation create_tag_removal_proposal_with_voter_set(voter_set_name: text) {
     create_proposal(common_proposal_type.ec_tag_remove, voter_set_name);
 }
@@ -345,4 +349,16 @@ operation create_account_link(ft4.accounts.account, address: byte_array) {
 
 operation enable_evm_link_begin_block() {
    pending_evm_links.add = true;
+}
+operation set_provider_multi_key_false() {
+    migration_completed.provider_multi_key = false;
+}
+
+operation require_system_provider_signer_entity_op(expected_provider_pubkey: pubkey) {
+    val provider = require_system_provider_signer_entity();
+    require(provider.pubkey == expected_provider_pubkey, "Unexpected provider");
+}
+
+operation set_system_p_member_key_vote_set() {
+    system_p_voter_set().member_key_type = common_proposal_vote_type.VOTER_SET_MEMBER_KEY;
 }

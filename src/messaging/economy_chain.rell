@@ -1,6 +1,7 @@
 module;
 
 import lib.icmf.constants.*;
+import provider_auth.model.*;
 
 val create_cluster_topic = ICMF_TOPIC_GLOBAL_PREFIX + "create_cluster";
 val create_cluster_error_topic = ICMF_TOPIC_LOCAL_PREFIX + "create_cluster_error";
@@ -18,6 +19,7 @@ val ticket_container_result_topic = ICMF_TOPIC_LOCAL_PREFIX + "ticket_container_
 val cluster_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "cluster_update";
 val cluster_node_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "cluster_node_update";
 val provider_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "provider_update";
+val provider_auth_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "provider_auth_update";
 val node_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "node_update";
 val subnode_image_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "subnode_image_update";
 val cluster_subnode_image_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "cluster_subnode_image_update";
@@ -95,6 +97,24 @@ struct provider_update_message {
     system: boolean;
     tier: text;
     active: boolean;
+}
+
+/**
+ * The message sent from DC to EC for each provider key update. Each message will contain all provider keys
+ * to let EC wipe and add.
+ */
+struct provider_auth_update_message {
+    provider_pubkey: pubkey;
+    key_roles: list<provider_auth_update_role>;
+}
+
+/**
+ * Belongs to the provider_auth_update_message message to store all keys and threshold for a specific key role.
+ */
+struct provider_auth_update_role {
+    role: provider_key_role;
+    threshold: integer;
+    keys: list<pubkey>;
 }
 
 struct cluster_provider_update_message {

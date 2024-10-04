@@ -20,6 +20,22 @@ enum common_proposal_state {
     PENDING, APPROVED, REJECTED, REVOKED
 }
 
+/**
+ * Defined what keys to permit voting by voter set members.
+ */
+enum common_proposal_vote_type {
+    /**
+     * common_voter_set_member.pubkey will be both member identifier and the key allowed to vote.
+     */
+    VOTER_SET_MEMBER_KEY,
+
+    /**
+     * common_voter_set_member.pubkey will be the identifier (provider pubkey) only and permits only provider_auth
+     * keys to vote with respect of threshold
+     */
+    PROVIDER_AUTH,
+}
+
 entity common_proposal {
     index timestamp, proposal_type: common_proposal_type;
     proposed_by: pubkey;
@@ -31,6 +47,9 @@ entity common_proposal {
 
 entity common_voter_set {
     key name;
+
+    /** VOTER_SET_MEMBER_KEY will be default for all voter_sets until the point multi keys are enabled. */
+    mutable member_key_type: common_proposal_vote_type = common_proposal_vote_type.VOTER_SET_MEMBER_KEY;
     mutable threshold: integer = 0;
 }
 

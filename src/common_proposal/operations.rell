@@ -1,33 +1,36 @@
-
-
 /**
- * Make common vote.
- * 
+ * Make common vote without providing voter set member key. This will be derived from the signer list.
+ *
+ * @param pubkey If voter set type is VOTER_SET_MEMBER_KEY then this is the key used to vote. If the type is
+ * PROVIDER_AUTH then this is the provider key.
+ *
  * Permission: common voter set member
- * 
+ *
  * Rate limit: no
  */
-operation make_common_vote(pubkey, proposal_id: rowid, vote: boolean) {
-    require_is_signer(pubkey);
+operation make_common_vote(proposal_id: rowid, vote: boolean) {
     val prop = require_common_proposal(proposal_id);
     require(prop.state == common_proposal_state.PENDING, "The proposal is already %s".format(prop.state));
-    require_common_voter_set_member(prop.voter_set, pubkey);
-    require(empty(common_vote @? {prop, pubkey}), "Only one vote per pubkey is allowed");
-    internal_common_vote(pubkey, prop, vote);
+    val voter_set_member = require_voter_set_member_pubkey(prop.voter_set);
+    require_common_voter_set_member_and_signer(prop.voter_set, voter_set_member);
+    require(empty(common_vote @? {prop, voter_set_member}), "Only one vote per pubkey is allowed");
+    internal_common_vote(voter_set_member, prop, vote);
 }
 
 /**
- * Revoke common proposal.
- * 
+ * Revoke common proposal providing voter set member key. This will be derived from the signer list.
+ *
  * Permission: proposal owner
- * 
+ *
  * Rate limit: no
  */
-operation revoke_common_proposal(pubkey, proposal_id: rowid) {
-    require_is_signer(pubkey);
+operation revoke_common_proposal(proposal_id: rowid) {
     val prop = require_common_proposal(proposal_id);
     require(prop.state == common_proposal_state.PENDING, "The proposal is already %s".format(prop.state));
-    require(prop.proposed_by == pubkey, "It is only allowed to revoke own proposals");
+    val voter_set_member = require_voter_set_member_pubkey(prop.voter_set);
+    require(prop.proposed_by == voter_set_member, "It is only allowed to revoke own proposals");
+    require_common_voter_set_member_and_signer(prop.voter_set, voter_set_member);
     prop.state = common_proposal_state.REVOKED;
     delete_common_proposal(prop);
 }
+

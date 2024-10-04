@@ -68,3 +68,20 @@ function send_response(ticket_id: integer, error_message: text?) {
         cluster_name = null,
     ).to_gtv());
 }
+
+/**
+ * Send provider and provider auth updates to economy chain. This is normally synced automatically
+ * but in case they are out of sync this can be run manually.
+ */
+operation update_ec_providers() {
+    val provider = require_provider_signer();
+    require_provider_auth_with_rate_limit(provider);
+    require_is_system_provider(provider.pubkey);
+
+    log("Sending provider information to economy chain...");
+
+    for (p in provider @* {} ( .pubkey, .system, .tier, .active )) {
+        send_provider_update_message(provider);
+        send_provider_auth_update_message(provider.pubkey);
+    }
+}

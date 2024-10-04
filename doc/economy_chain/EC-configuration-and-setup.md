@@ -49,6 +49,7 @@ From directory-chain:
 - `L_ticket_container_result`
 - `L_cluster_update`
 - `L_provider_update`
+- `L_provider_auth_update`
 - `L_node_update`
 - `L_cluster_node_update`
 - `L_token_price_changed`
@@ -88,6 +89,7 @@ Example:
               - L_ticket_container_result
               - L_cluster_update
               - L_provider_update
+              - L_provider_auth_update
               - L_node_update
               - L_cluster_node_update
               - L_token_price_changed

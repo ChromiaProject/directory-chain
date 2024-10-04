@@ -3,7 +3,7 @@ operation create_chromia_foundation_voter_set() {
     require(empty(common_voter_set @? { voter_sets.chromia_foundation }), "Voter set %s already exists".format(voter_sets.chromia_foundation));
     require(not(empty(op_context.get_signers())), "Transaction must be signed to set first member of voter set");
 
-    val voter_set = create_common_voter_set_internal(voter_sets.chromia_foundation, 0);
+    val voter_set = create_common_voter_set_internal(voter_sets.chromia_foundation, 0, vote_type = common_proposal_vote_type.VOTER_SET_MEMBER_KEY);
 
     for (signer in op_context.get_signers()) {
         create common_voter_set_member(voter_set, signer);
@@ -31,6 +31,6 @@ operation update_chromia_foundation_voter_set(my_pubkey: pubkey, new_threshold: 
         require(not(voter_set_members.empty()), "Can't remove last member in voter set");
     }
 
-    _propose_update_ec_voter_set(my_pubkey, voter_sets.chromia_foundation, new_threshold, new_member, remove_member);
+    _propose_update_ec_voter_set(voter_sets.chromia_foundation, new_threshold, new_member, remove_member);
 }
 

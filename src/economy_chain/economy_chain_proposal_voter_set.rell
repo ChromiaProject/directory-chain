@@ -9,7 +9,7 @@ function require_chromia_foundation_voter_set() = require_common_voter_set(voter
 function require_voter_set_with_signer_and_member(voter_set_name: text, pubkey) {
     require_is_signer(pubkey);
     val voter_set = require_common_voter_set(voter_set_name);
-    require_common_voter_set_member(voter_set, pubkey);
+    require_common_voter_set_member_and_signer(voter_set, pubkey);
     return voter_set;
 }
 
@@ -61,21 +61,23 @@ function delete_pending_ec_voter_set_update(proposal: common_proposal) {
     delete p;
 }
 
-operation propose_update_ec_voter_set(my_pubkey: pubkey, voter_set_name: text, new_threshold: integer?, new_member: list<pubkey>, remove_member: list<pubkey>) {
-    _propose_update_ec_voter_set(my_pubkey, voter_set_name, new_threshold, new_member, remove_member);
+operation propose_update_ec_voter_set(voter_set_name: text, new_threshold: integer?, new_member: list<pubkey>, remove_member: list<pubkey>) {
+    _propose_update_ec_voter_set(voter_set_name, new_threshold, new_member, remove_member);
 }
 
-function _propose_update_ec_voter_set(my_pubkey: pubkey, voter_set_name: text, new_threshold: integer?, new_member: list<pubkey>, remove_member: list<pubkey>) {
-    require_is_signer(my_pubkey);
+function _propose_update_ec_voter_set(voter_set_name: text, new_threshold: integer?, new_member: list<pubkey>, remove_member: list<pubkey>) {
+
     val voter_set = require_common_voter_set(voter_set_name);
+    val voter_set_member = require_voter_set_member_pubkey(voter_set);
+    require_common_voter_set_member_and_signer(voter_set, voter_set_member);
     require(voter_set.name != voter_sets.system_p, "Cannot update system voter set. Update this by proposing system provider role");
-    require_common_voter_set_governor(voter_set, my_pubkey);
+    require_common_voter_set_governor(voter_set, voter_set_member);
     require(empty(common_proposal @* { voter_set, common_proposal_state.PENDING }), "Cannot have more than one pending proposal involving this voter set.");
 
     val prop = create common_proposal(
         op_context.last_block_time,
         common_proposal_type.ec_voter_set_update,
-        my_pubkey,
+        voter_set_member,
         voter_set,
         "Update %s voter set".format(voter_sets.chromia_foundation)
     );
@@ -96,7 +98,7 @@ function _propose_update_ec_voter_set(my_pubkey: pubkey, voter_set_name: text, n
     for (m in remove_member) {
         create ec_voter_set_update.remove_member(update_prop, m);
     }
-    internal_common_vote(my_pubkey, prop, true);
+    internal_common_vote(voter_set_member, prop, true);
 }
 
 query get_ec_voter_set_update_proposal(id: rowid) {
