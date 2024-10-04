@@ -290,6 +290,17 @@ function _staking_distribute_rewards(n_batch: integer = -1) {
     val total_amount = rewards @ { } ( @sum .amount );
     log("Preparing to distribute %s rewards worth %s".format(rewards.size(), total_amount));
 
+    val rewarded_accounts = rewards @* { } ( .account );
+
+    val shared_rewards = pending_shared_payment @* {
+        .account in rewarded_accounts
+    } (
+        @group .account,
+        @sum amount = .amount
+    );
+    val total_shared_amount = shared_rewards @ { } ( @sum .amount );
+    log("Preparing to distribute %s shared rewards worth %s".format(shared_rewards.size(), total_shared_amount));
+
     // Do not start what we cannot finish
     val pool = get_pool_account();
     var total_pool_balance = get_account_balance(pool);
@@ -300,23 +311,32 @@ function _staking_distribute_rewards(n_batch: integer = -1) {
             return;
         }
     }
-    val rewarded_accounts = rewards @* { } ( .account );
     update staker_state @* { .account in rewarded_accounts } ( .pending_token_time = 0 );
+    delete pending_shared_payment @* { .account in rewarded_accounts };
 
     // Send payouts
     var payments = list<struct<staking_payment>>();
     for ((account, amount) in rewards) {
 
+        val total_transfer_amount = integer(amount + (shared_rewards @? { .account == account } ( .amount ) ?: 0));
+
         /// @dev This can be removed once Rell supports a HAVING equivalent.
-        if (integer(amount) == 0) {
+        if (total_transfer_amount == 0) {
             log("Skip zero payment.");
             continue;
         }
 
-        ft4.assets.Unsafe.transfer(pool, account, get_asset(), integer(amount));
-        log("Paid out %s to %s".format(amount, account.id));
+        ft4.assets.Unsafe.transfer(pool, account, get_asset(), total_transfer_amount);
+        log("Paid out %s to %s".format(total_transfer_amount, account.id));
 
-        payments.add(struct<staking_payment>(timestamp = _staking_last_known_time(), amount = integer(amount), account));
+        payments
+            .add(
+                struct<staking_payment>(
+                    timestamp = _staking_last_known_time(),
+                    amount = total_transfer_amount,
+                    account
+                )
+            );
     }
 
     create staking_payment ( payments );
