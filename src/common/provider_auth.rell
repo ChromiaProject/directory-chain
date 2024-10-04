@@ -1,0 +1,73 @@
+struct provider_keys_data {
+    provider_pubkey: pubkey;
+    keys: list<provider_type_keys_data>;
+}
+
+struct provider_type_keys_data {
+    type: provider_key_type;
+    threshold: integer;
+    keys: list<pubkey>;
+}
+
+@extend(after_provider_registered)
+function _after_provider_registered_add_key(provider, cluster: cluster?) {
+    _add_provider_key(provider.pubkey, provider.pubkey);
+}
+
+/**
+ * Add a key of type for the provider signing the transaction.
+ *
+ * @param pubkey The new key to add. Must sign the transaction.
+ */
+operation add_provider_key(type: provider_key_type, pubkey) {
+
+    val provider = require_provider_signer();
+    require_provider_auth_with_rate_limit(provider);
+    require_is_signer(pubkey);
+
+    _add_provider_key(provider.pubkey, pubkey, type);
+}
+
+/**
+ * Remove a key of type for the provider signing the transaction.
+ *
+ * @param pubkey The key to remove.
+ */
+operation remove_provider_key(type: provider_key_type, pubkey) {
+
+    val provider = require_provider_signer();
+    require_provider_auth_with_rate_limit(provider);
+
+    _remove_provider_key(provider.pubkey, type, pubkey);
+}
+
+/**
+ * Set the key threshold for the given key type for the provider signing the transaction. The threshold
+ * controls the number of keys required to authenticate the provider.
+ *
+ * @param threshold Can either be -1 for majority, 0 for super-majority or the number of keys required.
+ */
+operation set_provider_key_threshold(provider_key_type, threshold: integer) {
+
+    val provider = require_provider_signer();
+    require_provider_auth_with_rate_limit(provider);
+
+    _set_provider_key_threshold(provider.pubkey, provider_key_type, threshold);
+}
+
+/**
+ * Get keys for provider, their types and threshold.
+ */
+query get_provider_keys(pubkey) {
+
+    val provider = require_provider(pubkey);
+
+    val provider_keys = list<provider_type_keys_data>();
+    for (threshold in provider_auth_threshold @* { .provider_pubkey == provider.pubkey }) {
+
+        val keys = provider_auth_key @* { .provider_pubkey == provider.pubkey, .provider_key_type == threshold.provider_key_type } ( .pubkey );
+        provider_keys.add(provider_type_keys_data(threshold.provider_key_type, threshold.threshold, keys));
+    }
+
+    return provider_keys_data(provider.pubkey, provider_keys);
+}

@@ -1,0 +1,49 @@
+@test module;
+
+import ^^.*;
+import ^.helper_operations.*;
+import provider_auth.test.helper_operations.*;
+import common.*;
+import common.test.setup.*;
+import roles.test.ops.*;
+import common.test.helper_operations.*;
+
+function test_migrate_provider_keys() {
+
+    rell.test.tx().op(
+        add_provider(rell.test.keypairs.alice.pub),
+        set_provider_multi_key_false(),
+    ).run();
+
+    // Will only be run once
+    rell.test.tx().op(
+        begin_block_migration_op(),
+        begin_block_migration_op(),
+        begin_block_migration_op(),
+    ).run();
+
+    // Key is created
+    val keys = provider_auth_key @* { .provider_pubkey == rell.test.keypairs.alice.pub };
+    assert_equals(keys.size(), 1);
+    assert_equals(keys[0].provider_pubkey, rell.test.keypairs.alice.pub);
+    assert_equals(keys[0].pubkey, rell.test.keypairs.alice.pub);
+    assert_equals(keys[0].provider_key_type, provider_key_type.main);
+
+    // Default threshold is set
+    val threshold = provider_auth_threshold @ { .provider_pubkey == rell.test.keypairs.alice.pub, provider_key_type.main } ( .threshold );
+    assert_equals(threshold, consensus_threshold.super_majority);
+
+    // Migration job marked as completed
+    assert_true(migration_completed.provider_multi_key);
+
+    // Test auth - fail with no key type set
+    rell.test.tx().op(
+        provider_is_signer_op(rell.test.keypairs.alice.pub, []),
+    ).sign(rell.test.keypairs.alice).run_must_fail("auth failed");
+
+    // Test auth - works
+    rell.test.tx().op(
+        provider_is_signer_op(rell.test.keypairs.alice.pub, [provider_key_type.main]),
+        provider_is_signer_op(rell.test.keypairs.alice.pub, [provider_key_type.main, provider_key_type.configuration_proposal]),
+    ).sign(rell.test.keypairs.alice).run();
+}

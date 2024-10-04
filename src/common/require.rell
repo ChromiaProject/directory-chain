@@ -3,6 +3,10 @@ function require_is_signer(pubkey) {
 }
 
 function require_provider(pubkey) = require(provider @? { pubkey }, "Unknown provider " + pubkey);
+function require_provider_signer() {
+    val provider_pubkey = get_provider_signer();
+    return require(provider @? { provider_pubkey != null, provider_pubkey!! }, "Transaction must be signed by provider ");
+}
 function require_cluster(name) = require(cluster @? { name }, "Cluster %s not found".format(name));
 function require_clusters(names: list<text>): list<cluster> {
     val clusters = cluster @* { .name in names };
@@ -74,9 +78,14 @@ function require_is_provider_with_rate_limit(pubkey) {
     return provider;
 }
 
-// This is the function we should use for auth
-function require_provider_auth_with_rate_limit(provider) {
-    require_is_signer(provider.pubkey);
+/**
+ * This is the function we should use for auth.
+ *
+ * @param provider The provider that must sign this transaction.
+ * @param provider_key_type The type of auth keys to use for this authentication. Main is default.
+ */
+function require_provider_auth_with_rate_limit(provider, provider_key_type: list<provider_key_type> = [provider_key_type.main]) {
+    require(provider_is_signer(provider.pubkey, provider_key_type), "Operation must be signed by provider key(s)");
     require(provider.active, "Provider is not enabled");
     provider_rate_limit(provider);
 }

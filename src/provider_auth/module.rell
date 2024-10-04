@@ -1,0 +1,135 @@
+/**
+ * This module contains support for provider multi key authentication. A provider can have one or more keys and
+ * also define a threshold for keys required to sign a operation.
+ *
+ * The module is shared between D1 and EC, with data synced over icmf from D1 to EC.
+ */
+
+module;
+
+import provider_auth.model.*;
+import common_consensus.*;
+
+@extendable function after_provider_auth_updated(provider_pubkey: pubkey) {}
+
+/**
+ * Adds a key for provider if not already exists. If this is the first key of the type, then a default
+ * super-majority threshold is set.
+ */
+function _add_provider_key(provider_pubkey: pubkey, pubkey, provider_key_type = provider_key_type.main) {
+
+    if (not exists(provider_auth_key @? { provider_pubkey, provider_key_type, pubkey })) {
+        create provider_auth_key(provider_pubkey, provider_key_type, pubkey);
+    }
+
+    if (not is_provider_auth_threshold_set(provider_pubkey, provider_key_type)) {
+        _set_provider_key_threshold(provider_pubkey, provider_key_type, consensus_threshold.super_majority);
+    }
+
+    after_provider_auth_updated(provider_pubkey);
+}
+
+function _remove_provider_key(provider_pubkey: pubkey, type: provider_key_type, pubkey) {
+
+    val key_count = get_provider_auth_key_count(provider_pubkey, type);
+    require(
+        type != provider_key_type.main or key_count > 1,
+        "Can't remove last %s key".format(provider_key_type.main)
+    );
+    val key_threshold = get_provider_auth_threshold_value(provider_pubkey, type);
+    require(
+        key_threshold == consensus_threshold.majority or
+        key_threshold == consensus_threshold.super_majority or
+        key_count - 1 >= key_threshold, "Can't remove key from %s due to key count (%s) gets under threshold (%s)".format(
+        type, key_count - 1, key_threshold
+    ));
+
+    delete provider_auth_key @? { .provider_pubkey == provider_pubkey, type, pubkey };
+
+    after_provider_auth_updated(provider_pubkey);
+}
+
+/**
+ * Sets the required threshold for a specific provider and key type. The threshold is the same as for voting
+ * consensus (majority, super-majority or fixed number)
+ */
+function _set_provider_key_threshold(provider_pubkey: pubkey, provider_key_type, threshold: integer) {
+
+    val key_count = get_provider_auth_key_count(provider_pubkey, provider_key_type);
+
+    require(threshold <= key_count, "Threshold (%s) can't be larger than number of keys (%s)".format(threshold, key_count));
+    require(threshold >= -1, "Threshold must be -1 (majority), 0 (super-majority) or positive");
+
+    val pat = get_provider_auth_threshold(provider_pubkey, provider_key_type);
+    if (exists(pat)) {
+        pat.threshold = threshold;
+    } else {
+        create provider_auth_threshold(provider_pubkey, provider_key_type, threshold);
+    }
+
+    after_provider_auth_updated(provider_pubkey);
+}
+
+/**
+ * Checks if transactions is signed by provider_pubkey. Will require the threshold of signer keys of the given key type
+ * to be valid.
+ *
+ * @return True if transaction is signed by the specific providers, false otherwise.
+ */
+function provider_is_signer(provider_pubkey: pubkey, provider_key_types: list<provider_key_type> = [provider_key_type.main]) {
+
+    val key_types_signed = provider_auth_key @* { provider_pubkey, .provider_key_type in provider_key_types, .pubkey in op_context.get_signers() } ( @group .provider_key_type, @sum signed_keys = 1 );
+    val key_types_count = provider_auth_key @* { provider_pubkey, .provider_key_type in provider_key_types } ( @group .provider_key_type, @sum keys = 1 );
+
+    for (key_type_signed in key_types_signed) {
+        val threshold = provider_auth_threshold @? { provider_pubkey, key_type_signed.provider_key_type } ( .threshold );
+        val max_signer_keys = get_provider_auth_key_count(provider_pubkey, key_type_signed.provider_key_type);
+
+        if (
+            threshold != null and
+            max_signer_keys > 0 and
+            _compute_common_consensus_result(key_type_signed.signed_keys, 0, max_signer_keys, threshold) == common_consensus_result.approved
+        ) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function get_provider_auth_key_count(provider_pubkey: pubkey, provider_key_type): integer {
+    return provider_auth_key @ { provider_pubkey, provider_key_type } ( @sum 1 );
+}
+
+function get_provider_auth_threshold(provider_pubkey: pubkey, provider_key_type) {
+    return provider_auth_threshold @? { provider_pubkey, provider_key_type };
+}
+
+function get_provider_auth_threshold_value(provider_pubkey: pubkey, provider_key_type) {
+    return get_provider_auth_threshold(provider_pubkey, provider_key_type)?.threshold ?: 0;
+}
+
+function is_provider_auth_threshold_set(provider_pubkey: pubkey, provider_key_type) {
+    return get_provider_auth_threshold(provider_pubkey, provider_key_type) != null;
+}
+
+/**
+ * Identifies the provider by looking at the list of signers and returns the provider pubkey if
+ * one provider is found to be signing this transaction.
+ *
+ * @return The provider pubkey of the single provider signing this transaction.
+ */
+function get_provider_signer(): pubkey? {
+
+    val maybe_providers = provider_auth_key @* {
+        provider_auth_key.pubkey in op_context.get_signers() } ( @group .provider_pubkey );
+    var found_provider: pubkey? = null;
+
+    for (maybe_provider in maybe_providers) {
+        if (provider_is_signer(maybe_provider)) {
+            require(found_provider == null, "Transaction must be signed by one provider only");
+            found_provider = maybe_provider;
+        }
+    }
+
+    return found_provider;
+}
