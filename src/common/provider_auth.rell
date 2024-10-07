@@ -25,6 +25,10 @@ operation add_provider_key(type: provider_key_type, pubkey) {
     require_provider_auth_with_rate_limit(provider);
     require_is_signer(pubkey);
 
+    val key_owner = get_provider_by_auth_key(pubkey);
+    require(key_owner == null or key_owner == provider.pubkey,
+        "Key is already in use by provider %s".format(key_owner));
+
     _add_provider_key(provider.pubkey, pubkey, type);
 }
 
@@ -37,6 +41,8 @@ operation remove_provider_key(type: provider_key_type, pubkey) {
 
     val provider = require_provider_signer();
     require_provider_auth_with_rate_limit(provider);
+    require(get_provider_by_auth_key(pubkey) == provider.pubkey,
+        "Operation not signed by key owner");
 
     _remove_provider_key(provider.pubkey, type, pubkey);
 }
@@ -70,4 +76,14 @@ query get_provider_keys(pubkey) {
     }
 
     return provider_keys_data(provider.pubkey, provider_keys);
+}
+
+/**
+ * Find provider by auth key and return provider identifier pubkey.
+ *
+ * @param pubkey A provider key used for auth.
+ * @return The provider identity pubkey.
+ */
+query get_provider_by_key(pubkey): pubkey? {
+    return get_provider_by_auth_key(pubkey);
 }

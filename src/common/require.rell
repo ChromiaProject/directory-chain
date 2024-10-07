@@ -79,7 +79,7 @@ function require_is_provider_with_rate_limit(pubkey) {
 }
 
 /**
- * This is the function we should use for auth.
+ * Requires given provider is signing transaction, is active and not exceeds limit.
  *
  * @param provider The provider that must sign this transaction.
  * @param provider_key_type The type of auth keys to use for this authentication. Main is default.
@@ -88,6 +88,19 @@ function require_provider_auth_with_rate_limit(provider, provider_key_type: list
     require(provider_is_signer(provider.pubkey, provider_key_type), "Operation must be signed by provider key(s)");
     require(provider.active, "Provider is not enabled");
     provider_rate_limit(provider);
+}
+
+/**
+ * Requires given pubkey is an active provider which is signing the transaction.
+ *
+ * @param pubkey The provider key that must sign this transaction.
+ * @param provider_key_type The type of auth keys to use for this authentication. Main is default.
+ */
+function require_provider_auth(pubkey, provider_key_type: list<provider_key_type> = [provider_key_type.main]) {
+    val provider = require_provider(pubkey);
+    require(provider_is_signer(provider.pubkey, provider_key_type), "Operation must be signed by provider key(s)");
+    require(provider.active, "Provider is not enabled");
+    return provider;
 }
 
 function require_pubkey(pubkey) {

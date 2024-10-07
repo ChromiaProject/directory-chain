@@ -3,6 +3,10 @@
 import ^^.*;
 import ^.helper_operations.*;
 
+import ^.setup.*;
+import ^^.operations.*;
+import provider_auth.test.helper_operations.*;
+
 function test_require_pubkey() {
     // success
     // compressed 33-byte value
@@ -38,4 +42,65 @@ function test_require_blockchain() {
     require_blockchain(x"01");
     require_blockchain(x"00", [blockchain_state.RUNNING]);
     assert_fails(require_blockchain(x"00", [blockchain_state.ARCHIVED], *));
+}
+
+function test_require_provider_auth_with_rate_limit() {
+
+    val initial_provider = rell.test.keypairs.alice;
+
+    setup_module();
+    val provider = provider @ { initial_provider.pub };
+
+    rell.test.tx().op(
+        require_provider_auth_with_rate_limit_op(provider @ { initial_provider.pub })
+    ).sign(initial_provider).run();
+
+    // Valid - signed with provider key
+    rell.test.tx().op(
+        require_provider_auth_with_rate_limit_op(provider)
+    ).nop().sign(initial_provider).run();
+
+    // Add key and remove original key
+    rell.test.tx().op(
+        add_provider_key_op(initial_provider.pub, rell.test.keypairs.bob.pub),
+        remove_provider_key_op(initial_provider.pub, provider_key_type.main, initial_provider.pub),
+    ).nop().sign(initial_provider, rell.test.keypairs.bob).run();
+
+    // Invalid - not signed
+    rell.test.tx().op(
+        require_provider_auth_with_rate_limit_op(provider)
+    ).nop().run_must_fail("Operation must be signed by provider key(s)");
+
+    // Valid - signed with new bob key
+    rell.test.tx().op(
+        require_provider_auth_with_rate_limit_op(provider)
+    ).nop().sign(rell.test.keypairs.bob).run();
+
+    // Invalid - signed with old and removed key
+    rell.test.tx().op(
+        require_provider_auth_with_rate_limit_op(provider)
+    ).nop().sign(initial_provider).run_must_fail();
+}
+
+function test_test_require_provider_auth() {
+
+    val initial_provider = rell.test.keypairs.alice;
+
+    setup_module();
+    val provider = provider @ { initial_provider.pub };
+
+    // Invalid - no such provider
+    rell.test.tx().op(
+        require_provider_auth_op(rell.test.keypairs.bob.pub)
+    ).nop().sign(rell.test.keypairs.bob).run_must_fail();
+
+    // Invalid - not signed by key
+    rell.test.tx().op(
+        require_provider_auth_op(initial_provider.pub)
+    ).nop().sign(rell.test.keypairs.bob).run_must_fail();
+
+    // Valid
+    rell.test.tx().op(
+        require_provider_auth_op(initial_provider.pub)
+    ).nop().run_must_fail();
 }

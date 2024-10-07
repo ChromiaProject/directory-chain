@@ -136,7 +136,7 @@ function test_add_provider_key() {
         add_provider_key(provider_key_type.configuration_proposal, bob.pub),
     ).run_must_fail("Transaction must be signed by provider");
 
-    // Must be ay provider
+    // Must be a provider
     rell.test.tx().op(
         add_provider_key(provider_key_type.configuration_proposal, bob.pub),
     ).sign(frank).run_must_fail("Transaction must be signed by provider");
@@ -146,10 +146,29 @@ function test_add_provider_key() {
         add_provider_key(provider_key_type.configuration_proposal, bob.pub),
     ).sign(initial_provider).run_must_fail("Operation must be signed by %s".format(bob.pub));
 
-    // Valid - remove all keys after
+    // Valid
     rell.test.tx().op(
         add_provider_key(provider_key_type.configuration_proposal, bob.pub),
     ).sign(initial_provider, bob).run();
+}
+
+function test_add_provider_key__already_in_use_by_other_provider() {
+
+    setup_module();
+    val provider = provider @ { initial_provider.pub };
+
+    rell.test.tx().op(
+        add_provider_key(provider_key_type.main, rell.test.keypairs.frank.pub),
+        set_provider_key_threshold(provider_key_type.main, 2),
+        register_provider(initial_provider.pub, bob.pub, provider_tier.DAPP_PROVIDER),
+    ).sign(initial_provider, bob, rell.test.keypairs.frank).run();
+
+    // Invalid - key already added by initial_provider
+    // The op is signed by both initial_provider and bob, but since initial_provider requires both
+    // keys bob will be the identified provider
+    rell.test.tx().op(
+        add_provider_key(provider_key_type.main, initial_provider.pub),
+    ).sign(initial_provider, bob).run_must_fail("Key is already in use by provider %s".format(initial_provider.pub));
 }
 
 function test_remove_provider_key() {
@@ -178,6 +197,22 @@ function test_remove_provider_key() {
         set_provider_key_threshold(provider_key_type.main, 2),
         remove_provider_key(provider_key_type.main, initial_provider.pub),
     ).sign(initial_provider, bob).run_must_fail("Can't remove key from main due to key count (1) gets under threshold (2)");
+}
+
+function test_remove_provider_key__remove_other_providers_key() {
+
+    setup_module();
+    val provider = provider @ { initial_provider.pub };
+
+    rell.test.tx().op(
+        add_provider_key(provider_key_type.main, rell.test.keypairs.frank.pub),
+        register_provider(initial_provider.pub, bob.pub, provider_tier.DAPP_PROVIDER),
+    ).sign(initial_provider, bob, rell.test.keypairs.frank).run();
+
+    // Invalid - Must be signed by provider owning the key
+    rell.test.tx().op(
+        remove_provider_key(provider_key_type.main, initial_provider.pub),
+    ).sign(bob).run_must_fail("Operation not signed by key owner");
 }
 
 function test_set_provider_key_threshold() {

@@ -71,8 +71,8 @@ function _set_provider_key_threshold(provider_pubkey: pubkey, provider_key_type,
 }
 
 /**
- * Checks if transactions is signed by provider_pubkey. Will require the threshold of signer keys of the given key type
- * to be valid.
+ * Checks if transactions is signed by keys belonging to provider_pubkey. Will require the threshold of signer keys of
+ * the given key type to be valid.
  *
  * @return True if transaction is signed by the specific providers, false otherwise.
  */
@@ -132,4 +132,18 @@ function get_provider_signer(): pubkey? {
     }
 
     return found_provider;
+}
+
+/**
+ * Find provider by auth key.
+ *
+ * @pubkey Auth key to lookup provider by
+ * @provider_key_type If not null, limit search by key type.
+ * @return Provider pubkey
+ */
+function get_provider_by_auth_key(pubkey, type: provider_key_type? = null): pubkey? {
+    return provider_auth_key @? {
+        .pubkey == pubkey,
+        type == null or .provider_key_type == type
+    } ( .provider_pubkey ) limit 1;
 }
