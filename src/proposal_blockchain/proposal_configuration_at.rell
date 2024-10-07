@@ -71,6 +71,8 @@ struct pending_blockchain_configuration_at_data {
 
 /**
  * Returns blockchain configuration proposal at.
+ *
+ * @deprecated use get_configuration_proposal_at_v64 instead
  */
 query get_configuration_proposal_at(rowid?): (
     current_conf:blockchain_configuration_data,
@@ -87,6 +89,37 @@ query get_configuration_proposal_at(rowid?): (
     return (
         current_conf = blockchain_configuration_data(current.height, config.blockchain, current.config),
         proposed_conf = config
+    );
+}
+
+struct configuration_proposal_at_data {
+    blockchain_rid: byte_array;
+    current_height: integer;
+    current_configuration: byte_array;
+    proposed_height: integer;
+    proposed_force: boolean;
+    proposed_configuration: byte_array;
+}
+
+/**
+ * Returns blockchain configuration proposal at.
+ */
+query get_configuration_proposal_at_v64(rowid?): configuration_proposal_at_data? {
+    val proposal = get_latest_proposal(rowid, proposal_type.configuration_at);
+    if (proposal == null) return null;
+    val proposal_details = pending_configuration_at @? { require_proposal(proposal.rowid) }
+        (.blockchain, .height, .force, config = decompress_configuration(.data));
+    if (proposal_details == null) return null;
+
+    val current = get_latest_blockchain_configuration_data(proposal_details.blockchain);
+
+    return configuration_proposal_at_data(
+        blockchain_rid = proposal_details.blockchain.rid,
+        current_height = current.height,
+        current_configuration = current.config,
+        proposed_height = proposal_details.height,
+        proposed_force = proposal_details.force,
+        proposed_configuration = proposal_details.config,
     );
 }
 

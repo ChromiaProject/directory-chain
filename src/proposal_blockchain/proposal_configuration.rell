@@ -71,7 +71,8 @@ function apply_configuration_regular(pc: pending_configuration) {
     );
     create blockchain_configuration_update_attempt(
         pc.proposal,
-        config_hash
+        config_hash = config_hash,
+        blockchain_rid = pc.blockchain.rid,
     );
 }
 
@@ -112,6 +113,8 @@ struct pending_blockchain_configuration_data {
 
 /**
  * Returns blockchain configuration proposal.
+ *
+ * @deprecated use get_configuration_proposal_v64 instead
  */
 query get_configuration_proposal(rowid?): (
     current_conf:blockchain_configuration_data,
@@ -128,5 +131,32 @@ query get_configuration_proposal(rowid?): (
     return (
         current_conf = blockchain_configuration_data(current.height, config.blockchain, current.config),
         proposed_conf = config
+    );
+}
+
+struct configuration_proposal_data {
+    blockchain_rid: byte_array;
+    current_height: integer;
+    current_configuration: byte_array;
+    proposed_configuration: byte_array;
+}
+
+/**
+ * Returns blockchain configuration proposal.
+ */
+query get_configuration_proposal_v64(rowid?): configuration_proposal_data? {
+    val proposal = get_latest_proposal(rowid, proposal_type.configuration);
+    if (proposal == null) return null;
+    val proposal_details = pending_configuration @? { require_proposal(proposal.rowid) }
+        (.blockchain, config = decompress_configuration(.data));
+    if (proposal_details == null) return null;
+
+    val current = get_latest_blockchain_configuration_data(proposal_details.blockchain);
+
+    return configuration_proposal_data(
+        blockchain_rid = proposal_details.blockchain.rid,
+        current_height = current.height,
+        current_configuration = current.config,
+        proposed_configuration = proposal_details.config,
     );
 }
