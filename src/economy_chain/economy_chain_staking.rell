@@ -265,31 +265,24 @@ function _staking_distribute_rewards(n_batch: integer = -1) {
         _update_pending_token_time_all();
     }
 
-    val rewards = staker_state @* { } (
-            @group account = .account,
-            @sum amount = integer (
-                (
-                .pending_token_time
-            ) * rate * units_per_asset
-            )
+    val rewards = (
+        ss: staker_state,
+        @outer psp: pending_shared_payment @* { ss.account == psp.account }
+    ) @* { ss.pending_token_time>0 or psp?.amount?:0>0 } (
+        @group account = ss.account,
+        @sum amount = integer ((ss.pending_token_time) * rate * units_per_asset),
+        @sum shared_amount = psp?.amount?:0
     ) limit (
         if (n_batch == -1) integer.MAX_VALUE else chain_context.args.staking_rewards_payout_batch_size
     ) offset (if (n_batch == -1) 0 else n_batch * chain_context.args.staking_rewards_payout_batch_size);
-
 
     val total_amount = rewards @ { } ( @sum .amount );
     log("Preparing to distribute %s rewards worth %s".format(rewards.size(), total_amount));
 
     val rewarded_accounts = rewards @* { } ( .account );
 
-    val shared_rewards = pending_shared_payment @* {
-        .account in rewarded_accounts
-    } (
-        @group .account,
-        @sum amount = .amount
-    );
-    val total_shared_amount = shared_rewards @ { } ( @sum .amount );
-    log("Preparing to distribute %s shared rewards worth %s".format(shared_rewards.size(), total_shared_amount));
+    val total_shared_amount = rewards @ { } ( @sum .shared_amount );
+    log("Preparing to distribute %s shared rewards worth %s".format(rewards.size(), total_shared_amount));
 
     // Do not start what we cannot finish
     val pool = get_pool_account();
@@ -307,9 +300,9 @@ function _staking_distribute_rewards(n_batch: integer = -1) {
     
     // Send payouts
     var payments = list<struct<staking_payment>>();
-    for ((account, amount) in rewards) {
+    for ((account, amount,shared_amount) in rewards) {
 
-        val total_transfer_amount = integer(amount + (shared_rewards @? { .account == account } ( .amount ) ?: 0));
+        val total_transfer_amount = integer(amount + shared_amount);
 
         /// @dev This can be removed once Rell supports a HAVING equivalent.
         if (total_transfer_amount == 0) {
