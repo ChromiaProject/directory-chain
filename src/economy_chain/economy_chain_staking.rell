@@ -269,7 +269,7 @@ function _staking_distribute_rewards(n_batch: integer = -1) {
 
     val rewards = (
         ss: staker_state,
-        @outer psp: pending_shared_payment @* { ss.account == psp.account }
+        @outer psp: pending_shared_payment @* { ss.account == psp.account, psp.paid == false }
     ) @* { ss.pending_token_time>0 or psp?.amount?:0>0 } (
         @group account = ss.account,
         @sum amount = integer ((ss.pending_token_time) * rate * units_per_asset),
@@ -304,7 +304,8 @@ function _staking_distribute_rewards(n_batch: integer = -1) {
         }
     }
     update staker_state @* { .account in rewarded_accounts } ( .pending_token_time = 0 );
-    delete pending_shared_payment @* { .account in rewarded_accounts };
+    update pending_shared_payment @* { .account in rewarded_accounts } ( .paid = true );
+
     val asset = get_asset();
     val last_known_time = _staking_last_known_time();
     
@@ -376,11 +377,13 @@ function _staking_shared_rewards(pay_reward_result) {
     if (total_delegation == 0) {
         return;
     }
+    val _provider = provider @ { provider_pubkey };
 
     val pending_shared_payment_structs = staker_delegations @* { } (
         struct<pending_shared_payment> (
             .account,
-            integer(total_shared_reward * (.balance / decimal(total_delegation)))
+            integer(total_shared_reward * (.balance / decimal(total_delegation))),
+            _provider
         )
     );
 
