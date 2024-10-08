@@ -306,6 +306,7 @@ function _staking_distribute_rewards(n_batch: integer = -1) {
     update staker_state @* { .account in rewarded_accounts } ( .pending_token_time = 0 );
     delete pending_shared_payment @* { .account in rewarded_accounts };
     val asset = get_asset();
+    val last_known_time = _staking_last_known_time();
     
     // Send payouts
     var payments = list<struct<staking_payment>>();
@@ -319,7 +320,7 @@ function _staking_distribute_rewards(n_batch: integer = -1) {
         payments
             .add(
                 struct<staking_payment>(
-                    timestamp = _staking_last_known_time(),
+                    timestamp = last_known_time,
                     amount = total_transfer_amount,
                     account
                 )
