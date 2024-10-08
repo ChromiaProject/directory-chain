@@ -259,9 +259,11 @@ function _staking_clear_upcoming_delegations(ft4.accounts.account) {
 // default to -1, meaning batching is not used
 function _staking_distribute_rewards(n_batch: integer = -1) {
     val rate = staking_get_current_rate() / millis_per_year;
+    val first_batch = n_batch == 0;
+    val using_batches = n_batch != -1;
 
     // Get a list of payouts
-    if (n_batch == 0 or n_batch == -1) {
+    if (first_batch or not using_batches) {
         _update_pending_token_time_all();
     }
 
@@ -273,8 +275,8 @@ function _staking_distribute_rewards(n_batch: integer = -1) {
         @sum amount = integer ((ss.pending_token_time) * rate * units_per_asset),
         @sum shared_amount = psp?.amount?:0
     ) limit (
-        if (n_batch == -1) integer.MAX_VALUE else chain_context.args.staking_rewards_payout_batch_size
-    ) offset (if (n_batch == -1) 0 else n_batch * chain_context.args.staking_rewards_payout_batch_size);
+        if (using_batches) chain_context.args.staking_rewards_payout_batch_size else integer.MAX_VALUE
+    ) offset (if (using_batches)  n_batch * chain_context.args.staking_rewards_payout_batch_size else 0);
 
     val total_amount = rewards @ { } ( @sum .amount );
     log("Preparing to distribute %s rewards worth %s".format(rewards.size(), total_amount));
