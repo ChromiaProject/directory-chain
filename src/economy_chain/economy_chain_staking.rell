@@ -336,9 +336,10 @@ function _staking_distribute_rewards(n_batch: integer = -1) {
 // Shared rewards (triggered by a hook in the rewards logic)
 
 function _staking_shared_rewards(pay_reward_result) {
+    val last_known_time = _staking_last_known_time();
 
     // Do nothing if the start date has not passed
-    if (_staking_last_known_time() < staking_get_rewards_start()) {
+    if (last_known_time < staking_get_rewards_start()) {
         return;
     }
 
@@ -382,8 +383,9 @@ function _staking_shared_rewards(pay_reward_result) {
     val pending_shared_payment_structs = staker_delegations @* { } (
         struct<pending_shared_payment> (
             .account,
-            integer(total_shared_reward * (.balance / decimal(total_delegation))),
-            _provider
+            amount = integer(total_shared_reward * (.balance / decimal(total_delegation))),
+            _provider,
+            timestamp = last_known_time
         )
     );
 
