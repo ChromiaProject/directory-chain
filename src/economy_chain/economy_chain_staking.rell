@@ -313,7 +313,8 @@ function _staking_distribute_rewards(n_batch: integer = -1) {
     }
     update staker_state @* { .account in rewarded_accounts } ( .pending_token_time = 0 );
     delete pending_shared_payment @* { .account in rewarded_accounts };
-
+    val asset = get_asset();
+    
     // Send payouts
     var payments = list<struct<staking_payment>>();
     for ((account, amount) in rewards) {
@@ -326,7 +327,7 @@ function _staking_distribute_rewards(n_batch: integer = -1) {
             continue;
         }
 
-        ft4.assets.Unsafe.transfer(pool, account, get_asset(), total_transfer_amount);
+        ft4.assets.Unsafe.transfer(pool, account, asset, total_transfer_amount);
         log("Paid out %s to %s".format(total_transfer_amount, account.id));
 
         payments
