@@ -264,27 +264,17 @@ function _staking_distribute_rewards(n_batch: integer = -1) {
     if (n_batch == 0 or n_batch == -1) {
         _update_pending_token_time_all();
     }
-    var rewards = if (n_batch == -1) (
-        staker_state @* { } (
+
+    val rewards = staker_state @* { } (
             @group account = .account,
             @sum amount = integer (
                 (
                 .pending_token_time
             ) * rate * units_per_asset
             )
-        )
-    ) else (
-        staker_state @* { } (
-            @group account = .account,
-            @sum amount = integer (
-                (
-                .pending_token_time
-            ) * rate * units_per_asset
-            )
-        ) limit (chain_context.args.staking_rewards_payout_batch_size) offset (
-            n_batch * chain_context.args.staking_rewards_payout_batch_size
-        )
-    );
+    ) limit (
+        if (n_batch == -1) integer.MAX_VALUE else chain_context.args.staking_rewards_payout_batch_size
+    ) offset (if (n_batch == -1) 0 else n_batch * chain_context.args.staking_rewards_payout_batch_size);
 
 
     val total_amount = rewards @ { } ( @sum .amount );
