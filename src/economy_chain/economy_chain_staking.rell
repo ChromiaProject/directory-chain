@@ -284,7 +284,14 @@ function _staking_distribute_rewards(n_batch: integer = -1) {
     val rewarded_accounts = rewards @* { } ( .account );
 
     val total_shared_amount = rewards @ { } ( @sum .shared_amount );
-    log("Preparing to distribute %s shared rewards worth %s".format(rewards.size(), total_shared_amount));
+    val total_shared_rewarded_accounts = rewards @* { .shared_amount>0 } ( @sum 1 );
+    log(
+        "Preparing to distribute %s shared rewards worth %s"
+            .format(
+                total_shared_rewarded_accounts,
+                total_shared_amount
+            )
+    );
 
     // Do not start what we cannot finish
     val pool = get_pool_account();
@@ -305,7 +312,7 @@ function _staking_distribute_rewards(n_batch: integer = -1) {
     for ((account, amount,shared_amount) in rewards) {
 
         val total_transfer_amount = integer(amount + shared_amount);
-        
+
         ft4.assets.Unsafe.transfer(pool, account, asset, total_transfer_amount);
         log("Paid out %s to %s".format(total_transfer_amount, account.id));
 
