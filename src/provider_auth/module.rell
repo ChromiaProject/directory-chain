@@ -40,7 +40,7 @@ function _add_provider_key(provider_pubkey: pubkey, pubkey, provider_key_role = 
  * @param pubkey The auth key
  * @param role Role of key
  */
-function _remove_provider_key(provider_pubkey: pubkey, role: provider_key_role, pubkey) {
+function _remove_provider_key(provider_pubkey: pubkey, pubkey, role: provider_key_role) {
 
     val key_count = get_provider_auth_key_count(provider_pubkey, role);
     require(
@@ -128,14 +128,14 @@ function is_provider_auth_threshold_set(provider_pubkey: pubkey, provider_key_ro
  *
  * @return The provider pubkey of the single provider signing this transaction.
  */
-function get_provider_signer(): pubkey? {
+function get_provider_signer(provider_key_roles: list<provider_key_role> = [provider_key_role.main]): pubkey? {
 
     val maybe_providers = provider_auth_key @* {
         provider_auth_key.pubkey in op_context.get_signers() } ( @group .provider_pubkey );
     var found_provider: pubkey? = null;
 
     for (maybe_provider in maybe_providers) {
-        if (provider_is_signer(maybe_provider)) {
+        if (provider_is_signer(maybe_provider, provider_key_roles)) {
             require(found_provider == null, "Transaction must be signed by one provider only");
             found_provider = maybe_provider;
         }

@@ -9,33 +9,33 @@ val bob = rell.test.keypairs.bob;
 function test_make_common_vote() {
 
     rell.test.tx().op(
-        create_test_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
+        create_test_common_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
     ).sign(alice).run();
 
     rell.test.tx().op(
-        make_common_vote(alice.pub, get_latest_proposal_id(), true)
+        make_common_vote(alice.pub, get_latest_common_proposal_id(), true)
     ).sign(alice).run();
 }
 
 function test_make_common_vote_fail_due_to_not_member_of_voter_set() {
 
     rell.test.tx().op(
-        create_test_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
+        create_test_common_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
     ).sign(alice).run();
 
     rell.test.tx().op(
-        make_common_vote(bob.pub, get_latest_proposal_id(), true)
+        make_common_vote(bob.pub, get_latest_common_proposal_id(), true)
     ).sign(bob).run_must_fail("0x034f355bdcb7cc0af728ef3cceb9615d90684bb5b2ca5f859ab0f0b704075871aa is not part of voter set voter_set_name");
 }
 
 function test_revoke_proposal() {
 
     rell.test.tx().op(
-        create_test_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
+        create_test_common_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
     ).sign(alice).run();
 
     rell.test.tx().op(
-        revoke_common_proposal(alice.pub, get_latest_proposal_id()))
+        revoke_common_proposal(alice.pub, get_latest_common_proposal_id()))
         .sign(alice)
         .run();
 
@@ -54,11 +54,11 @@ function test_revoke_proposal_fail_due_to_not_existing() {
 function test_revoke_proposal_fail_due_to_not_my_proposal() {
 
     rell.test.tx().op(
-        create_test_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
+        create_test_common_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
     ).sign(alice).run();
 
     rell.test.tx().op(
-        revoke_common_proposal(bob.pub, get_latest_proposal_id()))
+        revoke_common_proposal(bob.pub, get_latest_common_proposal_id()))
         .sign(bob)
         .run_must_fail("It is only allowed to revoke own proposals");
 }
@@ -66,29 +66,29 @@ function test_revoke_proposal_fail_due_to_not_my_proposal() {
 function test_revoke_proposal_fail_due_to_already_approved() {
 
     rell.test.tx().op(
-        create_test_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
+        create_test_common_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
     ).sign(alice).run();
 
     rell.test.tx().op(
-        make_common_vote(alice.pub, get_latest_proposal_id(), true)
+        make_common_vote(alice.pub, get_latest_common_proposal_id(), true)
     ).sign(alice).run();
 
     rell.test.tx().op(
-        revoke_common_proposal(alice.pub, get_latest_proposal_id())
+        revoke_common_proposal(alice.pub, get_latest_common_proposal_id())
     ).sign(alice).run_must_fail("The proposal is already APPROVED");
 }
 
 function test_revoke_proposal_fail_due_to_already_rejected() {
 
     rell.test.tx().op(
-        create_test_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
+        create_test_common_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
     ).sign(alice).run();
 
     rell.test.tx().op(
-        make_common_vote(alice.pub, get_latest_proposal_id(), false)
+        make_common_vote(alice.pub, get_latest_common_proposal_id(), false)
     ).sign(alice).run();
 
     rell.test.tx().op(
-        revoke_common_proposal(alice.pub, get_latest_proposal_id())
+        revoke_common_proposal(alice.pub, get_latest_common_proposal_id())
     ).sign(alice).run_must_fail("The proposal is already REJECTED");
 }

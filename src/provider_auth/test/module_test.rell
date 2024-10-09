@@ -133,22 +133,22 @@ function test_add_provider_key() {
 
     // Must be signed by provider
     rell.test.tx().op(
-        add_provider_key(provider_key_role.configuration_proposal, bob.pub),
+        add_provider_key(provider_key_role.configuration_proposal_vote, bob.pub),
     ).run_must_fail("Transaction must be signed by provider");
 
     // Must be a provider
     rell.test.tx().op(
-        add_provider_key(provider_key_role.configuration_proposal, bob.pub),
+        add_provider_key(provider_key_role.configuration_proposal_vote, bob.pub),
     ).sign(frank).run_must_fail("Transaction must be signed by provider");
 
     // Must be signed by bob key
     rell.test.tx().op(
-        add_provider_key(provider_key_role.configuration_proposal, bob.pub),
+        add_provider_key(provider_key_role.configuration_proposal_vote, bob.pub),
     ).sign(initial_provider).run_must_fail("Operation must be signed by %s".format(bob.pub));
 
     // Valid
     rell.test.tx().op(
-        add_provider_key(provider_key_role.configuration_proposal, bob.pub),
+        add_provider_key(provider_key_role.configuration_proposal_vote, bob.pub),
     ).sign(initial_provider, bob).run();
 }
 
@@ -257,8 +257,8 @@ function test_set_threshold_followed_by_adding_key() {
 
     // Add bob keys and test all valid thresholds
     rell.test.tx().op(
-        set_provider_key_threshold(provider_key_role.configuration_proposal, consensus_threshold.majority),
-        add_provider_key(provider_key_role.configuration_proposal, bob.pub),
+        set_provider_key_threshold(provider_key_role.configuration_proposal_vote, consensus_threshold.majority),
+        add_provider_key(provider_key_role.configuration_proposal_vote, bob.pub),
     ).sign(initial_provider, bob).run();
 }
 
@@ -325,16 +325,16 @@ function test_get_provider_keys() {
     // Add keys for initial provider
     rell.test.tx().op(
         add_provider_key(provider_key_role.main, charlie.pub),
-        add_provider_key(provider_key_role.configuration_proposal, dave.pub),
-        add_provider_key(provider_key_role.configuration_proposal, eve.pub),
+        add_provider_key(provider_key_role.configuration_proposal_vote, dave.pub),
+        add_provider_key(provider_key_role.configuration_proposal_vote, eve.pub),
     ).sign(initial_provider, charlie, dave, eve).run();
 
     // Add keys for bob provider
     rell.test.tx().op(
         add_provider_key(provider_key_role.main, frank.pub),
-        add_provider_key(provider_key_role.configuration_proposal, trudy.pub),
+        add_provider_key(provider_key_role.configuration_proposal_vote, trudy.pub),
         set_provider_key_threshold(provider_key_role.main, -1),
-        set_provider_key_threshold(provider_key_role.configuration_proposal, 1),
+        set_provider_key_threshold(provider_key_role.configuration_proposal_vote, 1),
     ).sign(bob, frank, trudy).run();
 
     // Verify initial provider
@@ -343,7 +343,7 @@ function test_get_provider_keys() {
             provider_role_keys_data(provider_key_role.main,
                 0,
                 [initial_provider.pub, charlie.pub]),
-            provider_role_keys_data(provider_key_role.configuration_proposal,
+            provider_role_keys_data(provider_key_role.configuration_proposal_vote,
                 0,
                 [dave.pub, eve.pub])
         ])
@@ -355,7 +355,7 @@ function test_get_provider_keys() {
             provider_role_keys_data(provider_key_role.main,
                 -1,
                 [bob.pub, frank.pub]),
-            provider_role_keys_data(provider_key_role.configuration_proposal,
+            provider_role_keys_data(provider_key_role.configuration_proposal_vote,
                 1,
                 [trudy.pub])
         ])
