@@ -1,27 +1,37 @@
 module;
 
 /**
- * Provider auth supports different types of authorization scopes defined as types.
+ * Provider key role. Used to set authorization scope for provider keys.
  */
-enum provider_key_type {
-    /** normal key - delegate signature checks to gtx */
+enum provider_key_role {
+    /** Main key used to access all provider operations and manage other key roles */
     main,
 
-    /** This type is not in use but used for tests */
+    /** This role is not in use but used for tests */
     configuration_proposal,
 }
 
 /**
- * Keeps the threshold (same as for votes consensus) for each provider and key type.
+ * A keys authentication scheme. Currently only supports GTX, but can be extended in the future if.
+ */
+enum provider_key_auth_scheme {
+
+    /** Delegate signature checks to gtx */
+    gtx
+}
+
+/**
+ * Keeps the threshold (same as for votes consensus) for each provider and key role.
  */
 entity provider_auth_threshold {
-    key provider_pubkey: pubkey, provider_key_type;
+    key provider_pubkey: pubkey, provider_key_role;
     mutable threshold: integer;
 }
 
 /**
- * Keeps all provider keys and their types.
+ * Keeps all provider keys and their roles.
  */
 entity provider_auth_key {
-    key provider_pubkey: pubkey, provider_key_type, pubkey;
+    key provider_pubkey: pubkey, provider_key_role, pubkey;
+    auth_scheme: provider_key_auth_scheme = provider_key_auth_scheme.gtx;
 }

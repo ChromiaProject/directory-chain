@@ -1,10 +1,10 @@
 struct provider_keys_data {
     provider_pubkey: pubkey;
-    keys: list<provider_type_keys_data>;
+    keys: list<provider_role_keys_data>;
 }
 
-struct provider_type_keys_data {
-    type: provider_key_type;
+struct provider_role_keys_data {
+    role: provider_key_role;
     threshold: integer;
     keys: list<pubkey>;
 }
@@ -15,11 +15,12 @@ function _after_provider_registered_add_key(provider, cluster: cluster?) {
 }
 
 /**
- * Add a key of type for the provider signing the transaction.
+ * Add a key with role for the provider signing the transaction.
  *
+ * @param role They role of this key.
  * @param pubkey The new key to add. Must sign the transaction.
  */
-operation add_provider_key(type: provider_key_type, pubkey) {
+operation add_provider_key(role: provider_key_role, pubkey) {
 
     val provider = require_provider_signer();
     require_provider_auth_with_rate_limit(provider);
@@ -29,50 +30,52 @@ operation add_provider_key(type: provider_key_type, pubkey) {
     require(key_owner == null or key_owner == provider.pubkey,
         "Key is already in use by provider %s".format(key_owner));
 
-    _add_provider_key(provider.pubkey, pubkey, type);
+    _add_provider_key(provider.pubkey, pubkey, role);
 }
 
 /**
- * Remove a key of type for the provider signing the transaction.
+ * Remove a key with role for the provider signing the transaction.
  *
+ * @param role They role of this key.
  * @param pubkey The key to remove.
  */
-operation remove_provider_key(type: provider_key_type, pubkey) {
+operation remove_provider_key(role: provider_key_role, pubkey) {
 
     val provider = require_provider_signer();
     require_provider_auth_with_rate_limit(provider);
     require(get_provider_by_auth_key(pubkey) == provider.pubkey,
         "Operation not signed by key owner");
 
-    _remove_provider_key(provider.pubkey, type, pubkey);
+    _remove_provider_key(provider.pubkey, role, pubkey);
 }
 
 /**
- * Set the key threshold for the given key type for the provider signing the transaction. The threshold
+ * Set the key threshold a key role for the provider signing the transaction. The threshold
  * controls the number of keys required to authenticate the provider.
  *
+ * @param role They role of this key.
  * @param threshold Can either be -1 for majority, 0 for super-majority or the number of keys required.
  */
-operation set_provider_key_threshold(provider_key_type, threshold: integer) {
+operation set_provider_key_threshold(role: provider_key_role, threshold: integer) {
 
     val provider = require_provider_signer();
     require_provider_auth_with_rate_limit(provider);
 
-    _set_provider_key_threshold(provider.pubkey, provider_key_type, threshold);
+    _set_provider_key_threshold(provider.pubkey, role, threshold);
 }
 
 /**
- * Get keys for provider, their types and threshold.
+ * Get keys for provider, their roles and threshold.
  */
 query get_provider_keys(pubkey) {
 
     val provider = require_provider(pubkey);
 
-    val provider_keys = list<provider_type_keys_data>();
+    val provider_keys = list<provider_role_keys_data>();
     for (threshold in provider_auth_threshold @* { .provider_pubkey == provider.pubkey }) {
 
-        val keys = provider_auth_key @* { .provider_pubkey == provider.pubkey, .provider_key_type == threshold.provider_key_type } ( .pubkey );
-        provider_keys.add(provider_type_keys_data(threshold.provider_key_type, threshold.threshold, keys));
+        val keys = provider_auth_key @* { .provider_pubkey == provider.pubkey, .provider_key_role == threshold.provider_key_role } ( .pubkey );
+        provider_keys.add(provider_role_keys_data(threshold.provider_key_role, threshold.threshold, keys));
     }
 
     return provider_keys_data(provider.pubkey, provider_keys);

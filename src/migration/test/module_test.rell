@@ -27,10 +27,10 @@ function test_migrate_provider_keys() {
     assert_equals(keys.size(), 1);
     assert_equals(keys[0].provider_pubkey, rell.test.keypairs.alice.pub);
     assert_equals(keys[0].pubkey, rell.test.keypairs.alice.pub);
-    assert_equals(keys[0].provider_key_type, provider_key_type.main);
+    assert_equals(keys[0].provider_key_role, provider_key_role.main);
 
     // Default threshold is set
-    val threshold = provider_auth_threshold @ { .provider_pubkey == rell.test.keypairs.alice.pub, provider_key_type.main } ( .threshold );
+    val threshold = provider_auth_threshold @ { .provider_pubkey == rell.test.keypairs.alice.pub, provider_key_role.main } ( .threshold );
     assert_equals(threshold, consensus_threshold.super_majority);
 
     // Migration job marked as completed
@@ -43,7 +43,7 @@ function test_migrate_provider_keys() {
 
     // Test auth - works
     rell.test.tx().op(
-        provider_is_signer_op(rell.test.keypairs.alice.pub, [provider_key_type.main]),
-        provider_is_signer_op(rell.test.keypairs.alice.pub, [provider_key_type.main, provider_key_type.configuration_proposal]),
+        provider_is_signer_op(rell.test.keypairs.alice.pub, [provider_key_role.main]),
+        provider_is_signer_op(rell.test.keypairs.alice.pub, [provider_key_role.main, provider_key_role.configuration_proposal]),
     ).sign(rell.test.keypairs.alice).run();
 }

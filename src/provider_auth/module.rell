@@ -13,21 +13,21 @@ import common_consensus.*;
 @extendable function after_provider_auth_updated(provider_pubkey: pubkey) {}
 
 /**
- * Adds a key for provider if not already exists. If this is the first key of the type, then a default
+ * Adds a key for provider if not already exists. If this is the first key of this role, then a default
  * super-majority threshold is set.
  *
  * @param provider_pubkey They provider to add this key for.
  * @param pubkey The auth key
- * @param provider_key_type TODO or remove
+ * @param provider_key_role The role of key
  */
-function _add_provider_key(provider_pubkey: pubkey, pubkey, provider_key_type = provider_key_type.main) {
+function _add_provider_key(provider_pubkey: pubkey, pubkey, provider_key_role = provider_key_role.main) {
 
-    if (not exists(provider_auth_key @? { provider_pubkey, provider_key_type, pubkey })) {
-        create provider_auth_key(provider_pubkey, provider_key_type, pubkey);
+    if (not exists(provider_auth_key @? { provider_pubkey, provider_key_role, pubkey })) {
+        create provider_auth_key(provider_pubkey, provider_key_role, pubkey);
     }
 
-    if (not is_provider_auth_threshold_set(provider_pubkey, provider_key_type)) {
-        _set_provider_key_threshold(provider_pubkey, provider_key_type, consensus_threshold.super_majority);
+    if (not is_provider_auth_threshold_set(provider_pubkey, provider_key_role)) {
+        _set_provider_key_threshold(provider_pubkey, provider_key_role, consensus_threshold.super_majority);
     }
 
     after_provider_auth_updated(provider_pubkey);
@@ -38,44 +38,44 @@ function _add_provider_key(provider_pubkey: pubkey, pubkey, provider_key_type = 
  *
  * @param provider_pubkey They provider to add this key for.
  * @param pubkey The auth key
- * @param type TODO or remove
+ * @param role Role of key
  */
-function _remove_provider_key(provider_pubkey: pubkey, type: provider_key_type, pubkey) {
+function _remove_provider_key(provider_pubkey: pubkey, role: provider_key_role, pubkey) {
 
-    val key_count = get_provider_auth_key_count(provider_pubkey, type);
+    val key_count = get_provider_auth_key_count(provider_pubkey, role);
     require(
-        type != provider_key_type.main or key_count > 1,
-        "Can't remove last %s key".format(provider_key_type.main)
+        role != provider_key_role.main or key_count > 1,
+        "Can't remove last %s key".format(provider_key_role.main)
     );
-    val key_type_threshold = require(get_provider_auth_threshold(provider_pubkey, type),
-        "No threshold found for type %s".format(type));
+    val key_role_threshold = require(get_provider_auth_threshold(provider_pubkey, role),
+        "No threshold found for role %s".format(role));
     require(
-        key_count - 1 >= key_type_threshold.threshold,
+        key_count - 1 >= key_role_threshold.threshold,
             "Can't remove key from %s due to key count (%s) gets under threshold (%s)".format(
-                type, key_count - 1, key_type_threshold.threshold
+                role, key_count - 1, key_role_threshold.threshold
     ));
 
-    delete provider_auth_key @? { .provider_pubkey == provider_pubkey, type, pubkey };
+    delete provider_auth_key @? { .provider_pubkey == provider_pubkey, role, pubkey };
 
     after_provider_auth_updated(provider_pubkey);
 }
 
 /**
- * Sets the required threshold for a specific provider and key type. The threshold is the same as for voting
+ * Sets the required threshold for a specific provider key role. The threshold is the same as for voting
  * consensus (majority, super-majority or fixed number)
  */
-function _set_provider_key_threshold(provider_pubkey: pubkey, provider_key_type, threshold: integer) {
+function _set_provider_key_threshold(provider_pubkey: pubkey, provider_key_role, threshold: integer) {
 
-    val key_count = get_provider_auth_key_count(provider_pubkey, provider_key_type);
+    val key_count = get_provider_auth_key_count(provider_pubkey, provider_key_role);
 
     require(threshold <= key_count, "Threshold (%s) can't be larger than number of keys (%s)".format(threshold, key_count));
     require(is_valid_consensus_threshold(threshold), "Threshold must be -1 (majority), 0 (super-majority) or positive");
 
-    val pat = get_provider_auth_threshold(provider_pubkey, provider_key_type);
+    val pat = get_provider_auth_threshold(provider_pubkey, provider_key_role);
     if (exists(pat)) {
         pat.threshold = threshold;
     } else {
-        create provider_auth_threshold(provider_pubkey, provider_key_type, threshold);
+        create provider_auth_threshold(provider_pubkey, provider_key_role, threshold);
     }
 
     after_provider_auth_updated(provider_pubkey);
@@ -83,26 +83,26 @@ function _set_provider_key_threshold(provider_pubkey: pubkey, provider_key_type,
 
 /**
  * Checks if transactions is signed by keys belonging to provider_pubkey. Will require the threshold of signer keys of
- * the given key type to be valid.
+ * the given key role to be valid.
  *
  * @return True if transaction is signed by the specific providers, false otherwise.
  */
-function provider_is_signer(provider_pubkey: pubkey, provider_key_types: list<provider_key_type> = [provider_key_type.main]) {
+function provider_is_signer(provider_pubkey: pubkey, provider_key_roles: list<provider_key_role> = [provider_key_role.main]) {
 
-    val key_types_signed = provider_auth_key @* {
+    val key_roles_signed = provider_auth_key @* {
         provider_pubkey,
-        .provider_key_type in provider_key_types,
+        .provider_key_role in provider_key_roles,
         .pubkey in op_context.get_signers()
-    } ( @group .provider_key_type, @sum signed_keys = 1 );
+    } ( @group .provider_key_role, @sum signed_keys = 1 );
 
-    for (key_type_signed in key_types_signed) {
-        val threshold = provider_auth_threshold @? { provider_pubkey, key_type_signed.provider_key_type } ( .threshold );
-        val max_signer_keys = get_provider_auth_key_count(provider_pubkey, key_type_signed.provider_key_type);
+    for (key_role_signed in key_roles_signed) {
+        val threshold = provider_auth_threshold @? { provider_pubkey, key_role_signed.provider_key_role } ( .threshold );
+        val max_signer_keys = get_provider_auth_key_count(provider_pubkey, key_role_signed.provider_key_role);
 
         if (
             threshold != null and
             max_signer_keys > 0 and
-            _compute_common_consensus_result(key_type_signed.signed_keys, 0, max_signer_keys, threshold) == common_consensus_result.approved
+            _compute_common_consensus_result(key_role_signed.signed_keys, 0, max_signer_keys, threshold) == common_consensus_result.approved
         ) {
             return true;
         }
@@ -110,16 +110,16 @@ function provider_is_signer(provider_pubkey: pubkey, provider_key_types: list<pr
     return false;
 }
 
-function get_provider_auth_key_count(provider_pubkey: pubkey, provider_key_type): integer {
-    return provider_auth_key @ { provider_pubkey, provider_key_type } ( @sum 1 );
+function get_provider_auth_key_count(provider_pubkey: pubkey, provider_key_role): integer {
+    return provider_auth_key @ { provider_pubkey, provider_key_role } ( @sum 1 );
 }
 
-function get_provider_auth_threshold(provider_pubkey: pubkey, provider_key_type) {
-    return provider_auth_threshold @? { provider_pubkey, provider_key_type };
+function get_provider_auth_threshold(provider_pubkey: pubkey, provider_key_role) {
+    return provider_auth_threshold @? { provider_pubkey, provider_key_role };
 }
 
-function is_provider_auth_threshold_set(provider_pubkey: pubkey, provider_key_type) {
-    return get_provider_auth_threshold(provider_pubkey, provider_key_type) != null;
+function is_provider_auth_threshold_set(provider_pubkey: pubkey, provider_key_role) {
+    return get_provider_auth_threshold(provider_pubkey, provider_key_role) != null;
 }
 
 /**
@@ -148,12 +148,12 @@ function get_provider_signer(): pubkey? {
  * Find provider by auth key.
  *
  * @param pubkey Auth key to lookup provider by
- * @param type If not null, limit search by key type.
+ * @param role If not null, limit search by key role.
  * @return Provider pubkey
  */
-function get_provider_by_auth_key(pubkey, type: provider_key_type? = null): pubkey? {
+function get_provider_by_auth_key(pubkey, role: provider_key_role? = null): pubkey? {
     return provider_auth_key @? {
         .pubkey == pubkey,
-        type == null or .provider_key_type == type
+        role == null or .provider_key_role == role
     } ( .provider_pubkey ) limit 1;
 }
