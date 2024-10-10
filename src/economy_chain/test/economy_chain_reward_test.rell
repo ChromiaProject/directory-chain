@@ -623,7 +623,11 @@ function test_staking_req_reward_successful_due_to_disabled() {
 }
 
 function test_staking_req_reward_successful_followed_by_stopped() {
+    rell.test.tx().op(init()).run();
 
+    rell.test.tx()
+        .op(mint_to_pool(10000000000))
+        .sign(admin_privkey).run();
     // Staking OK - pay reward
     update_staking_requirements_constants(
         staking_requirements_enabled = true,
@@ -637,6 +641,7 @@ function test_staking_req_reward_successful_followed_by_stopped() {
         reward = 10,
         staking_amount = 10
     );
+    rell.test.tx().op(staking_claim_rewards(0)).sign(admin_privkey).run();
 
     assert_equals(get_account_balance(psa.staking_account), 11);
     assert_gt(psa.last_approved_stake_requirements, 0);
@@ -658,6 +663,8 @@ function test_staking_req_reward_successful_followed_by_stopped() {
     ).nop().sign(provider_key).run();
 
     psa = provider_staking_account @ { provider @ { provider_pubkey } };
+
+    rell.test.tx().op(staking_claim_rewards(0)).sign(admin_privkey).nop().run();
 
     assert_equals(get_account_balance(psa.staking_account), 22);
     assert_equals(psa.last_approved_stake_requirements, last_approved_stake_requirements);
