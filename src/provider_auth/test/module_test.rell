@@ -264,6 +264,59 @@ function test_set_threshold_followed_by_adding_key() {
 
 function test_get_provider_signer__roles() {
 
+    setup_module();
+    val provider = provider @ { initial_provider.pub };
+
+    // Add bob keys and test all valid thresholds
+    rell.test.tx().op(
+        add_provider_key(provider_key_role.configuration_proposal_vote, bob.pub),
+    ).sign(initial_provider, bob).run();
+
+    // Valid main key
+    rell.test.tx().op(
+        get_provider_signer_op(initial_provider.pub)
+    ).sign(initial_provider).run();
+
+    // Invalid - key is not in role
+    rell.test.tx().op(
+        get_provider_signer_op(null, [provider_key_role.configuration_proposal_vote])
+    ).sign(initial_provider).run();
+
+    // Valid key for role
+    rell.test.tx().op(
+        get_provider_signer_op(initial_provider.pub, [provider_key_role.configuration_proposal_vote])
+    ).sign(bob).run();
+
+    // Add provider key to role
+    rell.test.tx().op(
+        add_provider_key(provider_key_role.configuration_proposal_vote, initial_provider.pub),
+        set_provider_key_threshold(provider_key_role.configuration_proposal_vote, consensus_threshold.super_majority),
+    ).sign(initial_provider).run();
+
+    // Invalid - one key is not enough for super-majority
+    rell.test.tx().op(
+        get_provider_signer_op(null, [provider_key_role.configuration_proposal_vote])
+    ).sign(initial_provider).nop().run();
+
+    // Valid - signed by both keys
+    rell.test.tx().op(
+        get_provider_signer_op(initial_provider.pub, [provider_key_role.configuration_proposal_vote])
+    ).sign(initial_provider, bob).run();
+
+    // Threshold set to 1
+    rell.test.tx().op(
+        set_provider_key_threshold(provider_key_role.configuration_proposal_vote, 1),
+    ).sign(initial_provider, bob).run();
+
+    // Valid - signed only by one key
+    rell.test.tx().op(
+        get_provider_signer_op(initial_provider.pub, [provider_key_role.configuration_proposal_vote])
+    ).nop().sign(initial_provider).run();
+
+    // Valid - signed only by the other key
+    rell.test.tx().op(
+        get_provider_signer_op(initial_provider.pub, [provider_key_role.configuration_proposal_vote])
+    ).nop().sign(bob).run();
 }
 
 function test_get_provider_signer() {
