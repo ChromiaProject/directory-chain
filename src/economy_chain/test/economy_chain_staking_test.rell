@@ -776,7 +776,7 @@ function test_yield_and_batch_payout() {
     assert_equals(staking_rewards_for(test_account_charlie.id), 0);
 
     // Do payout batch 0
-    rell.test.tx().op(staking_claim_rewards(0)).sign(admin_privkey).run();
+    rell.test.tx().op(staking_claim_rewards(true, true)).sign(admin_privkey).run();
     // Ensure there's no (more than a few seconds worth of) claimable yield after payout
     log("Alice is ", test_account_alice.id);
     log("Bob is ", test_account_bob.id);
@@ -876,7 +876,7 @@ function test_yield_and_batch_payout_many() {
 
     // Do all batch payouts
     for (i in range(0,staked_accounts.size()/chain_context.args.staking_rewards_payout_batch_size)) {
-        rell.test.tx().op(staking_claim_rewards(i)).sign(admin_privkey).run();
+        rell.test.tx().op(staking_claim_rewards(true, i == 0)).sign(admin_privkey).nop().run();
         for (j in range(0,chain_context.args.staking_rewards_payout_batch_size)) {
             if (i * chain_context.args.staking_rewards_payout_batch_size + j >= staked_accounts.size()) {
                 break;
