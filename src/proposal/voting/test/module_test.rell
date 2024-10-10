@@ -65,48 +65,6 @@ function test_make_vote__voter_not_member() {
     ).sign(provider_2).run_must_fail("Provider is not a member of voter set vs1");
 }
 
-function test_make_vote__configuration_proposal_vote_role() {
-
-    rell.test.tx().op(
-        create_test_provider("", provider_1.pub, provider_tier.NODE_PROVIDER),
-        create_test_provider("", provider_2.pub, provider_tier.NODE_PROVIDER),
-        create_voter_set(provider_1.pub, "vs1", 0, [provider_1.pub, provider_2.pub], null)
-    ).sign(provider_1).run();
-
-    val provider = provider @ { provider_1.pub };
-    val voter_set = voter_set @ { };
-
-    rell.test.tx().op(
-        create_test_proposal(proposal_type.configuration, provider, voter_set),
-    ).sign(provider_1).run();
-
-    // Replace main key and
-    rell.test.tx().op(
-        add_provider_key_op(provider.pubkey, extra_key_1.pub),
-        remove_provider_key_op(provider.pubkey, provider_1.pub),
-    ).run();
-
-    // Invalid - main key is no longer provider_1
-    rell.test.tx().op(
-        make_vote(get_latest_proposal_id().to_integer(), true),
-    ).sign(provider_1).run_must_fail();
-
-    // Add role key
-    rell.test.tx().op(
-        add_provider_key_op(provider.pubkey, extra_key_2.pub, provider_key_role.configuration_proposal_vote),
-    ).run();
-
-    // Invalid - old main key still don't work
-    rell.test.tx().op(
-        make_vote(get_latest_proposal_id().to_integer(), true),
-    ).sign(provider_1).run_must_fail();
-
-    // Valid - but new key do
-    rell.test.tx().op(
-        make_vote(get_latest_proposal_id().to_integer(), true),
-    ).sign(extra_key_2).run();
-}
-
 function test_retract_vote() {
 
     // Invalid - no such proposal
@@ -157,46 +115,4 @@ function test_retract_vote__voter_not_member() {
     rell.test.tx().op(
         retract_vote(get_latest_proposal_id().to_integer()),
     ).sign(provider_2).run_must_fail("Provider is not a member of voter set vs1");
-}
-
-function test_retract_vote__configuration_proposal_vote_role() {
-
-    rell.test.tx().op(
-        create_test_provider("", provider_1.pub, provider_tier.NODE_PROVIDER),
-        create_test_provider("", provider_2.pub, provider_tier.NODE_PROVIDER),
-        create_voter_set(provider_1.pub, "vs1", 0, [provider_1.pub, provider_2.pub], null)
-    ).sign(provider_1).run();
-
-    val provider = provider @ { provider_1.pub };
-    val voter_set = voter_set @ { };
-
-    rell.test.tx().op(
-        create_test_proposal(proposal_type.configuration, provider, voter_set),
-    ).sign(provider_1).run();
-
-    // Replace main key and
-    rell.test.tx().op(
-        add_provider_key_op(provider.pubkey, extra_key_1.pub),
-        remove_provider_key_op(provider.pubkey, provider_1.pub),
-    ).run();
-
-    // Invalid - main key is no longer provider_1
-    rell.test.tx().op(
-        retract_vote(get_latest_proposal_id().to_integer()),
-    ).sign(provider_1).run_must_fail();
-
-    // Add role key
-    rell.test.tx().op(
-        add_provider_key_op(provider.pubkey, extra_key_2.pub, provider_key_role.configuration_proposal_vote),
-    ).run();
-
-    // Invalid - old main key still don't work
-    rell.test.tx().op(
-        retract_vote(get_latest_proposal_id().to_integer()),
-    ).sign(provider_1).run_must_fail();
-
-    // Valid - but new key do
-    rell.test.tx().op(
-        retract_vote(get_latest_proposal_id().to_integer()),
-    ).sign(extra_key_2).run();
 }

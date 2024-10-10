@@ -53,7 +53,7 @@ operation create_voter_set(my_pubkey: pubkey, name, threshold: integer, initials
  */
 operation make_vote(proposal_id: integer, vote: boolean) {
     val prop = require_proposal(rowid(proposal_id));
-    val provider = require_provider_signer_with_rate_limit(voter_roles(prop));
+    val provider = require_provider_signer_with_rate_limit();
     require(prop.state == proposal_state.PENDING, "The proposal is already %s".format(prop.state));
     require_voter_set_member(prop.voter_set, provider);
     require(empty(vote @? {prop, provider}), "Only one vote per pubkey is allowed");
@@ -69,7 +69,7 @@ operation make_vote(proposal_id: integer, vote: boolean) {
  */
 operation retract_vote(proposal_id: integer) {
     val prop = require_proposal(rowid(proposal_id));
-    val provider = require_provider_signer_with_rate_limit(voter_roles(prop));
+    val provider = require_provider_signer_with_rate_limit();
     require(prop.state == proposal_state.PENDING, "The proposal is already %s".format(prop.state));
     require_voter_set_member(prop.voter_set, provider);
 
@@ -82,17 +82,3 @@ operation retract_vote(proposal_id: integer) {
     }
 }
 
-/**
- * Based on type of proposal returns allowed provider auth roles to vote.
- *
- * @return A list of provider roles allowed to vote for this specific proposal.
- */
-function voter_roles(proposal): list<provider_key_role> {
-    return when (proposal.proposal_type) {
-        // Specific role for specific proposal
-        proposal_type.configuration -> [provider_key_role.main, provider_key_role.configuration_proposal_vote];
-
-        // Default only permits main role to vote
-        else -> [provider_key_role.main];
-    };
-}
