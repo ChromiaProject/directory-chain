@@ -589,17 +589,24 @@ function test_staking_req_reward_fail_due_to_low_total() {
 }
 
 function test_staking_req_reward_successful() {
+    rell.test.tx().op(init()).run();
 
     update_staking_requirements_constants(
         staking_requirements_enabled = true
     );
+    rell.test.tx()
+        .op(mint_to_pool(2000000000))
+        .sign(admin_privkey).run();
 
     val psa = run_staking_pay_out(
         reward = 10,
         staking_amount = economy_constants.staking_requirement_system_provider_total_stake_chr + 100
     );
 
-    assert_equals(get_account_balance(psa.staking_account), 11);
+    rell.test.tx().op(staking_claim_rewards(0)).sign(admin_privkey).run();
+
+    //assert that the reward is paid out. We subtract the regular staking reward from the total
+    assert_equals(get_account_balance(psa.staking_account) - 1150722983, 11);
     assert_gt(psa.last_approved_stake_requirements, 0);
 }
 
