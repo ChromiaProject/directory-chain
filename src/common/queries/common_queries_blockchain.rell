@@ -183,3 +183,19 @@ query get_unarchiving_blockchain_info(blockchain_rid: byte_array) = unarchiving_
     destination_container = .destination.name,
     final_height = .final_height
 );
+
+/**
+ * Return a list of blockchain rids with given config enabled.
+ *
+ * @param config_delay Return blockchains with greater or equal to the time in milliseconds. Use 1 to get all blockchains with this feature enabled.
+ * @return List of blockchain rids.
+ */
+query get_blockchains_with_specific_config(config_delay: integer? = null) {
+
+    require(config_delay != null, "At least one filter must be used");
+
+    return latest_blockchain_configuration_values @* {
+        config_delay == null or .config_delay >= config_delay
+    } ( .blockchain.rid );
+}
+

@@ -1,0 +1,22 @@
+@test module;
+
+import ^^.*;
+import common.test.helper_operations.*;
+import delay.test.helper_operations.*;
+
+function test_get_blockchains_with_specific_config() {
+
+    rell.test.tx().op(
+        create_blockchain(x"01", ""),
+        create_blockchain(x"02", ""),
+        create_blockchain(x"03", ""),
+    ).run();
+
+    rell.test.tx().op(
+        set_blockchain_config_delay_op(blockchain @ { x"01" }, 100),
+        set_blockchain_config_delay_op(blockchain @ { x"02" }, 5000),
+    ).run();
+
+    assert_equals(get_blockchains_with_specific_config(config_delay = 0), [x"01", x"02"]);
+    assert_equals(get_blockchains_with_specific_config(config_delay = 800), [x"02"]);
+}
