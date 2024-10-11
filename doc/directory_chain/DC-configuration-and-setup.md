@@ -1,6 +1,6 @@
 # Directory Chain Configuration
 
-### Module args
+## Module args
 
 The Directory Chain has the following module args:
 
@@ -45,7 +45,7 @@ Config type
 |-----------|:---------------------------------------------------------------------------------|
 | node_info | pubkey<br>host: text<br>port: integer<br>api_url: text<br>territory: text?       |
 
-### ICMF configuration
+## ICMF configuration
 
 In addition, you also need to set up ICMF configuration so that it listens to.
 
@@ -128,3 +128,19 @@ From economy-chain:
           - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
           - "net.postchain.eif.EifSynchronizationInfrastructureExtension" 
 ```
+
+## Delayed blockchain configuration
+
+A blockchain can be set to support delayed configuration updates to give users a heads-up and make them aware of upcoming changes. When a delay is enabled and a configuration proposal is accepted (with enough providers votes) it will wait the configured time before being applied to the blockchain. This also includes updating the delay setting itself.
+
+This is disabled by default but can be enabled by setting `config_delay` to the number of milliseconds the delay should last.
+
+```yaml
+blockchains:
+    name_of_blockchain:
+        config:
+            directory_chain:
+                config_delay: 0 # Delay in milliseconds
+```
+
+The `list_delayed_blockchain_configs` query can be used to retrieve existing delayed configuration proposals.
