@@ -14,3 +14,23 @@ function register_and_link_erc20_asset(ft4.assets.asset) {
 			eif.hbridge.bridge_mode.foreign 
 		);
 }
+
+/**
+ * Temporary operation to add evm links to accounts created with transfer fee
+ * Needed for questnet reward accounts to bridge out their CHR before vault adds the link operation for users
+ */
+operation add_missing_evm_links() {
+	val new_links = ( ads: ft4.accounts.auth_descriptor_signer, mad: ft4.accounts.main_auth_descriptor) @* {
+		ads.id.size() == 20 //ensure signer is an EVM address
+		and ads.account_auth_descriptor == mad.auth_descriptor //ensure signer is for a main AD
+		and empty ( // filter out accounts that already has a link
+			(e: eif.hbridge.evm_eoa_account_link) @* {
+				e.account == mad.account
+			}
+		)
+	} ( struct<eif.hbridge.evm_eoa_account_link> (address = ads.id, account = mad.account) );
+
+	//Avoid operation spam
+	require(new_links.size() > 0, "No new links to add");
+	create eif.hbridge.evm_eoa_account_link ( new_links );
+}
