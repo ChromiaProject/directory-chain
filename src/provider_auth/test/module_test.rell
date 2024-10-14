@@ -282,9 +282,10 @@ function test_get_provider_signer() {
         get_provider_signer_op(initial_provider.pub)
     ).sign(initial_provider).run();
 
-    // Add bob keys
+    // Add bob keys and set threshold to super-majority
     rell.test.tx().op(
         add_provider_key(provider_key_role.main, bob.pub),
+        set_provider_key_threshold(provider_key_role.main, consensus_threshold.super_majority),
     ).sign(initial_provider, bob).run();
 
     // No provider found - must be signed by both keys
@@ -334,17 +335,17 @@ function test_get_provider_keys() {
         add_provider_key(provider_key_role.main, frank.pub),
         add_provider_key(provider_key_role.configuration_proposal_vote, trudy.pub),
         set_provider_key_threshold(provider_key_role.main, -1),
-        set_provider_key_threshold(provider_key_role.configuration_proposal_vote, 1),
+        set_provider_key_threshold(provider_key_role.configuration_proposal_vote, 0),
     ).sign(bob, frank, trudy).run();
 
     // Verify initial provider
     assert_equals(get_provider_keys(initial_provider.pub),
         provider_keys_data(initial_provider.pub, keys = [
             provider_role_keys_data(provider_key_role.main,
-                0,
+                1,
                 [initial_provider.pub, charlie.pub]),
             provider_role_keys_data(provider_key_role.configuration_proposal_vote,
-                0,
+                1,
                 [dave.pub, eve.pub])
         ])
     );
@@ -356,7 +357,7 @@ function test_get_provider_keys() {
                 -1,
                 [bob.pub, frank.pub]),
             provider_role_keys_data(provider_key_role.configuration_proposal_vote,
-                1,
+                0,
                 [trudy.pub])
         ])
     );
