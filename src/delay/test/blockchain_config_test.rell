@@ -4,6 +4,10 @@ import ^^.*;
 import ^.helper_operations.*;
 import model.*;
 import common.test.helper_operations.*;
+import common.test.setup.*;
+import common.test.util.*;
+import direct_container.*;
+import common.test.ops.*;
 
 function test_blockchain_config_delay() {
 
@@ -37,3 +41,22 @@ function test_blockchain_config_delay() {
     assert_equals(get_blockchain_config_delay(x"02"), 0);
 }
 
+function test_get_blockchains_with_active_delayed_proposals() {
+
+    setup_module();
+
+    var conf = apply_required_configuration_properties();
+    rell.test.tx().op(
+        create_test_provider("bob", rell.test.pubkeys.bob),
+        create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub])
+    ).sign(initial_provider).run();
+
+    val directory_chain = blockchain @ { blockchains.directory_chain };
+
+    rell.test.tx().op(
+        set_blockchain_config_delay_op(directory_chain, 100),
+        propose_configuration(initial_provider.pub, directory_chain.rid, conf.to_gtv().to_bytes())
+    ).sign(initial_provider).run();
+
+    assert_equals(get_blockchains_with_active_delayed_proposals(), [directory_chain.rid]);
+}

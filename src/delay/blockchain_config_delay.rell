@@ -88,3 +88,20 @@ query list_delayed_blockchain_configs(blockchain_rid: byte_array): list<delayed_
 
     return result;
 }
+
+/**
+ * Get all blockchain rids with active delayed proposals.
+ *
+ * @return List of blockchain rids.
+ */
+query get_blockchains_with_active_delayed_proposals() {
+
+    val result = list<byte_array>();
+    val bcs = latest_blockchain_configuration_values @* { .config_delay > 0 } ( .blockchain );
+    for (bc in bcs) {
+        if (not get_blockchain_proposal_delay_ids(bc).empty()) {
+            result.add(bc.rid);
+        }
+    }
+    return result;
+}
