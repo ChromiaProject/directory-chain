@@ -153,19 +153,14 @@ function test_add_missing_evm_links() {
     assert_null(eif.hbridge.evm_eoa_account_link @? { ft4.accounts.account_by_id(dave_id) }); 
 
     rell.test.tx()
-        .op(add_missing_evm_links())
+        .op(enable_evm_link_begin_block())
         .run();
-
+        
+    rell.test.block().run();
     //Alice links are unchanged
     assert_equals((eif.hbridge.evm_eoa_account_link @* { alice_account }).size(), 1);    
     assert_equals(eif.hbridge.evm_eoa_account_link @? { bob_evm_address } (.account), ft4.accounts.account_by_id(bob_id));    
     assert_equals(eif.hbridge.evm_eoa_account_link @? { charlie_evm_address } (.account), ft4.accounts.account_by_id(charlie_id)); 
     //Dave is not an EVM signer and should not get a link
     assert_null(eif.hbridge.evm_eoa_account_link @? { ft4.accounts.account_by_id(dave_id) });
-
-    //Should not be runnable again
-    rell.test.tx()
-        .op(add_missing_evm_links())
-        .nop()
-        .run_must_fail("No new links to add");
 }
