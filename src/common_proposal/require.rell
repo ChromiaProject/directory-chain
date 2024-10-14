@@ -10,7 +10,7 @@ function require_common_voter_set_member_and_signer(common_voter_set, pubkey) {
         }
         common_proposal_vote_type.PROVIDER_AUTH -> {
             require(provider_is_signer(pubkey), "Operation must be signed by provider key(s)");
-            require(exists((pak: provider_auth_key, cvsm: common_voter_set_member, common_voter_set_member) @* {
+            require(exists((pak: provider_auth_key, cvsm: common_voter_set_member) @* {
                 pak.provider_pubkey == pubkey,
                 pak.provider_key_role == provider_key_role.main,
                 pak.provider_pubkey == cvsm.pubkey,
@@ -50,9 +50,7 @@ function require_voter_set_member_pubkey(voter_set: common_voter_set): pubkey {
             return signer_key_members[0];
         }
         common_proposal_vote_type.PROVIDER_AUTH -> {
-            val provider = get_provider_signer();
-            require(provider != null, "Operation must be signed by provider key(s)");
-            return provider!!;
+            return require(get_provider_signer(), "Operation must be signed by provider key(s)");
         }
     }
 }
