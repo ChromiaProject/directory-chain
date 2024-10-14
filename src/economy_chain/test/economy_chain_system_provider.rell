@@ -4,6 +4,7 @@ import ^^.*;
 import ^.helper_functions.*;
 import ^.helper_operations.*;
 import provider_auth.test.helper_operations.*;
+import common_consensus.*;
 
 val provider_key1 = rell.test.keypairs.alice;
 val provider_key2 = rell.test.keypairs.trudy;
@@ -40,6 +41,7 @@ function test_require_system_provider_signer_entity__one_provider_and_multiple_k
     // Add key2
     rell.test.tx().op(
         add_provider_key_op(provider_key1.pub, key2.pub),
+        set_provider_key_threshold_op(provider_key1.pub, provider_key_role.main, consensus_threshold.super_majority)
     ).sign(provider_key1).run();
 
     // Invalid - not signed by both keys and not in super-majority
@@ -128,6 +130,7 @@ function test_require_system_provider_signer_entity__multiple_providers_and_mult
         add_provider_key_op(provider_key1.pub, key1.pub),
         add_provider_key_op(provider_key1.pub, key2.pub),
         add_provider_key_op(provider_key1.pub, key3.pub),
+        set_provider_key_threshold_op(provider_key1.pub, provider_key_role.main, consensus_threshold.super_majority)
     ).nop().sign(provider_key1).run();
 
     // Add 2 keys to provider 2 and set threshold to 2 - the provider will have a total of 3 keys

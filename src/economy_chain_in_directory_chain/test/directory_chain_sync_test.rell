@@ -20,7 +20,7 @@ function test_init_events() {
         provider_pubkey = initial_provider.pub,
         key_roles = [provider_auth_update_role(
         role = provider_key_role.main,
-        threshold = 0,
+        threshold = 1,
         [initial_provider.pub])]).to_gtv()).to_gtv_pretty()
     );
 
@@ -115,7 +115,7 @@ function test_provider() {
         provider_pubkey = test_provider.pub,
         key_roles = [provider_auth_update_role(
         role = provider_key_role.main,
-        threshold = 0,
+        threshold = 1,
         [test_provider.pub])]).to_gtv()).to_gtv_pretty()
     );
 
@@ -420,7 +420,7 @@ function test_provider_auth_update() {
         provider_pubkey = initial_provider.pub,
         key_roles = [provider_auth_update_role(
         role = provider_key_role.main,
-        threshold = 0,
+        threshold = 1,
         [initial_provider.pub])]).to_gtv()).to_gtv_pretty()
     );
 
@@ -440,7 +440,7 @@ function test_provider_auth_update() {
         provider_pubkey = initial_provider.pub,
         key_roles = [provider_auth_update_role(
         role = provider_key_role.main,
-        threshold = 0,
+        threshold = 1,
         [initial_provider.pub, key2.pub])]).to_gtv()).to_gtv_pretty()
     );
 
@@ -460,12 +460,12 @@ function test_provider_auth_update() {
         key_roles = [
         provider_auth_update_role(
             role = provider_key_role.main,
-            threshold = 0,
+            threshold = 1,
             [initial_provider.pub, key2.pub]
         ),
         provider_auth_update_role(
             role = provider_key_role.configuration_proposal_vote,
-            threshold = 0,
+            threshold = 1,
             [key3.pub]
         )
     ]).to_gtv()).to_gtv_pretty());
@@ -475,13 +475,38 @@ function test_provider_auth_update() {
             all_keys_and_new_role_message,
     );
 
-
     // Remove key
     rell.test.tx().op(
+        set_provider_key_threshold(provider_key_role.configuration_proposal_vote, consensus_threshold.super_majority),
         remove_provider_key(provider_key_role.configuration_proposal_vote, key3.pub),
     ).sign(initial_provider, key2, key3).run();
 
     assert_events(
-        provider_and_key2_message,
+        ("icmf_message", (
+            topic = provider_auth_update_topic,
+            body = provider_auth_update_message(
+            provider_pubkey = initial_provider.pub,
+            key_roles = [
+                provider_auth_update_role(
+                    role = provider_key_role.main,
+                    threshold = 1,
+                    [initial_provider.pub, key2.pub]),
+                provider_auth_update_role(
+                    role = provider_key_role.configuration_proposal_vote,
+                    threshold = 0,
+                    [key3.pub]),
+            ]).to_gtv()).to_gtv_pretty()
+        ),
+        ("icmf_message", (
+            topic = provider_auth_update_topic,
+            body = provider_auth_update_message(
+            provider_pubkey = initial_provider.pub,
+            key_roles = [
+                provider_auth_update_role(
+                    role = provider_key_role.main,
+                    threshold = 1,
+                    [initial_provider.pub, key2.pub]),
+            ]).to_gtv()).to_gtv_pretty()
+        )
     );
 }
