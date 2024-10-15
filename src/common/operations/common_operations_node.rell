@@ -104,8 +104,10 @@ function replace_node_with_node_data_impl(my_pubkey: pubkey, node_data: replace_
 
     val cluster_names = cluster_node @* { old_node }.cluster.name;
     delete cluster_node @* { old_node };
+    after_node_removed_from_cluster(old_node, null);
     val clusters_replicated_by_node = cluster_replica_node @* { old_node } (.cluster);
     delete cluster_replica_node @* { old_node };
+    after_replica_node_removed_from_cluster(old_node, null);
     val blockchains_replicated_by_node = blockchain_replica_node @* { old_node } (.blockchain);
     delete blockchain_replica_node @* { old_node };
 
@@ -134,6 +136,8 @@ function replace_node_with_node_data_impl(my_pubkey: pubkey, node_data: replace_
     val new_node = add_node_internal(me, register_node_data, require_not_exists = false);
 
     for (cl in clusters_replicated_by_node) {
+        delete cluster_node @* { new_node };
+        after_node_removed_from_cluster(new_node, cl);
         _add_replica_node_to_cluster_internal(cl, new_node);
     }
 

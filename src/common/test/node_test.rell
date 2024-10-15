@@ -8,6 +8,7 @@ import ^^.queries.*;
 import ^^.test.setup.*;
 import model.*;
 import proposal_provider.*;
+import direct_cluster.*;
 
 val system_provider = rell.test.keypairs.bob;
 val sp_node_key = x"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa50093798EF9D51E7260BA921CD673F";
@@ -208,6 +209,85 @@ function test_disable_and_enable_node() {
     rell.test.tx().op(
         enable_node(node_provider1.pub, np1_node_key)
     ).sign(node_provider1).run();
+}
+
+function test_replace_node_with_replica_node_in_system_cluster() {
+    val provider = rell.test.keypairs.alice;
+    rell.test.tx().op(initialize_test_module(provider.pub, test_node)).run();
+    assert_not_null(node @? { initial_signer.pub });
+
+    val node = node @ { .provider == initial_provider() };
+
+    val replica_node = rell.test.keypairs.charlie;
+    rell.test.tx().op(
+        register_node(provider.pub, replica_node.pub, "replica_node", 7777, "http://replica_node/api_url")
+    ).sign(provider).run();
+
+    // Adding a replica node to system
+    rell.test.tx().op(
+        add_replica_node_to_cluster(initial_provider.pub, replica_node.pub, "system")
+    ).sign(initial_provider).run();
+    assert_true(not(empty(cluster_replica_node @* {  })));
+
+    // replace node by replica_node
+    rell.test.tx().op(
+        replace_node(provider.pub, node.pubkey, replica_node.pub, null, null, null)
+    )
+        .sign(provider)
+        .sign(initial_signer)
+        .sign(replica_node)
+        .run();
+
+
+    assert_null(node @? { provider.pub });
+    val replaced_node = node @ { replica_node.pub };
+    assert_equals(replaced_node.host, "replica_node");
+    assert_equals(replaced_node.port, 7777);
+    assert_equals(replaced_node.api_url, "http://replica_node/api_url");
+
+    assert_true(get_signers_of_cluster_name(clusters.system).contains(replaced_node.pubkey));
+    assert_false(get_signers_of_cluster_name(clusters.system).contains(provider.pub));
+}
+
+function test_if_new_node_replaces_an_old_replica_node_the_new_node_needs_to_become_a_replica_node() {
+    val provider = rell.test.keypairs.alice;
+    rell.test.tx().op(initialize_test_module(provider.pub, test_node)).run();
+    assert_not_null(node @? { initial_signer.pub });
+
+    val node = node @ { .provider == initial_provider() };
+    val node_pubkey = node.pubkey;
+
+    val replica_node = rell.test.keypairs.charlie;
+    rell.test.tx().op(
+        register_node(provider.pub, replica_node.pub, "replica_node", 7777, "http://replica_node/api_url")
+    ).sign(provider).run();
+
+    // Adding a replica node to system
+    rell.test.tx().op(
+        add_replica_node_to_cluster(initial_provider.pub, replica_node.pub, "system")
+    ).sign(initial_provider).run();
+    assert_true(not(empty(cluster_replica_node @* {  })));
+
+    // replace replica_node by node
+    rell.test.tx().op(
+        replace_node(provider.pub, replica_node.pub, node.pubkey, null, null, null)
+    )
+        .sign(provider)
+        .sign(initial_signer)
+        .sign(replica_node)
+        .run();
+
+
+    assert_null(node @? { replica_node.pub });
+    val replaced_node = node @ { .pubkey == node_pubkey };
+    assert_equals(replaced_node.host, "localhost");
+    assert_equals(replaced_node.port, 9870);
+    assert_equals(replaced_node.api_url, "http://localhost:7740");
+
+    assert_null(cluster_node @? { .node.pubkey == node_pubkey });
+    assert_not_null(cluster_replica_node @? { .node.pubkey == node_pubkey });
+    assert_false(get_signers_of_cluster_name(clusters.system).contains(replaced_node.pubkey));
+    assert_false(get_signers_of_cluster_name(clusters.system).contains(replica_node.pub));
 }
 
 function test_replace_node() {
