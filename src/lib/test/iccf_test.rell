@@ -1,0 +1,129 @@
+@test module;
+
+import ^^.iccf.*;
+import ^.helper_operations.*;
+
+val dummy_confirmation_proof = x"01";
+val dummy_source_chain = x"02";
+
+val dummy_transaction = gtx_transaction(
+    gtx_transaction_body(
+        dummy_source_chain,
+        [
+            gtx_operation("dummy", [(1).to_gtv()])
+        ],
+        list<gtv>()
+    ),
+    list<gtv>()
+);
+
+function test_iccf_proof() {
+    rell.test.tx().op(
+        check_proof(dummy_transaction)
+    ).run_must_fail("No proof operation present for TX");
+
+    rell.test.tx().op(
+        iccf_proof(dummy_source_chain, dummy_transaction.to_gtv().hash(), dummy_confirmation_proof),
+        check_proof(dummy_transaction)
+    ).run();
+}
+
+function test_iccf_proof_signer_validation() {
+    val signed_dummy_transaction = gtx_transaction(
+        gtx_transaction_body(
+            dummy_source_chain,
+            [
+                gtx_operation("dummy", [(1).to_gtv()])
+            ],
+            [rell.test.keypairs.bob.pub.to_gtv()]
+        ),
+        [x"".to_gtv()]
+    );
+
+    rell.test.tx().op(
+        iccf_proof(dummy_source_chain, signed_dummy_transaction.to_gtv().hash(), dummy_confirmation_proof),
+        check_proof(signed_dummy_transaction)
+    ).sign(rell.test.keypairs.alice).run_must_fail("Proof TX has to be signed by all the signers that signed the source TX");
+
+    rell.test.tx().op(
+        iccf_proof(dummy_source_chain, signed_dummy_transaction.to_gtv().hash(), dummy_confirmation_proof),
+        check_proof(signed_dummy_transaction)
+    ).sign(rell.test.keypairs.bob).run();
+}
+
+function test_iccf_proof_timestamp_validation() {
+    val tx_hash = dummy_transaction.to_gtv().hash();
+    val tx_time = 1728982413892;
+
+    val timestamped_confirmation_proof = confirmation_proof(
+        hash = tx_hash,
+        blockHeader = block_header(
+            blockchain_rid = dummy_source_chain,
+            previous_block_rid = dummy_source_chain,
+            merkle_root_hash = x"",
+            timestamp = tx_time,
+            height = 0,
+            dependencies = null.to_gtv(),
+            extra = map<text, gtv>()
+        ).to_gtv().to_bytes(),
+        witness = x"",
+        merkleProofTree = list<gtv>(),
+        txIndex = 0
+    );
+
+    rell.test.tx().op(
+        iccf_proof(dummy_source_chain, dummy_transaction.to_gtv().hash(), timestamped_confirmation_proof.to_gtv_pretty().to_bytes()),
+        check_proof(dummy_transaction, min_timestamp = tx_time + 1)
+    ).run_must_fail("Transaction is too old, confirmed at %s".format(tx_time));
+
+    rell.test.tx().op(
+        iccf_proof(dummy_source_chain, dummy_transaction.to_gtv().hash(), timestamped_confirmation_proof.to_gtv_pretty().to_bytes()),
+        check_proof(dummy_transaction, min_timestamp = tx_time)
+    ).run();
+
+    rell.test.tx().op(
+        iccf_proof(dummy_source_chain, dummy_transaction.to_gtv().hash(), timestamped_confirmation_proof.to_gtv_pretty().to_bytes()),
+        check_proof(dummy_transaction, max_timestamp = tx_time - 1)
+    ).run_must_fail("Transaction is too new, confirmed at %s".format(tx_time));
+
+    rell.test.tx().op(
+        iccf_proof(dummy_source_chain, dummy_transaction.to_gtv().hash(), timestamped_confirmation_proof.to_gtv_pretty().to_bytes()),
+        check_proof(dummy_transaction, max_timestamp = tx_time)
+    ).run();
+}
+
+function test_unique_iccf_proof_validation() {
+    rell.test.tx().op(
+        iccf_proof(dummy_source_chain, dummy_transaction.to_gtv().hash(), dummy_confirmation_proof),
+        check_proof(dummy_transaction, enforce_unique = true)
+    ).nop().run();
+
+    rell.test.tx().op(
+        iccf_proof(dummy_source_chain, dummy_transaction.to_gtv().hash(), dummy_confirmation_proof),
+        check_proof(dummy_transaction, enforce_unique = true)
+    ).nop().run_must_fail("Transaction has already been processed");
+}
+
+function test_require_operation() {
+    rell.test.tx().op(
+        iccf_proof(dummy_source_chain, dummy_transaction.to_gtv().hash(), dummy_confirmation_proof),
+        check_operation(dummy_transaction, "non_dummy")
+    ).run_must_fail("Operation with name non_dummy not found in transaction");
+
+    rell.test.tx().op(
+        iccf_proof(dummy_source_chain, dummy_transaction.to_gtv().hash(), dummy_confirmation_proof),
+        check_operation(dummy_transaction, "dummy")
+    ).run();
+}
+
+function test_extract_args() {
+    rell.test.tx().op(
+        iccf_proof(dummy_source_chain, dummy_transaction.to_gtv().hash(), dummy_confirmation_proof),
+        extract_args(dummy_transaction, "dummy", [(0).to_gtv()])
+    ).run_must_fail("Expected args did not match");
+
+    rell.test.tx().op(
+        iccf_proof(dummy_source_chain, dummy_transaction.to_gtv().hash(), dummy_confirmation_proof),
+        extract_args(dummy_transaction, "dummy", [(1).to_gtv()])
+    ).run();
+}
