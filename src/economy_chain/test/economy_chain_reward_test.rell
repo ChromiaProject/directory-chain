@@ -512,6 +512,56 @@ function test_pay_shared_rewards_dapp_cluster_full_reward_is_payed() {
 
     val test_account_dave = require(do_create_account(rell.test.keypairs.dave, auth_privkey));
     val test_account_charlie = require(do_create_account(rell.test.keypairs.charlie, auth_privkey));
+
+    rell.test.tx()
+        .op(mint_to_pool(8888888888))
+        .op(mint_to(test_account_dave, 9999999))
+    .sign(admin_privkey).run();
+
+    add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+
+    do_staking_deposit_native(rell.test.keypairs.dave, 9999999);
+    do_staking_delegate(rell.test.keypairs.dave, provider_pubkey);
+
+    assert_equals(get_account_balance(test_account_dave), 1000000000);
+
+    // FFWD
+    rell.test.set_next_block_time_delta(staking_delegation_delay_ms);
+    rell.test.block().run(); rell.test.block().run();
+
+    assert_equals(staking_get_current_delegate(test_account_dave.id), provider_pubkey);
+
+    val pa = run_pay_rewards(33090909, true);
+
+    assert_equals(get_account_balance(pa.account), 3726650000);
+    assert_equals(pa.reward_debt, 0);
+
+    // assert that rewards are not paid out yet
+    val regular_staking_reward = staking_rewards_claimable_for(test_account_dave.id);
+
+    assert_not_equals(
+        get_account_balance(
+            test_account_dave
+        ),
+        1000000000 + regular_staking_reward + 0.1 * 3726650000
+    );
+
+    rell.test.tx().op(staking_claim_rewards(true, true)).sign(admin_privkey).run();
+
+    // assert that staking reward + shared reward is paid out
+    assert_equals(
+        get_account_balance(
+            test_account_dave
+        ),
+        1000000000 + regular_staking_reward + 0.1 * 3726650000
+    );
+}
+
+function test_pay_shared_rewards_dapp_cluster_small_staking_share() {
+    rell.test.tx().op(init()).run();
+
+    val test_account_dave = require(do_create_account(rell.test.keypairs.dave, auth_privkey));
+    val test_account_charlie = require(do_create_account(rell.test.keypairs.charlie, auth_privkey));
     val test_account_bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
 
     val reward_amount = 3726650000;
@@ -549,6 +599,8 @@ function test_pay_shared_rewards_dapp_cluster_full_reward_is_payed() {
     assert_equals(get_account_balance(pa.account), reward_amount);
     assert_equals(pa.reward_debt, 0);
 
+    rell.test.tx().op(staking_claim_rewards(true, true)).sign(admin_privkey).run();
+
     log("dave balance ", get_account_balance(test_account_dave));
     log("dave pre balance ", pre_reward_dave_balance);
 
@@ -557,25 +609,6 @@ function test_pay_shared_rewards_dapp_cluster_full_reward_is_payed() {
 
     assert_true(too_small_to_care >= abs(get_account_balance(test_account_dave) - pre_reward_dave_balance - (0.1 * reward_amount * 0.3)));
     assert_true(too_small_to_care >= abs(get_account_balance(test_account_bob) - pre_reward_bob_balance - (0.1 * reward_amount * 0.7)));
-    // assert that rewards are not paid out yet
-    val regular_staking_reward = staking_rewards_claimable_for(test_account_dave.id);
-
-    assert_not_equals(
-        get_account_balance(
-            test_account_dave
-        ),
-        1000000000 + regular_staking_reward + 0.1 * 3726650000
-    );
-
-    rell.test.tx().op(staking_claim_rewards(true, true)).sign(admin_privkey).run();
-
-    // assert that staking reward + shared reward is paid out
-    assert_equals(
-        get_account_balance(
-            test_account_dave
-        ),
-        1000000000 + regular_staking_reward + 0.1 * 3726650000
-    );
 }
 
 function test_staking_req_reward_fail_due_to_low_own() {
