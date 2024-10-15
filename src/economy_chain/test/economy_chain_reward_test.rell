@@ -536,15 +536,13 @@ function test_pay_shared_rewards_dapp_cluster_full_reward_is_payed() {
     assert_equals(get_account_balance(pa.account), 3726650000);
     assert_equals(pa.reward_debt, 0);
     // assert that rewards are not paid out yet
+    val regular_staking_reward = staking_rewards_claimable_for(test_account_dave.id);
+
     assert_not_equals(
         get_account_balance(
             test_account_dave
         ),
-        1000000000 + integer(
-            9999999 * 0.00172630020
-        ) + (
-            0.1 * 3726650000
-        )
+        1000000000 + regular_staking_reward + 0.1 * 3726650000
     );
 
     rell.test.tx().op(staking_claim_rewards(true, true)).sign(admin_privkey).run();
@@ -554,11 +552,7 @@ function test_pay_shared_rewards_dapp_cluster_full_reward_is_payed() {
         get_account_balance(
             test_account_dave
         ),
-        1000000000 + integer(
-            9999999 * 0.00172630020
-        ) + (
-            0.1 * 3726650000
-        )
+        1000000000 + regular_staking_reward + 0.1 * 3726650000
     );
 }
 
@@ -602,11 +596,12 @@ function test_staking_req_reward_successful() {
         reward = 10,
         staking_amount = economy_constants.staking_requirement_system_provider_total_stake_chr + 100
     );
+    val regular_staking_reward = staking_rewards_claimable_for(psa.staking_account.id);
 
     rell.test.tx().op(staking_claim_rewards(true, true)).sign(admin_privkey).run();
 
     //assert that the reward is paid out. We subtract the regular staking reward from the total
-    assert_equals(get_account_balance(psa.staking_account) - 1150722983, 11);
+    assert_equals(get_account_balance(psa.staking_account) - regular_staking_reward, 11);
     assert_gt(psa.last_approved_stake_requirements, 0);
 }
 
