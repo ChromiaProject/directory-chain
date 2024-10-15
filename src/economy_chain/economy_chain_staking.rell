@@ -286,28 +286,31 @@ function _staking_distribute_rewards() {
             return;
         }
     }
-    update staker_state @* { } ( .pending_token_time = 0 );
 
     // Send payouts
-    var payments = list<struct<staking_payment>>();
     for ( (account, amount) in rewards ) {
 
         /// @dev This can be removed once Rell supports a HAVING equivalent.
         if (integer(amount) == 0) {
-            log("Skip zero payment.");
+            log("Skip zero payment to %s".format(account.id));
+            update staker_state @* { account } ( .pending_token_time = 0 );
             continue;
         }
 
-        ft4.assets.Unsafe.transfer(pool, account, get_asset(), integer(amount));
-        log("Paid out %s to %s".format(amount, account.id));
-
-        payments.add(struct<staking_payment>(timestamp = _staking_last_known_time(), amount = integer(amount), account));
+        if (not try_call(_staking_pay_reward(pool, account, amount, *))) {
+            log("Failed to pay out %s to %s".format(amount, account.id));
+        }
     }
 
-    create staking_payment ( payments );
     log("Stored payments on-chain.");
 }
 
+function _staking_pay_reward(pool: accounts.account, account: accounts.account, amount: big_integer) {
+    ft4.assets.Unsafe.transfer(pool, account, get_asset(), integer(amount));
+    update staker_state @* { account } ( .pending_token_time = 0 );
+    create staking_payment(timestamp = _staking_last_known_time(), amount = integer(amount), account);
+    log("Paid out %s to %s".format(amount, account.id));
+}
 
 // Shared rewards (triggered by a hook in the rewards logic)
 
