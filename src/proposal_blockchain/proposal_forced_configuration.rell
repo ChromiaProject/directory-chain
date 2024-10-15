@@ -11,18 +11,22 @@ entity forced_configuration {
     config_hash: byte_array;
 }
 
+@extend(apply_voting_result_handlers) function() = [proposal_type.force_configuration.name: apply_proposed_forced_configuration(*)];
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.force_configuration.name: delete_proposed_forced_configuration(*)];
+
 /**
  * Propose forcing a new configuration for a PAUSED blockchain at height.
- * 
+ *
  * Permission: container deployer
- * 
+ *
  * Rate limit: actions
- * 
+ *
  * @param my_pubkey pubkey of provider
  */
 operation propose_forced_configuration(my_pubkey: pubkey, blockchain_rid: byte_array, config_data: byte_array, height: integer, description: text = "") {
     val provider = require_is_provider_with_rate_limit(my_pubkey);
     val blockchain = require_active_blockchain(blockchain_rid);
+    require(not is_blockchain_config_delayed(blockchain.rid), "Forced configuration only allowed on chain with configuration delay disabled");
     val container = container_blockchain @ { blockchain }.container;
     require_container_deployer(container, provider);
 
@@ -35,8 +39,6 @@ operation propose_forced_configuration(my_pubkey: pubkey, blockchain_rid: byte_a
     create proposed_forced_configuration(prop, blockchain, height, config_data);
     internal_vote(provider, prop, true);
 }
-
-@extend(apply_voting_result_handlers) function() = [proposal_type.force_configuration.name: apply_proposed_forced_configuration(*)];
 
 function apply_proposed_forced_configuration(proposal) {
     val pfc = proposed_forced_configuration @? { proposal };
@@ -65,8 +67,6 @@ function apply_proposed_forced_configuration(proposal) {
     add_dependencies(config_data, blockchain.rid, pfc.height);
 }
 
-@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.force_configuration.name: delete_proposed_forced_configuration(*)];
-
 function delete_proposed_forced_configuration(proposal) {
     delete proposed_forced_configuration @? { proposal };
 }
@@ -86,6 +86,8 @@ struct forced_configuration_data {
 
 /**
  * Returns forced blockchain configuration proposal.
+ *
+ * @deprecated use get_forced_configuration_proposal_v64 instead
  */
 query get_proposed_forced_configuration(rowid?): (
     current_conf: blockchain_configuration_data,
@@ -102,6 +104,35 @@ query get_proposed_forced_configuration(rowid?): (
     return (
         current_conf = blockchain_configuration_data(current.height, config.blockchain, current.config),
         forced_conf = config
+    );
+}
+
+struct forced_configuration_proposal_data {
+    blockchain_rid: byte_array;
+    current_height: integer;
+    current_configuration: byte_array;
+    proposed_height: integer;
+    proposed_configuration: byte_array;
+}
+
+/**
+ * Returns forced blockchain configuration proposal.
+ */
+query get_forced_configuration_proposal_v64(rowid?): forced_configuration_proposal_data? {
+    val proposal = get_latest_proposal(rowid, proposal_type.force_configuration);
+    if (proposal == null) return null;
+    val proposal_details = proposed_forced_configuration @? { require_proposal(proposal.rowid) }
+        (.blockchain, .height, config = decompress_configuration(.config_data));
+    if (proposal_details == null) return null;
+
+    val current = get_latest_blockchain_configuration_data(proposal_details.blockchain);
+
+    return forced_configuration_proposal_data(
+        blockchain_rid = proposal_details.blockchain.rid,
+        current_height = current.height,
+        current_configuration = current.config,
+        proposed_height = proposal_details.height,
+        proposed_configuration = proposal_details.config,
     );
 }
 

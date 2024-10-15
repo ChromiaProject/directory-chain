@@ -63,8 +63,8 @@ To include the ICCF module in your rell project, specify in your config file:
 libs:
   iccf:
     registry: https://gitlab.com/chromaway/core/directory-chain
-    path: src/iccf
-    tagOrBranch: 1.35.0
-    rid: x"1D567580C717B91D2F188A4D786DB1D41501086B155A68303661D25364314A4D"
+    path: src/lib/iccf
+    tagOrBranch: 1.64.3
+    rid: x"B9CDA906E2ED650ACA2B1D97394D77F432545C26EAAD53336843A2327C594E64"
 ```
 Then use `chr install` to install the iccf-library.

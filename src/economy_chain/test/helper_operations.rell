@@ -123,8 +123,8 @@ operation pay_rewards_op(cluster: cluster, node_availability_report: node_availa
     pay_rewards(cluster, node_availability_report);
 }
 
-operation pay_reward_op(pool: ft4.accounts.account, account: ft4.accounts.account, reward_debt:big_integer,  reward: big_integer, identity: text) {
-    pay_reward(pool, account, reward_debt, reward, identity);
+operation pay_reward_op(pool: ft4.accounts.account, account: ft4.accounts.account, reward_debt:big_integer,  reward: big_integer, identity: text, has_delegation_share: boolean) {
+    pay_reward(pool, account, reward_debt, reward, identity, has_delegation_share);
 }
 
 operation set_pool_details_last_refill_millis_last_block_time_op() {
@@ -237,8 +237,8 @@ operation register_provider_account_op(provider) {
     register_provider_account(provider);
 }
 
-operation pay_out_node_rewards_op(node_reward: map<node, big_integer>) {
-    pay_out_node_rewards(node_reward);
+operation pay_out_node_rewards_op(node_reward: map<node, big_integer>, has_delegation_share: boolean) {
+    pay_out_node_rewards(node_reward, has_delegation_share);
 }
 operation add_staking(provider_staking_account, amount: integer) {
     val ss = create staker_state (
@@ -341,4 +341,8 @@ operation create_evm_account(evm_address: byte_array) {
 
 operation create_account_link(ft4.accounts.account, address: byte_array) {
     create eif.hbridge.evm_eoa_account_link ( account, address );
+}
+
+operation enable_evm_link_begin_block() {
+   pending_evm_links.add = true;
 }

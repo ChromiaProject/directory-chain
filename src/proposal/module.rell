@@ -61,23 +61,34 @@ enum blockchain_configuration_update_state {
 
 entity blockchain_configuration_update_attempt {
     key proposal, config_hash: byte_array;
+    blockchain_rid: byte_array = x"";
     mutable applied_at_height: integer = -1;
     mutable state: blockchain_configuration_update_state = blockchain_configuration_update_state.PENDING;
 }
 
 /**
+ * Extend to return all proposal entity ids supporting delays. This is used to let other modules be aware of delayed
+ * proposals such as blockchain pause.
+ */
+@extendable function proposal_delay_ids_handlers(): map<text, (blockchain) -> list<rowid>>;
+
+/**
  * Revoke proposal.
- * 
+ *
  * Permission: proposal owner
- * 
+ *
  * Rate limit: actions
- * 
+ *
  * @param my_pubkey pubkey of provider
  */
 operation revoke_proposal(my_pubkey: pubkey, proposal_rowid: rowid) {
     val me = require_is_provider_with_rate_limit(my_pubkey);
     val prop = require_proposal(proposal_rowid);
-    require(prop.state == proposal_state.PENDING, "The proposal is already %s".format(prop.state));
+
+    require(
+        prop.state == proposal_state.PENDING or
+        (prop.state == proposal_state.APPROVED and get_delayed_event_time(delay_type.PROPOSAL, prop.rowid.to_integer()) != null),
+        "The proposal is already %s".format(prop.state));
     require(prop.proposed_by == me, "It is only allowed to revoke own proposals");
     prop.state = proposal_state.REVOKED;
     delete_proposal(prop);
@@ -89,7 +100,34 @@ function create_proposal(proposal_type, proposed_by: provider, deployer: voter_s
 }
 
 function delete_proposal(prop: proposal) {
+    delete_delayed_event(delay_type.PROPOSAL, prop.rowid.to_integer());
     delete_proposal_handlers()[prop.proposal_type.name](prop);
 }
 
 @extendable function delete_proposal_handlers(): map<text, (proposal) -> unit>;
+
+/**
+ * Pause/unpause all delayed proposals for a specific chain.
+ */
+function set_blockchain_proposal_delay_states(blockchain, active: boolean) {
+
+    for (proposal_id in get_blockchain_proposal_delay_ids(blockchain)) {
+        set_delayed_event_state(delay_type.PROPOSAL, proposal_id.to_integer(), active);
+    }
+}
+
+/**
+ * Return all proposals that currently are delayed for a given chain.
+ */
+function get_blockchain_proposal_delay_ids(blockchain) {
+
+    val handlers = proposal_delay_ids_handlers();
+    val proposal_ids = set<rowid>();
+
+    for (handler in handlers.values()) {
+        val ids = handler(blockchain);
+        proposal_ids.add_all(ids);
+    }
+
+    return proposal_ids;
+}

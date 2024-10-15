@@ -1,0 +1,107 @@
+
+/**
+ * Holds a proposal for a blockchain with delay enabled. Once approved it will be delayed until
+ * before the change is applied.
+ */
+struct delayed_blockchain_proposal_data {
+    proposal_id: rowid;
+    proposal_type;
+    proposal_state;
+
+    /**
+     * Delay in milliseconds for how long this proposal will be delayed after approval and before being applied. This
+     * value is only populated before the delay has started (status PENDING, chain paused, etc.).
+     */
+    delay: integer?;
+
+    /**
+     * Contains approximate time when proposal is applied. This value is only populated when the delay is active
+     * and an estimated time can be calculated.
+     */
+    apply_at: integer?;
+}
+
+function is_blockchain_config_delayed(blockchain_rid: byte_array): boolean {
+
+    return get_blockchain_config_delay(blockchain_rid) > 0;
+}
+
+function get_blockchain_config_delay(blockchain_rid: byte_array?): integer {
+
+    return get_blockchain_config_delay_value(blockchain_rid) ?: 0;
+}
+
+function get_blockchain_config_delay_value(blockchain_rid: byte_array?): integer? {
+
+    return latest_blockchain_configuration_values @? { .blockchain.rid == blockchain_rid } ( .config_delay );
+}
+
+/**
+ * Takes a list of blockchains and returns a map with delay enabled blockchains and the time.
+ *
+ * @return A map of blockchains and their delay value.
+ */
+function get_blockchains_config_delay_value(blockchains: list<blockchain>): map<blockchain, integer> {
+
+    val delays = latest_blockchain_configuration_values @* {
+        .config_delay > 0,
+        .blockchain in blockchains
+    } ( .blockchain, .config_delay );
+
+    val result = map<blockchain, integer>();
+    for (delay in delays) {
+        result[delay.blockchain] = delay.config_delay;
+    }
+    return result;
+}
+
+function blockchain_config_delay_time_handler(blockchain?) {
+    return (blockchain, get_blockchain_config_delay(blockchain?.rid));
+}
+
+/**
+ * Returns currently active delayed proposals, including both pending and approved until they are applied.
+ *
+ * @param blockchain_rid The blockchain rid to retrieve proposals for.
+ * @return A list of delayed proposals with state and time information.
+ */
+query list_delayed_blockchain_configs(blockchain_rid: byte_array): list<delayed_blockchain_proposal_data> {
+
+    val bc = require_blockchain(blockchain_rid);
+    val bc_delay = get_blockchain_config_delay(blockchain_rid);
+    val delayed_proposals = get_blockchain_proposal_delay_ids(bc);
+
+    val result = list<delayed_blockchain_proposal_data>();
+    for (proposal_id in delayed_proposals) {
+
+        val proposal = proposal @ { proposal_id };
+        val delayed_event = delayed_event @? { delay_type.PROPOSAL, .ref_id == proposal_id.to_integer() } ( .active, .time );
+
+        result.add(delayed_blockchain_proposal_data(
+            proposal_id,
+            proposal.proposal_type,
+            proposal.state,
+            delay = if (delayed_event == null) bc_delay else if (delayed_event.active == false) delayed_event.time else null,
+            apply_at = if (delayed_event != null and delayed_event.active) delayed_event.time else null,
+        ));
+    }
+
+    return result;
+}
+
+/**
+ * Get all blockchain rids with active delayed proposals.
+ *
+ * @return List of blockchain rids.
+ */
+query get_blockchains_with_active_delayed_proposals() {
+
+    val result = list<byte_array>();
+    val bcs = latest_blockchain_configuration_values @* { .config_delay > 0 } ( .blockchain );
+    for (bc in bcs) {
+        if (not get_blockchain_proposal_delay_ids(bc).empty()) {
+            result.add(bc.rid);
+        }
+    }
+    return result;
+}

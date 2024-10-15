@@ -2,6 +2,7 @@
 
 import ^^.*;
 import ^.util.*;
+import ^.helper_operations.*;
 import ^^.operations.*;
 import ^^.queries.*;
 import ^^.test.ops.*;
@@ -165,4 +166,55 @@ function test_duplicate_blockchains() {
     ).sign(initial_provider).run();
 
     assert_not_null(blockchain @? { .name == "foo_chain", .state == blockchain_state.RUNNING });
+}
+
+function test_set_latest_blockchain_configuration_values() {
+
+    setup_module();
+
+    var conf = apply_required_configuration_properties();
+    val config_delay = (10000).to_gtv();
+    val dc_config = [DIRECTORY_CHAIN_CONFIG_DELAY_CONFIG_KEY: config_delay].to_gtv();
+    conf[DIRECTORY_CHAIN_CONFIG_KEY] = dc_config;
+
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p),
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(),
+            "foo_chain", "container1")
+    ).sign(initial_provider).run();
+    val chain = blockchain @ { "foo_chain" };
+
+    assert_equals(latest_blockchain_configuration_values @ { chain } ( .config_delay ), 10000);
+}
+
+function test_set_latest_blockchain_configuration_values_update() {
+
+    test_set_latest_blockchain_configuration_values_default();
+    val chain = blockchain @ { "foo_chain" };
+
+    var conf = apply_required_configuration_properties();
+    val config_delay = (20000).to_gtv();
+    val dc_config = [DIRECTORY_CHAIN_CONFIG_DELAY_CONFIG_KEY: config_delay].to_gtv();
+    conf[DIRECTORY_CHAIN_CONFIG_KEY] = dc_config;
+
+    rell.test.tx().op(
+        set_latest_blockchain_configuration_values_op(chain, conf),
+    ).sign(initial_provider).run();
+
+
+    assert_equals(latest_blockchain_configuration_values @ { chain } ( .config_delay ), 20000);
+}
+
+function test_set_latest_blockchain_configuration_values_default() {
+
+    setup_module();
+
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p),
+        propose_blockchain(initial_provider.pub, apply_required_configuration_properties().to_gtv().to_bytes(),
+            "foo_chain", "container1")
+    ).sign(initial_provider).run();
+    val chain = blockchain @ { "foo_chain" };
+
+    assert_equals(latest_blockchain_configuration_values @ { chain } ( .config_delay ), 0);
 }

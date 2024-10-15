@@ -1,9 +1,28 @@
 module;
 
+// NOTE: Non-camel case is necessary to decode properly
+struct confirmation_proof {
+    hash: byte_array;
+    blockHeader: byte_array;
+    witness: byte_array;
+    merkleProofTree: list<gtv>;
+    txIndex: integer;
+}
+
+struct block_header {
+    blockchain_rid: byte_array;
+    previous_block_rid: byte_array;
+    merkle_root_hash: byte_array;
+    timestamp: integer;
+    height: integer;
+    dependencies: gtv; // Can be either GtvNull or GtvArray
+    extra: map<text,gtv>;
+}
+
 /**
  * Inter-Chain Confirmation Facility (ICCF)
- * 
- * This module intends to make it easier for developers to verify that a proof has been 
+ *
+ * This module intends to make it easier for developers to verify that a proof has been
  * sent as a separate operation in this transaction.
  */
 
@@ -13,19 +32,23 @@ val iccf_anchored_proof_argument_count = 6;
 
 /**
  * Requires the presented transaction to be proved and extracts an argument from the specified operation
- * 
+ *
  * @param gtx_transaction The transaction to verify
  * @param op_name Name of the operation to extract
  * @param arg Index of the argument to be extracted (default: first argument)
  * @param verify_signers Whether or not the signers must match current transaction signatures
  * @param require_anchored_proof Whether or not we require inclusion of a proof that the block containing the transaction has been anchored in cluster anchoring chain
+ * @param min_timestamp Limit for how old the transaction is allowed to be, disabled if 0
+ * @param max_timestamp Limit for how new the transaction is allowed to be, disabled if 0
  */
 function extract_operation_arg(
     gtx_transaction,
     op_name: text,
     arg: integer = 0,
     verify_signers: boolean = true,
-    require_anchored_proof: boolean = false
+    require_anchored_proof: boolean = false,
+    min_timestamp: integer = 0,
+    max_timestamp: integer = 0
 ): gtv {
     val args = extract_operation_args(gtx_transaction, op_name, verify_signers, require_anchored_proof);
     require(
@@ -38,36 +61,44 @@ function extract_operation_arg(
 
 /**
  * Requires the presented transaction to be proved and extracts arguments of the specified operation
- * 
+ *
  * @param gtx_transaction The transaction to verify
  * @param op_name Name of the operation to extract
  * @param verify_signers Whether or not the signers must match current transaction signatures
  * @param require_anchored_proof Whether or not we require inclusion of a proof that the block containing the transaction has been anchored in cluster anchoring chain
+ * @param min_timestamp Limit for how old the transaction is allowed to be, disabled if 0
+ * @param max_timestamp Limit for how new the transaction is allowed to be, disabled if 0
  */
 function extract_operation_args(
     gtx_transaction,
     op_name: text,
     verify_signers: boolean = true,
-    require_anchored_proof: boolean = false
+    require_anchored_proof: boolean = false,
+    min_timestamp: integer = 0,
+    max_timestamp: integer = 0
 ): list<gtv> {
-    return require_operation(gtx_transaction, op_name, verify_signers, require_anchored_proof).args;
+    return require_operation(gtx_transaction, op_name, verify_signers, require_anchored_proof, min_timestamp, max_timestamp).args;
 }
 
 /**
  * Requires the presented transaction to be proved and extracts the specified operation
- * 
+ *
  * @param gtx_transaction The transaction to verify
  * @param op_name Name of the operation to extract
  * @param verify_signers Whether or not the signers must match current transaction signatures
  * @param require_anchored_proof Whether or not we require inclusion of a proof that the block containing the transaction has been anchored in cluster anchoring chain
+ * @param min_timestamp Limit for how old the transaction is allowed to be, disabled if 0
+ * @param max_timestamp Limit for how new the transaction is allowed to be, disabled if 0
  */
 function require_operation(
     gtx_transaction,
     op_name: text,
     verify_signers: boolean = true,
-    require_anchored_proof: boolean = false
+    require_anchored_proof: boolean = false,
+    min_timestamp: integer = 0,
+    max_timestamp: integer = 0
 ): gtx_operation {
-    require_valid_proof(gtx_transaction, verify_signers, require_anchored_proof);
+    require_valid_proof(gtx_transaction, verify_signers, require_anchored_proof, min_timestamp, max_timestamp);
     return require(
         gtx_transaction.body.operations @? { .name == op_name },
         "Operation with name %s not found in transaction %s".format(op_name, gtx_transaction)
@@ -76,18 +107,30 @@ function require_operation(
 
 /**
  * Requires the presented transaction to be proved
- * 
+ *
  * @param gtx_transaction The transaction to verify
  * @param verify_signers Whether or not the signers must match current transaction signatures
  * @param require_anchored_proof Whether or not we require inclusion of a proof that the block containing the transaction has been anchored in cluster anchoring chain
+ * @param min_timestamp Limit for how old the transaction is allowed to be, disabled if 0
+ * @param max_timestamp Limit for how new the transaction is allowed to be, disabled if 0
  */
 function require_valid_proof(
     gtx_transaction,
     verify_signers: boolean = true,
-    require_anchored_proof: boolean = false
+    require_anchored_proof: boolean = false,
+    min_timestamp: integer = 0,
+    max_timestamp: integer = 0
 ) {
     val tx_hash = gtx_transaction.to_gtv().hash();
-    require(_has_proof(gtx_transaction, require_anchored_proof), "No proof operation present for TX");
+    val proof_operation = _get_proof(gtx_transaction, require_anchored_proof);
+    require(proof_operation, "No proof operation present for TX");
+
+    if (min_timestamp != 0 or max_timestamp != 0) {
+        val proof = confirmation_proof.from_gtv_pretty(gtv.from_bytes(byte_array.from_gtv(proof_operation.args[2])));
+        val tx_confirmation_time = block_header.from_gtv(gtv.from_bytes(proof.blockHeader)).timestamp;
+        require(min_timestamp == 0 or tx_confirmation_time >= min_timestamp, "Transaction is too old, confirmed at %s".format(tx_confirmation_time));
+        require(max_timestamp == 0 or tx_confirmation_time <= max_timestamp, "Transaction is too new, confirmed at %s".format(tx_confirmation_time));
+    }
     if (verify_signers) {
         require(
             _has_signers(gtx_transaction),
@@ -99,7 +142,7 @@ function require_valid_proof(
 
 /**
  * Checks whether or not the current transaction is signed by the same signers as the given transaction
- * 
+ *
  * @param gtx_transaction The transaction to verify signers against
  */
 function _has_signers(gtx_transaction): boolean {
@@ -109,15 +152,15 @@ function _has_signers(gtx_transaction): boolean {
 }
 
 /**
- * Checks whether the current transaction contains a `iccf_proof` operation corresponding to the given transaction.
- * 
+ * Returns the `iccf_proof` operation corresponding to the given transaction if there is any present in current transaction.
+ *
  * @param gtx_transaction The transaction to check
  * @param require_anchored_proof Whether or not we require inclusion of a proof that the block containing the transaction has been anchored in cluster anchoring chain
  */
-function _has_proof(
+function _get_proof(
     gtx_transaction,
     require_anchored_proof: boolean = false
-): boolean {
+): gtx_operation? {
     val blockchain_rid = gtx_transaction.body.blockchain_rid;
     val tx_hash = gtx_transaction.to_gtv().hash();
     val proof_operation = op_context.get_all_operations() @? {
@@ -126,12 +169,12 @@ function _has_proof(
         byte_array.from_gtv(.args[1]) == tx_hash,
         not require_anchored_proof or .args.size() == iccf_anchored_proof_argument_count
     };
-    return exists(proof_operation);
+    return proof_operation;
 }
 
 /**
  * Prevents this transaction to be proved multiple times by storing the hash
- * 
+ *
  * @param gtx_transaction The transaction to make unique
  */
 function make_transaction_unique(gtx_transaction) {

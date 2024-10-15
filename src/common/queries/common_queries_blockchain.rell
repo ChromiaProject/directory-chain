@@ -59,6 +59,9 @@ struct blockchain_info {
     is_foreign_importing: boolean?;
     is_moving: boolean?;
     is_unarchiving: boolean?;
+
+    /** If set then this blockchain has the delay feature enabled. Time in milliseconds. */
+    config_delay: integer?;
 }
 
 /**
@@ -77,7 +80,8 @@ query get_blockchain_info(rid: byte_array): blockchain_info? {
             system = blockchain.system,
             is_foreign_importing = importing_foreign_blockchain @? { .blockchain_rid == rid } ??,
             is_moving = moving_blockchain @? { blockchain } ??,
-            is_unarchiving = unarchiving_blockchain @? { blockchain } ??
+            is_unarchiving = unarchiving_blockchain @? { blockchain } ??,
+            config_delay = get_blockchain_config_delay_value(blockchain.rid),
         );
     } else {
         return null;
@@ -102,6 +106,12 @@ query get_blockchain_info_list(include_inactive: boolean): list<blockchain_info>
         bc_infos.add_all((b: blockchain, c: container_blockchain) @* { c.blockchain == b and b.state == blockchain_state.RUNNING } (blockchain = b, c.container));
     }
 
+    val blockchains = list<blockchain>();
+    for (bc_info in bc_infos) {
+        blockchains.add(bc_info.blockchain);
+    }
+    val config_delays = get_blockchains_config_delay_value(blockchains);
+
     val result = list<blockchain_info>();
     for (bc in bc_infos) {
         result.add(blockchain_info(
@@ -113,7 +123,8 @@ query get_blockchain_info_list(include_inactive: boolean): list<blockchain_info>
             system = bc.blockchain.system,
             is_foreign_importing = importing_foreign_blockchain @? { .blockchain_rid == bc.blockchain.rid } ??,
             is_moving = moving_blockchain @? { bc.blockchain } ??,
-            is_unarchiving = unarchiving_blockchain @? { bc.blockchain } ??
+            is_unarchiving = unarchiving_blockchain @? { bc.blockchain } ??,
+            config_delay = config_delays.get_or_null(bc.blockchain),
         ));
     }
     return result;
