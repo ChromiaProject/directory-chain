@@ -1,0 +1,25 @@
+module;
+
+import ^^.iccf.*;
+
+operation iccf_proof(source_chain: byte_array, tx_hash: byte_array, confirmation_proof: byte_array) {}
+
+operation check_proof(
+    transaction: gtx_transaction,
+    verify_signers: boolean = true,
+    require_anchored_proof: boolean = false,
+    min_timestamp: integer = 0,
+    max_timestamp: integer = 0,
+    enforce_unique: boolean = false
+) {
+    require_valid_proof(transaction, verify_signers, require_anchored_proof, min_timestamp, max_timestamp);
+    if (enforce_unique) make_transaction_unique(transaction);
+}
+
+operation check_operation(transaction: gtx_transaction, op_name: text) {
+    require_operation(transaction, op_name);
+}
+
+operation extract_args(transaction: gtx_transaction, op_name: text, expected_args: list<gtv>) {
+    require(extract_operation_args(transaction, op_name) == expected_args, "Expected args did not match");
+}
