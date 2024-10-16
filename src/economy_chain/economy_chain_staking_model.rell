@@ -7,6 +7,8 @@ enum network {
 object _staking_state {
     mutable last_reward_distribution: integer = 0;
     mutable last_withdrawal_distribution: integer = 0;
+    mutable reward_first_distribution_block: integer = 0;
+    mutable reward_distribution_batches: integer = 1;
 }
 
 entity staker_withdrawal_request {
@@ -34,6 +36,14 @@ entity staking_payment {
     index timestamp;
     amount: integer;
     ft4.accounts.account;
+    shared_amount: integer = 0;
+    provider_pubkey: byte_array = x'';
+}
+
+entity pending_shared_payment {
+    index ft4.accounts.account;
+    amount: integer;
+    provider_pubkey: byte_array;
 }
 
 // @dev If this is changed so should `_update_pending_token_time_all` and the query `staking_rewards_claimable_for`.

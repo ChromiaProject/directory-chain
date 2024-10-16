@@ -256,85 +256,97 @@ function _staking_clear_upcoming_delegations(ft4.accounts.account) {
     delete staker_state_to_provider @* { .staker_state.account == account and .timestamp > _staking_last_known_time()};  
 }
 
-
-// Rewards
-
-function _staking_distribute_rewards() {
+// default to -1, meaning batching is not used
+function _staking_distribute_rewards(using_batches: boolean = false, update_pending_token_times: boolean = true) {
     val rate = staking_get_current_rate() / millis_per_year;
-
+    
     // Get a list of payouts
-    _update_pending_token_time_all();
-    val rewards = staker_state @* { } (
-        @group account = .account,
-        @sum amount = integer (
-            (
-            .pending_token_time
-        ) * rate * units_per_asset
-        )
+    if (update_pending_token_times or not using_batches) {
+        _update_pending_token_time_all();
+    }
+
+    val rewards = (
+        ss: staker_state,
+        @outer psp: pending_shared_payment @* { ss.account == psp.account }
+    ) @* { ss.pending_token_time > 0 or psp?.amount?: 0 > 0 } (
+        @group account = ss.account,
+        @sum amount = integer ((ss.pending_token_time) * rate * units_per_asset),
+        @sum shared_amount = psp?.amount?: 0,
+        @set provider_set = psp?.provider_pubkey?: x''
+    ) limit (
+        if (using_batches) chain_context.args.staking_rewards_payout_batch_size else integer.MAX_VALUE
     );
 
-    val total_amount = rewards @ {} (@sum .amount);
+    val total_amount = rewards @ { } ( @sum .amount );
     log("Preparing to distribute %s rewards worth %s".format(rewards.size(), total_amount));
+
+    val total_shared_amount = rewards @ { } ( @sum .shared_amount );
+    val total_shared_rewarded_accounts = rewards @ { .shared_amount > 0 } ( @sum 1 );
+    log(
+        "Preparing to distribute %s shared rewards worth %s"
+            .format(
+                total_shared_rewarded_accounts,
+                total_shared_amount
+            )
+    );
 
     // Do not start what we cannot finish
     val pool = get_pool_account();
     var total_pool_balance = get_account_balance(pool);
-    if (total_pool_balance < total_amount) {
+    if (total_pool_balance < total_amount + total_shared_amount) {
         total_pool_balance = refill_pool_account_if_possible();
-        if (total_pool_balance < total_amount) {       
+        if (total_pool_balance < total_amount + total_shared_amount) {       
             log("Cannot pay rewards. Insufficient funds.");
             return;
         }
     }
 
+    val asset = get_asset();
+    val last_known_time = _staking_last_known_time();
+    
     // Send payouts
-    for ( (account, amount) in rewards ) {
-
-        /// @dev This can be removed once Rell supports a HAVING equivalent.
-        if (integer(amount) == 0) {
-            log("Skip zero payment to %s".format(account.id));
-            update staker_state @* { account } ( .pending_token_time = 0 );
-            continue;
-        }
-
-        if (not try_call(_staking_pay_reward(pool, account, amount, *))) {
-            log("Failed to pay out %s to %s".format(amount, account.id));
+    for ( (account, amount, shared_amount, provider_set) in rewards ) {
+        if (not try_call(_staking_pay_reward(last_known_time, pool, asset, account, amount, shared_amount, list<byte_array>(provider_set), *))) {
+            log("Failed to pay out %s including %s from shared rewards to %s".format(amount + shared_amount, shared_amount, account.id));
         }
     }
-
     log("Stored payments on-chain.");
 }
 
-function _staking_pay_reward(pool: accounts.account, account: accounts.account, amount: big_integer) {
-    ft4.assets.Unsafe.transfer(pool, account, get_asset(), integer(amount));
+function _staking_pay_reward(last_known_time: timestamp, pool: accounts.account, ft4.assets.asset, account: accounts.account, amount: integer, shared_amount: integer, providers: list<byte_array>) {
+    val total_amount = amount + shared_amount;
+    val provider = if (empty(providers)) x'' else providers[0];
+    ft4.assets.Unsafe.transfer(pool, account, asset, total_amount);
     update staker_state @* { account } ( .pending_token_time = 0 );
-    create staking_payment(timestamp = _staking_last_known_time(), amount = integer(amount), account);
-    log("Paid out %s to %s".format(amount, account.id));
+    delete pending_shared_payment @* { account };
+    create staking_payment(timestamp = last_known_time, amount = amount, account, shared_amount, provider);
+    log("Paid out %s including %s from shared rewards to %s".format(total_amount, shared_amount, account.id));
 }
 
 // Shared rewards (triggered by a hook in the rewards logic)
 
 function _staking_shared_rewards(pay_reward_result) {
+    val last_known_time = _staking_last_known_time();
 
     // Do nothing if the start date has not passed
-    if (_staking_last_known_time() < staking_get_rewards_start()) {
+    if (last_known_time < staking_get_rewards_start()) {
         return;
     }
 
     // We ignore reward debt here as it will flow through the reward term after the pool is refreshed
     val total_shared_reward = chain_context.args.staking_rewards_share * pay_reward_result.payed_reward;
 
-    // Find provider pubkey
-    val provider_pubkey = provider_account @? { pay_reward_result.payed_to }.provider.pubkey;
+    // Find provider
+    val provider_data = provider_account @? { pay_reward_result.payed_to } (provider = .provider, pubkey = .provider.pubkey);
 
     // In some edge cases during testing a public key may be absent
-    if (empty(provider_pubkey)) {
-        log("Not provider public key for id: %s".format(pay_reward_result.payed_to.id));
+    if (empty(provider_data)) {
+        log("Not provider found for id: %s".format(pay_reward_result.payed_to.id));
         return;
     }
 
     val staker_delegations = ( s1: staker_state_to_provider) @* {
-        .provider.pubkey == provider_pubkey and not exists(
+        .provider == provider_data.provider and not exists(
             (s2:staker_state_to_provider) @* { 
                 s2.staker_state ==s1.staker_state,
                 (s2.timestamp>s1.timestamp) or 
@@ -354,27 +366,16 @@ function _staking_shared_rewards(pay_reward_result) {
         return;
     }
 
-    // Run through and payout by share of delegation
-    for (staker in staker_delegations) {
+    val pending_shared_payment_structs = staker_delegations @* { } (
+        struct<pending_shared_payment> (
+            .account,
+            // @dev The decimal is important
+            amount = integer(total_shared_reward * (.balance / decimal(total_delegation))),
+            provider_data.pubkey,
+        )
+    );
 
-        /// @dev The decimal is important
-        val share_amount = integer(total_shared_reward * (staker.balance / decimal(total_delegation)));
-
-        if(share_amount == 0) continue;
-
-        ft4.assets.Unsafe.transfer(get_pool_account(), staker.account, get_asset(), share_amount);
-        log(
-            "Paid reward share of %s to %s. Based on a delegation of %s CHR."
-                .format(
-                    share_amount,
-                    staker
-                        .account
-                        .id,
-                    staker
-                        .balance
-                )
-        );
-    }
+    create pending_shared_payment ( pending_shared_payment_structs );
 }
 
 /**
