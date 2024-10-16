@@ -38,7 +38,7 @@ function require_only_pending_proposal_of_type(proposal: common_proposal) {
 }
 
 /**
- * This makes sure a valid voter set is signer of transaction. It can either be a single key, or a provider
+ * This makes sure a valid voter set member is signer of transaction. It can either be a single key, or a provider
  * key set.
  */
 function require_voter_set_member_pubkey(voter_set: common_voter_set): pubkey {
@@ -50,7 +50,9 @@ function require_voter_set_member_pubkey(voter_set: common_voter_set): pubkey {
             return signer_key_members[0];
         }
         common_proposal_vote_type.PROVIDER_AUTH -> {
-            return require(get_provider_signer(), "Operation must be signed by provider key(s)");
+            val provider_signer = require(get_provider_signer(), "Operation must be signed by provider key(s)");
+            require(common_voter_set_member @ { voter_set, provider_signer } ( @sum 1 ) == 1, "Signer is no member of voter set");
+            return provider_signer;
         }
     }
 }
