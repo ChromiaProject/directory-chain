@@ -267,11 +267,12 @@ function _staking_distribute_rewards(using_batches: boolean = false, update_pend
 
     val rewards = (
         ss: staker_state,
-        @outer psp: pending_shared_payment @* { ss.account == psp.account, psp.paid == false }
-    ) @* { ss.pending_token_time > 0 or psp?.amount?:0 > 0 } (
+        @outer psp: pending_shared_payment @* { ss.account == psp.account }
+    ) @* { ss.pending_token_time > 0 or psp?.amount?: 0 > 0 } (
         @group account = ss.account,
         @sum amount = integer ((ss.pending_token_time) * rate * units_per_asset),
-        @sum shared_amount = psp?.amount?:0
+        @sum shared_amount = psp?.amount?: 0,
+        @set provider_set = psp?.provider_pubkey?: x''
     ) limit (
         if (using_batches) chain_context.args.staking_rewards_payout_batch_size else integer.MAX_VALUE
     );
@@ -280,7 +281,7 @@ function _staking_distribute_rewards(using_batches: boolean = false, update_pend
     log("Preparing to distribute %s rewards worth %s".format(rewards.size(), total_amount));
 
     val total_shared_amount = rewards @ { } ( @sum .shared_amount );
-    val total_shared_rewarded_accounts = rewards @* { .shared_amount > 0 } ( @sum 1 );
+    val total_shared_rewarded_accounts = rewards @ { .shared_amount > 0 } ( @sum 1 );
     log(
         "Preparing to distribute %s shared rewards worth %s"
             .format(
@@ -304,20 +305,21 @@ function _staking_distribute_rewards(using_batches: boolean = false, update_pend
     val last_known_time = _staking_last_known_time();
     
     // Send payouts
-    for ( (account, amount, shared_amount) in rewards ) {
-        if (not try_call(_staking_pay_reward(last_known_time, pool, asset, account, amount, shared_amount, *))) {
+    for ( (account, amount, shared_amount, provider_set) in rewards ) {
+        if (not try_call(_staking_pay_reward(last_known_time, pool, asset, account, amount, shared_amount, list<byte_array>(provider_set), *))) {
             log("Failed to pay out %s including %s from shared rewards to %s".format(amount + shared_amount, shared_amount, account.id));
         }
     }
     log("Stored payments on-chain.");
 }
 
-function _staking_pay_reward(last_known_time: timestamp, pool: accounts.account, ft4.assets.asset, account: accounts.account, amount: integer, shared_amount: integer) {
+function _staking_pay_reward(last_known_time: timestamp, pool: accounts.account, ft4.assets.asset, account: accounts.account, amount: integer, shared_amount: integer, providers: list<byte_array>) {
     val total_amount = amount + shared_amount;
+    val provider = if (empty(providers)) x'' else providers[0];
     ft4.assets.Unsafe.transfer(pool, account, asset, total_amount);
     update staker_state @* { account } ( .pending_token_time = 0 );
-    update pending_shared_payment @* { account } ( .paid = true );
-    create staking_payment(timestamp = last_known_time, amount = integer(amount), account);
+    delete pending_shared_payment @* { account };
+    create staking_payment(timestamp = last_known_time, amount = amount, account, shared_amount, provider);
     log("Paid out %s including %s from shared rewards to %s".format(total_amount, shared_amount, account.id));
 }
 
@@ -335,16 +337,16 @@ function _staking_shared_rewards(pay_reward_result) {
     val total_shared_reward = chain_context.args.staking_rewards_share * pay_reward_result.payed_reward;
 
     // Find provider
-    val provider = provider_account @? { pay_reward_result.payed_to } (.provider);
+    val provider_data = provider_account @? { pay_reward_result.payed_to } (provider = .provider, pubkey = .provider.pubkey);
 
     // In some edge cases during testing a public key may be absent
-    if (empty(provider)) {
+    if (empty(provider_data)) {
         log("Not provider found for id: %s".format(pay_reward_result.payed_to.id));
         return;
     }
 
     val staker_delegations = ( s1: staker_state_to_provider) @* {
-        .provider == provider and not exists(
+        .provider == provider_data.provider and not exists(
             (s2:staker_state_to_provider) @* { 
                 s2.staker_state ==s1.staker_state,
                 (s2.timestamp>s1.timestamp) or 
@@ -369,8 +371,7 @@ function _staking_shared_rewards(pay_reward_result) {
             .account,
             // @dev The decimal is important
             amount = integer(total_shared_reward * (.balance / decimal(total_delegation))),
-            provider,
-            timestamp = last_known_time
+            provider_data.pubkey,
         )
     );
 
