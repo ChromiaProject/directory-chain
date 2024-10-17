@@ -249,10 +249,31 @@ query staking_rewards_for(
 */
 query staking_get_rewards_paid(account_id: byte_array): integer {
     val account = ft4.accounts.Account(account_id);
-    return staking_payment @* { .account == account } ( @sum .amount )[0];
+    return staking_payment @ { .account == account } ( @sum .amount );
 }
 
-
+/**
+/* Shared staking rewards that have already been distributed to the user
+/*
+/* @param account_id Account ID
+/* @param provider_pubkey Optionally get rewards from a specific provider only
+/* @param since Only get shared rewards after a specific timestamp
+/* @return Amount of CHR in minor units
+*/
+query staking_get_shared_rewards_paid(
+    account_id: byte_array,
+    provider_pubkey: pubkey? = null,
+    since: timestamp? = null
+): integer {
+    val account = ft4.accounts.Account(account_id);
+    return staking_payment @ {
+        .account == account,
+        (empty(provider_pubkey) or .provider_pubkey == provider_pubkey),
+        (empty(since) or .timestamp > since)
+    } (
+        @sum .shared_amount
+    );
+}
 
 // Balances
 
@@ -285,19 +306,73 @@ query staking_get_native_balance(account_id: byte_array) {
 // Statistics
 
 /**
-/* Total staked by all users (including undelegated stakes)
+/* Total staked by all users with a Chromia account (including undelegated stakes)
 /*
 /* @return Total staked of CHR in minor units
 */
-query staking_total_stake() = staker_state @* { } ( @sum .balance )[0];
+query staking_total_stake() = staker_state @ { } ( @sum .balance );
 
 /**
-/* Total staked by all users (including undelegated stakes)
+/* Total staked by all users with a Chromia account on network (including undelegated stakes)
+/* @param network Chosen network
+/* @return Total staked of CHR in minor units
+*/
+query staking_total_stake_on_network(network)  = staker_state @ { network } ( @sum .balance );
+
+
+/**
+/* Total delegated by all users
+/* @param network Optionally specify network
+/* @return Total staked of CHR in minor units
+*/
+query staking_total_delegated(network? = null) {
+    return ( s1: staker_state_to_provider) @ {
+        .provider.pubkey != get_null_account() and (s1.timestamp <= _staking_last_known_time()) and 
+        (empty(network) or .staker_state.network == network) and 
+            empty((s2:staker_state_to_provider) @* { 
+                s2.staker_state ==s1.staker_state,
+                ((s2.timestamp <= _staking_last_known_time()) and (s2.timestamp>s1.timestamp)) 
+                or (s2.timestamp==s1.timestamp and s2 < s1) 
+            }
+        )
+    } ( @sum .staker_state.balance );
+}
+
+/**
+/* Total users that have delegated
+/* @param network Optionally specify network
+/* @return Total users
+*/
+query staking_total_delegation_accounts(network? = null) {
+    return ( s1: staker_state_to_provider) @ {
+        .provider.pubkey != get_null_account() and (s1.timestamp <= _staking_last_known_time()) and 
+            (empty(network) or .staker_state.network == network) and 
+            empty((s2:staker_state_to_provider) @* { 
+                s2.staker_state ==s1.staker_state,
+                ((s2.timestamp <= _staking_last_known_time()) and (s2.timestamp>s1.timestamp)) 
+                or (s2.timestamp==s1.timestamp and s2 < s1) 
+            }
+        )
+    } ( @sum 1 );
+}
+
+/**
+/* Total number of users that have created an account and staked on any network
 /*
 /* @return User count
 */
-query staking_total_accounts() = staker_state @* { } ( @sum 1 )[0];
+query staking_total_accounts() = staker_state @ { } ( @sum 1 );
 
+/**
+/* Total number of users that have created an account and staked on a network
+/*
+/* @return User count
+*/
+query staking_total_accounts_on_network(network) = staker_state @ { network } ( @sum 1 );
+
+query get_total_provisional_stake(network? = null) = provisional_stake_balance @ { (empty(network) or .network == network) } ( @sum .staked_balance );
+
+query get_total_provisional_stake_accounts(network? = null) = provisional_stake_balance @ { (empty(network) or .network == network) } ( @sum 1 );
 
 // Date utilites
 
