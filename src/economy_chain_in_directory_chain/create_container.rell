@@ -17,6 +17,7 @@ function receive_create_container_impl(body: gtv) {
         container_units = message.container_units,
         extra_storage = message.extra_storage,
         cluster_name = message.cluster_name,
+        subnode_image_name = message.subnode_image_name,
         *));
 
     val error_message = if (container_cluster_names == null)
@@ -36,7 +37,8 @@ function create_container_from_ticket(
     provider_pubkey: pubkey,
     container_units: integer,
     extra_storage: integer,
-    cluster_name: text
+    cluster_name: text,
+    subnode_image_name: text,
 ): (container_name: text, cluster_name: text) {
 
     require_pubkey(provider_pubkey);
@@ -50,7 +52,20 @@ function create_container_from_ticket(
         get_available_container_units(cluster) >= container_units and
         get_available_extra_storage(cluster) >= extra_storage
     ) {
+        var maybe_subnode_image: subnode_image? = null;
+        if (not subnode_image_name.empty()) {
+            maybe_subnode_image = require_subnode_image(subnode_image_name);
+            require(maybe_subnode_image.active, "Subnode image %s is not active".format(maybe_subnode_image.name));
+            require(maybe_subnode_image.subnode_image_type == subnode_image_type.COMMON or not empty(cluster_subnode_image @? { cluster, maybe_subnode_image }),
+                "Subnode image %s is not compatible with cluster %s".format(maybe_subnode_image.name, cluster.name));
+        }
+
         val container = create_container_in_cluster(provider, cluster, container_units, extra_storage);
+
+        if (maybe_subnode_image != null) {
+            create container_subnode_image(container, maybe_subnode_image);
+        }
+
         return (container_name = container.name, cluster_name = cluster.name);
     }
 
