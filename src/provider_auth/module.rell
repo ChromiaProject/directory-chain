@@ -1,0 +1,159 @@
+/**
+ * This module contains support for provider multi key authentication. A provider can have one or more keys and
+ * also define a threshold for keys required to sign a operation.
+ *
+ * The module is shared between DC and EC, with data synced over icmf from DC to EC.
+ */
+
+module;
+
+import provider_auth.model.*;
+import common_consensus.*;
+
+@extendable function after_provider_auth_updated(provider_pubkey: pubkey) {}
+
+/**
+ * Adds a key for provider if not already exists. If this is the first key of this role, then the default
+ * threshold is set to 1.
+ *
+ * @param provider_pubkey They provider to add this key for.
+ * @param pubkey The auth key
+ * @param provider_key_role The role of key
+ */
+function _add_provider_key(provider_pubkey: pubkey, pubkey, provider_key_role = provider_key_role.main) {
+
+    if (not exists(provider_auth_key @? { provider_pubkey, provider_key_role, pubkey })) {
+        create provider_auth_key(provider_pubkey, provider_key_role, pubkey);
+    }
+
+    if (not is_provider_auth_threshold_set(provider_pubkey, provider_key_role)) {
+        _set_provider_key_threshold(provider_pubkey, provider_key_role, 1);
+    }
+
+    after_provider_auth_updated(provider_pubkey);
+}
+
+/**
+ * Remove a key for provider.
+ *
+ * @param provider_pubkey They provider to add this key for.
+ * @param pubkey The auth key
+ * @param role Role of key
+ */
+function _remove_provider_key(provider_pubkey: pubkey, pubkey, role: provider_key_role) {
+
+    val key_count = get_provider_auth_key_count(provider_pubkey, role);
+    require(
+        role != provider_key_role.main or key_count > 1,
+        "Can't remove last %s key".format(provider_key_role.main)
+    );
+    val key_role_threshold = require(get_provider_auth_threshold(provider_pubkey, role),
+        "No threshold found for role %s".format(role));
+    require(
+        key_count - 1 >= key_role_threshold.threshold,
+            "Can't remove key from %s due to key count (%s) gets under threshold (%s)".format(
+                role, key_count - 1, key_role_threshold.threshold
+    ));
+
+    delete provider_auth_key @? { .provider_pubkey == provider_pubkey, role, pubkey };
+
+    after_provider_auth_updated(provider_pubkey);
+}
+
+/**
+ * Sets the required threshold for a specific provider key role. The threshold is the same as for voting
+ * consensus (majority, super-majority or fixed number)
+ */
+function _set_provider_key_threshold(provider_pubkey: pubkey, provider_key_role, threshold: integer) {
+
+    val key_count = get_provider_auth_key_count(provider_pubkey, provider_key_role);
+
+    require(threshold <= key_count, "Threshold (%s) can't be larger than number of keys (%s)".format(threshold, key_count));
+    require(is_valid_consensus_threshold(threshold), "Threshold must be -1 (majority), 0 (super-majority) or positive");
+
+    val pat = get_provider_auth_threshold(provider_pubkey, provider_key_role);
+    if (exists(pat)) {
+        pat.threshold = threshold;
+    } else {
+        create provider_auth_threshold(provider_pubkey, provider_key_role, threshold);
+    }
+
+    after_provider_auth_updated(provider_pubkey);
+}
+
+/**
+ * Checks if transactions is signed by keys belonging to provider_pubkey. Will require the threshold of signer keys of
+ * the given key role to be valid.
+ *
+ * @return True if transaction is signed by the specific providers, false otherwise.
+ */
+function provider_is_signer(provider_pubkey: pubkey, provider_key_roles: list<provider_key_role> = [provider_key_role.main]) {
+
+    val key_roles_signed = provider_auth_key @* {
+        provider_pubkey,
+        .provider_key_role in provider_key_roles,
+        .pubkey in op_context.get_signers()
+    } ( @group .provider_key_role, @sum signed_keys = 1 );
+
+    for (key_role_signed in key_roles_signed) {
+        val threshold = provider_auth_threshold @? { provider_pubkey, key_role_signed.provider_key_role } ( .threshold );
+        val max_signer_keys = get_provider_auth_key_count(provider_pubkey, key_role_signed.provider_key_role);
+
+        if (
+            threshold != null and
+            max_signer_keys > 0 and
+            _compute_common_consensus_result(key_role_signed.signed_keys, 0, max_signer_keys, threshold) == common_consensus_result.approved
+        ) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function get_provider_auth_key_count(provider_pubkey: pubkey, provider_key_role): integer {
+    return provider_auth_key @ { provider_pubkey, provider_key_role } ( @sum 1 );
+}
+
+function get_provider_auth_threshold(provider_pubkey: pubkey, provider_key_role) {
+    return provider_auth_threshold @? { provider_pubkey, provider_key_role };
+}
+
+function is_provider_auth_threshold_set(provider_pubkey: pubkey, provider_key_role) {
+    return get_provider_auth_threshold(provider_pubkey, provider_key_role) != null;
+}
+
+/**
+ * Identifies the provider by looking at the list of signers and returns the provider pubkey if
+ * one provider is found to be signing this transaction.
+ *
+ * @return The provider pubkey of the single provider signing this transaction.
+ */
+function get_provider_signer(provider_key_roles: list<provider_key_role> = [provider_key_role.main]): pubkey? {
+
+    val maybe_providers = provider_auth_key @* {
+        provider_auth_key.pubkey in op_context.get_signers() } ( @group .provider_pubkey );
+    var found_provider: pubkey? = null;
+
+    for (maybe_provider in maybe_providers) {
+        if (provider_is_signer(maybe_provider, provider_key_roles)) {
+            require(found_provider == null, "Transaction must be signed by one provider only");
+            found_provider = maybe_provider;
+        }
+    }
+
+    return found_provider;
+}
+
+/**
+ * Find provider by auth key.
+ *
+ * @param pubkey Auth key to lookup provider by
+ * @param role If not null, limit search by key role.
+ * @return Provider pubkey
+ */
+function get_provider_by_auth_key(pubkey, role: provider_key_role? = null): pubkey? {
+    return provider_auth_key @? {
+        .pubkey == pubkey,
+        role == null or .provider_key_role == role
+    } ( .provider_pubkey ) limit 1;
+}

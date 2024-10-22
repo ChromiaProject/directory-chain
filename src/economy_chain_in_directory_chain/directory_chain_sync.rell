@@ -1,4 +1,12 @@
 @extend(after_provider_registered) function(provider, cluster: cluster?) {
+    send_provider_update_message(provider);
+}
+
+@extend(after_provider_updated) function(provider) {
+    send_provider_update_message(provider);
+}
+
+function send_provider_update_message(provider) {
     send_message(provider_update_topic, provider_update_message(
         pubkey = provider.pubkey,
         system = provider.system,
@@ -7,13 +15,24 @@
     ).to_gtv());
 }
 
-@extend(after_provider_updated) function(provider) {
-    send_message(provider_update_topic, provider_update_message(
-        pubkey = provider.pubkey,
-        system = provider.system,
-        tier = provider.tier.name,
-        active = provider.active
-    ).to_gtv());
+@extend(after_provider_auth_updated) function(provider_pubkey: pubkey) {
+    send_provider_auth_update_message(provider_pubkey);
+}
+
+function send_provider_auth_update_message(provider_pubkey: pubkey) {
+    val message = provider_auth_update_message(
+        provider_pubkey = provider_pubkey,
+        list<provider_auth_update_role>()
+    );
+
+    for (pat in provider_auth_threshold @* { .provider_pubkey == provider_pubkey } ( .provider_key_role, .threshold )) {
+        val all_keys = provider_auth_key @* { .provider_pubkey == provider_pubkey, pat.provider_key_role } ( .pubkey );
+        if (all_keys.size() > 0) {
+            message.key_roles.add(provider_auth_update_role(pat.provider_key_role, pat.threshold, all_keys));
+        }
+    }
+
+    send_message(provider_auth_update_topic, message.to_gtv());
 }
 
 @extend(after_cluster_creation) function (provider, cluster) {

@@ -2,40 +2,100 @@
 
 import ^^.*;
 import ^.helper_functions.*;
+import provider_auth.test.helper_operations.*;
 
 val alice = rell.test.keypairs.alice;
 val bob = rell.test.keypairs.bob;
 
-function test_make_common_vote() {
+function test_make_common_vote_v65__voter_set_member_key() {
 
     rell.test.tx().op(
-        create_test_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
+        create_test_common_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
     ).sign(alice).run();
 
     rell.test.tx().op(
-        make_common_vote(alice.pub, get_latest_proposal_id(), true)
+        make_common_vote_v65(get_latest_common_proposal_id(), true)
     ).sign(alice).run();
 }
 
-function test_make_common_vote_fail_due_to_not_member_of_voter_set() {
+function test_make_common_vote_v65__provider_auth() {
+
+    // Create proposal
+    rell.test.tx().op(
+        create_test_common_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name", common_proposal_vote_type.PROVIDER_AUTH),
+    ).sign(alice).run();
+
+    // Invalid - provider has no keys
+    rell.test.tx().op(
+        make_common_vote_v65(get_latest_common_proposal_id(), true)
+    ).sign(alice).run_must_fail("Operation must be signed by provider key(s)");
+
+    // Add key for a new provider
+    rell.test.tx().op(
+        add_provider_key_op(rell.test.keypairs.dave.pub, rell.test.keypairs.dave.pub)
+    ).sign(rell.test.keypairs.dave).run();
+
+    // Invalid - Dave is not member of voter set
+    rell.test.tx().op(
+        make_common_vote_v65(get_latest_common_proposal_id(), true)
+    ).sign(rell.test.keypairs.dave).run_must_fail("Signer is no member of voter set");
+
+    // Add key
+    rell.test.tx().op(
+        add_provider_key_op(alice.pub, bob.pub)
+    ).sign(alice).run();
+
+    // Valid
+    rell.test.tx().op(
+        make_common_vote_v65(get_latest_common_proposal_id(), true)
+    ).sign(bob).run();
+}
+
+function test_make_common_vote_v65_fail_due_to_not_member_of_voter_set() {
 
     rell.test.tx().op(
-        create_test_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
+        create_test_common_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
     ).sign(alice).run();
 
     rell.test.tx().op(
-        make_common_vote(bob.pub, get_latest_proposal_id(), true)
-    ).sign(bob).run_must_fail("0x034f355bdcb7cc0af728ef3cceb9615d90684bb5b2ca5f859ab0f0b704075871aa is not part of voter set voter_set_name");
+        make_common_vote_v65(get_latest_common_proposal_id(), true)
+    ).sign(bob).run_must_fail("Operation must be signed by member of voter set");
 }
 
 function test_revoke_proposal() {
 
     rell.test.tx().op(
-        create_test_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
+        create_test_common_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
     ).sign(alice).run();
 
     rell.test.tx().op(
-        revoke_common_proposal(alice.pub, get_latest_proposal_id()))
+        revoke_common_proposal_v65(get_latest_common_proposal_id()))
+        .sign(alice)
+        .run();
+
+    val proposal = common_proposal @ { .proposed_by == alice.pub };
+    assert_equals(proposal.state, common_proposal_state.REVOKED);
+}
+
+function test_revoke_proposal__provider_auth() {
+
+    rell.test.tx().op(
+        create_test_common_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name", common_proposal_vote_type.PROVIDER_AUTH)
+    ).sign(alice).run();
+
+    // Invalid - provider has no keys
+    rell.test.tx().op(
+        revoke_common_proposal_v65(get_latest_common_proposal_id())
+    ).sign(alice).run_must_fail("Operation must be signed by provider key(s)");
+
+    // Add key
+    rell.test.tx().op(
+        add_provider_key_op(alice.pub, alice.pub)
+    ).sign(alice).run();
+
+    // Valid
+    rell.test.tx().op(
+        revoke_common_proposal_v65(get_latest_common_proposal_id()))
         .sign(alice)
         .run();
 
@@ -46,7 +106,7 @@ function test_revoke_proposal() {
 function test_revoke_proposal_fail_due_to_not_existing() {
 
     rell.test.tx().op(
-        revoke_common_proposal(bob.pub, rowid(0)))
+        revoke_common_proposal_v65(rowid(0)))
         .sign(bob)
         .run_must_fail("Proposal 0 not found");
 }
@@ -54,11 +114,18 @@ function test_revoke_proposal_fail_due_to_not_existing() {
 function test_revoke_proposal_fail_due_to_not_my_proposal() {
 
     rell.test.tx().op(
-        create_test_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
+        create_test_common_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
     ).sign(alice).run();
 
+    val voter_set = common_voter_set @ {};
+
+
     rell.test.tx().op(
-        revoke_common_proposal(bob.pub, get_latest_proposal_id()))
+        create_common_voter_set_member_op(voter_set, bob.pub)
+    ).run();
+
+    rell.test.tx().op(
+        revoke_common_proposal_v65(get_latest_common_proposal_id()))
         .sign(bob)
         .run_must_fail("It is only allowed to revoke own proposals");
 }
@@ -66,29 +133,62 @@ function test_revoke_proposal_fail_due_to_not_my_proposal() {
 function test_revoke_proposal_fail_due_to_already_approved() {
 
     rell.test.tx().op(
-        create_test_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
+        create_test_common_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
     ).sign(alice).run();
 
     rell.test.tx().op(
-        make_common_vote(alice.pub, get_latest_proposal_id(), true)
+        make_common_vote_v65(get_latest_common_proposal_id(), true)
     ).sign(alice).run();
 
     rell.test.tx().op(
-        revoke_common_proposal(alice.pub, get_latest_proposal_id())
+        revoke_common_proposal_v65(get_latest_common_proposal_id())
     ).sign(alice).run_must_fail("The proposal is already APPROVED");
 }
 
 function test_revoke_proposal_fail_due_to_already_rejected() {
 
     rell.test.tx().op(
-        create_test_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
+        create_test_common_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
     ).sign(alice).run();
 
     rell.test.tx().op(
-        make_common_vote(alice.pub, get_latest_proposal_id(), false)
+        make_common_vote_v65(get_latest_common_proposal_id(), false)
     ).sign(alice).run();
 
     rell.test.tx().op(
-        revoke_common_proposal(alice.pub, get_latest_proposal_id())
+        revoke_common_proposal_v65(get_latest_common_proposal_id())
     ).sign(alice).run_must_fail("The proposal is already REJECTED");
+}
+
+function test_revoke_proposal_fail_due_to_already_rejected__provider_auth() {
+
+    // Create proposal
+    rell.test.tx().op(
+        create_test_common_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name", common_proposal_vote_type.PROVIDER_AUTH),
+    ).sign(alice).run();
+
+    // Invalid - provider has no keys
+    rell.test.tx().op(
+        revoke_common_proposal_v65(get_latest_common_proposal_id())
+    ).sign(alice).run_must_fail("Operation must be signed by provider key(s)");
+
+    // Add keys
+    rell.test.tx().op(
+        add_provider_key_op(alice.pub, alice.pub),
+        add_provider_key_op(alice.pub, bob.pub),
+        set_provider_key_threshold_op(alice.pub, provider_key_role.main, consensus_threshold.super_majority),
+    ).sign(alice).run();
+
+    // Invalid - must be signed by both keys
+    rell.test.tx().op(
+        revoke_common_proposal_v65(get_latest_common_proposal_id())
+    ).sign(alice).run_must_fail("Operation must be signed by provider key(s)");
+    rell.test.tx().op(
+        revoke_common_proposal_v65(get_latest_common_proposal_id())
+    ).sign(bob).run_must_fail("Operation must be signed by provider key(s)");
+
+    // Valid when signed by both keys
+    rell.test.tx().op(
+        revoke_common_proposal_v65(get_latest_common_proposal_id())
+    ).sign(alice, bob).run();
 }

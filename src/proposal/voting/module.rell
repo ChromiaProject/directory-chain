@@ -1,6 +1,7 @@
 module;
 
 import ^.*;
+import common_consensus.*;
 
 entity vote {
     key proposal, provider;
@@ -43,19 +44,34 @@ operation create_voter_set(my_pubkey: pubkey, name, threshold: integer, initials
     }
 }
 
+
+/**
+ * Vote for proposal.
+ *
+ * Permission: voter set member
+ *
+ * Rate limit: no
+ *
+ * @param my_pubkey pubkey of provider
+ */
+operation make_vote(my_pubkey: pubkey, proposal_id: integer, vote: boolean) {
+    make_vote_internal(proposal_id, vote);
+}
+
 /**
  * Vote for proposal.
  * 
  * Permission: voter set member
  * 
  * Rate limit: no
- * 
- * @param my_pubkey pubkey of provider
  */
-operation make_vote(my_pubkey: pubkey, proposal_id: integer, vote: boolean) {
-    require_is_signer(my_pubkey);
-    val provider = require_provider(my_pubkey);
+operation make_vote_v65(proposal_id: integer, vote: boolean) {
+    make_vote_internal(proposal_id, vote);
+}
+
+function make_vote_internal(proposal_id: integer, vote: boolean) {
     val prop = require_proposal(rowid(proposal_id));
+    val provider = require_provider_signer_with_rate_limit();
     require(prop.state == proposal_state.PENDING, "The proposal is already %s".format(prop.state));
     require_voter_set_member(prop.voter_set, provider);
     require(empty(vote @? {prop, provider}), "Only one vote per pubkey is allowed");
@@ -64,17 +80,31 @@ operation make_vote(my_pubkey: pubkey, proposal_id: integer, vote: boolean) {
 
 /**
  * Delete vote for proposal.
+ *
+ * Permission: voter set member
+ *
+ * Rate limit: no
+ *
+ * @param my_pubkey pubkey of provider
+ */
+operation retract_vote(my_pubkey: pubkey, proposal_id: integer) {
+    retract_vote_internal(proposal_id);
+}
+
+/**
+ * Delete vote for proposal.
  * 
  * Permission: voter set member
  * 
  * Rate limit: no
- * 
- * @param my_pubkey pubkey of provider
  */
-operation retract_vote(my_pubkey: pubkey, proposal_id: integer) {
-    require_is_signer(my_pubkey);
-    val provider = require_provider(my_pubkey);
+operation retract_vote_v65(proposal_id: integer) {
+    retract_vote_internal(proposal_id);
+}
+
+function retract_vote_internal(proposal_id: integer) {
     val prop = require_proposal(rowid(proposal_id));
+    val provider = require_provider_signer_with_rate_limit();
     require(prop.state == proposal_state.PENDING, "The proposal is already %s".format(prop.state));
     require_voter_set_member(prop.voter_set, provider);
 

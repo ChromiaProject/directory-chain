@@ -14,10 +14,11 @@ function require_dapp_cluster(cluster_name: text) = require(cluster_name != syst
 
 function require_provider(pubkey) = require(provider @? { pubkey }, "No provider found with pubkey %s".format(pubkey));
 
+function require_active_provider(pubkey) = require(provider @? { pubkey, .active == true }, "No provider found with pubkey %s".format(pubkey));
+
 function require_provider_is_signer(pubkey) {
-    val provider = require(provider @? { pubkey }, "No provider found with pubkey %s".format(pubkey));
-    require(op_context.is_signer(pubkey), "Operation must be signed by provider " + pubkey);
-    return provider;
+    require(provider_is_signer(pubkey), "Operation must be signed by provider " + pubkey);
+    return require(provider @? { pubkey }, "No provider found with pubkey %s".format(pubkey));
 }
 
 function require_signed_by_account_id(account_id: byte_array) {

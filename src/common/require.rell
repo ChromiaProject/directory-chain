@@ -3,6 +3,10 @@ function require_is_signer(pubkey) {
 }
 
 function require_provider(pubkey) = require(provider @? { pubkey }, "Unknown provider " + pubkey);
+function require_provider_signer(provider_key_roles: list<provider_key_role> = [provider_key_role.main]) {
+    val provider_pubkey = require(get_provider_signer(provider_key_roles), "Transaction must be signed by provider");
+    return require_provider(provider_pubkey);
+}
 function require_cluster(name) = require(cluster @? { name }, "Cluster %s not found".format(name));
 function require_clusters(names: list<text>): list<cluster> {
     val clusters = cluster @* { .name in names };
@@ -68,17 +72,49 @@ function require_voter_set_member(voter_set, provider) {
     require(exists(voter_set_member @* { voter_set, provider}), "Provider is not a member of voter set " + voter_set.name);
 }
 
-function require_is_provider_with_rate_limit(pubkey) {
+function require_is_provider_with_rate_limit(pubkey, provider_key_roles: list<provider_key_role> = [provider_key_role.main]) {
     val provider = require_provider(pubkey);
-    require_provider_auth_with_rate_limit(provider);
+    require_provider_auth_with_rate_limit(provider, provider_key_roles);
     return provider;
 }
 
-// This is the function we should use for auth
-function require_provider_auth_with_rate_limit(provider) {
-    require_is_signer(provider.pubkey);
+/**
+ * Requires given provider is signing transaction, is active and not exceeds limit.
+ *
+ * @param provider The provider that must sign this transaction.
+ * @param provider_key_roles The type of auth keys to use for this authentication. Main is default.
+ */
+function require_provider_auth_with_rate_limit(provider, provider_key_roles: list<provider_key_role> = [provider_key_role.main]) {
+    require(provider_is_signer(provider.pubkey, provider_key_roles), "Operation must be signed by provider key(s)");
     require(provider.active, "Provider is not enabled");
     provider_rate_limit(provider);
+}
+
+/**
+ * Requires given pubkey is an active provider which is signing the transaction.
+ *
+ * @param pubkey The provider key that must sign this transaction.
+ * @param provider_key_role The type of auth keys to use for this authentication. Main is default.
+ */
+function require_provider_auth(pubkey, provider_key_role: list<provider_key_role> = [provider_key_role.main]) {
+    val provider = require_provider(pubkey);
+    require(provider_is_signer(provider.pubkey, provider_key_role), "Operation must be signed by provider key(s)");
+    require(provider.active, "Provider is not enabled");
+    return provider;
+}
+
+
+/**
+ * Derives provider from signatures and rejects if multiple providers are found.
+ *
+ * @param provider_key_roles Only keys within list of roles is approved.
+ */
+function require_provider_signer_with_rate_limit(provider_key_roles: list<provider_key_role> = [provider_key_role.main]) {
+    val provider_pubkey = require(get_provider_signer(provider_key_roles), "Transaction must be signed by provider");
+    val provider = require_provider(provider_pubkey);
+    require(provider.active, "Provider is not enabled");
+    provider_rate_limit(provider);
+    return provider;
 }
 
 function require_pubkey(pubkey) {

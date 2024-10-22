@@ -3,6 +3,7 @@
 import ^^.*;
 import ^.helper_functions.*;
 import ^.helper_operations.*;
+import provider_auth.test.helper_operations.*;
 
 function test_migrate_provider_staking_accounts() {
 
@@ -30,4 +31,48 @@ function test_migrate_provider_staking_accounts() {
             .last_approved_stake_requirements == pa.last_approved_stake_requirements
         }));
     }
+}
+
+function test_migrate_provider_keys() {
+
+    // The migration has already been done, but lets flip it to trigger it again next block building
+    // and also set the system_p voter type it will have before migration.
+    add_provider(rell.test.pubkeys.alice, false, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op(
+        set_provider_multi_key_false(),
+        set_system_p_member_key_vote_set(),
+    ).run();
+
+    assert_equals(system_p_voter_set().member_key_type, common_proposal_vote_type.VOTER_SET_MEMBER_KEY);
+
+    // Will only be run once
+    rell.test.block().run();
+
+    // System_p voter set is changed to provider auth
+    assert_equals(system_p_voter_set().member_key_type, common_proposal_vote_type.PROVIDER_AUTH);
+
+    // Key is created
+    val keys = provider_auth_key @* { .provider_pubkey == rell.test.keypairs.alice.pub };
+    assert_equals(keys.size(), 1);
+    assert_equals(keys[0].provider_pubkey, rell.test.keypairs.alice.pub);
+    assert_equals(keys[0].pubkey, rell.test.keypairs.alice.pub);
+    assert_equals(keys[0].provider_key_role, provider_key_role.main);
+
+    // Default threshold is set
+    val threshold = provider_auth_threshold @ { .provider_pubkey == rell.test.keypairs.alice.pub, provider_key_role.main } ( .threshold );
+    assert_equals(threshold, 1);
+
+    // Migration job marked as completed
+    assert_true(migration_completed.provider_multi_key);
+
+    // Test auth - fail with no key type set
+    rell.test.tx().op(
+        provider_is_signer_op(rell.test.keypairs.alice.pub, []),
+    ).sign(rell.test.keypairs.alice).run_must_fail("auth failed");
+
+    // Test auth - works
+    rell.test.tx().op(
+        provider_is_signer_op(rell.test.keypairs.alice.pub, [provider_key_role.main]),
+        provider_is_signer_op(rell.test.keypairs.alice.pub, [provider_key_role.main, provider_key_role.configuration_proposal_vote]),
+    ).sign(rell.test.keypairs.alice).run();
 }

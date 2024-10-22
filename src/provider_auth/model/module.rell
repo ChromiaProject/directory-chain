@@ -1,0 +1,36 @@
+module;
+
+/**
+ * Provider key role. Used to set authorization scope for provider keys.
+ */
+enum provider_key_role {
+    /** Main key used to access all provider operations and manage other key roles */
+    main,
+
+    /** Used for testing only */
+    configuration_proposal_vote,
+}
+
+/**
+ * A keys authentication scheme. Currently only supports GTX, but can be extended in the future.
+ */
+enum provider_key_auth_scheme {
+    /** Delegate signature checks to gtx */
+    gtx
+}
+
+/**
+ * Keeps the threshold (same as for votes consensus) for each provider and key role.
+ */
+entity provider_auth_threshold {
+    key provider_pubkey: pubkey, provider_key_role;
+    mutable threshold: integer;
+}
+
+/**
+ * Keeps all provider keys and their roles.
+ */
+entity provider_auth_key {
+    key provider_pubkey: pubkey, provider_key_role, pubkey;
+    auth_scheme: provider_key_auth_scheme = provider_key_auth_scheme.gtx;
+}

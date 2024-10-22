@@ -3,6 +3,7 @@
 import ^^^.common.operations.*;
 import ^^^.common.test.setup.*;
 import ^^^.common.test.util.*;
+import ^^^.common.test.ops.*;
 import ^^^.direct_cluster.*;
 import ^^.*;
 import ^^^.model.*;
@@ -13,8 +14,20 @@ import proposal_subnode_image.*;
 function test_init_events() {
     setup_module();
 
+    val provider_auth_update_message = ("icmf_message", (
+        topic = provider_auth_update_topic,
+        body = provider_auth_update_message(
+        provider_pubkey = initial_provider.pub,
+        key_roles = [provider_auth_update_role(
+        role = provider_key_role.main,
+        threshold = 1,
+        [initial_provider.pub])]).to_gtv()).to_gtv_pretty()
+    );
+
     val directory_chain_brid = blockchain @ { blockchains.directory_chain } (.rid);
     assert_events(
+        provider_auth_update_message,
+        provider_auth_update_message,
         ("icmf_message", (
             topic = provider_update_topic,
             body = provider_update_message(
@@ -96,7 +109,19 @@ function test_provider() {
         register_provider(initial_provider.pub, test_provider.pub, provider_tier.NODE_PROVIDER)
     ).sign(initial_provider).run();
 
+    val provider_auth_update_message = ("icmf_message", (
+        topic = provider_auth_update_topic,
+        body = provider_auth_update_message(
+        provider_pubkey = test_provider.pub,
+        key_roles = [provider_auth_update_role(
+        role = provider_key_role.main,
+        threshold = 1,
+        [test_provider.pub])]).to_gtv()).to_gtv_pretty()
+    );
+
     assert_events(
+        provider_auth_update_message,
+        provider_auth_update_message,
         ("icmf_message", (
             topic = provider_update_topic,
             body = provider_update_message(
@@ -376,5 +401,112 @@ function test_subnode_image() {
                 active = false,
             ).to_gtv()
         ).to_gtv_pretty())
+    );
+}
+
+function test_provider_auth_update() {
+
+    val key2 = rell.test.keypairs.bob;
+    val key3 = rell.test.keypairs.charlie;
+
+    // Register provider - will trigger 2 messages
+    rell.test.tx().op(
+        create_test_provider("P1", initial_provider.pub),
+    ).sign(initial_provider, key2, key3).run();
+
+    val provider_key_message = ("icmf_message", (
+        topic = provider_auth_update_topic,
+        body = provider_auth_update_message(
+        provider_pubkey = initial_provider.pub,
+        key_roles = [provider_auth_update_role(
+        role = provider_key_role.main,
+        threshold = 1,
+        [initial_provider.pub])]).to_gtv()).to_gtv_pretty()
+    );
+
+    assert_events(
+        provider_key_message,
+            provider_key_message,
+    );
+
+    // Add a key
+    rell.test.tx().op(
+        add_provider_key(provider_key_role.main, key2.pub),
+    ).sign(initial_provider, key2, key3).run();
+
+    val provider_and_key2_message = ("icmf_message", (
+        topic = provider_auth_update_topic,
+        body = provider_auth_update_message(
+        provider_pubkey = initial_provider.pub,
+        key_roles = [provider_auth_update_role(
+        role = provider_key_role.main,
+        threshold = 1,
+        [initial_provider.pub, key2.pub])]).to_gtv()).to_gtv_pretty()
+    );
+
+    assert_events(
+        provider_and_key2_message,
+    );
+
+    // Add a key of new role - will triggger 2 messages
+    rell.test.tx().op(
+        add_provider_key(provider_key_role.configuration_proposal_vote, key3.pub),
+    ).sign(initial_provider, key2, key3).run();
+
+    val all_keys_and_new_role_message = ("icmf_message", (
+        topic = provider_auth_update_topic,
+        body = provider_auth_update_message(
+        provider_pubkey = initial_provider.pub,
+        key_roles = [
+        provider_auth_update_role(
+            role = provider_key_role.main,
+            threshold = 1,
+            [initial_provider.pub, key2.pub]
+        ),
+        provider_auth_update_role(
+            role = provider_key_role.configuration_proposal_vote,
+            threshold = 1,
+            [key3.pub]
+        )
+    ]).to_gtv()).to_gtv_pretty());
+
+    assert_events(
+        all_keys_and_new_role_message,
+            all_keys_and_new_role_message,
+    );
+
+    // Remove key
+    rell.test.tx().op(
+        set_provider_key_threshold(provider_key_role.configuration_proposal_vote, consensus_threshold.super_majority),
+        remove_provider_key(provider_key_role.configuration_proposal_vote, key3.pub),
+    ).sign(initial_provider, key2, key3).run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = provider_auth_update_topic,
+            body = provider_auth_update_message(
+            provider_pubkey = initial_provider.pub,
+            key_roles = [
+                provider_auth_update_role(
+                    role = provider_key_role.main,
+                    threshold = 1,
+                    [initial_provider.pub, key2.pub]),
+                provider_auth_update_role(
+                    role = provider_key_role.configuration_proposal_vote,
+                    threshold = 0,
+                    [key3.pub]),
+            ]).to_gtv()).to_gtv_pretty()
+        ),
+        ("icmf_message", (
+            topic = provider_auth_update_topic,
+            body = provider_auth_update_message(
+            provider_pubkey = initial_provider.pub,
+            key_roles = [
+                provider_auth_update_role(
+                    role = provider_key_role.main,
+                    threshold = 1,
+                    [initial_provider.pub, key2.pub]),
+            ]).to_gtv()).to_gtv_pretty()
+        )
     );
 }

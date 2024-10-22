@@ -1,0 +1,39 @@
+/**
+ * The purpose of this module is to migrate data in the same way we do in EC.
+ */
+
+module;
+
+import management_chain_common.*;
+import common.*;
+
+/**
+ * Migration statuses to only run a migration once.
+ */
+object migration_completed {
+    mutable provider_multi_key: boolean = false;
+}
+
+@extend(before_begin_block)
+function begin_block_migration(height: integer) {
+
+    if (not migration_completed.provider_multi_key) {
+        migration_completed.provider_multi_key = true;
+        migrate_provider_keys();
+    }
+}
+
+/**
+  * Called once to create a provider key entities to support multi key for provider authentication.
+  */
+function migrate_provider_keys() {
+
+    log("Migrate and create provider multi key entities...");
+
+    for (provider in provider @* {}) {
+
+        log("Migrating provider %s to multi key".format(provider.pubkey));
+
+        _add_provider_key(provider.pubkey, provider.pubkey, provider_key_role.main);
+    }
+}

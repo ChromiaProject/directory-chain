@@ -47,7 +47,7 @@ function test_propose_and_remove_container() {
     rell.test.tx().op(
         propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p)
     ).sign(initial_provider).run();
-    _make_vote(sp);
+    _make_vote_v65(sp);
 
     assert_equals(get_container_data("container1"), container_data(
             name = "container1",
@@ -77,7 +77,7 @@ function test_propose_and_remove_container() {
     rell.test.tx().op(
         propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "container1")
     ).sign(initial_provider).run();
-    _make_vote(sp);
+    _make_vote_v65(sp);
 
     // Asserting blockchain is added to container1
     val bc_foo = blockchain @? { "foo_chain" };
@@ -92,7 +92,7 @@ function test_propose_and_remove_container() {
         propose_container_limits(initial_provider.pub, "container1", limits),
         propose_blockchain(initial_provider.pub, conf_bar.to_gtv().to_bytes(), "bar_chain", "container1")
     ).sign(initial_provider).run();
-    // _make_vote(sp); Not votes,
+    // _make_vote_v65(sp); Not votes,
     assert_true(exists(pending_container_limits @? { .container.name == "container1" }));
     assert_true(exists(pending_blockchain @? { .container.name == "container1" }));
 
@@ -114,7 +114,7 @@ function test_propose_and_remove_container() {
     ).sign(initial_provider).run();
 
     // SP votes for container removal
-    _make_vote(sp);
+    _make_vote_v65(sp);
 
     // Asserting that container1 is removed
     assert_null(container @? { "container1" });
@@ -142,9 +142,9 @@ function test_container_duplicate_name() {
     ).nop().sign(sp).run_must_fail("Container with name container1 already exists");
 }
 
-function _make_vote(voter: rell.test.keypair) {
+function _make_vote_v65(voter: rell.test.keypair) {
     rell.test.tx().op(
-        make_vote(voter.pub, last_proposal().rowid.to_integer(), true)
+        make_vote_v65(last_proposal().rowid.to_integer(), true)
     ).sign(voter).run();
 }
 

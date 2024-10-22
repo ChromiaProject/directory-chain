@@ -1,0 +1,118 @@
+@test module;
+
+import ^^.*;
+import ^.helper_operations.*;
+import ^^^^.common.test.ops.*;
+import common_proposal.test.helper_functions.*;
+import provider_auth.test.helper_operations.*;
+
+val provider_1 = rell.test.keypairs.alice;
+val provider_2 = rell.test.keypairs.bob;
+val extra_key_1 = rell.test.keypairs.dave;
+val extra_key_2 = rell.test.keypairs.eve;
+val extra_key_3 = rell.test.keypairs.frank;
+
+
+function test_make_vote_v65() {
+
+    // Invalid - no such proposal
+    rell.test.tx().op(
+        make_vote_v65(999999, true),
+    ).run_must_fail("Proposal 999999 not found");
+
+    rell.test.tx().op(
+        create_test_provider("", provider_1.pub, provider_tier.NODE_PROVIDER),
+        create_test_provider("", provider_2.pub, provider_tier.NODE_PROVIDER),
+        create_voter_set(provider_1.pub, "vs1", 0, [provider_1.pub, provider_2.pub], null)
+    ).sign(provider_1).run();
+
+    val provider = provider @ { provider_1.pub };
+    val voter_set = voter_set @ { };
+
+    rell.test.tx().op(
+        create_test_proposal(proposal_type.container, provider, voter_set),
+    ).sign(provider_1).run();
+
+    // Invalid - must be signed
+    rell.test.tx().op(
+        make_vote_v65(get_latest_proposal_id().to_integer(), true),
+    ).run_must_fail("Transaction must be signed by provider");
+
+    // Valid
+    rell.test.tx().op(
+        make_vote_v65(get_latest_proposal_id().to_integer(), true),
+    ).sign(provider_1).run();
+}
+
+function test_make_vote_v65__voter_not_member() {
+
+    rell.test.tx().op(
+        create_test_provider("", provider_1.pub, provider_tier.NODE_PROVIDER),
+        create_test_provider("", provider_2.pub, provider_tier.NODE_PROVIDER),
+        create_voter_set(provider_1.pub, "vs1", 0, [provider_1.pub], null)
+    ).sign(provider_1).run();
+
+    val provider = provider @ { provider_1.pub };
+    val voter_set = voter_set @ { };
+
+    rell.test.tx().op(
+        create_test_proposal(proposal_type.container, provider, voter_set),
+    ).sign(provider_1).run();
+
+    // Invalid - provider_2 not member of voter set
+    rell.test.tx().op(
+        make_vote_v65(get_latest_proposal_id().to_integer(), true),
+    ).sign(provider_2).run_must_fail("Provider is not a member of voter set vs1");
+}
+
+function test_retract_vote_v65() {
+
+    // Invalid - no such proposal
+    rell.test.tx().op(
+        retract_vote_v65(999999),
+    ).run_must_fail("Proposal 999999 not found");
+
+    rell.test.tx().op(
+        create_test_provider("", provider_1.pub, provider_tier.NODE_PROVIDER),
+        create_test_provider("", provider_2.pub, provider_tier.NODE_PROVIDER),
+        create_voter_set(provider_1.pub, "vs1", 0, [provider_1.pub, provider_2.pub], null)
+    ).sign(provider_1).run();
+
+    val provider = provider @ { provider_1.pub };
+    val voter_set = voter_set @ { };
+
+    rell.test.tx().op(
+        create_test_proposal(proposal_type.container, provider, voter_set),
+    ).sign(provider_1).run();
+
+    // Invalid - must be signed
+    rell.test.tx().op(
+        retract_vote_v65(get_latest_proposal_id().to_integer()),
+    ).run_must_fail("Transaction must be signed by provider");
+
+    // Valid
+    rell.test.tx().op(
+        retract_vote_v65(get_latest_proposal_id().to_integer()),
+    ).sign(provider_1).run();
+}
+
+function test_retract_vote__voter_not_member() {
+
+    rell.test.tx().op(
+        create_test_provider("", provider_1.pub, provider_tier.NODE_PROVIDER),
+        create_test_provider("", provider_2.pub, provider_tier.NODE_PROVIDER),
+        create_voter_set(provider_1.pub, "vs1", 0, [provider_1.pub], null)
+    ).sign(provider_1).run();
+
+    val provider = provider @ { provider_1.pub };
+    val voter_set = voter_set @ { };
+
+    rell.test.tx().op(
+        create_test_proposal(proposal_type.container, provider, voter_set),
+    ).sign(provider_1).run();
+
+    // Invalid - provider_2 not member of voter set
+    rell.test.tx().op(
+        retract_vote_v65(get_latest_proposal_id().to_integer()),
+    ).sign(provider_2).run_must_fail("Provider is not a member of voter set vs1");
+}
