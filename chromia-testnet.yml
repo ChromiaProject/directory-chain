@@ -3,16 +3,15 @@ definitions:
     release_version: ${RELEASE_VERSION:-dev}
     release_commit: ${RELEASE_COMMIT:-dev}
 blockchains:
-  devnet1:
-    module: management_chain_devnet1
+  testnet:
+    module: management_chain_testnet
     config:
-      # *common_config
       config_consensus_strategy: HEADER_HASH
       revolt:
         fast_revolt_status_timeout: 2000
         revolt_when_should_build_block: true
       signers:
-        - x"0350fe40766bc0ce8d08b3f5b810e49a8352fdd458606bd5fafe5acdcdc8ff3f57"
+        - x"02CCF3A609497F5C42C1A79433BD00221706772A9532C51DB1559559173DB87A8B"
       sync_ext:
         - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
       gtx:
@@ -39,21 +38,17 @@ blockchains:
               - G_change_dapp_providers_state
     moduleArgs:
       common.init:
-        initial_provider: 03ECD350EEBC617CBBFBEF0A1B7AE553A748021FD65C7C50C5ABB4CA16D4EA5B05
+        initial_provider: 02FEA5C0D8396B38C50200F2A583DCC8ED23416B9F9700A4AA435D57865939A536
         genesis_node:
-          - 0350fe40766bc0ce8d08b3f5b810e49a8352fdd458606bd5fafe5acdcdc8ff3f57
-          - node0.devnet1.chromia.dev
+          - 02CCF3A609497F5C42C1A79433BD00221706772A9532C51DB1559559173DB87A8B
+          - node0.testnet.chromia.com
           - 9870
-          - https://node0.devnet1.chromia.dev:7740
+          - https://node0.testnet.chromia.com:7740
           - SE
       common:
         allow_blockchain_dependencies: false
         provider_quota_max_actions_per_day: 100
-      auth_service:
-        pubkey: x"02B6F2967CF9AFC4D289EF475A2C2DDEC9EAB79AC60C1C99683E3134074619E635"
-        include_system_cluster: true
       proposal_blockchain.util:
-        # *proposal_blockchain_util
         max_config_path_depth: 10
         max_config_size: 5242880 # 5 MiB
         max_block_size: 27262976 # 26 MiB
@@ -76,7 +71,7 @@ blockchains:
     config:
       config_consensus_strategy: HEADER_HASH
       blockstrategy:
-        maxblocktime: 30000
+        maxblocktime: 300000
         name: "net.postchain.d1.anchoring.AnchoringBlockBuildingStrategy"
       revolt:
         fast_revolt_status_timeout: 2000
@@ -128,8 +123,8 @@ blockchains:
       moduleArgs:
         anchoring_chain_cluster:
           imcf_headers_with_messages_query_limit: 3 # Good for testing limits
-  economy_chain_devnet1:
-    module: economy_chain_devnet1
+  economy_chain_testnet:
+    module: economy_chain_testnet
     config:
       config_consensus_strategy: HEADER_HASH
       revolt:
@@ -166,13 +161,12 @@ blockchains:
               - G_token_price_changed
           local:
             - topic: L_evm_block_events
-              bc-rid: x"6272D4BCD57DD736309ED8C82693C55A199B8FC9C72CD06A187497425328CE42" # TODO Set to EVM receiver bcrid
+              bc-rid: x"8CF1B749A5475D49FEEEC0D3DBF2CB632D397B85D9F054431A7195D719835BDE"
       eif:
         snapshot:
           levels_per_page: 2
           snapshots_to_keep: 2
     moduleArgs:
-      # *economy_chain_ft4_module_args_devnet1
       lib.ft4.core.accounts:
         rate_limit:
           active: 1
@@ -206,6 +200,9 @@ blockchains:
           - name: "Chromia Test"  # Should match `economy_chain_module_args.asset_name`
             amount: 10000000L # 10.0 tCHR
         fee_account: x"23746168BF9C5F4E96A0866720CDC63A540E036CCB11F7A7F76F7B23A992C063" # pool account
+      lib.auth:
+        # TODO set proper pubkey for auth-server-ft4
+        auth_pubkey: x"0317FF1ECF25B04026B6F9FA1960BA58070FB1CFC98519F7BC02D71ED1B00B1997"
       # *economy_chain_test_claim_tchr_args
       economy_chain_test_claim_tchr:
         asset_name: "Chromia Test"
@@ -217,13 +214,13 @@ blockchains:
         # *economy_chain_module_args
         bsc_asset_network_id: 97
         bsc_asset_address: "8e59d72e4DdA56F26963C6b8c77cA1959E9A74F0"
-        eth_asset_network_id: 11155111 # needs to be present, but not used in devnet3
-        eth_asset_address: "Aa1ae68ABcd32804132370B9f73c3160dbbfC593" # needs to be present, but not used in devnet3
+        eth_asset_network_id: 11155111 # needs to be present, but not used in testnet
+        eth_asset_address: "Aa1ae68ABcd32804132370B9f73c3160dbbfC593" # needs to be present, but not used in testnet
         asset_name: "Chromia Test"
         asset_symbol: "tCHR"
         asset_decimals: 6
         asset_icon: "https://s3.eu-central-1.amazonaws.com/www.chromiadev.net/assets/tCHR.png"
-        pool_amount_to_mint: 150000000000 # 150k CHR
+        pool_amount_to_mint: 1000000000
         staking_withdrawal_delay_ms: 120000 # 2 min
         staking_delegation_delay_ms: 604800000
         staking_rewards_payout_interval_ms: 86400000 # 1 day
@@ -236,8 +233,10 @@ blockchains:
         evm_transaction_submitters_bonus: 0.1
       economy_chain_test_mint_on_ras_staking:
         amount_to_mint: 1000000000
+      economy_chain_test_auth_server:
+        # TODO set proper pubkey for admin for test networks
+        admin_pubkey: x"0317AC5B309A05B81A68F1A64321A3C6E6799E037C12892838682EBB9A620316A6"
       chain_version: *chain_version
-
 docs:
   title: Directory chain
   footerMessage: © 2024 Chromia
