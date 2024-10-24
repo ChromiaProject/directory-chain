@@ -127,3 +127,11 @@ function test_extract_args() {
         extract_args(dummy_transaction, "dummy", [(1).to_gtv()])
     ).run();
 }
+
+function test_source_blockchain_validation() {
+    val another_chain = x"03";
+    rell.test.tx().op(
+        iccf_proof(dummy_source_chain, dummy_transaction.to_gtv().hash(), dummy_confirmation_proof),
+        check_proof(dummy_transaction, valid_source_blockchain_rids = set([another_chain]))
+    ).run_must_fail("%s is not a valid source blockchain".format(dummy_source_chain));
+}
