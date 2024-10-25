@@ -8,6 +8,9 @@ struct proposal_data {
 
     /** If proposal is approved and the delay mechanism is enabled this will contain the time it will be applied  */
     apply_at: timestamp?;
+
+    /** Voter set name to control voting for this proposal */
+    voter_set_name: text? = null;
 }
 
 /**
@@ -50,6 +53,7 @@ query get_proposal(id: rowid?): proposal_data? {
         description = result.description,
         state = result.state,
         apply_at = get_delayed_event_time(delay_type.PROPOSAL, result.rowid.to_integer()),
+        voter_set_name = result.voter_set.name,
     );
 }
 
@@ -63,6 +67,9 @@ struct proposal_voting_results {
     max_votes: integer;
     threshold: integer;
     voting_result;
+
+    /** Voter set name to control voting for this proposal */
+    voter_set_name: text? = null;
 }
 
 /**
@@ -80,7 +87,7 @@ query get_proposal_voting_results(rowid): proposal_voting_results {
         approved -> voting_result.approved;
         else -> voting_result.pending;
     };
-    return proposal_voting_results(positive_votes, negative_votes, max_votes, threshold, status);
+    return proposal_voting_results(positive_votes, negative_votes, max_votes, threshold, status, proposal.voter_set.name);
 }
 
 struct proposal_voter {
