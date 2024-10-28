@@ -14,18 +14,17 @@ import lib.auth;
 struct module_args {
     auth_privkey: byte_array;
     admin_privkey: byte_array;
+    
+    account_creator_privkey: byte_array;
 }
 
 val auth_privkey = chain_context.args.auth_privkey;
+val mint_amount = 10000000000;
 
 function test_init() {
-    rell.test.tx().op(
-        claim_test_chr()
-    ).run_must_fail("Economy chain is not initialized");
+    faucet().run_must_fail("Economy chain is not initialized");
 
-    rell.test.tx().op(
-        init()
-    ).run();
+    init().run();
 
     val asset = get_chr_asset();
     assert_equals(asset.symbol, "tCHR");
@@ -37,35 +36,148 @@ function test_init() {
     ).nop().run_must_fail("Economy chain is already initialized");
 }
 
-function test_claim_test_chr_success() {
-    rell.test.tx().op(init()).run();
+function test_faucet_success() {
+    init().run();
     val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val initial_balance = get_account_balance(alice);
+
     rell.test.set_next_block_time_delta(millis_per_week + 1);
     rell.test.block().run();
+
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, claim_test_chr())
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, faucet())
     ).op(
-        claim_test_chr()
+        faucet()
     ).run();
+
     val new_balance = get_account_balance(alice);
     assert_gt(new_balance, initial_balance);
+    assert_equals(new_balance - initial_balance, mint_amount);
     assert_equals(get_balance(alice.id), new_balance);
 }
 
-function test_claim_test_chr_failure() {
-    rell.test.tx().op(init()).run();
+function test_faucet_failure() {
+    init().run();
     val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, claim_test_chr())
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, faucet())
     ).op(
-        claim_test_chr()
+        faucet()
     ).run();
+
     rell.test.set_next_block_time_delta(millis_per_week - rell.test.DEFAULT_BLOCK_INTERVAL - 1);
     rell.test.block().run();
+
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, claim_test_chr())
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, faucet())
     ).op(
-        claim_test_chr()
-    ).run_must_fail("You have already claimed");
+        faucet()
+    ).run_must_fail("seconds before claiming more");
+}
+
+function test_faucet_rate_limits_on_account_creation() {
+    init().run();
+
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.privkeys.alice);
+
+    create_account(alice_evm_address)
+        .sign(chain_context.args.account_creator_privkey)
+        .run();
+
+    rell.test.tx()
+        .op(ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, faucet()))
+        .op(faucet())
+        .run_must_fail("seconds before claiming more");
+}
+
+function test_faucet_works_after_rate_limit_end() {
+    init().run();
+
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.privkeys.alice);
+    val first_timestamp = rell.test.last_block_time;
+
+    create_account(alice_evm_address)
+        .sign(chain_context.args.account_creator_privkey)
+        .run();
+
+    val rl = faucet_user @ {};
+    assert_equals(rl.last_refill_millis, first_timestamp);
+
+    rell.test.set_next_block_time(first_timestamp + millis_per_week + 1);
+    rell.test.block().run();
+
+    rell.test.tx()
+        .op(ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice,faucet()))
+        .op(faucet())
+        .nop()
+        .run();
+
+    val second_timestamp = rell.test.last_block_time;
+
+    assert_equals(rl.last_refill_millis, first_timestamp + millis_per_week + 1);
+
+    rell.test.set_next_block_time(second_timestamp + millis_per_week + 1);
+    rell.test.block().run();
+
+    rell.test.tx()
+        .op(ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, faucet()))
+        .op(faucet())
+        .nop()
+        .run();
+
+    assert_equals(rl.last_refill_millis, second_timestamp + millis_per_week + 1);
+    assert_equals(
+        assets.balance @ {} (.amount), 3*mint_amount
+    );
+}
+
+// Pure account creation tests
+
+function test_create_account() {
+    init().run();
+    
+    val id = x"aabb".hash();
+    create_account(x"aabb")
+        .sign(chain_context.args.account_creator_privkey)
+        .run();
+
+    assert_equals((accounts.account @* { id }).size(), 1);
+    assert_equals(
+        accounts.account_auth_descriptor @ {} (.args),
+        [ set(["A", "T"]).to_gtv(), x"aabb".to_gtv() ].to_gtv().to_bytes()
+    );
+}
+
+function test_create_account_prevents_duplicates() {
+    init().run();
+
+    create_account(x"aabb")
+        .sign(chain_context.args.account_creator_privkey)
+        .run();
+
+    create_account(x"aabb")
+        .sign(chain_context.args.account_creator_privkey)
+        .nop()
+        .run_must_fail("duplicate key");
+}
+
+function test_create_account_fails_without_admin() {
+    init().run();
+
+    create_account(x"aabb")
+        .sign(rell.test.keypairs.alice)
+        .run_must_fail("Please use the Faucet");
+}
+
+function test_create_account_links_evm() {
+    init().run();
+
+    create_account(x"aabb")
+        .sign(chain_context.args.account_creator_privkey)
+        .run();
+
+    assert_not_null(
+        eif.hbridge.evm_eoa_account_link @? { .address==x"aabb", .account.id==x"aabb".hash() }
+    );
 }
