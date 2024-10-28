@@ -6,25 +6,60 @@ entity faucet_user {
 
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
-    scope = "claim_test_chr",
-    flags = ["T"],
-    message = claim_test_chr_auth_message(*)
+    scope = rell.meta(faucet).mount_name,
+    flags = [],
+    message = faucet_auth_message(*)
 );
 
-function claim_test_chr_auth_message(gtv) =
+function faucet_auth_message(gtv) =
     "Please sign the message\nto receive %s %s on account {account_id}".format(
         ft4.assets.format_amount_with_decimals(chain_context.args.amount_to_mint, chain_context.args.asset_decimals),
         chain_context.args.asset_symbol);
 
-operation claim_test_chr() {
+operation faucet() {
     require_initialized();
 
     val account = ft4.auth.authenticate();
-    val user = faucet_user @? { account } ?: create faucet_user(account = account, last_refill_millis = 0);
+    mint_test_chr(account);
+}
 
-    require(user.last_refill_millis + chain_context.args.test_chr_refill_limit_millis < op_context.last_block_time,
-        "You have already claimed %s within the last 7 days, come back later".format(chain_context.args.asset_name));
+function mint_test_chr(ft4.accounts.account) {
+    val user = faucet_user @? { account } ?: 
+        create faucet_user(account = account, last_refill_millis = 0);
+
+    val earliest_refill_time = user.last_refill_millis + chain_context.args.test_chr_refill_limit_millis;
+
+    require(
+        earliest_refill_time < op_context.last_block_time,
+        "You must wait %s seconds before claiming more %s".format(
+            (earliest_refill_time - op_context.last_block_time) / 1000,
+            chain_context.args.asset_name
+        )
+    );
 
     ft4.assets.Unsafe.mint(account, get_asset(), chain_context.args.amount_to_mint);
     user.last_refill_millis = op_context.last_block_time;
+}
+
+// very simple, single sig. `signer` should be the EVM address, must be signed by `account_creator_privkey`
+operation create_account(signer: byte_array) {
+    require(
+        op_context.is_signer(chain_context.args.account_creator_pubkey),
+        "Please use the Faucet or Vault to register accounts on the testnet"
+    );
+
+    val acc = accounts.create_account_with_auth(
+        accounts.auth_descriptor(
+            accounts.auth_type.S,
+            [
+                set(["A", "T"]).to_gtv(),
+                signer.to_gtv()
+            ],
+            null.to_gtv()
+        )
+    );
+
+    eif.hbridge._link_evm_eoa_account(signer, acc);
+
+    mint_test_chr(acc);
 }
