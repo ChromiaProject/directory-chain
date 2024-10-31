@@ -255,9 +255,12 @@ function test_forced_configuration() {
     assert_false(actual_config.contains("signers"));
     val blockchain_configuration_signers = blockchain_configuration_signers @ { bc, 10 } (.signers);
     assert_equals(blockchain_configuration_signers, [initial_signer.pub].to_gtv().to_bytes());
-    val forced_configuration_data = get_forced_configuration(bc.rid);
+    val forced_configuration_data = get_forced_configurations(bc.rid);
     assert_equals(forced_configuration_data.size(), 1);
-    assert_equals(forced_configuration_data[0], forced_configuration_data(bc, 10, actual_config_bytes.hash()));
+    assert_equals(
+        forced_configuration_data[0],
+        forced_configuration_data(blockchain_rid = bc.rid, 10, config_hash = actual_config_bytes.hash())
+    );
 }
 
 function test_forced_configuration_delay() {
