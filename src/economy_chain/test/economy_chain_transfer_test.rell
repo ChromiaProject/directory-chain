@@ -152,3 +152,27 @@ function test_memo_fails_with_too_long_text() {
         .op(memo("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc mattis interdum sapien quis pellentesque. Ut augue ligula, efficitur ut neque non, posuere aliquet ante. Nulla sed erat non lacus gravida euismod ac vel sem."))
         .run_must_fail("Memo is too long");
 }
+
+function test_disabled_operations_with_memo() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+
+    val eve = test.register_eve();
+
+    rell.test.tx()
+        .op(test.ft_auth_operation_for(eve.keypair.pub))
+        .op(enable_transfer_memo())
+        .sign(eve.keypair)
+        .run();
+
+    rell.test.tx()
+        .op(test.ft_auth_operation_for(eve.keypair.pub))
+        .op(staking_deposit_native(10, null))
+        .sign(eve.keypair)
+        .run_must_fail("Operation is not allowed for memo account");
+
+    rell.test.tx()
+        .op(test.ft_auth_operation_for(eve.keypair.pub))
+        .op(create_container_with_subnode_image(eve.keypair.pub, 1, 1, 0, cluster_name, false, ""))
+        .sign(eve.keypair)
+        .run_must_fail("Operation is not allowed for memo account");
+}

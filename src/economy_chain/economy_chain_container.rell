@@ -127,6 +127,7 @@ function create_container_impl(
     }
 
     val account = ft4.auth.authenticate();
+    require_non_memo_account(account);
 
     val cost = calculate_container_cost(duration_weeks, container_units, extra_storage_gib, cluster.tag);
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), cost);
@@ -242,6 +243,7 @@ operation upgrade_container(container_name: text, upgraded_container_units: inte
 
     val account = ft4.auth.authenticate();
     require(lease.account == account, "Lease for container %s was not created by you".format(container_name));
+    require_non_memo_account(account);
 
     val cluster = require_cluster(upgraded_cluster_name);
 
