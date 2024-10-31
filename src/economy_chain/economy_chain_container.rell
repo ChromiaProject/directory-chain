@@ -127,7 +127,6 @@ function create_container_impl(
     }
 
     val account = ft4.auth.authenticate();
-    ft4.accounts.Account(account.id);
 
     val cost = calculate_container_cost(duration_weeks, container_units, extra_storage_gib, cluster.tag);
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), cost);
@@ -185,7 +184,6 @@ operation assign_subnode_image_to_container(container_name: text, subnode_image_
     require(empty(lease_subnode_image @? { lease }), "Container %s already has a custom subnode image".format(container_name));
 
     val account = ft4.auth.authenticate();
-    ft4.accounts.Account(account.id);
     require(lease.account == account, "Lease for container %s was not created by you".format(container_name));
 
     val ticket = create ticket(type = ticket_type.ASSIGN_SUBNODE_IMAGE_TO_CONTAINER, account);
@@ -243,7 +241,6 @@ operation upgrade_container(container_name: text, upgraded_container_units: inte
     require_dapp_cluster(upgraded_cluster_name);
 
     val account = ft4.auth.authenticate();
-    ft4.accounts.Account(account.id);
     require(lease.account == account, "Lease for container %s was not created by you".format(container_name));
 
     val cluster = require_cluster(upgraded_cluster_name);
@@ -307,7 +304,6 @@ operation renew_container(container_name: text, duration_weeks: integer) {
     require_lease_duration(duration_weeks);
 
     val account = ft4.auth.authenticate();
-    ft4.accounts.Account(account.id);
 
     val lease = require_lease(container_name);
 
@@ -343,7 +339,6 @@ operation auto_renew_container(container_name: text) {
     require_initialized();
 
     val account = ft4.auth.authenticate();
-    ft4.accounts.Account(account.id);
 
     val lease = require_lease(container_name);
     require(lease.account == account, "Lease for container %s was not created by you".format(container_name));
@@ -381,7 +376,6 @@ operation cancel_renew_container(container_name: text) {
     require_initialized();
 
     val account = ft4.auth.authenticate();
-    ft4.accounts.Account(account.id);
 
     val lease = require_lease(container_name);
     require(lease.account == account, "Lease for container %s was not created by you".format(container_name));
