@@ -22,10 +22,12 @@ function test_rewards_are_disabled_before_2050() {
     rell.test.block().run();
 
     // Set up a delegated state
-    val test_account_alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
+    do_evm_stake_update_bsc(alice_evm_address, 10 * units_per_asset);
+    val test_account_alice = require(do_create_account_using_ras_staking(rell.test.keypairs.alice));
     val test_account_bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
 
-    val an_amount = 3 * units_per_asset;
+    val an_amount = 20 * units_per_asset;
 
     rell.test.tx()
         .op(mint_to(test_account_alice, an_amount))
@@ -56,9 +58,17 @@ function test_rewards_are_disabled_before_2050() {
     rell.test.set_next_block_time(START_OF_2050 + 10 * staking_delegation_delay_ms);
     rell.test.block().run();
 
+    // Try to break this with a shared reward
+    val pa = run_pay_rewards(888, true);
+    quick_pay_shared_rewards(8888, pa.account);
+
     // There is a reward
     val first_reward = staking_rewards_claimable_for(test_account_alice.id);
     assert_true(first_reward > 0);
+    assert_equals(staking_payment @ {.account == test_account_alice} (@sum 1), 1);
+
+    // Pending rewards are there
+    assert_equals(pending_shared_payment @ {.account == test_account_alice} (@sum 1), 2);
 
     // Advance 10 periods
     rell.test.set_next_block_time(START_OF_2050 + 20 * staking_delegation_delay_ms);
@@ -68,8 +78,38 @@ function test_rewards_are_disabled_before_2050() {
     val second_reward = staking_rewards_claimable_for(test_account_alice.id);
     assert_true(0 < second_reward);
 
+    // Try to break this with a shared reward
+    quick_pay_shared_rewards(8888, pa.account);
+    quick_pay_shared_rewards(8888, pa.account);
+    quick_pay_shared_rewards(8888, pa.account);
+
+    // Pending rewards are queued
+    assert_equals(pending_shared_payment @ {.account == test_account_alice} (@sum 1), 3);
+
+    // Advance 11 periods
+    rell.test.set_next_block_time_delta(11 * staking_delegation_delay_ms);
+    rell.test.block().run();
+    rell.test.block().run();
+
     // A payout has happened
     assert_true(staking_get_rewards_paid(test_account_alice.id) > 0);
+    val how_many_payouts = staking_payment @ {.account == test_account_alice} (@sum 1);
+    assert_equals(how_many_payouts, 3);
+    assert_equals(pending_shared_payment @ {.account == test_account_alice} (@sum 1), 0);
+
+    // Pending payouts cleared
+    rell.test.set_next_block_time_delta(1);
+    rell.test.block().run();
+    assert_equals(pending_shared_payment @ {.account == test_account_alice} (@sum 1), 0);
+
+    rell.test.set_next_block_time_delta(staking_delegation_delay_ms / 2);
+    rell.test.block().run();
+
+    // Another payout hasn't happened
+    assert_equals(staking_payment @ {.account == test_account_alice} (@sum 1), how_many_payouts);
+
+    // Pending rewards have been cleared
+    assert_equals(pending_shared_payment @ {.account == test_account_alice} (@sum 1), 0);
 }
 
 function test_fee_share_are_disabled_before_2050() {
@@ -98,7 +138,7 @@ function test_fee_share_are_disabled_before_2050() {
 
     assert_equals(staking_get_current_delegate(test_account_dave.id), provider_pubkey);
 
-    val pa = run_pay_rewards(33090909, true);
+    run_pay_rewards(33090909, true);
 
     // Nothing paid out
     assert_equals(get_account_balance(test_account_dave), 1000000000);
@@ -121,7 +161,6 @@ function run_pay_rewards(pool_assets: big_integer = 0, calculate_system_reward: 
         set_pool_details_last_refill_millis_last_block_time_op()
     ).run();
 
-    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     if (pool_assets != 0) {
         add_assets_to_pool(pool_assets);
     }
@@ -134,4 +173,11 @@ function run_pay_rewards(pool_assets: big_integer = 0, calculate_system_reward: 
 
     val pa = provider_account @ { provider @ { provider_pubkey } };
     return pa;
+}
+
+function quick_pay_shared_rewards(amount: integer, provider: accounts.account) {
+    rell.test.set_next_block_time_delta(1);
+    rell.test.tx().op(
+        pay_reward_op(get_pool_account(), provider, 0,  amount, "", true)
+    ).nop().run();
 }

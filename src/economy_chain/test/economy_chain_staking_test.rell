@@ -1583,3 +1583,38 @@ function test_provisional_stake_queries() {
     assert_equals(get_total_provisional_stake_accounts(network.BSC), 2);
     assert_equals(get_total_provisional_stake_accounts(network.CHR), 0);
 }
+
+function test_staking_payouts_multiple_pending_shared_rewards() {
+
+    // Basic initialisation
+    rell.test.tx()
+        .op(init())
+        .op(mint_to_pool(100000 * units_per_asset))
+    .sign(admin_privkey).run();
+
+    // Make Bob with an existing 100 BSC stake
+    val bob_evm_address = crypto.eth_pubkey_to_address(rell.test.keypairs.bob.pub);
+    do_evm_stake_update_bsc(bob_evm_address, 100 * units_per_asset);
+    val test_account_bob = require(do_create_account_using_ras_staking(rell.test.keypairs.bob));
+
+    add_provider(rell.test.keypairs.charlie.pub);
+
+    do_staking_delegate(rell.test.keypairs.bob, rell.test.keypairs.charlie.pub);
+
+    // FFWD
+   rell.test.set_next_block_time_delta(millis_per_year);
+   rell.test.block().run();
+
+    rell.test.tx()
+        .op(create_pending_shared_payment(test_account_bob.id, 10 * units_per_asset, rell.test.keypairs.charlie.pub))
+        .op(create_pending_shared_payment(test_account_bob.id, 10 * units_per_asset, rell.test.keypairs.charlie.pub))
+    .run();
+
+    val bob_amount = staking_rewards_claimable_for(test_account_bob.id);
+
+    // Do payout
+    rell.test.tx().op(staking_claim_rewards()).sign(admin_privkey).run();
+
+    assert_equals(staking_get_rewards_paid(test_account_bob.id), bob_amount);
+    assert_equals(staking_get_shared_rewards_paid(test_account_bob.id), 20 * units_per_asset);
+}

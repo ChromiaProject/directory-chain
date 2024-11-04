@@ -266,23 +266,42 @@ function _staking_distribute_rewards(using_batches: boolean = false, update_pend
         _update_pending_token_time_all();
     }
 
-    val rewards = (
+    val all_users_for_batch = 
+    (
         ss: staker_state,
         @outer psp: pending_shared_payment @* { ss.account == psp.account }
-    ) @* { ss.pending_token_time > 0 or psp?.amount?: 0 > 0 } (
-        @group account = ss.account,
-        @sum amount = integer ((ss.pending_token_time) * rate * units_per_asset),
-        @sum shared_amount = psp?.amount?: 0,
-        @set provider_set = psp?.provider_pubkey?: x''
-    ) limit (
+    ) @* {
+            ss.pending_token_time > 0
+        or  psp?.amount?: 0 > 0
+    } (
+        @group ss.account
+    )
+    limit (
         if (using_batches) chain_context.args.staking_rewards_payout_batch_size else integer.MAX_VALUE
     );
 
-    val total_amount = rewards @ { } ( @sum .amount );
-    log("Preparing to distribute %s rewards worth %s".format(rewards.size(), total_amount));
+    val all_staking_rewards = staker_state @* {
+            .account in all_users_for_batch
+        and .pending_token_time > 0
+    } (
+        @group .account,
+        @sum amount = integer ((.pending_token_time) * rate * units_per_asset)
+    );
 
-    val total_shared_amount = rewards @ { } ( @sum .shared_amount );
-    val total_shared_rewarded_accounts = rewards @ { .shared_amount > 0 } ( @sum 1 );
+    val all_shared_rewards = pending_shared_payment @* {
+            .account in all_users_for_batch
+        and .amount > 0
+    } (
+        @group .account,
+        @sum shared_amount = .amount,
+        @set provider_set = .provider_pubkey
+    );
+
+    val total_amount = all_staking_rewards @ { } ( @sum .amount );
+    log("Preparing to distribute %s rewards worth %s".format(all_users_for_batch.size(), total_amount));
+
+    val total_shared_amount = all_shared_rewards @ { } ( @sum .shared_amount );
+    val total_shared_rewarded_accounts = all_shared_rewards @ {} ( @sum 1 );
     log(
         "Preparing to distribute %s shared rewards worth %s"
             .format(
@@ -304,11 +323,14 @@ function _staking_distribute_rewards(using_batches: boolean = false, update_pend
 
     val asset = get_asset();
     val last_known_time = _staking_last_known_time();
-    
+
     // Send payouts
-    for ( (account, amount, shared_amount, provider_set) in rewards ) {
-        if (not try_call(_staking_pay_reward(last_known_time, pool, asset, account, amount, shared_amount, list<byte_array>(provider_set), *))) {
-            log("Failed to pay out %s including %s from shared rewards to %s".format(amount + shared_amount, shared_amount, account.id));
+    for (account in all_users_for_batch ) {
+        val amount = all_staking_rewards @? {.account == account} (.amount) ?: 0;
+        val shared = all_shared_rewards @? {.account == account} (.shared_amount, .provider_set) ?: (shared_amount = 0, provider_set = set<byte_array>());
+        log("Preparing to pay out staking reward of %s and shared reward of %s to account %s".format(amount, shared.shared_amount, account));
+        if (not try_call(_staking_pay_reward(last_known_time, pool, asset, account, amount, shared.shared_amount, list<byte_array>(shared.provider_set), *))) {
+            log("Failed to pay out %s including %s from shared rewards to %s".format(amount + shared.shared_amount, shared.shared_amount, account.id));
         }
     }
     log("Stored payments on-chain.");
