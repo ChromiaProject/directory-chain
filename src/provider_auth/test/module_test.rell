@@ -55,10 +55,10 @@ function test_provider_is_signer__gtx_threshold_1() {
         provider_is_signer_op(initial_provider.pub, [provider_key_role.main]),
     ).sign(initial_provider, bob, charlie).run();
 
-    // Remove 2 keys
+    // Revoke 2 keys
     rell.test.tx().op(
-        remove_provider_key(provider_key_role.main, initial_provider.pub),
-        remove_provider_key(provider_key_role.main, bob.pub),
+        revoke_provider_key(provider_key_role.main, initial_provider.pub),
+        revoke_provider_key(provider_key_role.main, bob.pub),
     ).sign(initial_provider, bob, charlie).run();
 
     // Signed by all 3, works since charlie is signing
@@ -110,9 +110,9 @@ function test_provider_is_signer__gtx_threshold_0_super_majority() {
         provider_is_signer_op(initial_provider.pub, [provider_key_role.main]),
     ).sign(initial_provider, bob, charlie, dave).run();
 
-    // Remove 1 key
+    // Revoke 1 key
     rell.test.tx().op(
-        remove_provider_key(provider_key_role.main, initial_provider.pub),
+        revoke_provider_key(provider_key_role.main, initial_provider.pub),
     ).sign(initial_provider, bob, charlie).run();
 
     // Must be signed by 3
@@ -171,35 +171,35 @@ function test_add_provider_key__already_in_use_by_other_provider() {
     ).sign(initial_provider, bob).run_must_fail("Key is already in use by provider %s".format(initial_provider.pub));
 }
 
-function test_remove_provider_key() {
+function test_revoke_provider_key_validation() {
 
     setup_module();
     val provider = provider @ { initial_provider.pub };
 
     // Must be signed by provider
     rell.test.tx().op(
-        remove_provider_key(provider_key_role.main, initial_provider.pub),
+        revoke_provider_key(provider_key_role.main, initial_provider.pub),
     ).run_must_fail("Transaction must be signed by provider");
 
     // Must be a provider
     rell.test.tx().op(
-        remove_provider_key(provider_key_role.main, initial_provider.pub),
+        revoke_provider_key(provider_key_role.main, initial_provider.pub),
     ).sign(frank).run_must_fail("Transaction must be signed by provider");
 
-    // Can't remove last key
+    // Can't revoke last key
     rell.test.tx().op(
-        remove_provider_key(provider_key_role.main, initial_provider.pub),
-    ).sign(initial_provider).run_must_fail("Can't remove last main key");
+        revoke_provider_key(provider_key_role.main, initial_provider.pub),
+    ).sign(initial_provider).run_must_fail("Can't revoke last main key");
 
-    // Can't remove a key if it gets under required threshold
+    // Can't revoke a key if it gets under required threshold
     rell.test.tx().op(
         add_provider_key(provider_key_role.main, bob.pub),
         set_provider_key_threshold(provider_key_role.main, 2),
-        remove_provider_key(provider_key_role.main, initial_provider.pub),
-    ).sign(initial_provider, bob).run_must_fail("Can't remove key from main due to key count (1) gets under threshold (2)");
+        revoke_provider_key(provider_key_role.main, initial_provider.pub),
+    ).sign(initial_provider, bob).run_must_fail("Can't revoke key from main due to key count (1) gets under threshold (2)");
 }
 
-function test_remove_provider_key__remove_other_providers_key() {
+function test_revoke_provider_key__revoke_other_providers_key() {
 
     setup_module();
     val provider = provider @ { initial_provider.pub };
@@ -211,8 +211,63 @@ function test_remove_provider_key__remove_other_providers_key() {
 
     // Invalid - Must be signed by provider owning the key
     rell.test.tx().op(
-        remove_provider_key(provider_key_role.main, initial_provider.pub),
+        revoke_provider_key(provider_key_role.main, initial_provider.pub),
     ).sign(bob).run_must_fail("Operation not signed by key owner");
+}
+
+function test_cannot_readd_a_revoked_provider_key() {
+    setup_module();
+    val provider = provider @ { initial_provider.pub };
+
+    rell.test.tx().op(
+        add_provider_key(provider_key_role.main, rell.test.keypairs.frank.pub),
+    ).sign(initial_provider, rell.test.keypairs.frank).run();
+
+    rell.test.tx().op(
+        revoke_provider_key(provider_key_role.main, rell.test.keypairs.frank.pub),
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        add_provider_key(provider_key_role.main, rell.test.keypairs.frank.pub),
+    ).nop().sign(initial_provider, rell.test.keypairs.frank).run_must_fail("Pubkey %s has been revoked".format(rell.test.keypairs.frank.pub));
+}
+
+function test_cannot_auth_with_a_revoked_provider_key() {
+
+    setup_module();
+    val provider = provider @ { initial_provider.pub };
+
+    val frank = rell.test.keypairs.frank;
+    val eve = rell.test.keypairs.eve;
+
+    rell.test.tx().op(
+        add_provider_key(provider_key_role.main, frank.pub),
+        set_provider_key_threshold(provider_key_role.main, 2),
+    ).sign(initial_provider, frank).run();
+
+    rell.test.tx().op(
+        provider_is_signer_op(initial_provider.pub, [provider_key_role.main]),
+    ).nop().sign(initial_provider, frank).run();
+
+    rell.test.tx().op(
+        add_provider_key(provider_key_role.main, eve.pub),
+    ).sign(initial_provider, frank, eve).run();
+
+    rell.test.tx().op(
+        provider_is_signer_op(initial_provider.pub, [provider_key_role.main]),
+    ).nop().sign(initial_provider, frank).run();
+
+    rell.test.tx().op(
+        revoke_provider_key(provider_key_role.main, frank.pub),
+    ).sign(initial_provider, eve).run();
+
+    rell.test.tx().op(
+        provider_is_signer_op(initial_provider.pub, [provider_key_role.main]),
+    ).nop().sign(initial_provider, frank).run_must_fail("auth failed");
+
+    rell.test.tx().op(
+        provider_is_signer_op(initial_provider.pub, [provider_key_role.main]),
+    ).nop().sign(initial_provider, eve).run();
 }
 
 function test_set_provider_key_threshold() {
