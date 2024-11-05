@@ -34,19 +34,25 @@ operation add_provider_key(role: provider_key_role, pubkey) {
 }
 
 /**
- * Remove a key with role for the provider signing the transaction.
+ * No longer supported, use revoke_provider_key instead.
+ */
+operation remove_provider_key(role: provider_key_role, pubkey) {
+    require(false, "Removing provider keys is not supported, use revoke_provider_key instead");
+}
+
+/**
+ * Revoke a key with role for the provider signing the transaction.
  *
  * @param role They role of this key.
  * @param pubkey The key to remove.
  */
-operation remove_provider_key(role: provider_key_role, pubkey) {
-
+operation revoke_provider_key(role: provider_key_role, pubkey) {
     val provider = require_provider_signer();
     require_provider_auth_with_rate_limit(provider);
     require(get_provider_by_auth_key(pubkey) == provider.pubkey,
         "Operation not signed by key owner");
 
-    _remove_provider_key(provider.pubkey, pubkey, role);
+    _revoke_provider_key(provider.pubkey, pubkey, role);
 }
 
 /**
@@ -74,7 +80,7 @@ query get_provider_keys(pubkey) {
     val provider_keys = list<provider_role_keys_data>();
     for (threshold in provider_auth_threshold @* { .provider_pubkey == provider.pubkey }) {
 
-        val keys = provider_auth_key @* { .provider_pubkey == provider.pubkey, .provider_key_role == threshold.provider_key_role } ( .pubkey );
+        val keys = provider_auth_key @* { .provider_pubkey == provider.pubkey, .provider_key_role == threshold.provider_key_role, .active } ( .pubkey );
         provider_keys.add(provider_role_keys_data(threshold.provider_key_role, threshold.threshold, keys));
     }
 

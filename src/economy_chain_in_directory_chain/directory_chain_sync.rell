@@ -26,7 +26,7 @@ function send_provider_auth_update_message(provider_pubkey: pubkey) {
     );
 
     for (pat in provider_auth_threshold @* { .provider_pubkey == provider_pubkey } ( .provider_key_role, .threshold )) {
-        val all_keys = provider_auth_key @* { .provider_pubkey == provider_pubkey, pat.provider_key_role } ( .pubkey );
+        val all_keys = provider_auth_key @* { .provider_pubkey == provider_pubkey, pat.provider_key_role } ( .pubkey, .active );
         if (all_keys.size() > 0) {
             message.key_roles.add(provider_auth_update_role(pat.provider_key_role, pat.threshold, all_keys));
         }

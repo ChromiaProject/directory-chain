@@ -21,9 +21,11 @@ import common_consensus.*;
  * @param provider_key_role The role of key
  */
 function _add_provider_key(provider_pubkey: pubkey, pubkey, provider_key_role = provider_key_role.main) {
+    require(not exists(provider_auth_key @? { provider_pubkey, pubkey, not .active }),
+        "Pubkey %s has been revoked".format(pubkey));
 
-    if (not exists(provider_auth_key @? { provider_pubkey, provider_key_role, pubkey })) {
-        create provider_auth_key(provider_pubkey, provider_key_role, pubkey);
+    if (not exists(provider_auth_key @? { provider_pubkey, provider_key_role, pubkey, .active })) {
+        create provider_auth_key(provider_pubkey, provider_key_role, pubkey, true);
     }
 
     if (not is_provider_auth_threshold_set(provider_pubkey, provider_key_role)) {
@@ -34,28 +36,27 @@ function _add_provider_key(provider_pubkey: pubkey, pubkey, provider_key_role = 
 }
 
 /**
- * Remove a key for provider.
+ * Revoke a key for provider.
  *
  * @param provider_pubkey They provider to add this key for.
  * @param pubkey The auth key
  * @param role Role of key
  */
-function _remove_provider_key(provider_pubkey: pubkey, pubkey, role: provider_key_role) {
-
+function _revoke_provider_key(provider_pubkey: pubkey, pubkey, role: provider_key_role) {
     val key_count = get_provider_auth_key_count(provider_pubkey, role);
     require(
         role != provider_key_role.main or key_count > 1,
-        "Can't remove last %s key".format(provider_key_role.main)
+        "Can't revoke last %s key".format(provider_key_role.main)
     );
     val key_role_threshold = require(get_provider_auth_threshold(provider_pubkey, role),
         "No threshold found for role %s".format(role));
     require(
         key_count - 1 >= key_role_threshold.threshold,
-            "Can't remove key from %s due to key count (%s) gets under threshold (%s)".format(
+            "Can't revoke key from %s due to key count (%s) gets under threshold (%s)".format(
                 role, key_count - 1, key_role_threshold.threshold
     ));
 
-    delete provider_auth_key @? { .provider_pubkey == provider_pubkey, role, pubkey };
+    update provider_auth_key @ { .provider_pubkey == provider_pubkey, role, pubkey } (.active = false);
 
     after_provider_auth_updated(provider_pubkey);
 }
@@ -92,7 +93,8 @@ function provider_is_signer(provider_pubkey: pubkey, provider_key_roles: list<pr
     val key_roles_signed = provider_auth_key @* {
         provider_pubkey,
         .provider_key_role in provider_key_roles,
-        .pubkey in op_context.get_signers()
+        .pubkey in op_context.get_signers(),
+        .active
     } ( @group .provider_key_role, @sum signed_keys = 1 );
 
     for (key_role_signed in key_roles_signed) {
@@ -111,7 +113,7 @@ function provider_is_signer(provider_pubkey: pubkey, provider_key_roles: list<pr
 }
 
 function get_provider_auth_key_count(provider_pubkey: pubkey, provider_key_role): integer {
-    return provider_auth_key @ { provider_pubkey, provider_key_role } ( @sum 1 );
+    return provider_auth_key @ { provider_pubkey, provider_key_role, .active } ( @sum 1 );
 }
 
 function get_provider_auth_threshold(provider_pubkey: pubkey, provider_key_role) {
@@ -131,7 +133,7 @@ function is_provider_auth_threshold_set(provider_pubkey: pubkey, provider_key_ro
 function get_provider_signer(provider_key_roles: list<provider_key_role> = [provider_key_role.main]): pubkey? {
 
     val maybe_providers = provider_auth_key @* {
-        provider_auth_key.pubkey in op_context.get_signers() } ( @group .provider_pubkey );
+        provider_auth_key.pubkey in op_context.get_signers(), .active } ( @group .provider_pubkey );
     var found_provider: pubkey? = null;
 
     for (maybe_provider in maybe_providers) {
@@ -154,6 +156,7 @@ function get_provider_signer(provider_key_roles: list<provider_key_role> = [prov
 function get_provider_by_auth_key(pubkey, role: provider_key_role? = null): pubkey? {
     return provider_auth_key @? {
         .pubkey == pubkey,
-        role == null or .provider_key_role == role
+        role == null or .provider_key_role == role,
+        .active
     } ( .provider_pubkey ) limit 1;
 }

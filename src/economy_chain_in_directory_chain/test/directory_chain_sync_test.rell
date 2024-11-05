@@ -21,7 +21,7 @@ function test_init_events() {
         key_roles = [provider_auth_update_role(
         role = provider_key_role.main,
         threshold = 1,
-        [initial_provider.pub])]).to_gtv()).to_gtv_pretty()
+        [(pubkey = initial_provider.pub, active = true)])]).to_gtv()).to_gtv_pretty()
     );
 
     val directory_chain_brid = blockchain @ { blockchains.directory_chain } (.rid);
@@ -116,7 +116,7 @@ function test_provider() {
         key_roles = [provider_auth_update_role(
         role = provider_key_role.main,
         threshold = 1,
-        [test_provider.pub])]).to_gtv()).to_gtv_pretty()
+        [(pubkey = test_provider.pub, active = true)])]).to_gtv()).to_gtv_pretty()
     );
 
     assert_events(
@@ -421,7 +421,7 @@ function test_provider_auth_update() {
         key_roles = [provider_auth_update_role(
         role = provider_key_role.main,
         threshold = 1,
-        [initial_provider.pub])]).to_gtv()).to_gtv_pretty()
+        [(pubkey = initial_provider.pub, active = true)])]).to_gtv()).to_gtv_pretty()
     );
 
     assert_events(
@@ -441,14 +441,14 @@ function test_provider_auth_update() {
         key_roles = [provider_auth_update_role(
         role = provider_key_role.main,
         threshold = 1,
-        [initial_provider.pub, key2.pub])]).to_gtv()).to_gtv_pretty()
+        [(pubkey = initial_provider.pub, active = true), (pubkey = key2.pub, active = true)])]).to_gtv()).to_gtv_pretty()
     );
 
     assert_events(
         provider_and_key2_message,
     );
 
-    // Add a key of new role - will triggger 2 messages
+    // Add a key of new role - will trigger 2 messages
     rell.test.tx().op(
         add_provider_key(provider_key_role.configuration_proposal_vote, key3.pub),
     ).sign(initial_provider, key2, key3).run();
@@ -461,12 +461,12 @@ function test_provider_auth_update() {
         provider_auth_update_role(
             role = provider_key_role.main,
             threshold = 1,
-            [initial_provider.pub, key2.pub]
+            [(pubkey = initial_provider.pub, active = true), (pubkey = key2.pub, active = true)]
         ),
         provider_auth_update_role(
             role = provider_key_role.configuration_proposal_vote,
             threshold = 1,
-            [key3.pub]
+            [(pubkey = key3.pub, active = true)]
         )
     ]).to_gtv()).to_gtv_pretty());
 
@@ -475,12 +475,9 @@ function test_provider_auth_update() {
             all_keys_and_new_role_message,
     );
 
-    // Remove key
     rell.test.tx().op(
         set_provider_key_threshold(provider_key_role.configuration_proposal_vote, consensus_threshold.super_majority),
-        remove_provider_key(provider_key_role.configuration_proposal_vote, key3.pub),
     ).sign(initial_provider, key2, key3).run();
-
     assert_events(
         ("icmf_message", (
             topic = provider_auth_update_topic,
@@ -490,23 +487,39 @@ function test_provider_auth_update() {
                 provider_auth_update_role(
                     role = provider_key_role.main,
                     threshold = 1,
-                    [initial_provider.pub, key2.pub]),
+                    [(pubkey = initial_provider.pub, active = true), (pubkey = key2.pub, active = true)]),
                 provider_auth_update_role(
                     role = provider_key_role.configuration_proposal_vote,
                     threshold = 0,
-                    [key3.pub]),
+                    [(pubkey = key3.pub, active = true)]),
             ]).to_gtv()).to_gtv_pretty()
-        ),
+        )
+    );
+
+    rell.test.tx().op(
+        revoke_provider_key(provider_key_role.configuration_proposal_vote, key3.pub),
+    ).sign(initial_provider, key2).run();
+    assert_events(
         ("icmf_message", (
             topic = provider_auth_update_topic,
             body = provider_auth_update_message(
-            provider_pubkey = initial_provider.pub,
-            key_roles = [
-                provider_auth_update_role(
-                    role = provider_key_role.main,
-                    threshold = 1,
-                    [initial_provider.pub, key2.pub]),
-            ]).to_gtv()).to_gtv_pretty()
+                provider_pubkey = initial_provider.pub,
+                key_roles = [
+                    provider_auth_update_role(
+                        role = provider_key_role.main,
+                        threshold = 1,
+                        [
+                            (pubkey = initial_provider.pub, active = true),
+                            (pubkey = key2.pub, active = true),
+                        ]),
+                    provider_auth_update_role(
+                        role = provider_key_role.configuration_proposal_vote,
+                        threshold = 0,
+                        [
+                            (pubkey = key3.pub, active = false),
+                        ]),
+                ]
+            ).to_gtv()).to_gtv_pretty()
         )
     );
 }

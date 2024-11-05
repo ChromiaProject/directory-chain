@@ -432,8 +432,12 @@ function test_receive_provider_auth_update_message() {
         receive_provider_auth_update_message_op(provider_auth_update_message(
             rell.test.keypairs.alice.pub,
             key_roles = [
-            provider_auth_update_role(provider_key_role.main, 2, [rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub]),
-            provider_auth_update_role(provider_key_role.configuration_proposal_vote, 1, [rell.test.keypairs.alice.pub]),
+            provider_auth_update_role(provider_key_role.main, 2,
+                [(pubkey = rell.test.keypairs.alice.pub, active = true), (pubkey = rell.test.keypairs.bob.pub, active = true)]
+            ),
+            provider_auth_update_role(provider_key_role.configuration_proposal_vote, 1,
+                [(pubkey = rell.test.keypairs.alice.pub, active = true)]
+            ),
         ]))
     ).run();
 
@@ -442,10 +446,10 @@ function test_receive_provider_auth_update_message() {
     assert_equals(threshold.size(), 1);
     assert_equals(threshold[0].provider_key_role, provider_key_role.main);
     assert_equals(threshold[0].threshold, 2);
-    var all_keys = provider_auth_key @* { .provider_pubkey == rell.test.keypairs.alice.pub } ( .pubkey );
+    var all_keys = provider_auth_key @* { .provider_pubkey == rell.test.keypairs.alice.pub } ( .pubkey, .active );
     assert_equals(all_keys.size(), 2);
-    assert_equals(all_keys[0], rell.test.keypairs.alice.pub);
-    assert_equals(all_keys[1], rell.test.keypairs.bob.pub);
+    assert_equals(all_keys[0], (pubkey = rell.test.keypairs.alice.pub, active = true));
+    assert_equals(all_keys[1], (pubkey = rell.test.keypairs.bob.pub, active = true));
 }
 
 function test_subnode_image() {
