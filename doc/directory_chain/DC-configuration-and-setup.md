@@ -62,6 +62,7 @@ From economy-chain:
 - `G_upgrade_container`
 - `G_stop_container`
 - `G_restart_container`
+- `G_remove_container`
 
 ### Configuration example:
 ```yaml
@@ -96,6 +97,7 @@ From economy-chain:
               - G_upgrade_container
               - G_stop_container
               - G_restart_container
+              - G_remove_container
     moduleArgs:
       common.init:
         initial_provider: ${INITIAL_PROVIDER:-03ECD350EEBC617CBBFBEF0A1B7AE553A748021FD65C7C50C5ABB4CA16D4EA5B05}

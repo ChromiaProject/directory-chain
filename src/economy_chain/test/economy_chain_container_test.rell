@@ -15,6 +15,7 @@ import lib.auth;
 struct module_args {
     auth_privkey: byte_array;
     admin_privkey: byte_array;
+    container_removal_timeout: integer;
 }
 
 val auth_privkey = chain_context.args.auth_privkey;
@@ -570,4 +571,48 @@ function test_auth_messages() {
 
     // Cancel auto-renew
     assert_equals(cancel_renew_container_auth_message([container_name.to_gtv()].to_gtv()), "Please sign the message\nto cancel auto-renewal of container container name\non account {account_id}");
+}
+
+function test_remove_expired_lease() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init);
+
+    assert_false(lease @ { container_name } (.expired));
+    rell.test.set_next_block_time_delta(millis_per_week + 1);
+    rell.test.block().run();
+    rell.test.set_next_block_time_delta(chain_context.args.container_removal_timeout);
+    rell.test.block().run();
+    assert_true(lease @ { container_name } (.expired));
+    assert_events(("icmf_message", (
+        topic = stop_container_topic,
+        body = stop_container_message(container_name).to_gtv()
+    ).to_gtv_pretty()));
+
+    rell.test.block().run();
+    assert_events(("icmf_message", (
+        topic = remove_container_topic,
+        body = remove_container_message(container_name).to_gtv()
+    ).to_gtv_pretty()));
+    assert_null(lease @? { container_name });
+}
+
+function test_no_early_removal_of_expired_lease() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init);
+
+    assert_false(lease @ { container_name } (.expired));
+    rell.test.set_next_block_time_delta(millis_per_week + 1);
+    rell.test.block().run();
+    rell.test.set_next_block_time_delta(chain_context.args.container_removal_timeout - 60000);
+    rell.test.block().run();
+    assert_true(lease @ { container_name } (.expired));
+    assert_events(("icmf_message", (
+        topic = stop_container_topic,
+        body = stop_container_message(container_name).to_gtv()
+    ).to_gtv_pretty()));
+
+    rell.test.block().run();
+    assert_not_null(lease @? { container_name });
 }

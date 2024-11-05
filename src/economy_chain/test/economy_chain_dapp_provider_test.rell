@@ -16,6 +16,7 @@ struct module_args {
     auth_privkey: byte_array;
     admin_privkey: byte_array;
     dapp_provider_creation_cost: integer = 10000000;
+    container_removal_timeout: integer;
 }
 
 val auth_privkey = chain_context.args.auth_privkey;
@@ -65,6 +66,7 @@ function test_expired_container_lease_disables_dapp_providers() {
 
     rell.test.set_next_block_time_delta(millis_per_week + 1);
     rell.test.block().run();
+    rell.test.set_next_block_time_delta(1);
     rell.test.block().run();
 
     assert_true(container_lease.expired);
@@ -85,6 +87,16 @@ function test_expired_container_lease_disables_dapp_providers() {
         ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, register_dapp_provider(container_name, rell.test.pubkeys.trudy)),
         register_dapp_provider(container_name, rell.test.pubkeys.trudy)
     ).sign(rell.test.keypairs.alice).run_must_fail("Container lease is expired");
+
+    // Assert complete removal when lease is removed
+    rell.test.set_next_block_time_delta(chain_context.args.container_removal_timeout);
+    rell.test.block().run();
+    rell.test.block().run();
+    assert_events(("icmf_message", (
+        topic = remove_container_topic,
+        body = remove_container_message(container_name).to_gtv()
+    ).to_gtv_pretty()));
+    assert_null(lease_dapp_provider @? { .lease == container_lease, .provider == rell.test.pubkeys.bob });
 }
 
 function test_dapp_providers_are_transferred_on_container_upgrade() {

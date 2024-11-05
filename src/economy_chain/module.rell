@@ -52,6 +52,7 @@ struct module_args {
     evm_transaction_submitters_bonus: decimal;
     max_dapp_providers_per_lease: integer = 100;
     dapp_provider_creation_cost: integer = 10000000; // 10 CHR
+    container_removal_timeout: integer;
 }
 
 val units_per_asset = (10).pow(chain_context.args.asset_decimals);
@@ -89,6 +90,7 @@ operation __begin_block(height: integer) {
     if (state.initialized) {
         handle_configuration_update();
         if (not try_call(expire_leases(op_context.last_block_time, *))) log("Failed lease expiry.");
+        if (not try_call(delete_expired_leases(op_context.last_block_time, *))) log("Failed to delete expired leases.");
         if (not try_call(__staking_begin_block(height, *))) log("Failed staking begin block hook.");
         if (not try_call(__evm_links_begin_block(*))) log("Failed evm links begin block hook.");
     }

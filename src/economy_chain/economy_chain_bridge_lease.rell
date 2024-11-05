@@ -147,6 +147,10 @@ function delete_bridge_leases(lease): list<struct<bridge_lease>> {
     }
 }
 
+@extend(on_expired_lease_removed) function remove_already_expired_bridge_leases(lease) {
+    delete bridge_lease @* { lease };
+}
+
 function transfer_bridge_leases_to_lease(lease, bridge_leases: list<struct<bridge_lease>>) {
     for (bridge_lease in bridge_leases) {
         create bridge_lease(
