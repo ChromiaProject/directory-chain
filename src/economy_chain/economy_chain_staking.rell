@@ -328,7 +328,6 @@ function _staking_distribute_rewards(using_batches: boolean = false, update_pend
     for (account in all_users_for_batch ) {
         val amount = all_staking_rewards @? {.account == account} (.amount) ?: 0;
         val shared = all_shared_rewards @? {.account == account} (.shared_amount, .provider_set) ?: (shared_amount = 0, provider_set = set<byte_array>());
-        log("Preparing to pay out staking reward of %s and shared reward of %s to account %s".format(amount, shared.shared_amount, account));
         if (not try_call(_staking_pay_reward(last_known_time, pool, asset, account, amount, shared.shared_amount, list<byte_array>(shared.provider_set), *))) {
             log("Failed to pay out %s including %s from shared rewards to %s".format(amount + shared.shared_amount, shared.shared_amount, account.id));
         }
@@ -343,7 +342,7 @@ function _staking_pay_reward(last_known_time: timestamp, pool: accounts.account,
     update staker_state @* { account } ( .pending_token_time = 0 );
     delete pending_shared_payment @* { account };
     create staking_payment(timestamp = last_known_time, amount = amount, account, shared_amount, provider);
-    log("Paid out %s including %s from shared rewards to %s".format(total_amount, shared_amount, account.id));
+    log("Paid out reward of %s including %s staking reward and %s shared reward to %s".format(total_amount, amount, shared_amount, account.id));
 }
 
 // Shared rewards (triggered by a hook in the rewards logic)
