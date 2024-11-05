@@ -27,7 +27,24 @@ function expire_lease(lease) {
     on_lease_expired(lease);
 }
 
+function delete_expired_leases(current_time_millis: integer) {
+    if (chain_context.args.container_removal_timeout < 0) return;
+
+    for (lease in lease @* { current_time_millis > .start_time + .duration_millis + chain_context.args.container_removal_timeout, .expired }) {
+        // Don't touch leases for containers that are currently being upgraded
+        if (not has_pending_upgrade(lease.container_name)) {
+            log("Lease for container %s has been expired longer than the allowed time, removing it".format(lease.container_name));
+            send_message(remove_container_topic, remove_container_message(container_name = lease.container_name).to_gtv()); // fire-and-forget
+            on_expired_lease_removed(lease);
+            delete lease_subnode_image @? { lease };
+            delete lease;
+        }
+    }
+}
+
 @extendable function on_lease_expired(lease) {}
+
+@extendable function on_expired_lease_removed(lease) {}
 
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(

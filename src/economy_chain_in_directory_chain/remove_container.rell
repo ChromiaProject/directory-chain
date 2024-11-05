@@ -1,0 +1,24 @@
+@extend(receive_icmf_message) function receive_remove_container(sender: byte_array, topic: text, body: gtv) {
+    if (topic != remove_container_topic) return;
+
+    if (sender != economy_chain.rid) {
+        log("Sender %s is not the economy chain, ignoring".format(sender));
+        return;
+    }
+
+    receive_remove_container_impl(body);
+}
+
+function receive_remove_container_impl(body: gtv) {
+    val message = remove_container_message.from_gtv(body);
+    val container = container @? { .name == message.container_name };
+
+    if (not exists(container)) {
+        log("Unable to remove non-existing container %s".format(message.container_name));
+        return;
+    }
+
+    if (not try_call(remove_container_impl(container, *))) {
+        log("Unable to remove container %s".format(message.container_name));
+    }
+}

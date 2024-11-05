@@ -1,0 +1,54 @@
+@test module;
+
+import ^^^.common.operations.*;
+import ^^^.common.test.setup.*;
+import ^^^.common.test.util.*;
+import ^^^.direct_cluster.*;
+import ^^^.direct_container.*;
+import ^^.*;
+import ^.helpers.*;
+
+
+function test_container_state_operations() {
+    setup_module();
+
+    val cluster_name = "bob_cluster";
+    val container_name = "bob_container";
+    val blockchain_name = "bob_blockchain";
+    val cluster_data = cluster_creation_data(cluster_units = 1, extra_storage = 1024);
+    val register_node_data = register_node_data(
+        rell.test.pubkeys.charlie, host = "host", port = 7777, api_url = "http://host/api_url", [cluster_name],
+        cluster_units = 1, extra_storage = 1024
+    );
+    var conf = apply_required_configuration_properties();
+
+    rell.test.tx().op(
+        create_cluster_with_cluster_data(initial_provider.pub, cluster_name, system_p_voter_set().name, [initial_provider.pub], cluster_data),
+        register_node_with_node_data(initial_provider.pub, register_node_data),
+        create_container(initial_provider.pub, container_name, cluster_name, 1, [initial_provider.pub]),
+        // Add a bc to test that this works even when container is not empty
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), blockchain_name, container_name)
+    ).sign(initial_provider).run();
+    val bob_cluster = cluster @ { .name == cluster_name };
+    val bob_container = container @ { .name == container_name };
+    val bob_blockchain = blockchain @ { .name == blockchain_name };
+
+    // Stopping
+    rell.test.tx().op(
+        receive_stop_container_op(stop_container_message(container_name).to_gtv())
+    ).run();
+    assert_equals(bob_container.state, container_state.STOPPED);
+
+    // Restarting
+    rell.test.tx().op(
+        receive_restart_container_op(restart_container_message(container_name).to_gtv())
+    ).run();
+    assert_equals(bob_container.state, container_state.RUNNING);
+
+    // Removing
+    rell.test.tx().op(
+        receive_remove_container_op(remove_container_message(container_name).to_gtv())
+    ).run();
+    assert_null(container @? { .name == container_name });
+    assert_equals(bob_blockchain.state, blockchain_state.REMOVED);
+}
