@@ -1,7 +1,40 @@
 module;
 
+import ^.constants.*;
+
+/**
+ * Topic configuration topic to be used with the receiver_icmf_update_topics
+ * function. Check ICMF configuration documentation for details.
+ */
+struct icmf_receiver_topic {
+
+    /** Topic name, prefixed with either G_ or L_ depending on type */
+    topic: text;
+
+    /** Blockchain rid for sender, optional for global but required for local */
+    bc_rid: byte_array?;
+
+    /** Height to start read messages from */
+    skip_to_height: integer = 0;
+}
+
 operation __icmf_message(sender: byte_array, topic: text, body: gtv) {
     receive_icmf_message(sender, topic, body);
 }
 
 @extendable function receive_icmf_message(sender: byte_array, topic: text, body: gtv) {}
+
+/**
+ * Updates ICMF receiver topics by appending the configuration defined in the blockchain
+ * configuration. Make sure to include all topics in each update call since it overwrites
+ * the previous configuration sent by this call.
+ * It is not possible to update or remove topics defined in the blockchain configuration.
+ * 
+ * @param receiver_topics A list of receiver topic configurations.
+ */
+function receiver_icmf_update_topics(receiver_topics: list<icmf_receiver_topic>) {
+    for (receiver_topic in receiver_topics) {
+        require_valid_icmf_topic_name(receiver_topic.topic);
+    }
+    op_context.emit_event("icmf_receiver_topics", receiver_topics.to_gtv_pretty());
+}
