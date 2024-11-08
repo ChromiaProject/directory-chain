@@ -10,3 +10,28 @@ function test_add_erc20_link_on_init() {
 
 	assert_equals(eif.hbridge.erc20_asset @* { get_asset() } ( @sum 1 )[0], 2);
 }
+
+function test_get_bridge_contracts_query_from_hbridge_lib() {
+	// unknown network
+	assert_equals(
+		eif.hbridge.get_bridge_contracts(network_id = -1),
+		list<eif.hbridge.bridge_contract_info>()
+	);
+
+	// bsc_testnet
+	assert_equals(
+		eif.hbridge.get_bridge_contracts(network_id = 97),
+		[
+			eif.hbridge.bridge_contract_info(
+				contract_address = "0x2Cf48D2891CC286d18596Df1261D011d1B78E03E",
+				evm_read_offset = 10,
+				erc20_assets = []
+			),
+			eif.hbridge.bridge_contract_info(
+				contract_address = "0x2Cf48D2891CC286d18596Df1261D011d1B78E03F",
+				evm_read_offset = 10,
+				erc20_assets = []
+			),
+		]
+	);
+}
