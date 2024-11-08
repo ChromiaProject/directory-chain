@@ -136,27 +136,31 @@ function test_list_delayed_blockchain_configs() {
 
     // Set blockchain delay and propose a config update
     rell.test.tx().op(
-        set_blockchain_config_delay_op(bc, bc_delay),
-        propose_configuration(rell.test.pubkeys.alice, bc.rid, conf.to_gtv().to_bytes())
+        set_blockchain_config_delay_op(bc, bc_delay)
     ).sign(rell.test.keypairs.alice).run();
-
-    rell.test.set_next_block_time_delta(half_hour_delay);
-    bob_votes();
 
     // Pause chain
     rell.test.set_next_block_time_delta(half_hour_delay);
     rell.test.tx().op(
         propose_blockchain_action(rell.test.pubkeys.alice, bc.rid, blockchain_action.pause)
     ).sign(rell.test.keypairs.alice).run();
+    rell.test.set_next_block_time_delta(bc_delay);
     bob_votes();
+    rell.test.block().run();
     assert_equals(bc.state, blockchain_state.PAUSED);
+
+    rell.test.tx().op(
+        propose_configuration(rell.test.pubkeys.alice, bc.rid, conf.to_gtv().to_bytes())
+    ).sign(rell.test.keypairs.alice).run();
+    rell.test.set_next_block_time_delta(half_hour_delay);
+    bob_votes();
 
     val proposal1_id = proposal @ { proposal_type.configuration } ( @sort_desc .rowid ) limit 1;
     val result1 = list_delayed_blockchain_configs(bc.rid);
 
     // Assert one paused proposal
     assert_equals(result1, list<delayed_blockchain_proposal_data>([
-        delayed_blockchain_proposal_data(proposal1_id, proposal_type.configuration, proposal_state.APPROVED, delay=bc_delay - half_hour_delay * 2, apply_at=null)
+        delayed_blockchain_proposal_data(proposal1_id, proposal_type.configuration, proposal_state.APPROVED, delay=bc_delay, apply_at=null)
     ]));
 
     // Resume chain and propose a new config
@@ -165,6 +169,7 @@ function test_list_delayed_blockchain_configs() {
         propose_configuration(rell.test.pubkeys.alice, bc.rid, conf.to_gtv().to_bytes()),
         propose_blockchain_action(rell.test.pubkeys.alice, bc.rid, blockchain_action.resume)
     ).sign(rell.test.keypairs.alice).run();
+    rell.test.set_next_block_time_delta(half_hour_delay);
     bob_votes();
 
     val proposal2_id = proposal @ { proposal_type.configuration } ( @sort_desc .rowid ) limit 1;
@@ -172,7 +177,7 @@ function test_list_delayed_blockchain_configs() {
 
     // Assert a resumed config proposal and a new not yet approved proposal
     assert_equals(result2, list<delayed_blockchain_proposal_data>([
-        delayed_blockchain_proposal_data(proposal1_id, proposal_type.configuration, proposal_state.APPROVED, delay=null, apply_at=19861000),
+        delayed_blockchain_proposal_data(proposal1_id, proposal_type.configuration, proposal_state.APPROVED, delay=null, apply_at=rell.test.last_block_time + bc_delay - half_hour_delay),
         delayed_blockchain_proposal_data(proposal2_id, proposal_type.configuration, proposal_state.PENDING, delay=bc_delay, apply_at=null)
     ]));
 

@@ -23,6 +23,9 @@ function proposal_blockchain_action_str(prop: proposal): text? =
     pending_blockchain_action @? { prop } ( "%s:%s:%d".format(prop.proposal_type, .action, prop.rowid) );
 
 @extend(apply_voting_result_handlers) function() = [proposal_type.blockchain_action.name: apply_blockchain_action(*)];
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.blockchain_action.name: delete_pending_blockchain_action(*)];
+@extend(proposal_delay_time_handlers) function() = [proposal_type.blockchain_action.name: blockchain_action_proposal_delay_time_handler(*)];
+@extend(proposal_delay_ids_handlers) function() = [proposal_type.blockchain_action.name: blockchain_action_proposal_delay_ids_handler(*)];
 
 function apply_blockchain_action(proposal) {
     val pba = pending_blockchain_action @? { proposal };
@@ -37,10 +40,20 @@ function apply_blockchain_action(proposal) {
     }
 }
 
-@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.blockchain_action.name: delete_pending_blockchain_action(*)];
-
 function delete_pending_blockchain_action(proposal) {
     delete pending_blockchain_action @? { proposal };
+}
+
+function blockchain_action_proposal_delay_time_handler(proposal): (blockchain?, integer) {
+    return blockchain_config_delay_time_handler(pending_blockchain_action @? {
+        proposal, .action in [blockchain_action.pause, blockchain_action.remove, blockchain_action.archive]
+    } ( .blockchain ));
+}
+
+function blockchain_action_proposal_delay_ids_handler(blockchain): list<rowid> {
+    return pending_blockchain_action @* {
+        blockchain, .action in [blockchain_action.pause, blockchain_action.remove, blockchain_action.archive]
+    } ( .proposal.rowid );
 }
 
 // Stop block production by pausing

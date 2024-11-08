@@ -95,7 +95,7 @@ function test_propose_blockchain_action() {
     // 9. See blockchain_action against UNARCHIVING blockchain state in .blockchain_archive_unarchive_action_test.rell
 }
 
-function test_propose_blockchain_pause_action_while_config_proposal_is_delayed() {
+function test_config_proposals_delay_is_not_counted_while_paused() {
 
     setup();
 
@@ -114,42 +114,138 @@ function test_propose_blockchain_pause_action_while_config_proposal_is_delayed()
     bob_votes();
     val chain = blockchain @ { "chain" };
 
+    // Pause the chain (and also any future config proposal)
+    rell.test.set_block_interval(1);
+    alice_proposes_action(chain, blockchain_action.pause);
+    bob_votes();
+
     // Set a blockchain delay and create a config proposal
-    rell.test.set_next_block_time_delta(1);
     rell.test.tx().op(
         set_blockchain_config_delay_op(chain, 100),
         propose_configuration(initial_provider.pub, chain.rid, conf.to_gtv().to_bytes())
     ).sign(rell.test.keypairs.alice).run();
 
     // Bob approves config proposal, it will be applied in 100ms
-    rell.test.set_next_block_time_delta(1);
     bob_votes();
-
-    // Pause the chain (and also the config proposal)
-    rell.test.set_next_block_time_delta(1);
-    alice_proposes_action(chain, blockchain_action.pause);
-
-    rell.test.set_next_block_time_delta(1);
-    bob_votes();
-
-    // Pause time longer than config delay
-    rell.test.set_next_block_time_delta(1000);
-    rell.test.block().run();
 
     // Delayed event still paused
-    assert_true(exists(delayed_event @? { .active == false, .time == 98 }));
+    assert_true(exists(delayed_event @? { .active == false, .time == 100 }));
 
     // Unpause chain (and config proposal delay)
     alice_proposes_action(chain, blockchain_action.resume);
+    rell.test.set_next_block_time_delta(100);
     bob_votes();
 
     // Delayed event active again
-    assert_true(exists(delayed_event @? { .active == true, .time != 98 }));
+    assert_true(exists(delayed_event @? { .active == true, .time != 100 }));
 
-    // Delayed event executed after 98 ms (100ms in total excluding pause)
-    rell.test.set_next_block_time_delta(98);
+    // Delayed event executed after 100 ms
     rell.test.block().run();
     assert_false(exists(delayed_event @? { }));
+}
+
+function test_delayed_actions() {
+    setup();
+
+    val container = "container";
+    val alice = provider @ { rell.test.pubkeys.alice };
+
+    // 1 day delay
+    var conf = apply_required_configuration_properties([DIRECTORY_CHAIN_CONFIG_KEY : [DIRECTORY_CHAIN_CONFIG_DELAY_CONFIG_KEY : 86400000].to_gtv()]);
+    rell.test.tx().op(
+        create_container(alice.pubkey, container, clusters.system, 0, [alice.pubkey]),
+        propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "chain", container),
+    ).sign(rell.test.keypairs.alice).run();
+    val chain = blockchain @ { "chain" };
+
+    // Verify pause is delayed
+    alice_proposes_action(chain, blockchain_action.pause);
+
+    assert_equals(chain.state, blockchain_state.RUNNING);
+    assert_true(exists(delayed_event @? { .active }));
+
+    rell.test.set_next_block_time_delta(86400000);
+    rell.test.block().run();
+    rell.test.block().run();
+
+    assert_equals(chain.state, blockchain_state.PAUSED);
+    assert_false(exists(delayed_event @? { .active }));
+
+    alice_proposes_action(chain, blockchain_action.resume);
+
+    // Verify removal is delayed
+    alice_proposes_action(chain, blockchain_action.remove);
+
+    assert_equals(chain.state, blockchain_state.RUNNING);
+    assert_true(exists(delayed_event @? { .active }));
+
+    rell.test.set_next_block_time_delta(86400000);
+    rell.test.block().run();
+    rell.test.block().run();
+
+    assert_equals(chain.state, blockchain_state.REMOVED);
+    assert_false(exists(delayed_event @? { .active }));
+}
+
+function test_future_delayed_actions_are_applied_immediately_if_delay_is_removed() {
+    setup();
+
+    val container = "container";
+    val alice = provider @ { rell.test.pubkeys.alice };
+
+    // 1 day delay
+    val conf = apply_required_configuration_properties([DIRECTORY_CHAIN_CONFIG_KEY : [DIRECTORY_CHAIN_CONFIG_DELAY_CONFIG_KEY : 86400000].to_gtv()]);
+    rell.test.tx().op(
+        create_container(alice.pubkey, container, clusters.system, 0, [alice.pubkey]),
+        propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "chain", container),
+    ).sign(rell.test.keypairs.alice).run();
+    val chain = blockchain @ { "chain" };
+
+    // Propose a pause
+    alice_proposes_action(chain, blockchain_action.pause);
+    assert_true(exists(delayed_event @? { .active, .time == rell.test.last_block_time - rell.test.block_interval + 86400000 }));
+
+    // No delay config
+    rell.test.tx().op(
+        set_blockchain_config_delay_op(chain, 0)
+    ).run();
+    // Pause is no longer delayed and will be applied next block
+    assert_true(exists(delayed_event @? { .active, .time == rell.test.last_block_time - rell.test.block_interval }));
+    rell.test.block().run();
+    assert_equals(chain.state, blockchain_state.PAUSED);
+    assert_false(exists(delayed_event @? {  }));
+}
+
+// TODO: This behavior should be further improved by adding a failed state to proposals
+function test_that_invalid_delayed_proposal_does_break_chain() {
+    setup();
+
+    val container = "container";
+    val alice = provider @ { rell.test.pubkeys.alice };
+
+    // 1 day delay
+    val conf = apply_required_configuration_properties([DIRECTORY_CHAIN_CONFIG_KEY : [DIRECTORY_CHAIN_CONFIG_DELAY_CONFIG_KEY : 86400000].to_gtv()]);
+    rell.test.tx().op(
+        create_container(alice.pubkey, container, clusters.system, 0, [alice.pubkey]),
+        propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "chain", container),
+    ).sign(rell.test.keypairs.alice).run();
+    val chain = blockchain @ { "chain" };
+
+    // Propose a removal
+    alice_proposes_action(chain, blockchain_action.remove);
+    assert_true(exists(delayed_event @? { .active, .time == rell.test.last_block_time - rell.test.block_interval + 86400000 }));
+
+    // Add a dependent chain that will prevent removal
+    val dependent_conf = apply_required_configuration_properties(["dependencies": [["dep".to_gtv(), chain.rid.to_gtv()]].to_gtv()]);
+    rell.test.set_next_block_time_delta(86400000);
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, dependent_conf.to_gtv().to_bytes(), "dependent_chain", container),
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Trigger removal action and see that it's not applied but chain is not broken either and delayed action is gone
+    rell.test.block().run();
+    assert_false(exists(delayed_event @? {}));
+    assert_equals(chain.state, blockchain_state.RUNNING);
 }
 
 function alice_proposes_action(bc: blockchain, action: blockchain_action) {
