@@ -70,6 +70,8 @@ function test_add_remove_providers() {
     // Ensure delegates have been removed
     assert_equals(staking_get_total_delegation_to(rell.test.keypairs.charlie.pub), 0); // <- Removed immediately
     assert_equals(staking_get_total_delegation_to(rell.test.keypairs.bob.pub), 11); // <- Unchanged
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.bob.pub), 1);
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.charlie.pub), 0);
 
     log("Staking start time: ", staking_get_rewards_start());
 
@@ -98,15 +100,21 @@ function test_delegation() {
 
     add_provider(rell.test.keypairs.bob.pub);
     add_provider(rell.test.keypairs.charlie.pub);
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.bob.pub), 0);
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.charlie.pub), 0);
 
     do_staking_delegate_failure(rell.test.keypairs.alice, rell.test.keypairs.bob.pub, "Need stake to delegate.");
 
     do_staking_deposit_native(rell.test.keypairs.alice, 8000);
     do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.charlie.pub);
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.bob.pub), 0);
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.charlie.pub), 1);
     rell.test.set_next_block_time_delta(1);
     rell.test.block().run();
 
     // Should be near immediate as delegating from nothing
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.bob.pub), 0);
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.charlie.pub), 1);
     assert_equals(staking_get_current_delegate_on_network(test_account_alice.id, network.CHR), rell.test.keypairs.charlie.pub);
     assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.charlie.pub);
 
@@ -284,7 +292,9 @@ function test_three_networks_multiple_deposits_withdrawals_rewards() {
 
     // Delegate and run forwards 1 year + 1 week
     add_provider(rell.test.keypairs.dave.pub);
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.dave.pub), 0);
     do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.dave.pub);
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.dave.pub), 1);
     rell.test.set_next_block_time_delta(millis_per_year + staking_delegation_delay_ms);
     rell.test.block().run();
 
@@ -635,6 +645,9 @@ function test_yield_and_payout_crudely () {
     // FFWD
     rell.test.set_next_block_time_delta(millis_per_year);
     rell.test.block().run();
+
+    // Check 2 delegations for C
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.charlie.pub), 2);
 
     // Check that there is a yield and that B is twice of A (allow for rounding)
     val alice_amount = staking_rewards_claimable_for(test_account_alice.id);
