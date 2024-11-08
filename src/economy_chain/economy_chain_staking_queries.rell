@@ -1,12 +1,12 @@
 // Rates
 
 /** Current annualised reward rate
-/*  @return as a decimal fraction, eg. 0.1 is 10%
+ *  @return as a decimal fraction, eg. 0.1 is 10%
 */
 query staking_get_current_rate(): decimal = economy_constants.staking_reward_rate;
 
 /** Starting instant of rewards
-/*  @return As a Unix timestamp
+ *  @return As a Unix timestamp
 */
 query staking_get_rewards_start(): timestamp = chain_context.args.staking_rewards_start_time;
 
@@ -14,12 +14,12 @@ query staking_get_rewards_start(): timestamp = chain_context.args.staking_reward
 // Delegations
 
 /**
-/* The current delegation of the user's stake on one of the three blockchain networks.
-/* Ordinarily the user would be staked (or unstaked) identitically across all networks.
-/*
-/* @param account_id User account ID (bytes32)
-/* @param network Network using the enum
-/* @return Public key of the delegated to provider, or null if currently undelegated
+ * The current delegation of the user's stake on one of the three blockchain networks.
+ * Ordinarily the user would be staked (or unstaked) identitically across all networks.
+ *
+ * @param account_id User account ID (bytes32)
+ * @param network Network using the enum
+ * @return Public key of the delegated to provider, or null if currently undelegated
 */
 query staking_get_current_delegate_on_network(account_id: byte_array, network): byte_array? {
     /// @dev This query needs to amended at the same time as `staking_get_current_delegate`
@@ -47,11 +47,11 @@ query staking_get_current_delegate_on_network(account_id: byte_array, network): 
 }
 
 /**
-/* Gets the user's most recent stake delegation across all network.
-/* This can vary if a withdrawal has been made on a single chain.
-/*
-/* @param account_id Given user
-/* @return Public key of the last delegated to provider, or null if last undelegated
+ * Gets the user's most recent stake delegation across all network.
+ * This can vary if a withdrawal has been made on a single chain.
+ *
+ * @param account_id Given user
+ * @return Public key of the last delegated to provider, or null if last undelegated
 */
 query staking_get_current_delegate(account_id: byte_array) {
     /// @dev This query needs to amended at the same time as `staking_get_current_delegate_on_network`
@@ -78,11 +78,11 @@ query staking_get_current_delegate(account_id: byte_array) {
 }
 
 /**
-/*  This will return the next delegation change, or null if there is none.
-/*  Delegation changes do not take place immediately.
-/*
-/* @param account_id Given user
-/* @return A tuple of the next to be delegated to provider and the timestamp the delegation will take effect. Or null if no re-delegation is scheduled.
+ *  This will return the next delegation change, or null if there is none.
+ *  Delegation changes do not take place immediately.
+ *
+ * @param account_id Given user
+ * @return A tuple of the next to be delegated to provider and the timestamp the delegation will take effect. Or null if no re-delegation is scheduled.
 */
 query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubkey?, time: integer)? {
     val staker = ft4.accounts.Account(account_id);
@@ -106,10 +106,10 @@ query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubk
 }
 
 /**
-/* Total staked CHR across all networks and all users that had been delegated to the provider
-/*
-/* @param pubkey Public key of the given provider
-/* @return Total CHR staked to the given provider in minor units
+ * Total staked CHR across all networks and all users that had been delegated to the provider
+ *
+ * @param pubkey Public key of the given provider
+ * @return Total CHR staked to the given provider in minor units
 */
 query staking_get_total_delegation_to(pubkey, network? = null) {
     return ( s1: staker_state_to_provider) @ {
@@ -124,11 +124,31 @@ query staking_get_total_delegation_to(pubkey, network? = null) {
     } ( @sum .staker_state.balance );
 }
 
+
 /**
-/* Total stake the provider has delegated to themselves
-/*
-/* @param pubkey Public key of the given provider
-/* @return Total self staked CHR in  minor units
+ * Number of users delegating to a provider on all networks
+ *
+ * @param pubkey Public key of the given provider
+ * @return Count of users delegating to a provider
+*/
+query staking_get_number_of_delegates_to(pubkey): integer {
+    // Extra join to ft4.accounts.account to avoid limitations on nesting queries
+    return accounts.account @* { .id in ((s1: staker_state_to_provider) @* {
+        .provider.pubkey == pubkey and (s1.timestamp <= _staking_last_known_time()) and 
+            not exists((s2:staker_state_to_provider) @* { 
+                s2.staker_state ==s1.staker_state,
+                ((s2.timestamp <= _staking_last_known_time()) and (s2.timestamp>s1.timestamp)) 
+                or (s2.timestamp==s1.timestamp and s2 < s1) 
+            }
+        )
+    } ( .staker_state.account.id ))} @ {} (@sum 1);
+}
+
+/**
+ * Total stake the provider has delegated to themselves
+ *
+ * @param pubkey Public key of the given provider
+ * @return Total self staked CHR in  minor units
 */
 query staking_get_provider_stake(pubkey) {
     val provider_id = provider_staking_account @ {pubkey == .provider.pubkey} (.staking_account.id);
@@ -141,14 +161,14 @@ query staking_get_provider_stake(pubkey) {
 // Withdrawals
 
 /**
-/* Timestamp of the next withdrawal.
-/* 
-/* The true expected time will be slightly longer than this as withdrawal payouts trigger periodically.
-/* However the delay on a withdrawal payout should not be noticeable in a production configuration.
-/*
-/* @param account_id Given account's id
-/* @param network The network of the next withdrawal of interest. Defaults to CHR native.
-/* @return Timestamp of the expected withdrawal time or null if not withdrawal has been requested
+ * Timestamp of the next withdrawal.
+ * 
+ * The true expected time will be slightly longer than this as withdrawal payouts trigger periodically.
+ * However the delay on a withdrawal payout should not be noticeable in a production configuration.
+ *
+ * @param account_id Given account's id
+ * @param network The network of the next withdrawal of interest. Defaults to CHR native.
+ * @return Timestamp of the expected withdrawal time or null if not withdrawal has been requested
 */
 query staking_get_withdrawal_time(account_id: byte_array, network = network.CHR): timestamp? {
     return staker_withdrawal_request @? {
@@ -162,12 +182,12 @@ query staking_get_withdrawal_time(account_id: byte_array, network = network.CHR)
 // Rewards
 
 /**
-/* Reward that would be paid to the user if rewards were distributed now
-/*
-/* @param account_id Account ID
-/* @return Amount of CHR in minor units
-/* @dev If this is changed so should `_update_pending_token_time` and the query `_update_pending_token_time_all`.
-/* @dev Please pay particular attention to the bits marked with ***.
+ * Reward that would be paid to the user if rewards were distributed now
+ *
+ * @param account_id Account ID
+ * @return Amount of CHR in minor units
+ * @dev If this is changed so should `_update_pending_token_time` and the query `_update_pending_token_time_all`.
+ * @dev Please pay particular attention to the bits marked with ***.
 */
 query staking_rewards_claimable_for(account_id: byte_array) {
     val rate = staking_get_current_rate() / millis_per_year;
@@ -228,10 +248,10 @@ query staking_rewards_claimable_for(account_id: byte_array) {
 }
 
 /**
-/* All staking rewards earned for an account, including both distributed and undistributed rewards.
-/*
-/* @param account_id Account ID
-/* @return Amount of CHR in minor units
+ * All staking rewards earned for an account, including both distributed and undistributed rewards.
+ *
+ * @param account_id Account ID
+ * @return Amount of CHR in minor units
 */
 query staking_rewards_for(
     account_id: byte_array
@@ -242,10 +262,10 @@ query staking_rewards_for(
 );
 
 /**
-/* Staking rewards that have already been distributed to the user
+ * Staking rewards that have already been distributed to the user
 /*
-/* @param account_id Account ID
-/* @return Amount of CHR in minor units
+ * @param account_id Account ID
+ * @return Amount of CHR in minor units
 */
 query staking_get_rewards_paid(account_id: byte_array): integer {
     val account = ft4.accounts.Account(account_id);
@@ -253,12 +273,12 @@ query staking_get_rewards_paid(account_id: byte_array): integer {
 }
 
 /**
-/* Shared staking rewards that have already been distributed to the user
-/*
-/* @param account_id Account ID
-/* @param provider_pubkey Optionally get rewards from a specific provider only
-/* @param since Only get shared rewards after a specific timestamp
-/* @return Amount of CHR in minor units
+ * Shared staking rewards that have already been distributed to the user
+ *
+ * @param account_id Account ID
+ * @param provider_pubkey Optionally get rewards from a specific provider only
+ * @param since Only get shared rewards after a specific timestamp
+ * @return Amount of CHR in minor units
 */
 query staking_get_shared_rewards_paid(
     account_id: byte_array,
@@ -278,10 +298,10 @@ query staking_get_shared_rewards_paid(
 // Balances
 
 /**
-/* Balance staked by the user
-/*
-/* @param account_id Account ID
-/* @return Total balance of CHR in minor units
+ * Balance staked by the user
+ *
+ * @param account_id Account ID
+ * @return Total balance of CHR in minor units
 */
 query staking_get_balance(
     account_id: byte_array
@@ -292,10 +312,10 @@ query staking_get_balance(
 );
 
 /**
-/* Native FT4 Chromia balance of CHR (in minor units) staked by the user
-/*
-/* @param account_id Account ID
-/* @return Total balance of CHR in minor units
+ * Native FT4 Chromia balance of CHR (in minor units) staked by the user
+ *
+ * @param account_id Account ID
+ * @return Total balance of CHR in minor units
 */
 query staking_get_native_balance(account_id: byte_array) {
     val account = ft4.accounts.Account(account_id);
@@ -306,24 +326,26 @@ query staking_get_native_balance(account_id: byte_array) {
 // Statistics
 
 /**
-/* Total staked by all users with a Chromia account (including undelegated stakes)
-/*
-/* @return Total staked of CHR in minor units
+ * Total staked by all users with a Chromia account (including undelegated stakes)
+ *
+ * @return Total staked of CHR in minor units
 */
 query staking_total_stake() = staker_state @ { } ( @sum .balance );
 
 /**
-/* Total staked by all users with a Chromia account on network (including undelegated stakes)
-/* @param network Chosen network
-/* @return Total staked of CHR in minor units
+ * Total staked by all users with a Chromia account on network (including undelegated stakes)
+ *
+ * @param network Chosen network
+ * @return Total staked of CHR in minor units
 */
 query staking_total_stake_on_network(network)  = staker_state @ { network } ( @sum .balance );
 
 
 /**
-/* Total delegated by all users
-/* @param network Optionally specify network
-/* @return Total staked of CHR in minor units
+ * Total delegated by all users
+ * 
+ * @param network Optionally specify network
+ * @return Total staked of CHR in minor units
 */
 query staking_total_delegated(network? = null) {
     return ( s1: staker_state_to_provider) @ {
@@ -339,9 +361,10 @@ query staking_total_delegated(network? = null) {
 }
 
 /**
-/* Total users that have delegated
-/* @param network Optionally specify network
-/* @return Total users
+ * Total users that have delegated
+ * 
+ * @param network Optionally specify network
+ * @return Total users
 */
 query staking_total_delegation_accounts(network? = null) {
     return ( s1: staker_state_to_provider) @ {
@@ -357,16 +380,16 @@ query staking_total_delegation_accounts(network? = null) {
 }
 
 /**
-/* Total number of users that have created an account and staked on any network
-/*
-/* @return User count
+ * Total number of users that have created an account and staked on any network
+ *
+ * @return User count
 */
 query staking_total_accounts() = staker_state @ { } ( @sum 1 );
 
 /**
-/* Total number of users that have created an account and staked on a network
-/*
-/* @return User count
+ * Total number of users that have created an account and staked on a network
+ *
+ * @return User count
 */
 query staking_total_accounts_on_network(network) = staker_state @ { network } ( @sum 1 );
 
