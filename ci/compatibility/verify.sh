@@ -6,7 +6,7 @@ script_dir=$(dirname -- "$0")
 project_dir=$script_dir/../../
 chromia_yml=$project_dir/chromia-mainnet.yml
 chromia_yml_modified=$project_dir/chromia.yml.mod
-secret=$script_dir/devnet2_secret
+secret=$script_dir/devnet1_secret
 node_url=$(grep api.url "$secret" | sed 's/^api.url[ =]*//g')
 
 # Blockchains to verify
@@ -41,7 +41,7 @@ for bc in "${blockchains_to_verify[@]}" ; do
     cat << EOF >> "$chromia_yml_modified"
 
 deployments:
-  devnet2:
+  devnet1:
     brid: x"$directory_chain_brid"
     url:
       - ${node_url}
@@ -50,7 +50,7 @@ deployments:
       $bc_settings_name: x"$bcrid"
 EOF
 
-    chr deployment update -s "$chromia_yml_modified" -d devnet2 -bc "$bc_settings_name" --secret "$secret" --verify-only || verification_failed=1
+    chr deployment update -s "$chromia_yml_modified" -d devnet1 -bc "$bc_settings_name" --secret "$secret" --verify-only || verification_failed=1
 
 done
 rm "$chromia_yml_modified"
