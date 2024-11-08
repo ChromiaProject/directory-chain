@@ -1,0 +1,175 @@
+@test module;
+
+import ^^.*;
+import common.test.ops.*;
+import common.test.setup.*;
+import common.test.util.*;
+import proposal.voting.test.ops.*;
+import proposal_container.*;
+import direct_container.*;
+import lib.test.helper_operations.*;
+import lib.test.iccf_test_lib.*;
+
+function test_blockchain_auth() {
+    setup_module(provider_quota_max_containers = 3);
+    rell.test.tx().op(create_test_provider("bob", rell.test.pubkeys.bob)).run();
+
+    val cl = system_cluster();
+    val container = "container";
+    val container2 = "container2";
+    val container3 = "container3";
+    val alice = provider @ { rell.test.pubkeys.alice };
+    val bob = provider @ { rell.test.pubkeys.bob };
+
+    rell.test.tx().op(
+        create_container(initial_provider.pub, container, clusters.system, 0, [alice.pubkey])
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        create_container(initial_provider.pub, container2, clusters.system, 0, [bob.pubkey])
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        create_container(initial_provider.pub, container3, clusters.system, 0, [alice.pubkey, bob.pubkey])
+    ).sign(initial_provider).run();
+
+    val conf = apply_required_configuration_properties();
+
+    rell.test.tx().op(
+        propose_blockchain(bob.pubkey, conf.to_gtv().to_bytes(), "controlling_chain", container2)
+    ).sign(rell.test.keypairs.bob).run();
+    val controlling_blockchain = blockchain @ { .name == "controlling_chain" };
+    
+    conf["nonce"] = (0).to_gtv();
+
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "foo_chain", container)
+    ).sign(rell.test.keypairs.alice).run();
+    val bc = blockchain @ { .name == "foo_chain" };
+    assert_equals(bc.state, blockchain_state.RUNNING);
+
+    rell.test.tx().op(
+        add_provider_blockchain_auth("bogus".hash())
+    ).sign(rell.test.keypairs.alice).run_must_fail("Unknown blockchain");
+
+    rell.test.tx().op(
+        add_provider_blockchain_auth(controlling_blockchain.rid)
+    ).sign(rell.test.keypairs.alice).run();
+
+    conf["nonce"] = (1).to_gtv();
+
+    rell.test.tx().op(
+        propose_configuration(alice.pubkey, bc.rid, conf.to_gtv().to_bytes())
+    ).sign(rell.test.keypairs.alice).run_must_fail("Blockchain authentication is enabled for provider %s".format(alice.pubkey));
+
+    val configuration_op1 = gtx_operation("propose_configuration_iccf", [bc.rid.to_gtv(), conf.to_gtv().to_bytes().to_gtv()]);
+
+    val wrong_bc_external_transaction = make_transaction("bogus_chain".hash(), configuration_op1);
+    rell.test.tx().op(
+        iccf_proof_for("bogus_chain".hash(), wrong_bc_external_transaction, 1),
+        propose_configuration_iccf(wrong_bc_external_transaction, 0, alice.pubkey)
+    ).run_must_fail("%s is not a valid source blockchain".format("bogus_chain".hash()));
+
+    val wrong_op_external_transaction = make_transaction(controlling_blockchain.rid,
+        gtx_operation("bogus_op", [(1).to_gtv()]));
+    rell.test.tx().op(
+        iccf_proof_for(controlling_blockchain.rid, wrong_op_external_transaction, 2),
+        propose_configuration_iccf(wrong_op_external_transaction, 0, alice.pubkey)
+    ).run_must_fail("Wrong operation name <bogus_op>, expected <propose_configuration_iccf>");
+
+    val wrong_args_external_transaction = make_transaction(controlling_blockchain.rid,
+        gtx_operation("propose_configuration_iccf", [bc.rid.to_gtv()]));
+    rell.test.tx().op(
+        iccf_proof_for(controlling_blockchain.rid, wrong_args_external_transaction, 3),
+        propose_configuration_iccf(wrong_args_external_transaction, 0, alice.pubkey)
+    ).run_must_fail("Wrong number of operation arguments <1>, expected <2>");
+
+    val configuration_tx1 = make_transaction(controlling_blockchain.rid, configuration_op1);
+
+    rell.test.tx().op(
+        propose_configuration_iccf(configuration_tx1, 0, alice.pubkey)
+    ).run_must_fail("No proof operation present for TX");
+
+    rell.test.tx().op(
+        iccf_proof_for(controlling_blockchain.rid, configuration_tx1, 4),
+        propose_configuration_iccf(configuration_tx1, 1, alice.pubkey)
+    ).run_must_fail("op_index out of range");
+
+    rell.test.tx().op(
+        iccf_proof_for(controlling_blockchain.rid, configuration_tx1, 5),
+        propose_configuration_iccf(configuration_tx1, 0, alice.pubkey)
+    ).run();
+    verify_blockchain_config(bc, 1);
+
+    rell.test.tx().op(
+        iccf_proof_for(controlling_blockchain.rid, configuration_tx1, 6),
+        propose_configuration_iccf(configuration_tx1, 0, alice.pubkey)
+    ).nop().run_must_fail("Transaction has already been processed");
+
+    conf["nonce"] = (10).to_gtv();
+
+    val container2_tx = make_transaction(controlling_blockchain.rid,
+        gtx_operation("propose_blockchain_iccf", [conf.to_gtv().to_bytes().to_gtv(), "bar_chain".to_gtv(), container2.to_gtv()]));
+    rell.test.tx().op(
+        iccf_proof_for(controlling_blockchain.rid, container2_tx, 7),
+        propose_blockchain_iccf(container2_tx, 0, alice.pubkey)
+    ).run_must_fail("Provider %s is not a deployer of container %s".format(alice.pubkey, container2));
+
+    val container3_tx = make_transaction(controlling_blockchain.rid,
+        gtx_operation("propose_blockchain_iccf", [conf.to_gtv().to_bytes().to_gtv(), "bar_chain".to_gtv(), container3.to_gtv()]));
+    rell.test.tx().op(
+        iccf_proof_for(controlling_blockchain.rid, container3_tx, 7),
+        propose_blockchain_iccf(container3_tx, 0, alice.pubkey)
+    ).run_must_fail("Provider %s must be the only member of the voter set".format(alice.pubkey));
+
+    val action_tx = make_transaction(controlling_blockchain.rid,
+        gtx_operation("propose_blockchain_action_iccf", [bc.rid.to_gtv(), blockchain_action.pause.to_gtv()]));
+    rell.test.tx().op(
+        iccf_proof_for(controlling_blockchain.rid, action_tx, 1),
+        propose_blockchain_action_iccf(action_tx, 0, alice.pubkey),
+    ).run_must_fail("Transaction older than previous, confirmed at %s".format(1));
+    rell.test.tx().op(
+        iccf_proof_for(controlling_blockchain.rid, action_tx, 8),
+        propose_blockchain_action_iccf(action_tx, 0, alice.pubkey),
+    ).run();
+    assert_equals(bc.state, blockchain_state.PAUSED);
+
+    val remove_auth_tx = make_transaction(controlling_blockchain.rid,
+        gtx_operation("remove_provider_blockchain_auth", list<gtv>()));
+    rell.test.tx().op(
+        iccf_proof_for(controlling_blockchain.rid, remove_auth_tx, 9),
+        remove_provider_blockchain_auth(remove_auth_tx, 0, alice.pubkey)
+    ).run();
+
+    conf["nonce"] = (2).to_gtv();
+
+    val configuration_tx2 = make_transaction(controlling_blockchain.rid,
+        gtx_operation("propose_configuration_iccf", [bc.rid.to_gtv(), conf.to_gtv().to_bytes().to_gtv()]));
+    rell.test.tx().op(
+        iccf_proof_for(controlling_blockchain.rid, configuration_tx2, 10),
+        propose_configuration_iccf(configuration_tx2, 0, alice.pubkey)
+    ).run_must_fail("Blockchain authentication is not enabled for provider %s".format(alice.pubkey));
+
+    rell.test.tx().op(
+        propose_configuration(alice.pubkey, bc.rid, conf.to_gtv().to_bytes())
+    ).sign(rell.test.keypairs.alice).run();
+    verify_blockchain_config(bc, 2);
+}
+
+function make_transaction(blockchain_rid: byte_array, gtx_operation) = gtx_transaction(
+        gtx_transaction_body(
+            blockchain_rid,
+            [
+                gtx_operation
+            ],
+            list<gtv>()
+        ),
+        list<gtv>()
+    );
+
+function verify_blockchain_config(blockchain, nonce: integer) {
+    val (actual_config_height, actual_config_bytes, signers) = get_latest_pending_blockchain_configuration_data(blockchain)!!;
+    assert_true(actual_config_height > 0);
+    val actual_config = map<text, gtv>.from_gtv(gtv.from_bytes(actual_config_bytes));
+    assert_equals(actual_config["nonce"], (nonce).to_gtv());
+}

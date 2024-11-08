@@ -27,17 +27,45 @@ entity added_blockchain {
  */
 operation propose_blockchain(my_pubkey: pubkey, config_data: byte_array, bc_name: text, container_name: text, description: text = "") {
     val me = require_is_provider_with_rate_limit(my_pubkey);
+    val proposal = create_blockchain_proposal(me, config_data, bc_name, container_name, description);
+    internal_vote(me, proposal, true);
+}
+
+/**
+ * Propose a new blockchain to a container.
+ *
+ * Permission: container deployer
+ *
+ * Rate limit: actions
+ *
+ * @param tx_to_prove  the transaction from other chain to use for authentication
+ * @param op_index     index of the relevant operation in tx_to_prove
+ * @param my_pubkey    pubkey of provider
+ */
+operation propose_blockchain_iccf(tx_to_prove: gtx_transaction, op_index: integer, my_pubkey: pubkey) {
+    val me = require_provider(my_pubkey);
+    val args = require_provider_with_iccf_proof_and_rate_limit(tx_to_prove, op_index, op_context.get_current_operation().name, 3, me);
+    val config_data = byte_array.from_gtv(args[0]);
+    val bc_name = text.from_gtv(args[1]);
+    val container_name = text.from_gtv(args[2]);
+
+    val proposal = create_blockchain_proposal(me, config_data, bc_name, container_name, iccf_description);
+    apply_iccf_proposal(proposal);
+}
+
+function create_blockchain_proposal(provider, config_data: byte_array, bc_name: text, container_name: text, description: text): proposal {
     val container = require_running_container(container_name);
-    require_container_deployer(container, me);
+    require_container_deployer(container, provider);
     validate_entity_name(bc_name);
 
     validate_blockchain_configuration(container, config_data, signers = true, header_hash = true, system_chain = false);
 
-    require(empty(pending_blockchain @* { .data == config_data, .proposal.state == proposal_state.PENDING } limit 1), "Blockchain with the same config already proposed");
-    val prop = create_proposal(proposal_type.bc, me, container.deployer, description);
+    require(empty(pending_blockchain @* { .data == config_data, .proposal.state == proposal_state.PENDING } limit 1),
+        "Blockchain with the same config already proposed");
+    val prop = create_proposal(proposal_type.bc, provider, container.deployer, description);
     val bc = create pending_blockchain(prop, bc_name, data = config_data, container);
     validate_blockchain_proposal(bc);
-    internal_vote(me, prop, true);
+    return prop;
 }
 
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.bc.name: delete_pending_blockchain(*)];

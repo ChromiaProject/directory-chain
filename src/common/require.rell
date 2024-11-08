@@ -1,3 +1,5 @@
+import lib.iccf;
+
 function require_is_signer(pubkey) {
     require(op_context.is_signer(pubkey), "Operation must be signed by " + pubkey);
 }
@@ -5,7 +7,9 @@ function require_is_signer(pubkey) {
 function require_provider(pubkey) = require(provider @? { pubkey }, "Unknown provider " + pubkey);
 function require_provider_signer(provider_key_roles: list<provider_key_role> = [provider_key_role.main]) {
     val provider_pubkey = require(get_provider_signer(provider_key_roles), "Transaction must be signed by provider");
-    return require_provider(provider_pubkey);
+    val provider = require_provider(provider_pubkey);
+    require(empty(provider_auth_blockchain @* { provider }), "Blockchain authentication is enabled for provider %s".format(provider.pubkey));
+    return provider;
 }
 function require_cluster(name) = require(cluster @? { name }, "Cluster %s not found".format(name));
 function require_clusters(names: list<text>): list<cluster> {
@@ -85,9 +89,55 @@ function require_is_provider_with_rate_limit(pubkey, provider_key_roles: list<pr
  * @param provider_key_roles The type of auth keys to use for this authentication. Main is default.
  */
 function require_provider_auth_with_rate_limit(provider, provider_key_roles: list<provider_key_role> = [provider_key_role.main]) {
+    require(empty(provider_auth_blockchain @* { provider }), "Blockchain authentication is enabled for provider %s".format(provider.pubkey));
     require(provider_is_signer(provider.pubkey, provider_key_roles), "Operation must be signed by provider key(s)");
     require(provider.active, "Provider is not enabled");
     provider_rate_limit(provider);
+}
+
+/**
+ * Requires given provider to authenticate this transaction, is active and not exceeds limit.
+ *
+ * @param tx_to_prove  the transaction from other chain to use for authentication
+ * @param op_index     index of the relevant operation in tx_to_prove
+ * @param op_name      expected operation name
+ * @param op_arg_count expected operation argument count
+ * @param provider     the provider that must sign this transaction
+ */
+function require_provider_with_iccf_proof_and_rate_limit(tx_to_prove: gtx_transaction, op_index: integer,
+        op_name: text, op_arg_count: integer, provider): list<gtv> {
+    val args = require_provider_iccf_auth(tx_to_prove, op_index, op_name, op_arg_count, provider);
+    require(provider.active, "Provider is not enabled");
+    provider_rate_limit(provider);
+    return args;
+}
+
+/**
+ * Requires given provider to authenticate using ICCF.
+ *
+ * @param tx_to_prove  the transaction from other chain to use for authentication
+ * @param op_index     index of the relevant operation in tx_to_prove
+ * @param op_name      expected operation name
+ * @param op_arg_count expected operation argument count
+ * @param provider     the provider that must sign this transaction.
+ */
+function require_provider_iccf_auth(tx_to_prove: gtx_transaction, op_index: integer,
+        op_name: text, op_arg_count: integer, provider): list<gtv> {
+    val blockchain = require(provider_auth_blockchain @? { provider } (.blockchain),
+        "Blockchain authentication is not enabled for provider %s".format(provider.pubkey));
+    iccf.require_valid_proof(
+        tx_to_prove,
+        require_anchored_proof=true,
+        verify_signers=false,
+        valid_source_blockchain_rids=set([blockchain.rid]),
+        require_not_older = true,
+    );
+    iccf.make_transaction_unique(tx_to_prove);
+    require(op_index in range(tx_to_prove.body.operations.size()), "op_index out of range");
+    val op = tx_to_prove.body.operations[op_index];
+    require(op.name == op_name, "Wrong operation name <%s>, expected <%s>".format(op.name, op_name));
+    require(op.args.size() == op_arg_count, "Wrong number of operation arguments <%s>, expected <%s>".format(op.args.size(), op_arg_count));
+    return op.args;
 }
 
 /**
@@ -98,6 +148,7 @@ function require_provider_auth_with_rate_limit(provider, provider_key_roles: lis
  */
 function require_provider_auth(pubkey, provider_key_role: list<provider_key_role> = [provider_key_role.main]) {
     val provider = require_provider(pubkey);
+    require(empty(provider_auth_blockchain @* { provider }), "Blockchain authentication is enabled for provider %s".format(provider.pubkey));
     require(provider_is_signer(provider.pubkey, provider_key_role), "Operation must be signed by provider key(s)");
     require(provider.active, "Provider is not enabled");
     return provider;
@@ -112,6 +163,7 @@ function require_provider_auth(pubkey, provider_key_role: list<provider_key_role
 function require_provider_signer_with_rate_limit(provider_key_roles: list<provider_key_role> = [provider_key_role.main]) {
     val provider_pubkey = require(get_provider_signer(provider_key_roles), "Transaction must be signed by provider");
     val provider = require_provider(provider_pubkey);
+    require(empty(provider_auth_blockchain @* { provider }), "Blockchain authentication is enabled for provider %s".format(provider.pubkey));
     require(provider.active, "Provider is not enabled");
     provider_rate_limit(provider);
     return provider;
@@ -120,5 +172,14 @@ function require_provider_signer_with_rate_limit(provider_key_roles: list<provid
 function require_pubkey(pubkey) {
     require(pubkey.size() == 33 or pubkey.size() == 65 or pubkey.size() == 1336, "Value is not pubkey: " + pubkey);
 }
+
+function require_blockchain_rid(blockchain_rid: byte_array) {
+    require(blockchain_rid.size() > 0, "blockchain_rid cannot be empty");
+    require(
+        blockchain_rid.size() == 32,
+        "blockchain_rid must be 32 bytes (was %d bytes)".format(blockchain_rid.size())
+    );
+}
+
 
 function require_subnode_image(name) = require(subnode_image @? { name }, "Subnode image %s not found".format(name));
