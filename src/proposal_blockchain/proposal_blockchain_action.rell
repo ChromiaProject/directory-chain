@@ -136,7 +136,30 @@ function _apply_unarchive_blockchain(action: pending_blockchain_action, proposal
  */
 operation propose_blockchain_action(my_pubkey: pubkey, blockchain_rid: byte_array, action: blockchain_action, description: text = "") {
     require(action != blockchain_action.unarchive, "Use propose_blockchain_unarchive_action() for unarchive operation");
-    propose_blockchain_action_impl(my_pubkey, blockchain_rid, action, x"", description);
+    propose_blockchain_action_pubkey_impl(my_pubkey, blockchain_rid, action, x"", description);
+}
+
+/**
+ * Propose a blockchain action (pause, resume, remove, archive).
+ *
+ * Permission: container deployer
+ *
+ * Rate limit: actions
+ *
+ * @param tx_to_prove  the transaction from other chain to use for authentication
+ * @param op_index     index of the relevant operation in tx_to_prove
+ * @param my_pubkey    pubkey of provider
+ */
+operation propose_blockchain_action_iccf(tx_to_prove: gtx_transaction, op_index: integer, my_pubkey: pubkey) {
+    val me = require_provider(my_pubkey);
+    val args = require_provider_with_iccf_proof_and_rate_limit(tx_to_prove, op_index,
+        op_context.get_current_operation().name, 2, me);
+    val blockchain_rid = byte_array.from_gtv(args[0]);
+    val action = blockchain_action.from_gtv(args[1]);
+
+    require(action != blockchain_action.unarchive, "Unarchiving via ICCF is not supported");
+    val proposal = propose_blockchain_action_impl(me, blockchain_rid, action, x"", iccf_description);
+    apply_iccf_proposal(proposal);
 }
 
 /**
@@ -150,12 +173,16 @@ operation propose_blockchain_action(my_pubkey: pubkey, blockchain_rid: byte_arra
  */
 operation propose_blockchain_unarchive_action(my_pubkey: pubkey, blockchain_rid: byte_array, destination_container: text, final_height: integer, description: text = "") {
     val args = unarchive_args(destination_container, final_height);
-    propose_blockchain_action_impl(my_pubkey, blockchain_rid, blockchain_action.unarchive, args.to_bytes(), description);
+    propose_blockchain_action_pubkey_impl(my_pubkey, blockchain_rid, blockchain_action.unarchive, args.to_bytes(), description);
 }
 
-function propose_blockchain_action_impl(my_pubkey: pubkey, blockchain_rid: byte_array, action: blockchain_action, args: byte_array, description: text = "") {
+function propose_blockchain_action_pubkey_impl(my_pubkey: pubkey, blockchain_rid: byte_array, action: blockchain_action, args: byte_array, description: text = "") {
     val me = require_is_provider_with_rate_limit(my_pubkey);
+    val prop = propose_blockchain_action_impl(me, blockchain_rid, action, args, description);
+    internal_vote(me, prop, true);
+}
 
+function propose_blockchain_action_impl(me: provider, blockchain_rid: byte_array, action: blockchain_action, args: byte_array, description: text = ""): proposal {
     // blockchain state requirements
     val blockchain = require_blockchain(blockchain_rid);
     val pending_proposal = pending_blockchain_action @? { blockchain, .proposal.state == proposal_state.PENDING };
@@ -182,8 +209,8 @@ function propose_blockchain_action_impl(my_pubkey: pubkey, blockchain_rid: byte_
     }
 
     val prop = create_proposal(proposal_type.blockchain_action, me, deployer, description);
-    val pba = create pending_blockchain_action(prop, blockchain, action, args);
-    internal_vote(me, prop, true);
+    create pending_blockchain_action(prop, blockchain, action, args);
+    return prop;
 }
 
 /**

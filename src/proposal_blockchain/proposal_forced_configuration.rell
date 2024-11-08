@@ -25,6 +25,34 @@ entity forced_configuration {
  */
 operation propose_forced_configuration(my_pubkey: pubkey, blockchain_rid: byte_array, config_data: byte_array, height: integer, description: text = "") {
     val provider = require_is_provider_with_rate_limit(my_pubkey);
+    val proposal = create_forced_configuration_proposal(provider, blockchain_rid, config_data, height, description);
+    internal_vote(provider, proposal, true);
+}
+
+/**
+ * Propose forcing a new configuration for a PAUSED blockchain at height.
+ *
+ * Permission: container deployer
+ *
+ * Rate limit: actions
+ *
+ * @param tx_to_prove  the transaction from other chain to use for authentication
+ * @param op_index     index of the relevant operation in tx_to_prove
+ * @param my_pubkey    pubkey of provider
+ */
+operation propose_forced_configuration_iccf(tx_to_prove: gtx_transaction, op_index: integer, my_pubkey: pubkey) {
+    val provider = require_provider(my_pubkey);
+    val args = require_provider_with_iccf_proof_and_rate_limit(tx_to_prove, op_index,
+        op_context.get_current_operation().name, 3, provider);
+    val blockchain_rid = byte_array.from_gtv(args[0]);
+    val config_data = byte_array.from_gtv(args[1]);
+    val height = integer.from_gtv(args[2]);
+
+    val proposal = create_forced_configuration_proposal(provider, blockchain_rid, config_data, height, iccf_description);
+    apply_iccf_proposal(proposal);
+}
+
+function create_forced_configuration_proposal(provider, blockchain_rid: byte_array, config_data: byte_array, height: integer, description: text): proposal {
     val blockchain = require_active_blockchain(blockchain_rid);
     require(not is_blockchain_config_delayed(blockchain.rid), "Forced configuration only allowed on chain with configuration delay disabled");
     val container = container_blockchain @ { blockchain }.container;
@@ -37,7 +65,7 @@ operation propose_forced_configuration(my_pubkey: pubkey, blockchain_rid: byte_a
 
     val prop = create_proposal(proposal_type.force_configuration, provider, container.deployer, description);
     create proposed_forced_configuration(prop, blockchain, height, config_data);
-    internal_vote(provider, prop, true);
+    return prop;
 }
 
 function apply_proposed_forced_configuration(proposal) {
