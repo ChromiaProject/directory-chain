@@ -255,16 +255,32 @@ function remove_blockchain(blockchain) {
 
 @extend(before_store_blockchain_configuration)
 function set_latest_blockchain_configuration_values(blockchain, config_map: map<text, gtv>) {
+    val current_delay = get_blockchain_config_delay(blockchain.rid);
 
     delete latest_blockchain_configuration_values @? { blockchain };
     val latest_values = create latest_blockchain_configuration_values(blockchain);
+    val new_config_delay = extract_config_delay(config_map) ?: 0;
+    if (current_delay != new_config_delay) {
+        val delayed_proposal_ids = get_blockchain_proposal_delay_ids(blockchain) @* { } ($.to_integer());
+        val delayed_bc_proposals = delayed_event @* { .ref_id in delayed_proposal_ids };
 
+        for (delayed_proposal in delayed_bc_proposals) {
+            val max_delay = if (delayed_proposal.active) op_context.last_block_time + new_config_delay else new_config_delay;
+            delayed_proposal.time = min(delayed_proposal.time, max_delay);
+        }
+
+    }
+
+    latest_values.config_delay = new_config_delay;
+}
+
+function extract_config_delay(config_map: map<text, gtv>): integer? {
     if (config_map.contains(DIRECTORY_CHAIN_CONFIG_KEY)) {
-
         val dc_map = map<text, gtv>.from_gtv_pretty(config_map[DIRECTORY_CHAIN_CONFIG_KEY]);
 
         if (dc_map.contains(DIRECTORY_CHAIN_CONFIG_DELAY_CONFIG_KEY)) {
-            latest_values.config_delay = integer.from_gtv_pretty(dc_map[DIRECTORY_CHAIN_CONFIG_DELAY_CONFIG_KEY]);
+            return integer.from_gtv_pretty(dc_map[DIRECTORY_CHAIN_CONFIG_DELAY_CONFIG_KEY]);
         }
     }
+    return null;
 }

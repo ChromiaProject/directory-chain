@@ -41,13 +41,22 @@ function begin_block_delay(height: integer) {
 
         val callbacks = delayed_event_callback();
         if (callbacks.contains(event.type)) {
-
-            log("Delayed event executed for %s with ref id %s".format(event.type, event.ref_id));
-
-            delayed_event_callback()[event.type](event.ref_id);
+            val type = event.type;
+            val ref_id = event.ref_id;
+            if (try_call(execute_delayed_event(type, ref_id, *))) {
+                log("Delayed event executed for %s with ref id %s".format(type, ref_id));
+            } else {
+                log("Failed to execute delayed event for %s with ref id %s".format(type, ref_id));
+            }
         }
+        // We probably can't afford accumulating and retrying failed executions (that could be an attack vector)
+        // Callback handlers should ensure that they handle failures gracefully
         delete event;
     }
+}
+
+function execute_delayed_event(type: delay_type, ref_id: integer) {
+    delayed_event_callback()[type](ref_id);
 }
 
 function get_delayed_event_time(type: delay_type, ref_id: integer) {

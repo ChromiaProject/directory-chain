@@ -45,6 +45,16 @@ query get_blockchain_move_proposal(rowid?):
 
 @extend(apply_voting_result_handlers) function() = [proposal_type.blockchain_move_start.name: apply_blockchain_move(*)];
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.blockchain_move_start.name: delete_pending_blockchain_move(*)];
+@extend(proposal_delay_time_handlers) function() = [proposal_type.blockchain_move_start.name: blockchain_move_proposal_delay_time_handler(*)];
+@extend(proposal_delay_ids_handlers) function() = [proposal_type.blockchain_move_start.name: blockchain_move_proposal_delay_ids_handler(*)];
+
+function blockchain_move_proposal_delay_time_handler(proposal): (blockchain?, integer) {
+    return blockchain_config_delay_time_handler(pending_blockchain_move @? { proposal } ( .blockchain ));
+}
+
+function blockchain_move_proposal_delay_ids_handler(blockchain): list<rowid> {
+    return pending_blockchain_move @* { blockchain } ( .proposal.rowid );
+}
 
 function apply_blockchain_move(proposal) {
     val pending_blockchain_move = pending_blockchain_move @ { proposal };
