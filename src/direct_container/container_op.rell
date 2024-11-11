@@ -8,7 +8,7 @@
  * @param consensus_threshold  majority (-1), super majority (0) or custom (1, ...)
  */
 operation create_container(me: pubkey, name, cluster_name: text, consensus_threshold: integer, deployers: list<pubkey>) {
-    create_container_with_resource_limits_impl(me, name, cluster_name, consensus_threshold, deployers, empty_container_resource_limits());
+    create_container_with_resource_limits_impl(me, name, cluster_name, consensus_threshold, deployers, empty_container_resource_limits(), "");
 }
 
 /**
@@ -16,8 +16,10 @@ operation create_container(me: pubkey, name, cluster_name: text, consensus_thres
  *
  * @deprecated use create_container_with_resource_limits()
  */
-operation create_container_with_units(me: pubkey, name, cluster_name: text, consensus_threshold: integer, deployers: list<pubkey>, container_units: integer) {
-    create_container_with_resource_limits_impl(me, name, cluster_name, consensus_threshold, deployers, [container_resource_limit_type.container_units : container_units]);
+operation create_container_with_units(me: pubkey, name, cluster_name: text, consensus_threshold: integer,
+        deployers: list<pubkey>, container_units: integer) {
+    create_container_with_resource_limits_impl(me, name, cluster_name, consensus_threshold, deployers,
+        [container_resource_limit_type.container_units : container_units], "");
 }
 
 /**
@@ -27,8 +29,23 @@ operation create_container_with_units(me: pubkey, name, cluster_name: text, cons
  * 
  * Rate limit: actions
  */
-operation create_container_with_resource_limits(me: pubkey, name, cluster_name: text, consensus_threshold: integer, deployers: list<pubkey>, resource_limits: map<container_resource_limit_type, integer>) {
-    create_container_with_resource_limits_impl(me, name, cluster_name, consensus_threshold, deployers, resource_limits);
+operation create_container_with_resource_limits(me: pubkey, name, cluster_name: text, consensus_threshold: integer,
+        deployers: list<pubkey>, resource_limits: map<container_resource_limit_type, integer>) {
+    create_container_with_resource_limits_impl(me, name, cluster_name, consensus_threshold, deployers, resource_limits, "");
+}
+
+/**
+ * Creates container with resource limits and subnode image.
+ *
+ * Permission: cluster governor
+ *
+ * Rate limit: actions
+ *
+ * @param subnode_image subnode image name, or "" to not assign subnode image
+ */
+operation create_container_with_resource_limits_and_subnode_image(me: pubkey, name, cluster_name: text, consensus_threshold: integer,
+        deployers: list<pubkey>, resource_limits: map<container_resource_limit_type, integer>, subnode_image: text) {
+    create_container_with_resource_limits_impl(me, name, cluster_name, consensus_threshold, deployers, resource_limits, subnode_image);
 }
 
 /**
@@ -41,7 +58,7 @@ operation create_container_with_resource_limits(me: pubkey, name, cluster_name: 
  * @param  consensus_threshold  majority (-1), super majority (0) or custom (1, ...)
  */
 operation create_container_from(me: pubkey, name, cluster_name: text, consensus_threshold: integer, voter_set_name: text) {
-    create_container_from_with_resource_limits_impl(me, name, cluster_name, consensus_threshold, voter_set_name, empty_container_resource_limits());
+    create_container_from_with_resource_limits_impl(me, name, cluster_name, consensus_threshold, voter_set_name, empty_container_resource_limits(), "");
 }
 
 /**
@@ -49,8 +66,10 @@ operation create_container_from(me: pubkey, name, cluster_name: text, consensus_
  *
  * @deprecated use create_container_from_with_container_units()
  */
-operation create_container_from_with_units(me: pubkey, name, cluster_name: text, consensus_threshold: integer, voter_set_name: text, container_units: integer) {
-    create_container_from_with_resource_limits_impl(me, name, cluster_name, consensus_threshold, voter_set_name, [container_resource_limit_type.container_units : container_units]);
+operation create_container_from_with_units(me: pubkey, name, cluster_name: text, consensus_threshold: integer,
+        voter_set_name: text, container_units: integer) {
+    create_container_from_with_resource_limits_impl(me, name, cluster_name, consensus_threshold, voter_set_name,
+        [container_resource_limit_type.container_units : container_units], "");
 }
 
 /**
@@ -60,8 +79,23 @@ operation create_container_from_with_units(me: pubkey, name, cluster_name: text,
  * 
  * Rate limit: actions
  */
-operation create_container_from_with_resource_limits(me: pubkey, name, cluster_name: text, consensus_threshold: integer, voter_set_name: text, resource_limits: map<container_resource_limit_type, integer>) {
-    create_container_from_with_resource_limits_impl(me, name, cluster_name, consensus_threshold, voter_set_name, resource_limits);
+operation create_container_from_with_resource_limits(me: pubkey, name, cluster_name: text, consensus_threshold: integer,
+        voter_set_name: text, resource_limits: map<container_resource_limit_type, integer>) {
+    create_container_from_with_resource_limits_impl(me, name, cluster_name, consensus_threshold, voter_set_name, resource_limits, "");
+}
+
+/**
+ * Creates container with voters set, resource limits and subnode image.
+ *
+ * Permission: cluster governor
+ *
+ * Rate limit: actions
+ *
+ * @param subnode_image subnode image name, or "" to not assign subnode image
+ */
+operation create_container_from_with_resource_limits_and_subnode_image(me: pubkey, name, cluster_name: text, consensus_threshold: integer,
+        voter_set_name: text, resource_limits: map<container_resource_limit_type, integer>, subnode_image: text) {
+    create_container_from_with_resource_limits_impl(me, name, cluster_name, consensus_threshold, voter_set_name, resource_limits, subnode_image);
 }
 
 /**
@@ -94,17 +128,20 @@ operation remove_container_deployer(me: pubkey, container_name: text, deployer_p
     delete voter_set_member @? { container.deployer, deployer };
 }
 
-function create_container_with_resource_limits_impl(me: pubkey, name, cluster_name: text, consensus_threshold: integer, deployers: list<pubkey>, resource_limits: map<container_resource_limit_type, integer>) {
+function create_container_with_resource_limits_impl(me: pubkey, name, cluster_name: text, consensus_threshold: integer,
+        deployers: list<pubkey>, resource_limits: map<container_resource_limit_type, integer>, subnode_image_name: text) {
     val provider = require_is_provider_with_rate_limit(me);
     val cluster = require_cluster(cluster_name);
     require_cluster_governor(cluster, provider);
     require_provider_quota(provider, provider_quota_type.max_containers);
     val (container_units, max_blockchains, extra_storage) = get_resource_limits_or_defaults(resource_limits);
     require_cluster_quotas(cluster, container_units, extra_storage);
-    create_container_impl(provider, name, cluster, consensus_threshold, deployers, container_units, max_blockchains, extra_storage);
+    val container = create_container_impl(provider, name, cluster, consensus_threshold, deployers, container_units, max_blockchains, extra_storage);
+    assign_subnode_image(container, subnode_image_name);
 }
 
-function create_container_from_with_resource_limits_impl(me: pubkey, name, cluster_name: text, consensus_threshold: integer, voter_set_name: text, resource_limits: map<container_resource_limit_type, integer>) {
+function create_container_from_with_resource_limits_impl(me: pubkey, name, cluster_name: text, consensus_threshold: integer,
+        voter_set_name: text, resource_limits: map<container_resource_limit_type, integer>, subnode_image_name: text) {
     val provider = require_is_provider_with_rate_limit(me);
     val cluster = require_cluster(cluster_name);
     require_cluster_governor(cluster, provider);
@@ -113,7 +150,8 @@ function create_container_from_with_resource_limits_impl(me: pubkey, name, clust
     require_cluster_quotas(cluster, container_units, extra_storage);
     val vs = require_voter_set(voter_set_name);
     val deployers = voter_set_member @* { vs } (.provider.pubkey);
-    create_container_impl(provider, name, cluster, consensus_threshold, deployers, container_units, max_blockchains, extra_storage);
+    val container = create_container_impl(provider, name, cluster, consensus_threshold, deployers, container_units, max_blockchains, extra_storage);
+    assign_subnode_image(container, subnode_image_name);
 }
 
 function get_resource_limits_or_defaults(resource_limits: map<container_resource_limit_type, integer>) = (
@@ -121,6 +159,17 @@ function get_resource_limits_or_defaults(resource_limits: map<container_resource
     resource_limits.get_or_default(container_resource_limit_type.max_blockchains, standard_container_defaults.max_blockchains),
     resource_limits.get_or_default(container_resource_limit_type.extra_storage, standard_container_defaults.extra_storage)
 );
+
+function assign_subnode_image(container, subnode_image_name: text) {
+    if (not subnode_image_name.empty()) {
+        val subnode_image = require_subnode_image(subnode_image_name);
+        require(subnode_image.active, "Subnode image %s is not active".format(subnode_image_name));
+        require(subnode_image.subnode_image_type == subnode_image_type.COMMON
+                or not empty(cluster_subnode_image @? { container.cluster, subnode_image }),
+            "Subnode image %s is not compatible with cluster %s".format(subnode_image_name, container.cluster.name));
+        create container_subnode_image(container, subnode_image);
+    }
+}
 
 /**
  * Remove container.
