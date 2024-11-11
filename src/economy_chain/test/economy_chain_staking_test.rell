@@ -106,6 +106,12 @@ function test_delegation() {
     do_staking_delegate_failure(rell.test.keypairs.alice, rell.test.keypairs.bob.pub, "Need stake to delegate.");
 
     do_staking_deposit_native(rell.test.keypairs.alice, 8000);
+    assert_events(
+        ("icmf_message",(topic = economy_chain_staking_balance_update_topic, body = economy_chain_staking_balance_update(
+            test_account_alice.id,
+            8000,
+        ).to_gtv()).to_gtv_pretty()),
+    );
     do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.charlie.pub);
     assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.bob.pub), 0);
     assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.charlie.pub), 1);

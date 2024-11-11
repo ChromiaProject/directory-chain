@@ -76,3 +76,60 @@ function test_migrate_provider_keys() {
         provider_is_signer_op(rell.test.keypairs.alice.pub, [provider_key_role.main, provider_key_role.configuration_proposal_vote]),
     ).sign(rell.test.keypairs.alice).run();
 }
+
+function test_migrate_publish_staking_balance() {
+
+    rell.test.tx().op(init()).run();
+
+    val users = list([
+        rell.test.keypairs.alice,
+        rell.test.keypairs.bob,
+        rell.test.keypairs.charlie,
+        rell.test.keypairs.dave,
+        rell.test.keypairs.eve,
+        rell.test.keypairs.frank,
+    ]);
+
+    val user_account_ids = list<pubkey>();
+    for (keypair in users) {
+        val evm_address = crypto.eth_privkey_to_address(keypair.priv);
+        do_evm_stake_update_bsc(evm_address, 50 * units_per_asset);
+        val test_account = require(do_create_account_using_ras_staking(keypair));
+        user_account_ids.add(test_account.id);
+        assert_equals(staking_get_balance(test_account.id), 50 * units_per_asset);
+    }
+
+    assert_equals(staking_total_accounts(), 6);
+
+    rell.test.tx().op(
+        set_migrations_completed(publish_staking_balance = false)
+    ).run();
+
+    for (i in range(users.size() / 2 + 1)) {
+
+        // The last iteration will set this to true
+        assert_false(migration_completed.publish_staking_balance);
+
+        rell.test.block().run();
+
+        log("Round %s %s %s".format(i,
+            migration_staking_account_balance_published @* {} ( @sum 1 ),
+            migration_completed.publish_staking_balance));
+
+        if (not migration_completed.publish_staking_balance) {
+            assert_events(
+                ("icmf_message",(topic = economy_chain_staking_balance_update_topic, body = economy_chain_staking_balance_update(
+                    user_account_ids[i * 2],
+                    50 * units_per_asset,
+                ).to_gtv()).to_gtv_pretty()),
+                ("icmf_message",(topic = economy_chain_staking_balance_update_topic, body = economy_chain_staking_balance_update(
+                    user_account_ids[i * 2 + 1],
+                    50 * units_per_asset,
+                ).to_gtv()).to_gtv_pretty()),
+            );
+        }
+    }
+
+    assert_true(migration_completed.publish_staking_balance);
+    assert_true(migration_staking_account_balance_published @ {} ( @sum 1 ) == 0);
+}

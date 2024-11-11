@@ -62,6 +62,8 @@ function _staking_deposit_native_impl(amount: integer, delegate_to: pubkey? = nu
         // Down this path everything is updated anyway
         _staking_delegate(staker, delegate_to);
     }
+
+    publish_staking_balance(staker);
 }
 
 function _change_staking_account(account: ft4.accounts.account, new_account: ft4.accounts.account) {
@@ -132,9 +134,9 @@ function _staking_update_evm_state(staker: ft4.accounts.account, network, new_ba
     }
 
     ss.balance = new_balance;
+    publish_staking_balance(staker);
 
     _staking_clear_upcoming_delegations(staker);
-
 }
 
 
@@ -209,7 +211,10 @@ function _staking_distribute_withdrawals() {
     update staker_withdrawal_request @* {
         .active and .staker_state.network == network.CHR and .finish_at <= _staking_last_known_time( )
     } ( .active = false);
- 
+
+    for (ss in staker_states) {
+        publish_staking_balance(ss.account);
+    }
 }
 
 
