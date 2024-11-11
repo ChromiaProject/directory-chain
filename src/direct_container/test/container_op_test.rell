@@ -3,6 +3,7 @@
 import ^^.*;
 import common.test.setup.*;
 import common.test.ops.*;
+import common.test.helper_operations.*;
 import common.test.util.constants.*;
 import proposal_cluster.*;
 
@@ -62,4 +63,51 @@ function test_create_container() {
 
     assert_null(container @? { "foo" });
     assert_not_null(voter_set @? { "container_foo_deployer" });
+}
+
+function test_create_container_with_subnode_image() {
+    setup_module(provider_quota_max_containers = 1);
+    val deployer1 = rell.test.keypairs.bob;
+
+    rell.test.tx().op(
+        create_subnode_image(
+            name = "chromia-subnode1",
+            url = "registry.gitlab.com/chromaway/postchain-chromia/chromaway/chromia-subnode",
+            digest = "sha256:3d8ec76e4e510ad90515e5fd71c6185360cd3ba32e3feb80f1cc15460722f482",
+            subnode_image_type = subnode_image_type.COMMON,
+            provider_pubkey = initial_provider.pub,
+            active = false,
+        ),
+        create_subnode_image(
+            name = "chromia-subnode2",
+            url = "registry.gitlab.com/chromaway/postchain-chromia/chromaway/chromia-subnode",
+            digest = "sha256:3d8ec76e4e510ad90515e5fd71c6185360cd3ba32e3feb80f1cc15460722f483",
+            subnode_image_type = subnode_image_type.COMMON,
+            provider_pubkey = initial_provider.pub,
+            active = true,
+        ),
+    ).run();
+
+    val subnode_image = subnode_image @ { .name == "chromia-subnode2" };
+
+    // Register provider as tier 0
+    rell.test.tx().op(
+        create_test_provider("", deployer1.pub, provider_tier.DAPP_PROVIDER),
+    ).run();
+
+    val deployers = list<pubkey>();
+    deployers.add(deployer1.pub);
+
+    rell.test.tx().op(
+        create_container_with_resource_limits_and_subnode_image(initial_provider.pub, "foo", clusters.system, 1,
+            deployers, map<container_resource_limit_type, integer>(), "chromia-subnode1")
+    ).sign(initial_provider).run_must_fail("Subnode image chromia-subnode1 is not active");
+
+    rell.test.tx().op(
+        create_container_with_resource_limits_and_subnode_image(initial_provider.pub, "foo", clusters.system, 1,
+            deployers, map<container_resource_limit_type, integer>(), "chromia-subnode2")
+    ).sign(initial_provider).run();
+
+    val container = container @ { "foo" };
+    assert_not_null(container_subnode_image @? { container, subnode_image });
 }
