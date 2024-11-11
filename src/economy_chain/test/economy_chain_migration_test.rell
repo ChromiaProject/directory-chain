@@ -77,7 +77,7 @@ function test_migrate_provider_keys() {
     ).sign(rell.test.keypairs.alice).run();
 }
 
-function test_migrate_publish_staking_balance() {
+function test_migrate_publish_staking_state() {
 
     rell.test.tx().op(init()).run();
 
@@ -102,34 +102,32 @@ function test_migrate_publish_staking_balance() {
     assert_equals(staking_total_accounts(), 6);
 
     rell.test.tx().op(
-        set_migrations_completed(publish_staking_balance = false)
+        set_migrations_completed(publish_staking_state = false)
     ).run();
 
     for (i in range(users.size() / 2 + 1)) {
 
         // The last iteration will set this to true
-        assert_false(migration_completed.publish_staking_balance);
+        assert_false(migration_completed.publish_staking_state);
 
         rell.test.block().run();
 
-        log("Round %s %s %s".format(i,
-            migration_staking_account_balance_published @* {} ( @sum 1 ),
-            migration_completed.publish_staking_balance));
-
-        if (not migration_completed.publish_staking_balance) {
+        if (not migration_completed.publish_staking_state) {
             assert_events(
-                ("icmf_message",(topic = economy_chain_staking_balance_update_topic, body = economy_chain_staking_balance_update(
+                ("icmf_message",(topic = economy_chain_staking_state_update, body = economy_chain_staking_state_update_message(
                     user_account_ids[i * 2],
                     50 * units_per_asset,
+                    list<economy_chain_staking_state_withdrawal>(),
                 ).to_gtv()).to_gtv_pretty()),
-                ("icmf_message",(topic = economy_chain_staking_balance_update_topic, body = economy_chain_staking_balance_update(
+                ("icmf_message",(topic = economy_chain_staking_state_update, body = economy_chain_staking_state_update_message(
                     user_account_ids[i * 2 + 1],
                     50 * units_per_asset,
+                    list<economy_chain_staking_state_withdrawal>(),
                 ).to_gtv()).to_gtv_pretty()),
             );
         }
     }
 
-    assert_true(migration_completed.publish_staking_balance);
-    assert_true(migration_staking_account_balance_published @ {} ( @sum 1 ) == 0);
+    assert_true(migration_completed.publish_staking_state);
+    assert_true(migration_staking_account_state_published @ {} ( @sum 1 ) == 0);
 }

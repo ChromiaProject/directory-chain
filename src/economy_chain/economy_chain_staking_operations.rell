@@ -68,6 +68,7 @@ function staking_cancel_withdrawal_auth_message(gtv): text {
 operation staking_cancel_withdrawal() {
     val user = ft4.auth.authenticate();
     update staker_withdrawal_request @* { .staker_state.account == user and .active == true } ( .active = false );
+    publish_staking_state(user);
 }
 
 
@@ -132,10 +133,6 @@ operation set_provider_staking_account(provider_pubkey: pubkey, new_account_pubk
         new_account = ft4.accounts.create_account_with_auth(auth_descriptor);
     }
 
-    val previous_staking_account = provider_staking_account.staking_account;
     _change_staking_account(provider_staking_account.staking_account, new_account);
     provider_staking_account.staking_account = new_account;
-
-    publish_staking_balance(previous_staking_account);
-    publish_staking_balance(new_account);
 }

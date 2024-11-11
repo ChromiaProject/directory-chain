@@ -63,7 +63,7 @@ function _staking_deposit_native_impl(amount: integer, delegate_to: pubkey? = nu
         _staking_delegate(staker, delegate_to);
     }
 
-    publish_staking_balance(staker);
+    publish_staking_state(staker);
 }
 
 function _change_staking_account(account: ft4.accounts.account, new_account: ft4.accounts.account) {
@@ -72,6 +72,9 @@ function _change_staking_account(account: ft4.accounts.account, new_account: ft4
 
     log("Changed staking account from %s to %s and migrated %s staker states".format(
         account.id, new_account.id, count));
+
+    publish_staking_state(account);
+    publish_staking_state(new_account);
 }
 
 
@@ -134,7 +137,7 @@ function _staking_update_evm_state(staker: ft4.accounts.account, network, new_ba
     }
 
     ss.balance = new_balance;
-    publish_staking_balance(staker);
+    publish_staking_state(staker);
 
     _staking_clear_upcoming_delegations(staker);
 }
@@ -165,6 +168,8 @@ function _staking_request_withdrawal(user: ft4.accounts.account, _network: netwo
         ss,
         true
     );
+
+    publish_staking_state(user);
 
     log("Created a withdrawal request for %s on network %s".format(user.id, _network));
 }
@@ -213,7 +218,7 @@ function _staking_distribute_withdrawals() {
     } ( .active = false);
 
     for (ss in staker_states) {
-        publish_staking_balance(ss.account);
+        publish_staking_state(ss.account);
     }
 }
 
@@ -256,6 +261,8 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
     );
 
     create staker_state_to_provider ( fresh_staker_state_to_provider );
+
+    publish_staking_state(staker);
 }
 
 function _staking_clear_upcoming_delegations(ft4.accounts.account) {

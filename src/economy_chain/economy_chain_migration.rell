@@ -2,7 +2,7 @@
 object migration_completed {
     mutable provider_staking_account_entity: boolean = false;
     mutable provider_multi_key: boolean = false;
-    mutable publish_staking_balance: boolean = false;
+    mutable publish_staking_state: boolean = false;
 }
 
 function do_migrations() {
@@ -16,8 +16,8 @@ function do_migrations() {
         migrate_provider_keys();
         migrate_system_p_voter_set_type();
     }
-    if (not migration_completed.publish_staking_balance) {
-        migrate_publish_staking_balance();
+    if (not migration_completed.publish_staking_state) {
+        migrate_publish_staking_state();
     }
 }
 
@@ -66,32 +66,32 @@ function migrate_provider_staking_accounts() {
 }
 
 /**
- * Not really a migration per definition, but this will publish staking balance for all staking accounts on
+ * Not really a migration per definition, but this will publish staking states for all staking accounts on
  * a ICMF topic to give consumers the full picture of all staking accounts. Sends 100 per block until it is done and
  * then empties the temporary table.
  */
-function migrate_publish_staking_balance() {
+function migrate_publish_staking_state() {
 
     val staking_account_subset = staker_state @* {
-        .account not in migration_staking_account_balance_published @* {} ( .account )
-    } ( .account ) limit chain_context.args.migration_staking_account_balance_send_limit;
+        .account not in migration_staking_account_state_published @* {} ( .account )
+    } ( .account ) limit chain_context.args.migration_staking_account_state_send_limit;
 
     if (empty(staking_account_subset)) {
-        migration_completed.publish_staking_balance = true;
-        delete migration_staking_account_balance_published @* { };
+        migration_completed.publish_staking_state = true;
+        delete migration_staking_account_state_published @* { };
     } else {
 
         log("Sending %s staking balance messages".format(staking_account_subset.size()));
 
         for (staking_account in staking_account_subset) {
-            publish_staking_balance(staking_account);
+            publish_staking_state(staking_account);
         }
-        create migration_staking_account_balance_published(staking_account_subset @* {}
-            ( struct<migration_staking_account_balance_published>($) )
+        create migration_staking_account_state_published(staking_account_subset @* {}
+            ( struct<migration_staking_account_state_published>($) )
         );
     }
 }
 
-entity migration_staking_account_balance_published {
+entity migration_staking_account_state_published {
     key ft4.accounts.account;
 }
