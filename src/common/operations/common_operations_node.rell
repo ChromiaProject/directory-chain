@@ -92,7 +92,20 @@ operation replace_node_with_node_data(my_pubkey: pubkey, node_data: replace_node
     replace_node_with_node_data_impl(my_pubkey, node_data);
 }
 
-function replace_node_with_node_data_impl(my_pubkey: pubkey, node_data: replace_node_data) {
+/**
+ * Replace node with node data and keeps the old node as a replica node.
+ *
+ * Permission: node provider (owner)
+ *
+ * Rate limit: actions
+ *
+ * @param my_pubkey pubkey of provider
+ */
+operation replace_node_with_node_data_and_keep_old_node_as_replica(my_pubkey: pubkey, node_data: replace_node_data) {
+    replace_node_with_node_data_impl(my_pubkey, node_data, true);
+}
+
+function replace_node_with_node_data_impl(my_pubkey: pubkey, node_data: replace_node_data, keep_old_node_as_replica: boolean = false) {
     log("------------- Replace-Node: %s --------------".format(node_data.old_node_key));
     val me = require_is_provider_with_rate_limit(my_pubkey);
     require_is_signer(node_data.old_node_key);
@@ -102,14 +115,21 @@ function replace_node_with_node_data_impl(my_pubkey: pubkey, node_data: replace_
     _require_replace_cluster_units(old_node, node_data);
     _require_replace_extra_storage(old_node, node_data);
 
-    val cluster_names = cluster_node @* { old_node }.cluster.name;
+    val node_clusters = cluster_node @* { old_node }.cluster;
     delete cluster_node @* { old_node };
     after_node_removed_from_cluster(old_node, null);
     val clusters_replicated_by_node = cluster_replica_node @* { old_node } (.cluster);
-    delete cluster_replica_node @* { old_node };
-    after_replica_node_removed_from_cluster(old_node, null);
     val blockchains_replicated_by_node = blockchain_replica_node @* { old_node } (.blockchain);
-    delete blockchain_replica_node @* { old_node };
+
+    if (keep_old_node_as_replica) {
+        for (cluster in node_clusters) {
+            _add_replica_node_to_cluster_internal(cluster, old_node);
+        }
+    } else {
+        delete cluster_replica_node @* { old_node };
+        after_replica_node_removed_from_cluster(old_node, null);
+        delete blockchain_replica_node @* { old_node };
+    }
 
     if (exists(node_data.new_host)) {
         validate_host(node_data.new_host!!);
@@ -126,13 +146,15 @@ function replace_node_with_node_data_impl(my_pubkey: pubkey, node_data: replace_
         host = node_data.new_host ?: old_node.host, 
         port = node_data.new_port ?: old_node.port,
         api_url = node_data.new_api_url ?: old_node.api_url,
-        clusters = cluster_names,
+        clusters = node_clusters @* {}.name,
         cluster_units = node_data.new_cluster_units ?: old_node.cluster_units,
         territory = node_data.new_territory ?: old_node.territory,
         extra_storage = node_data.new_extra_storage ?: old_node.extra_storage);
 
-    before_node_removal(old_node);
-    delete old_node;
+    if (not keep_old_node_as_replica) {
+        before_node_removal(old_node);
+        delete old_node;
+    }
     val new_node = add_node_internal(me, register_node_data, require_not_exists = false);
 
     for (cl in clusters_replicated_by_node) {
