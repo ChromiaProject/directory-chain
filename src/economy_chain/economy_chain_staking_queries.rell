@@ -126,15 +126,17 @@ query staking_get_total_delegation_to(pubkey, network? = null) {
 
 
 /**
- * Number of users delegating to a provider on all networks
+ * Number of users delegating to a provider
  *
  * @param pubkey Public key of the given provider
+ * @param network Chosen network
  * @return Count of users delegating to a provider
 */
-query staking_get_number_of_delegates_to(pubkey): integer {
+query staking_get_number_of_delegates_to(pubkey, network? = null): integer {
     // Extra join to ft4.accounts.account to avoid limitations on nesting queries
     return accounts.account @* { .id in ((s1: staker_state_to_provider) @* {
         .provider.pubkey == pubkey and (s1.timestamp <= _staking_last_known_time()) and 
+            (not exists(network) or .staker_state.network == network) and 
             not exists((s2:staker_state_to_provider) @* { 
                 s2.staker_state ==s1.staker_state,
                 ((s2.timestamp <= _staking_last_known_time()) and (s2.timestamp>s1.timestamp)) 
