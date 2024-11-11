@@ -344,6 +344,25 @@ query staking_total_stake_on_network(network)  = staker_state @ { network } ( @s
 
 
 /**
+* All shared staking rewards that have been distributed to users (starting from 2024-10-26)
+*
+* @param from Only get shared rewards after a specific timestamp
+* @param to Only get shared rewards before a specific timestamp
+* @return Amount of CHR in minor units
+*/
+query staking_get_all_shared_rewards_paid(
+    from: timestamp? = null,
+    to: timestamp? = null
+): integer {
+    return staking_payment @ {
+        (empty(from) or .timestamp > from),
+        (empty(to) or .timestamp <= to)
+    } (
+        @sum .shared_amount
+    );
+}
+
+/**
  * Total delegated by all users
  * 
  * @param network Optionally specify network
