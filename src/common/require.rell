@@ -123,16 +123,27 @@ function require_provider_with_iccf_proof_and_rate_limit(tx_to_prove: gtx_transa
  */
 function require_provider_iccf_auth(tx_to_prove: gtx_transaction, op_index: integer,
         op_name: text, op_arg_count: integer, provider): list<gtv> {
-    val blockchain = require(provider_auth_blockchain @? { provider } (.blockchain),
+    val provider_auth_blockchain = require(provider_auth_blockchain @? { provider },
         "Blockchain authentication is not enabled for provider %s".format(provider.pubkey));
-    iccf.require_valid_proof(
+    val proof = iccf.require_and_return_valid_proof(
         tx_to_prove,
         require_anchored_proof=true,
         verify_signers=false,
-        valid_source_blockchain_rids=set([blockchain.rid]),
-        require_not_older = true,
+        valid_source_blockchain_rids=set([provider_auth_blockchain.blockchain.rid]),
     );
-    iccf.make_transaction_unique(tx_to_prove);
+
+    val block_header = iccf.block_header.from_gtv(gtv.from_bytes(proof.blockHeader));
+    val height = block_header.height;
+    val tx_index = proof.txIndex;
+    require(height != provider_auth_blockchain.latest_height or tx_index != provider_auth_blockchain.latest_tx_index,
+        "Transaction has already been processed");
+    require(height > provider_auth_blockchain.latest_height
+            or (height == provider_auth_blockchain.latest_height and tx_index > provider_auth_blockchain.latest_tx_index),
+        "Transaction is older than previous, confirmed in block %d transaction %d".format(
+            provider_auth_blockchain.latest_height, provider_auth_blockchain.latest_tx_index));
+    provider_auth_blockchain.latest_height = height;
+    provider_auth_blockchain.latest_tx_index = tx_index;
+
     require(op_index in range(tx_to_prove.body.operations.size()), "op_index out of range");
     val op = tx_to_prove.body.operations[op_index];
     require(op.name == op_name, "Wrong operation name <%s>, expected <%s>".format(op.name, op_name));

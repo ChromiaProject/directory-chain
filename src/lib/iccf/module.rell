@@ -119,7 +119,6 @@ function require_operation(
  * @param require_anchored_proof Whether or not we require inclusion of a proof that the block containing the transaction has been anchored in cluster anchoring chain
  * @param min_timestamp Limit for how old the transaction is allowed to be, disabled if 0
  * @param max_timestamp Limit for how new the transaction is allowed to be, disabled if 0
- * @param require_not_older Require that the proof transaction is not older than the previously processed proof for the same source blockchain
  * @param valid_source_blockchain_rids Valid source blockchains for transaction
  *
  * @return operations in the transaction to verify
@@ -131,30 +130,48 @@ function require_valid_proof(
     min_timestamp: integer = 0,
     max_timestamp: integer = 0,
     valid_source_blockchain_rids: set<byte_array>? = null,
-    require_not_older: boolean = false,
 ): list<gtx_operation> {
+    require_and_return_valid_proof(gtx_transaction, verify_signers, require_anchored_proof, min_timestamp, max_timestamp, valid_source_blockchain_rids);
+    return gtx_transaction.body.operations;
+}
+
+/**
+ * Requires the presented transaction to be proved
+ *
+ * @param gtx_transaction The transaction to verify
+ * @param verify_signers Whether or not the signers must match current transaction signatures
+ * @param require_anchored_proof Whether or not we require inclusion of a proof that the block containing the transaction has been anchored in cluster anchoring chain
+ * @param min_timestamp Limit for how old the transaction is allowed to be, disabled if 0
+ * @param max_timestamp Limit for how new the transaction is allowed to be, disabled if 0
+ * @param valid_source_blockchain_rids Valid source blockchains for transaction
+ *
+ * @return the confirmation proof
+ */
+function require_and_return_valid_proof(
+    gtx_transaction,
+    verify_signers: boolean = true,
+    require_anchored_proof: boolean = false,
+    min_timestamp: integer = 0,
+    max_timestamp: integer = 0,
+    valid_source_blockchain_rids: set<byte_array>? = null,
+): confirmation_proof {
     val proof_operation = _get_proof(gtx_transaction, require_anchored_proof);
     require(proof_operation, "No proof operation present for TX");
+
+    val proof = confirmation_proof.from_gtv_pretty(gtv.from_bytes(byte_array.from_gtv(proof_operation.args[2])));
 
     require(
         valid_source_blockchain_rids == null or valid_source_blockchain_rids.contains(gtx_transaction.body.blockchain_rid),
         "%s is not a valid source blockchain".format(gtx_transaction.body.blockchain_rid)
     );
 
-    if (min_timestamp != 0 or max_timestamp != 0 or require_not_older) {
-        val tx_confirmation_time = get_tx_confirmation_time(proof_operation);
-        require(min_timestamp == 0 or tx_confirmation_time >= min_timestamp, "Transaction is too old, confirmed at %s".format(tx_confirmation_time));
-        require(max_timestamp == 0 or tx_confirmation_time <= max_timestamp, "Transaction is too new, confirmed at %s".format(tx_confirmation_time));
-
-        if (require_not_older) {
-            val previous = iccf_latest_transaction @? { gtx_transaction.body.blockchain_rid };
-            if (previous != null) {
-                require(tx_confirmation_time >= previous.timestamp, "Transaction older than previous, confirmed at %s".format(tx_confirmation_time));
-                previous.timestamp = tx_confirmation_time;
-            } else {
-                create iccf_latest_transaction(gtx_transaction.body.blockchain_rid, tx_confirmation_time);
-            }
-        }
+    if (min_timestamp != 0 or max_timestamp != 0) {
+        val block_header = block_header.from_gtv(gtv.from_bytes(proof.blockHeader));
+        val tx_confirmation_time = block_header.timestamp;
+        require(min_timestamp == 0 or tx_confirmation_time >= min_timestamp,
+            "Transaction is too old, confirmed at %d in block %d".format(tx_confirmation_time, block_header.height));
+        require(max_timestamp == 0 or tx_confirmation_time <= max_timestamp,
+            "Transaction is too new, confirmed at %d in block %d".format(tx_confirmation_time, block_header.height));
     }
 
     if (verify_signers) {
@@ -163,12 +180,8 @@ function require_valid_proof(
             "Proof TX has to be signed by all the signers that signed the source TX"
         );
     }
-    return gtx_transaction.body.operations;
-}
 
-function get_tx_confirmation_time(proof_operation: gtx_operation): timestamp {
-    val proof = confirmation_proof.from_gtv_pretty(gtv.from_bytes(byte_array.from_gtv(proof_operation.args[2])));
-    return block_header.from_gtv(gtv.from_bytes(proof.blockHeader)).timestamp;
+    return proof;
 }
 
 /**
@@ -223,9 +236,4 @@ function make_transaction_unique(gtx_transaction) {
 @log
 entity iccf_verified_transaction {
     key hash: byte_array;
-}
-
-entity iccf_latest_transaction {
-    key blockchain_rid: byte_array;
-    mutable timestamp;
 }
