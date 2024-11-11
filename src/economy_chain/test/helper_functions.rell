@@ -600,20 +600,45 @@ function check_account_invariants(ft4.accounts.account) {
 function update_staking_requirements_constants(
     staking_requirements_enabled: boolean? = null,
     staking_requirement_stop_payout_days: integer? = null,
-    staking_requirement_system_provider_own_stake_chr: integer? = null,
-    staking_requirement_system_provider_total_stake_chr: integer? = null,
-    staking_requirement_dapp_provider_own_stake_chr: integer? = null,
-    staking_requirement_dapp_provider_total_stake_chr: integer? = null
+    staking_requirement_system_node_own_stake_chr: integer? = null,
+    staking_requirement_system_node_total_stake_chr: integer? = null,
+    staking_requirement_dapp_node_own_stake_chr: integer? = null,
+    staking_requirement_dapp_node_total_stake_chr: integer? = null
 ) {
 
     rell.test.tx().op(
         update_staking_requirements_economy_constants(
             staking_requirements_enabled,
             staking_requirement_stop_payout_days,
-            staking_requirement_system_provider_own_stake_chr,
-            staking_requirement_system_provider_total_stake_chr,
-            staking_requirement_dapp_provider_own_stake_chr,
-            staking_requirement_dapp_provider_total_stake_chr
+            staking_requirement_system_node_own_stake_chr,
+            staking_requirement_system_node_total_stake_chr,
+            staking_requirement_dapp_node_own_stake_chr,
+            staking_requirement_dapp_node_total_stake_chr
         )
     ).run();
+}
+
+function create_cluster_nodes(provider, system: boolean = true, dapp_nodes: integer = 3) {
+    val nodes = list<node>();
+    if (system) {
+        val cluster_system = ensure_cluster(system_cluster_name, false, false, 1, 1024);
+        val node_system = ensure_node(provider.pubkey, rell.test.keypairs.dave.pub, true, "SE", 1, 1024, false);
+        nodes.add(node_system);
+        rell.test.tx().op(
+            create_cluster_node_op(cluster_system, node_system),
+        ).run();
+    }
+
+    val node_keys = [rell.test.keypairs.eve, rell.test.keypairs.frank, rell.test.keypairs.grace, rell.test.keypairs.heidi];
+    for (i in range(0, min(dapp_nodes, node_keys.size()))) {
+        val dapp_key = node_keys[i];
+        val cluster = ensure_cluster("cluster%s".format(i), false, false, 1, 1024);
+        val node = ensure_node(provider.pubkey, dapp_key.pub, true, "SE", 1, 1024, false);
+        nodes.add(node);
+        rell.test.tx().op(
+            create_cluster_node_op(cluster, node),
+        ).run();
+    }
+
+    return nodes;
 }
