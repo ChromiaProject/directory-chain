@@ -70,3 +70,24 @@ query get_providers(tier: provider_tier, system: boolean, require_active: boolea
 query get_provider_quotas(): list<struct<provider_quota>> {
     return provider_quota @* {} ($.to_struct());
 }
+
+struct provider_auth_blockchain_data {
+    /** Controlling blockchain RID */
+    blockchain_rid: byte_array;
+    /** Block height of latest transaction used from the controlling blockchain, or -1 if not used yet */
+    latest_height: integer;
+    /** Transaction index (within block) of latest transaction used from the controlling blockchain, or -1 if not used yet */
+    latest_tx_index: integer;
+}
+
+/**
+ * Returns provider blockchain auth information, or null if blockchain auth is not enabled for provider.
+ */
+query get_provider_auth_blockchain(pubkey): provider_auth_blockchain_data? {
+    val provider = require_provider(pubkey);
+    return provider_auth_blockchain @? { provider } (provider_auth_blockchain_data(
+        blockchain_rid = .blockchain.rid,
+        latest_height = .latest_height,
+        latest_tx_index = .latest_tx_index,
+    ));
+}
