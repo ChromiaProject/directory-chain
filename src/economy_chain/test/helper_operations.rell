@@ -307,8 +307,12 @@ operation create_reward_provider_deleted_node_op(provider, node: pubkey, cluster
     create_reward_provider_deleted_node(provider, node, [cluster]);
 }
 
-operation set_migrations_completed(provider_staking_account_entity: boolean) {
+operation set_migrations_completed(
+    provider_staking_account_entity: boolean = true,
+    publish_staking_state: boolean = true,
+) {
     migration_completed.provider_staking_account_entity = provider_staking_account_entity;
+    migration_completed.publish_staking_state = publish_staking_state;
 }
 
 operation purge_provider_staking_account_entities() {
@@ -366,4 +370,18 @@ operation set_system_p_member_key_vote_set() {
 operation create_pending_shared_payment(account_id: byte_array, amount: integer, provider_pubkey: pubkey) {
     val account = ft4.accounts.Account(account_id);
     create pending_shared_payment(account, amount, provider_pubkey);
+}
+
+operation migrate_publish_staking_state_op() {
+    migrate_publish_staking_state();
+}
+
+operation test_staking_deposit_native(staker: ft4.accounts.account, amount: integer) {
+    create staker_state (
+        staker,
+        network.CHR,
+        balance = amount,
+        last_update = _staking_last_known_time(),
+        pending_token_time = 0
+    );
 }

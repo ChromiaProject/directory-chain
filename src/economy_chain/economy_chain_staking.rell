@@ -62,6 +62,8 @@ function _staking_deposit_native_impl(amount: integer, delegate_to: pubkey? = nu
         // Down this path everything is updated anyway
         _staking_delegate(staker, delegate_to);
     }
+
+    publish_staking_state(staker);
 }
 
 function _change_staking_account(account: ft4.accounts.account, new_account: ft4.accounts.account) {
@@ -70,6 +72,9 @@ function _change_staking_account(account: ft4.accounts.account, new_account: ft4
 
     log("Changed staking account from %s to %s and migrated %s staker states".format(
         account.id, new_account.id, count));
+
+    publish_staking_state(account);
+    publish_staking_state(new_account);
 }
 
 
@@ -132,9 +137,9 @@ function _staking_update_evm_state(staker: ft4.accounts.account, network, new_ba
     }
 
     ss.balance = new_balance;
+    publish_staking_state(staker);
 
     _staking_clear_upcoming_delegations(staker);
-
 }
 
 
@@ -163,6 +168,8 @@ function _staking_request_withdrawal(user: ft4.accounts.account, _network: netwo
         ss,
         true
     );
+
+    publish_staking_state(user);
 
     log("Created a withdrawal request for %s on network %s".format(user.id, _network));
 }
@@ -209,7 +216,10 @@ function _staking_distribute_withdrawals() {
     update staker_withdrawal_request @* {
         .active and .staker_state.network == network.CHR and .finish_at <= _staking_last_known_time( )
     } ( .active = false);
- 
+
+    for (ss in staker_states) {
+        publish_staking_state(ss.account);
+    }
 }
 
 
@@ -231,7 +241,10 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
 
     // deactivate chromia withdraw requests
     val withdraw_requests_chr = withdraw_requests @* { .staker_state.network == network.CHR };
-    update withdraw_requests_chr ( .active = false );
+    if (not empty(withdraw_requests_chr)) {
+        update withdraw_requests_chr ( .active = false );
+        publish_staking_state(staker);
+    }
 
     val staker_states_to_exclude = withdraw_requests @* { .staker_state.network != network.CHR } ( .staker_state );
  

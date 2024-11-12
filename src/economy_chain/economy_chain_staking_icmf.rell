@@ -1,0 +1,16 @@
+function publish_staking_state(staker: ft4.accounts.account) {
+    val balance = staker_state @ { staker } ( @sum .balance );
+
+    val withdrawals = staker_withdrawal_request @* { .staker_state.account == staker, .active } (
+        economy_chain_staking_state_withdrawal (amount = .staker_state.balance, .finish_at)
+    );
+
+    send_message(
+        economy_chain_staking_state_update,
+        economy_chain_staking_state_update_message(
+            staker.id,
+            balance,
+            withdrawals
+            ).to_gtv()
+    );
+}
