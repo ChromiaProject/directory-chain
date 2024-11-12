@@ -1,0 +1,93 @@
+/**
+ * Get provider staking status.
+
+ * @param pubkey  provider pubkey
+ */
+query get_provider_staking_status(pubkey) {
+    val provider = require_provider(pubkey);
+    val provider_staking_account = provider_staking_account @ { provider };
+    val own_staking_chr = staking_get_provider_stake(provider.pubkey);
+    val total_staking_chr = staking_get_total_delegation_to(provider.pubkey);
+    val approved = provider_meets_staking_requirements(provider);
+    val (days_since_approved, days_until_stop, pay_out_reward) = get_staking_requirement_payout_stop(provider_staking_account);
+
+    return provider_staking_status(
+        staking_account_id = provider_staking_account.staking_account.id,
+        own_staking_chr = own_staking_chr,
+        total_staking_chr = total_staking_chr,
+        approved = approved,
+        days_since_last_approved = if (provider_staking_account.last_approved_stake_requirements > 0) days_since_approved else null,
+        days_until_reward_stops = if (approved == false) max(0, days_until_stop) else null
+    );
+}
+
+function is_staking_approved(provider, reward: big_integer): boolean {
+
+    if (economy_constants.staking_requirements_enabled) {
+        val provider_staking_account = provider_staking_account @ { provider };
+
+        if (provider_meets_staking_requirements(provider)) {
+            provider_staking_account.last_approved_stake_requirements = op_context.last_block_time;
+        } else {
+            val (days_since_approved_staking, days_until_stopped_payout, pay_out_reward) = get_staking_requirement_payout_stop(provider_staking_account);
+
+            if (pay_out_reward) {
+                log("Provider %s does not meet staking requirements - payouts will be stopped in %d days".format(
+                    provider.pubkey, days_until_stopped_payout));
+            } else {
+                log("Provider %s lost reward of %s due to low levels of staking for too long (%s days)".format(
+                    provider.pubkey, reward, days_since_approved_staking));
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+function provider_meets_staking_requirements(provider): boolean {
+
+    val current_own = staking_get_provider_stake(provider.pubkey);
+    val current_total = staking_get_total_delegation_to(provider.pubkey);
+    val staking_requirements = get_staking_requirements(provider);
+
+    if (current_own < staking_requirements.own) {
+        log("Provider %s has not enough own staking (%s < %s)".format(provider.pubkey, current_own, staking_requirements.own));
+        return false;
+    }
+
+    if (current_total < staking_requirements.total) {
+        log("Provider %s has not enough total staking (%s < %s)"
+            .format(provider.pubkey, current_total, staking_requirements.total));
+        return false;
+    }
+
+    return true;
+}
+
+function get_staking_requirements(provider) {
+    val nodes = get_provider_node_type_count(provider);
+    val own_staking = nodes.system * economy_constants.staking_requirement_system_node_own_stake_chr
+        + nodes.dapp * economy_constants.staking_requirement_dapp_node_own_stake_chr;
+    val total_staking = nodes.system * economy_constants.staking_requirement_system_node_total_stake_chr
+        + nodes.dapp * economy_constants.staking_requirement_dapp_node_total_stake_chr;
+    return (own = own_staking, total = total_staking);
+}
+
+function get_provider_node_type_count(provider) {
+    val nodes = cluster_node @* { .node.provider == provider } ( system = .cluster.name == system_cluster_name )
+        @* {} ( @group .system, @sum count = 1 );
+
+    var system_nodes = 0;
+    var dapp_nodes = 0;
+
+    for (node in nodes) {
+        if (node.system) {
+            system_nodes += node.count;
+        } else {
+            dapp_nodes += node.count;
+        }
+    }
+
+    return (system = system_nodes, dapp = dapp_nodes);
+}

@@ -400,26 +400,3 @@ function _staking_shared_rewards(pay_reward_result) {
     create pending_shared_payment ( pending_shared_payment_structs );
     log("Created %s pending shared payments for delegation to provider %s".format(pending_shared_payment_structs.size(), provider_data.pubkey));
 }
-
-/**
- * Get provider staking status.
-
- * @param pubkey  provider pubkey
- */
-query get_provider_staking_status(pubkey) {
-    val provider = require_provider(pubkey);
-    val provider_staking_account = provider_staking_account @ { provider };
-    val own_staking_chr = staking_get_provider_stake(provider.pubkey);
-    val total_staking_chr = staking_get_total_delegation_to(provider.pubkey);
-    val approved = provider_meets_staking_requirements(provider);
-    val (days_since_approved, days_until_stop, pay_out_reward) = get_staking_requirement_payout_stop(provider_staking_account);
-
-    return provider_staking_status(
-        staking_account_id = provider_staking_account.staking_account.id,
-        own_staking_chr = own_staking_chr,
-        total_staking_chr = total_staking_chr,
-        approved = approved,
-        days_since_last_approved = if (provider_staking_account.last_approved_stake_requirements > 0) days_since_approved else null,
-        days_until_reward_stops = if (approved == false) max(0, days_until_stop) else null
-    );
-}
