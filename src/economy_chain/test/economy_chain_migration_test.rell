@@ -131,3 +131,25 @@ function test_migrate_publish_staking_state() {
     assert_true(migration_completed.publish_staking_state);
     assert_true(migration_staking_account_state_published @ {} ( @sum 1 ) == 0);
 }
+
+function test_migrate_publish_staking_state_multiple_networks() {
+
+    rell.test.tx().op(init()).run();
+
+    val evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
+    do_evm_stake_update_eth(evm_address, 50 * units_per_asset);
+    do_evm_stake_update_bsc(evm_address, 50 * units_per_asset);
+    val test_account = require(do_create_account_using_ras_staking(rell.test.keypairs.alice));
+    assert_equals(staking_get_balance(test_account.id), 2 * 50 * units_per_asset);
+
+    rell.test.tx().op(
+        set_migrations_completed(publish_staking_state = false)
+    ).run();
+
+    rell.test.block().run();
+    assert_false(migration_completed.publish_staking_state);
+
+    rell.test.block().run();
+    assert_true(migration_completed.publish_staking_state);
+    assert_true(migration_staking_account_state_published @ {} ( @sum 1 ) == 0);
+}

@@ -241,7 +241,10 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
 
     // deactivate chromia withdraw requests
     val withdraw_requests_chr = withdraw_requests @* { .staker_state.network == network.CHR };
-    update withdraw_requests_chr ( .active = false );
+    if (not empty(withdraw_requests_chr)) {
+        update withdraw_requests_chr ( .active = false );
+        publish_staking_state(staker);
+    }
 
     val staker_states_to_exclude = withdraw_requests @* { .staker_state.network != network.CHR } ( .staker_state );
  
@@ -261,8 +264,6 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
     );
 
     create staker_state_to_provider ( fresh_staker_state_to_provider );
-
-    publish_staking_state(staker);
 }
 
 function _staking_clear_upcoming_delegations(ft4.accounts.account) {
