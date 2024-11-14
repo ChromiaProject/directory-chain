@@ -55,7 +55,7 @@ query get_economy_metrics(pubkey): economy_metrics {
     val provider_nodes_pubkeys = node @* { provider } ( .pubkey );
 
     val average_availability_on_a_providers_nodes = get_average_availability_on_a_providers_nodes_in_the_last_24h(provider_nodes_pubkeys);
-    val total_number_of_nodes_per_provider = get_total_number_of_nodes_per_provider(provider_nodes);
+    val total_number_of_nodes_per_provider = provider_nodes.size();
     val total_number_of_scus_per_provider = get_total_number_of_scus_per_provider(provider_nodes);
     val average_occupancy_rate_of_a_providers_scus = get_average_occupancy_rate_of_a_providers_scus(provider_nodes);
     val amount_of_the_last_reward_payout = get_total_reward_payed_in_the_last_24h(provider_nodes_pubkeys);
@@ -69,6 +69,43 @@ query get_economy_metrics(pubkey): economy_metrics {
     );
 }
 
+/**
+ * Get economy details for a specific node.
+ * 
+ * @param pubkey The nodes pubkey
+ */
+query get_economy_metrics_per_node(pubkey): economy_node_metrics {
+    val node = require_node(pubkey);
+    return get_economy_metrics_per_node_internal(node);
+}
+
+/**
+ * Get economy metrics for all provider nodes.
+ * 
+ * @param pubkey The providers pubkey.
+ */
+query get_economy_metrics_per_provider_nodes(pubkey): list<economy_node_metrics> {
+    val provider = require_provider(pubkey);
+    val provider_nodes = node @* { provider };
+    val result = list<economy_node_metrics>();
+
+    for (node in provider_nodes) {
+        result.add(get_economy_metrics_per_node_internal(node));
+    }
+
+    return result;
+}
+
+function get_economy_metrics_per_node_internal(node): economy_node_metrics {
+    return economy_node_metrics(
+        node_pubkey = node.pubkey,
+        availability = get_average_availability_on_a_providers_nodes_in_the_last_24h([node.pubkey]),
+        amount_of_the_last_reward_payout = get_total_reward_payed_in_the_last_24h([node.pubkey]),
+        signing_clusters = cluster_node @* { node } ( .cluster.name ),
+        replicating_clusters = cluster_replica_node @* { node } ( .cluster.name ),
+    );
+}
+
 function get_average_availability_on_a_providers_nodes_in_the_last_24h(provider_nodes: list<pubkey>): decimal {
     val provider_availabilities = get_provider_availabilities(provider_nodes, get_last_blocktime() - millis_per_day);
     val number_of_availabilities = provider_availabilities.size();
@@ -76,7 +113,7 @@ function get_average_availability_on_a_providers_nodes_in_the_last_24h(provider_
     for (availability in provider_availabilities) {
         total_availability += availability.availability;
     }
-    return if (number_of_availabilities != 0 ) total_availability / number_of_availabilities  else 0.0;
+    return if (number_of_availabilities != 0) total_availability / number_of_availabilities else 0.0;
 }
 
 function get_provider_availabilities(provider_nodes: list<pubkey>, start: timestamp): list<provider_availability> {
@@ -104,36 +141,45 @@ function get_provider_availabilities(provider_nodes: list<pubkey>, start: timest
     return result;
 }
 
-function get_total_number_of_nodes_per_provider(provider_nodes: list<node>): integer {
-    return provider_nodes.size();
+function get_total_number_of_nodes_per_provider(provider): integer {
+    return node @ { provider, .active } ( @sum 1 );
 }
 
+/**
+ * Return a sum of the total number of SCUs available in all nodes dapp clusters,
+ * excluding the units allocated by system.
+ */
 function get_total_number_of_scus_per_provider(provider_nodes: list<node>): integer {
-    var provider_nodes_total_cluster_units = 0;
-    for (node in provider_nodes) {
-        provider_nodes_total_cluster_units += node.cluster_units;
+
+    var total_cluster_units = 0;
+    val clusters = cluster_node @* { .node in provider_nodes, .cluster.name != system_cluster_name } ( .cluster.cluster_units );
+    for (cluster_units in clusters) {
+        total_cluster_units += total_available_scus(cluster_units);
     }
-    return provider_nodes_total_cluster_units * standard_cluster_unit.container_units;
+    return total_cluster_units - (clusters.size() * standard_cluster_unit.system_container_units);
 }
 
-function get_average_occupancy_rate_of_a_providers_scus(provider_nodes: list<node>): decimal {
-    var occupancy_rate = 0.0;
-    var dapp_nodes = 0;
-    for (node in provider_nodes) {
-        val node_dapp_clusters = cluster_node @* { node, .cluster.name != system_cluster_name } ( .cluster );
-        // Node is only part of system cluster, ignore it for occupancy rate calculations
-        if (node_dapp_clusters.empty() and exists(cluster_node @? { node, .cluster.name == system_cluster_name })) {
-            continue;
-        }
-        dapp_nodes++;
-
-        var node_occupancy_rate = 0.0;
-        for (cluster in node_dapp_clusters) {
-            node_occupancy_rate += occupancy_rate(cluster);
-        }
-        occupancy_rate += if (node_dapp_clusters.empty()) 0.0 else node_occupancy_rate / node_dapp_clusters.size();
+// Based on leasable scus
+function get_occupied_nodes_scus(nodes: list<node>): integer {
+    val node_dapp_clusters = cluster_node @* { .node in nodes, .cluster.name != system_cluster_name } ( .cluster );
+    var scus_occupied = 0;
+    for (dapp_cluster in node_dapp_clusters) {
+        scus_occupied += occupied_scus(dapp_cluster);
     }
-    return if (dapp_nodes == 0) 0.0 else occupancy_rate / dapp_nodes;
+    return scus_occupied;
+}
+
+// Based on leasable scus
+function get_occupied_node_cluster_scus(node, cluster): integer? {
+    val node_cluster = cluster_node @? { node, cluster, .cluster.name != system_cluster_name } ( .cluster );
+    return if (not empty(node_cluster)) occupied_scus(node_cluster) else null;
+}
+
+// This is the rate of leasable scus
+function get_average_occupancy_rate_of_a_providers_scus(provider_nodes: list<node>): decimal {
+    val scus_total = get_total_number_of_scus_per_provider(provider_nodes);
+    val scus_occupied = get_occupied_nodes_scus(provider_nodes);
+    return if (scus_total > 0) decimal(scus_occupied) / scus_total else 0;
 }
 
 function get_total_reward_payed_in_the_last_24h(provider_nodes: list<pubkey>) {
