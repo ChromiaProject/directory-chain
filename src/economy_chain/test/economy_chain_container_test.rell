@@ -491,6 +491,24 @@ function test_upgrade_container_insufficient_funds() {
     ).run_must_fail("Balance is too low");
 }
 
+function test_upgrade_container_lower_total_storage() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 2);
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, upgrade_container(container_name, 1, 15, cluster_name))
+    ).op(
+        upgrade_container(container_name, 1, 15, cluster_name)
+    ).run_must_fail("Upgraded total storage must be greater or equal to current total storage.");
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, upgrade_container(container_name, 1, 16, cluster_name))
+    ).op(
+        upgrade_container(container_name, 1, 16, cluster_name),
+    ).run();
+}
+
 function test_remaining_lease_value_is_correct() {
     rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
     val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
