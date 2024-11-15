@@ -58,10 +58,11 @@ function test_set_provider_staking_account() {
     rell.test.tx().op(init()).run();
     add_provider(rell.test.keypairs.alice.pub);
 
-    val old_staking_account = provider_staking_account @ {.provider.pubkey == rell.test.keypairs.alice.pub } ( .staking_account );
+    val provider_staking_account = provider_staking_account @ { .provider.pubkey == rell.test.keypairs.alice.pub };
+    val old_staking_account = provider_staking_account.staking_account;
     rell.test.tx()
         .op(mint_to(old_staking_account, 9999999))
-        .op(test_staking_deposit_native(old_staking_account, 100))
+        .op(add_staking(provider_staking_account, 100))
         .run();
 
     assert_true(exists(provider_staking_account @* {

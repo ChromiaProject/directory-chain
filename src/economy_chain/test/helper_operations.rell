@@ -244,10 +244,10 @@ operation register_provider_account_op(provider) {
 operation pay_out_node_rewards_op(node_reward: map<node, big_integer>, has_delegation_share: boolean) {
     pay_out_node_rewards(node_reward, has_delegation_share);
 }
-operation add_staking(provider_staking_account, amount: integer) {
+operation add_staking(provider_staking_account, amount: integer, network: network = network.CHR) {
     val ss = create staker_state (
         account = provider_staking_account.staking_account,
-        network = network.CHR,
+        network = network,
         balance = amount,
         last_update = 0,
         pending_token_time = 0
@@ -374,14 +374,4 @@ operation create_pending_shared_payment(account_id: byte_array, amount: integer,
 
 operation migrate_publish_staking_state_op() {
     migrate_publish_staking_state();
-}
-
-operation test_staking_deposit_native(staker: ft4.accounts.account, amount: integer) {
-    create staker_state (
-        staker,
-        network.CHR,
-        balance = amount,
-        last_update = _staking_last_known_time(),
-        pending_token_time = 0
-    );
 }

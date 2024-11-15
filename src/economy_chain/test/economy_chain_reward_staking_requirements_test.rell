@@ -112,3 +112,30 @@ function test_get_provider_staking_status_not_approved() {
     assert_equals(staking_status, expected);
 }
 
+function test_provider_meets_staking_requirements__require_native_staking() {
+
+    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    val provider_staking_account = provider_staking_account @ { provider };
+
+    val cluster = ensure_cluster("cluster_name", false, false, 1, 1024);
+    add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    val node = ensure_node(provider_pubkey, node1_keys.pub, true, "SE", 1, 1024, false);
+    add_cluster_node(cluster.name, node1_keys.pub, false);
+
+    rell.test.tx().op(
+        staking_init_op(),
+        update_staking_requirements_economy_constants(staking_requirement_dapp_node_own_stake_chr = 1, staking_requirement_dapp_node_total_stake_chr = 0),
+        add_staking(provider_staking_account, 1, network.BSC),
+        add_staking(provider_staking_account, 1, network.ETH),
+    ).sign(provider_key).run();
+
+    assert_equals(staking_get_provider_stake(provider_pubkey), 2);
+    assert_false(provider_meets_staking_requirements(provider));
+
+    rell.test.tx().op(
+        add_staking(provider_staking_account, 1, network.CHR),
+    ).sign(provider_key).run();
+
+    assert_equals(staking_get_provider_stake(provider_pubkey), 3);
+    assert_true(provider_meets_staking_requirements(provider));
+}
