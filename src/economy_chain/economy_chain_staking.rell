@@ -279,27 +279,20 @@ function _staking_distribute_rewards(using_batches: boolean = false, update_pend
         _update_pending_token_time_all();
     }
 
-    val all_users_for_batch = 
-    (
-        ss: staker_state,
-        @outer psp: pending_shared_payment @* { ss.account == psp.account }
-    ) @* {
-            ss.pending_token_time > 0
-        or  psp?.amount?: 0 > 0
+    val all_staking_rewards = staker_state @* {
+        .pending_token_time > 0
     } (
-        @group ss.account
-    )
-    limit (
+        @group .account,
+        @sum amount = integer (
+            (
+            .pending_token_time
+        ) * rate * units_per_asset
+        )
+    ) limit (
         if (using_batches) chain_context.args.staking_rewards_payout_batch_size else integer.MAX_VALUE
     );
 
-    val all_staking_rewards = staker_state @* {
-            .account in all_users_for_batch
-        and .pending_token_time > 0
-    } (
-        @group .account,
-        @sum amount = integer ((.pending_token_time) * rate * units_per_asset)
-    );
+    val all_users_for_batch = all_staking_rewards @* {} (.account);
 
     val all_shared_rewards = pending_shared_payment @* {
             .account in all_users_for_batch
@@ -338,8 +331,7 @@ function _staking_distribute_rewards(using_batches: boolean = false, update_pend
     val last_known_time = _staking_last_known_time();
 
     // Send payouts
-    for (account in all_users_for_batch ) {
-        val amount = all_staking_rewards @? {.account == account} (.amount) ?: 0;
+    for ((account, amount) in all_staking_rewards ) {
         val shared = all_shared_rewards @? {.account == account} (.shared_amount, .provider_set) ?: (shared_amount = 0, provider_set = set<byte_array>());
         if (not try_call(_staking_pay_reward(last_known_time, pool, asset, account, amount, shared.shared_amount, list<byte_array>(shared.provider_set), *))) {
             log("Failed to pay out %s including %s from shared rewards to %s".format(amount + shared.shared_amount, shared.shared_amount, account.id));
