@@ -1,0 +1,26 @@
+import common.*;
+
+val token_chain_name = "token_chain";
+
+object token_chain {
+    mutable rid: byte_array = x"";
+}
+
+/**
+ * TODO
+ */
+operation init_token_chain(my_pubkey: pubkey, token_chain_config: byte_array) {
+    require_is_provider_with_rate_limit(my_pubkey);
+    require_is_system_provider(my_pubkey);
+
+    require(token_chain.rid == x"", "Token chain is already started");
+
+    val nodes = cluster_node @* { system_cluster() } ( @sort .node.pubkey );
+    // do not write new configuration when size is 0 since it's impossible to recover from that
+    require(nodes.size() > 0, "System cluster must have at least one node");
+
+    log("Adding token chain to system container");
+    val token_blockchain = add_blockchain(token_chain_config, nodes, token_chain_name, system_container(), true);
+    update token_chain ( rid = token_blockchain.rid );
+}
+
