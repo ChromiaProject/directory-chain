@@ -1,0 +1,48 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import test_utils: lib.ft4.test.utils;
+}
+
+struct module_args {
+    auth_privkey: byte_array;
+    listing_fee: integer;
+}
+
+function test_creating_token() {
+    rell.test.tx().op(
+        init_token_chain()
+    ).sign(rell.test.keypairs.alice).run();
+
+    val proposer = do_create_account(rell.test.keypairs.bob, chain_context.args.auth_privkey, chain_context.args.listing_fee);
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_token(
+            "Test",
+            "TST",
+            6,
+            "test.com",
+            [],
+            [])
+        )
+    ).op(
+        propose_token(
+            "Test",
+            "TST",
+            6,
+            "test.com",
+            [],
+            [],
+        )
+    ).sign(rell.test.keypairs.bob).run();
+
+    assert_equals(get_account_balance(proposer), 0);
+    val pool_account = ft4.accounts.account_by_id(get_pool_account_id());
+    assert_equals(get_account_balance(pool_account), chain_context.args.listing_fee);
+
+    // TODO Complete voting etc...
+}

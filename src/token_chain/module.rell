@@ -36,6 +36,7 @@ struct minting_policy {
 operation init_token_chain() {
 
     require(op_context.is_signer(chain_context.args.init_pubkey), "Operation must be signed by initial key");
+    create_pool_account();
     register_assets();
 
     create_token_chain_governance_account();
@@ -56,22 +57,28 @@ function register_assets() {
     );
 }
 
-//@extend(ft4.auth.auth_handler)
-//function () = ft4.auth.add_auth_handler(
-//    scope = rell.meta(propose_token).mount_name,
-//    flags = ["T"],
-//    message = propose_token_auth_message(*)
-//);
-//
-//function propose_token_auth_message() {
-//    val args = struct<add_bridge_lease>.from_gtv(gtv);
-//    return "Please sign the message\nto add a bridge lease to container lease %s\nfor blockchain %s and validator contract %s on network %s\n".format(
-//        args.container_name,
-//        args.blockchain_rid,
-//        args.validator_contract,
-//        args.evm_network_id
-//    );
-//}
+val pool_account_type = "TOKEN_CHAIN_POOL";
+
+function create_pool_account() =
+    ft4.accounts.create_account_without_auth(get_pool_account_id(), pool_account_type);
+
+function get_pool_account_id() = (pool_account_type + chain_context.blockchain_rid).hash();
+
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(propose_token).mount_name,
+    flags = ["T"],
+    message = propose_token_auth_message(*)
+);
+
+function propose_token_auth_message(gtv): text {
+    val args = struct<propose_token>.from_gtv(gtv);
+    // TODO: Improve message
+    return "Please sign the message\nto propose adding token %s\n".format(
+        args.name
+    );
+}
 
 //
 //Token name
@@ -87,11 +94,13 @@ function register_assets() {
 //Account creation strategy details (see “Account creation strategy” section below)
 
 entity pending_token_proposal {
+    key common_proposal;
     name: text;
-    key symbol: text;
+    symbol: text;
     decimals: integer;
     icon: text;
     account_creation_brids: text;
+    fee: integer;
 }
 
 entity pending_token_proposal_minting_policy {
@@ -99,6 +108,49 @@ entity pending_token_proposal_minting_policy {
     account: ft4.accounts.account;
     key pending_token_proposal, account;
     initial_amount: integer;
+}
+
+entity token {
+    owner: ft4.accounts.account;
+    asset: ft4.assets.asset;
+}
+
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.tc_propose_token.name: apply_token_create(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.tc_propose_token.name: cleanup_pending_token_create(*)];
+
+function apply_token_create(proposal: common_proposal) {
+    val pending_token = pending_token_proposal @ { proposal };
+
+    val pool_account = ft4.accounts.account_by_id(get_pool_account_id());
+    val governance_account = ft4.accounts.account_by_id(get_token_chain_governance_account_id());
+    ft4.assets.Unsafe.transfer(pool_account, governance_account, get_asset(), pending_token.fee);
+
+    val proposer_account = ft4.accounts.account_by_id(proposal.proposed_by);
+    val asset = ft4.assets.Unsafe.register_asset(
+        pending_token.name,
+        pending_token.symbol,
+        pending_token.decimals,
+        chain_context.blockchain_rid,
+        pending_token.icon
+    );
+
+    create token(proposer_account, asset);
+
+    // Apply minting
+}
+
+function cleanup_pending_token_create(proposal: common_proposal) {
+    val pending_token = pending_token_proposal @ { proposal };
+
+    // Refund rejected proposals
+    if (proposal.state == common_proposal_state.REJECTED) {
+        val pool_account = ft4.accounts.account_by_id(get_pool_account_id());
+        val proposer_account = ft4.accounts.account_by_id(proposal.proposed_by);
+        ft4.assets.Unsafe.transfer(pool_account, proposer_account, get_asset(), pending_token.fee);
+    }
+
+    delete pending_token_proposal_minting_policy @* { pending_token };
+    delete pending_token;
 }
 
 operation propose_token(
@@ -111,20 +163,25 @@ operation propose_token(
 ) {
     val account = ft4.auth.authenticate();
 
-    val governance_account = ft4.accounts.account_by_id(get_token_chain_governance_account_id());
-    ft4.assets.Unsafe.transfer(account, governance_account, get_asset(),
+    val pool_account = ft4.accounts.account_by_id(get_pool_account_id());
+    ft4.assets.Unsafe.transfer(account, pool_account, get_asset(),
         chain_context.args.listing_fee);
 
+    val proposal = create common_proposal(op_context.last_block_time, common_proposal_type.tc_propose_token, account.id,
+        require_common_voter_set(token_chain_governance_voter_set));
+
     val pending_token_proposal = create pending_token_proposal(
-        name, symbol, decimals, icon, join_pubkey_list(account_creation_brids)
+            common_proposal = proposal,
+            name = name,
+            symbol = symbol,
+            decimals = decimals,
+            icon = icon,
+            account_creation_brids = join_pubkey_list(account_creation_brids),
+            fee = chain_context.args.listing_fee
     );
     for (pm in minting_policy) {
         create pending_token_proposal_minting_policy(pending_token_proposal, pm.account, pm.initial_amount);
     }
-
-    // TODO pubkey
-    create common_proposal(op_context.last_block_time, common_proposal_type.tc_propose_token, pubkey,
-        require_common_voter_set(token_chain_governance_voter_set));
 }
 
 function join_pubkey_list(brids: list<pubkey>) {
