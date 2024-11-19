@@ -10,6 +10,7 @@ namespace ft4 {
     import lib.ft4.assets;
     import lib.ft4.auth;
     import test_utils: lib.ft4.test.utils;
+    import lib.ft4.accounts.strategies;
 }
 
 import lib.hbridge;
@@ -1661,4 +1662,38 @@ function test_staking_payouts_multiple_pending_shared_rewards() {
 
     assert_equals(staking_get_rewards_paid(test_account_bob.id), bob_amount);
     assert_equals(staking_get_shared_rewards_paid(test_account_bob.id), 20 * units_per_asset);
+}
+
+function test_ras_staking_operation_without_stake() {
+    rell.test.tx().op(init()).run();
+
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
+    do_create_account_using_ras_staking(rell.test.keypairs.alice, "no stake or insufficient stake");
+}
+
+function test_ras_staking_operation_without_register_account() {
+    rell.test.tx().op(init()).run();
+
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
+    do_evm_stake_update_bsc(alice_evm_address, 50 * units_per_asset);
+
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(alice_evm_address, set(["A", "T"]));
+
+    rell.test.tx()
+        .op(ras_staking(alice_evm_address, auth_descriptor))
+    .run_must_fail("<ras_staking> must be followed by a register account operation");
+}
+
+function test_ras_staking_operation_without_auth() {
+    rell.test.tx().op(init()).run();
+
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
+    do_evm_stake_update_bsc(alice_evm_address, 50 * units_per_asset);
+
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(alice_evm_address, set(["A", "T"]));
+
+    rell.test.tx()
+        .op(ras_staking(alice_evm_address, auth_descriptor))
+        .op(ft4.strategies.external.register_account())
+    .run_must_fail("Missing signature for address <%s>".format(alice_evm_address));
 }
