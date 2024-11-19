@@ -14,35 +14,9 @@ struct module_args {
     listing_fee: integer;
 }
 
-function setup(): ft4.accounts.account {
-    rell.test.tx().op(
-        init_token_chain()
-    ).sign(rell.test.keypairs.alice).run();
-
-    val proposer = do_create_account(rell.test.keypairs.bob, chain_context.args.auth_privkey, chain_context.args.listing_fee);
-
-    val propose_op = propose_token(
-                "Test",
-                "TST",
-                6,
-                "http://test.com",
-                [],
-                ["foo".hash(), "bar".hash()]);
-    rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)
-    ).op(propose_op)
-    .run();
-
-    assert_equals(pending_token_proposal @ { .common_proposal.rowid == get_latest_common_proposal_id() }.account_creation_brids,
-        "foo".hash().to_hex() + "," + "bar".hash().to_hex());
-
-    assert_equals(get_account_balance(proposer), 0);
-
-    return proposer;
-}
-
 function test_creating_token_success() {
-    val proposer = setup();
+    val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee);
+    assert_equals(get_account_balance(proposer), 0);
 
     val pool_account = ft4.accounts.account_by_id(get_pool_account_id());
     assert_equals(get_account_balance(pool_account), chain_context.args.listing_fee);
@@ -63,7 +37,7 @@ function test_creating_token_success() {
 
 
 function test_creating_token_refund() {
-    val proposer = setup();
+    val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee);
 
     val pool_account = ft4.accounts.account_by_id(get_pool_account_id());
     assert_equals(get_account_balance(pool_account), chain_context.args.listing_fee);
@@ -83,7 +57,7 @@ function test_creating_token_refund() {
 }
 
 function test_creating_token_revoke() {
-    val proposer = setup();
+    val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee);
 
     val pool_account = ft4.accounts.account_by_id(get_pool_account_id());
     assert_equals(get_account_balance(pool_account), chain_context.args.listing_fee);

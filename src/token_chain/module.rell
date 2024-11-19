@@ -1,12 +1,16 @@
 module;
 
 import common_proposal.*;
+import lib.iccf.*;
 
 namespace ft4 {
     import lib.ft4.accounts;
     import lib.ft4.assets;
     import lib.ft4.auth;
     import lib.ft4.utils;
+    import lib.ft4.accounts.strategies;
+    import lib.ft4.accounts.strategies.transfer;
+    import lib.ft4.accounts.strategies.transfer.fee;
 }
 
 struct module_args {
@@ -83,7 +87,9 @@ function create_token_chain_governance_account() =
         token_chain_governance_account_type
     );
 
+function get_asset_id() = (chain_context.args.asset_name, chain_context.args.economy_chain_blockchain_rid).hash();
+
 function get_asset(): ft4.assets.asset {
-    val asset_id = (chain_context.args.asset_name, chain_context.args.economy_chain_blockchain_rid).hash();
+    val asset_id = get_asset_id();
     return ft4.assets.asset @ { .id == asset_id };
 }

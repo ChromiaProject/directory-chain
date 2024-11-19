@@ -1,0 +1,44 @@
+val token_chain_account_creation_op_name = "create_token_chain_account";
+
+@extend(ft4.strategies.strategy)
+function () = ft4.strategies.add_strategy(
+    op = rell.meta(ras_iccf),
+    account_details = iccf_account_details(*),
+    action = apply_ras_iccf_action(*)
+);
+
+operation ras_iccf(transaction: gtx_transaction, asset_id: byte_array) {
+    ft4.strategies.require_register_account_next_operation();
+}
+
+function iccf_account_details(gtv) {
+    val params = struct<ras_iccf>.from_gtv(gtv);
+
+    val asset = ft4.assets.asset @ { .id == params.asset_id };
+    val token = token @ { asset };
+    val token_account_creation_brids = token_account_creation_brid @ { token } (@set .blockchain_rid);
+
+    val account_creation_args = extract_operation_args(params.transaction, token_chain_account_creation_op_name, valid_source_blockchain_rids = token_account_creation_brids);
+    require(exists(account_creation_args), "Account creation operation must have at least one argument");
+
+    val main_auth_descriptor = ft4.accounts.auth_descriptor.from_gtv(account_creation_args[0]);
+    val signers = ft4.accounts.get_signers(main_auth_descriptor);
+    val disposable_auth_descriptor = if (account_creation_args.size() > 1) ft4.accounts.auth_descriptor.from_gtv(account_creation_args[1]) else null;
+
+    return ft4.strategies.account_details(
+        account_id = ft4.accounts.get_account_id_from_signers(signers),
+        main = main_auth_descriptor,
+        disposable = disposable_auth_descriptor
+    );
+}
+
+function apply_ras_iccf_action(ft4.accounts.account, strategy_params_gtv: gtv) {
+    val params = struct<ras_iccf>.from_gtv(strategy_params_gtv);
+
+    val asset = ft4.assets.asset @ { .id == params.asset_id };
+    val token = token @ { asset };
+
+    val account_creation_fee = ft4.transfer.resolve_fee_assets(ft4.fee.fee_assets())[get_asset_id()];
+    val governance_account = ft4.accounts.account_by_id(get_token_chain_governance_account_id());
+    ft4.assets.Unsafe.transfer(token.owner, governance_account, get_asset(), account_creation_fee);
+}
