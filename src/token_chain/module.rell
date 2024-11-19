@@ -6,6 +6,7 @@ namespace ft4 {
     import lib.ft4.accounts;
     import lib.ft4.assets;
     import lib.ft4.auth;
+    import lib.ft4.utils;
 }
 
 struct module_args {
@@ -16,8 +17,10 @@ struct module_args {
     asset_icon: text;
     asset_decimals: integer;
     economy_chain_blockchain_rid: pubkey;
+    proposal_revoke_timeout_days: integer;
 }
 
+val millis_per_day = 24 * 60 * 60 * 1000;
 val token_chain_governance_voter_set = "Token chain governance";
 val token_chain_governance_account_type = "TOKEN_CHAIN_GOVERNANCE";
 val pool_account_type = "TOKEN_CHAIN_POOL";
@@ -30,6 +33,11 @@ struct minting_policy {
 entity token {
     owner: ft4.accounts.account;
     asset: ft4.assets.asset;
+}
+
+entity token_account_creation_brid {
+    token;
+    blockchain_rid: byte_array;
 }
 
 operation init_token_chain() {
@@ -60,19 +68,6 @@ function create_pool_account() =
     ft4.accounts.create_account_without_auth(get_pool_account_id(), pool_account_type);
 
 function get_pool_account_id() = (pool_account_type + chain_context.blockchain_rid).hash();
-
-function join_pubkey_list(brids: list<pubkey>) {
-    if (brids.empty()) {
-        return "";
-    }
-    var result = brids[0].to_hex();
-    if (brids.size() > 1) {
-        for (i in range(1, brids.size())) {
-            result = result + "," + brids[i].to_hex();
-        }
-    }
-    return result;
-}
 
 function get_token_chain_governance_account_id() = (
         token_chain_governance_account_type + chain_context
