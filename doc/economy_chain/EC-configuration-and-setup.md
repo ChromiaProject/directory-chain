@@ -58,6 +58,8 @@ From directory-chain:
 - `L_cluster_subnode_image_update`
 From EVM Transaction Submitter chain:
 - `G_evm_transaction_submitter_cost_topic`
+From EIF EVM event receiver chain:
+- `L_evm_block_events`
 
 ### EIF configuration
 
@@ -99,21 +101,14 @@ Example:
           global:
             topics:
               - G_evm_transaction_submitter_cost_topic
+          local:
+            - topic: L_evm_block_events
+              bc-rid: x"0000000000000000000000000000000000000000000000000000000000000000" # TODO Set to EVM receiver bcrid
       eif:
         # event processing 
         snapshot:
           levels_per_page: 2
           snapshots_to_keep: 2
-        # event receiver  
-        chains:
-          bsc:
-            network_id: 97
-            contracts:
-              - "0x6e42297d0374B78b695bd7d91f92C76E24B551F4"
-              - "0x753218363422002DF74F3D0D8d67f6CB38bE32D0"
-            evm_read_offset: 3
-            read_offset: 3
-            events: !include config/events.yaml
     moduleArgs:
       lib.ft4.core.accounts:
          rate_limit:
