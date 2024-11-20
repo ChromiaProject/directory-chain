@@ -1,18 +1,14 @@
-function has_pending_upgrade(container_name: text): boolean {
-    val upgrade_ticket = upgrade_container_ticket @? { container_name };
-    return upgrade_ticket != null and upgrade_ticket.ticket.state == ticket_state.PENDING;
-}
+function has_pending_upgrade(container_name: text): boolean =
+    not empty(upgrade_container_ticket @* { container_name, .ticket.state == ticket_state.PENDING});
 
-function has_pending_subnode_image_assignment(container_name: text): boolean {
-    val subnode_image_assignment_ticket = assign_subnode_image_to_container_ticket @? { container_name };
-    return subnode_image_assignment_ticket != null and subnode_image_assignment_ticket.ticket.state == ticket_state.PENDING;
-}
+function has_pending_subnode_image_assignment(container_name: text): boolean =
+    not empty(assign_subnode_image_to_container_ticket @* { container_name, .ticket.state == ticket_state.PENDING});
 
 function receive_ticket_container_result_message(body: gtv) {
     val message = ticket_container_result_message.from_gtv(body);
     val ticket = ticket @? { .rowid == rowid(message.ticket_id) };
     if (ticket == null) {
-        log("ticket_id %s not found".format(message.ticket_id));
+        log("ticket_id %d not found".format(message.ticket_id));
         return;
     }
     ticket.state = if (message.error_message == null) ticket_state.SUCCESS else ticket_state.FAILURE;
@@ -26,7 +22,7 @@ function receive_ticket_container_result_message(body: gtv) {
                 ticket_state.SUCCESS -> {
                     val container_name = message.container_name!!;
                     val cluster_name = message.cluster_name!!;
-                    log("Successfully created container %s in cluster %s for ticket %s".format(container_name, cluster_name, message.ticket_id));
+                    log("Successfully created container %s in cluster %s for ticket %d".format(container_name, cluster_name, message.ticket_id));
                     specific_ticket.container_name = container_name;
                     val lease = create lease(
                         container_name = container_name,
@@ -43,7 +39,7 @@ function receive_ticket_container_result_message(body: gtv) {
                     }
                 }
                 ticket_state.FAILURE -> {
-                    log("Failed to create container for ticket %s".format(message.ticket_id));
+                    log("Failed to create container for ticket %d".format(message.ticket_id));
 
                     ft4.assets.Unsafe.transfer(get_pool_account(), ticket.account, get_asset(), specific_ticket.cost);
                     create lease_refund(ticket.account, specific_ticket.cost);
@@ -59,7 +55,7 @@ function receive_ticket_container_result_message(body: gtv) {
                     // Note: When we implement "move" the container name might change so we should check what name D1 returns
                     val upgraded_container_name = message.container_name!!;
                     val upgraded_cluster_name = message.cluster_name!!;
-                    log("Successfully upgraded container %s for ticket %s".format(upgraded_container_name, message.ticket_id));
+                    log("Successfully upgraded container %s for ticket %d".format(upgraded_container_name, message.ticket_id));
                     val current_lease = lease @ { .container_name == specific_ticket.container_name };
                     val currently_auto_renewed = current_lease.auto_renew;
                     val current_duration = current_lease.duration_millis;
@@ -91,7 +87,7 @@ function receive_ticket_container_result_message(body: gtv) {
                     transfer_dapp_providers_to_lease(new_lease, lease_dapp_providers);
                 }
                 ticket_state.FAILURE -> {
-                    log("Failed to upgrade container for ticket %s".format(message.ticket_id));
+                    log("Failed to upgrade container for ticket %d".format(message.ticket_id));
 
                     ft4.assets.Unsafe.transfer(get_pool_account(), ticket.account, get_asset(), specific_ticket.cost);
                     create lease_refund(ticket.account, specific_ticket.cost);
@@ -103,13 +99,13 @@ function receive_ticket_container_result_message(body: gtv) {
             val specific_ticket = assign_subnode_image_to_container_ticket @ { ticket };
             when (ticket.state) {
                 ticket_state.SUCCESS -> {
-                    log("Successfully assigned subnode image % to container %s for ticket %s".format(
+                    log("Successfully assigned subnode image %s to container %s for ticket %d".format(
                         specific_ticket.subnode_image_name, specific_ticket.container_name, message.ticket_id));
                     val lease = lease @ { .container_name == specific_ticket.container_name };
                     create lease_subnode_image(lease, subnode_image @ { .name == specific_ticket.subnode_image_name });
                 }
                 ticket_state.FAILURE -> {
-                    log("Failed to assign subnode image % to container %s for ticket %s".format(
+                    log("Failed to assign subnode image %s to container %s for ticket %d".format(
                         specific_ticket.subnode_image_name, specific_ticket.container_name, message.ticket_id));
                 }
             }
