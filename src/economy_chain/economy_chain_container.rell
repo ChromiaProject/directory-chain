@@ -197,7 +197,13 @@ function assign_subnode_image_to_container_auth_message(gtv): text {
 operation assign_subnode_image_to_container(container_name: text, subnode_image_name: text) {
     require_initialized();
     val lease = require_lease(container_name);
+
     require(not subnode_image_name.empty(), "Subnode image name cannot be empty");
+    val subnode_image = require(subnode_image @? { .name == subnode_image_name }, "Subnode image %s not found".format(subnode_image_name));
+    require(subnode_image.active, "Subnode image %s is not active".format(subnode_image_name));
+    require(subnode_image.subnode_image_type == subnode_image_type.COMMON or not empty(cluster_subnode_image @? { lease.cluster, subnode_image }),
+        "Subnode image %s is not compatible with cluster %s".format(subnode_image_name, lease.cluster.name));
+
     require(not has_pending_subnode_image_assignment(container_name), "Container %s already has a pending subnode image assignment".format(container_name));
     require(empty(lease_subnode_image @? { lease }), "Container %s already has a custom subnode image".format(container_name));
 
