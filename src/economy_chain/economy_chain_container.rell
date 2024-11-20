@@ -181,8 +181,8 @@ function () = ft4.auth.add_auth_handler(
 function assign_subnode_image_to_container_auth_message(gtv): text {
     val args = struct<assign_subnode_image_to_container>.from_gtv(gtv);
     return "Please sign the message\nto assign subnode image %s\nto container %s\non account {account_id}".format(
-        args.container_name,
         args.subnode_image_name,
+        args.container_name,
     );
 }
 
@@ -249,7 +249,7 @@ operation upgrade_container(container_name: text, upgraded_container_units: inte
     upgraded_extra_storage_gib: integer, upgraded_cluster_name: text) {
     require_initialized();
     val lease = require_lease(container_name);
-    require(not has_pending_upgrade(container_name), "Container already has a pending upgrade");
+    require(not has_pending_upgrade(container_name), "Container %s already has a pending upgrade".format(container_name));
     require(
         upgraded_container_units != lease.container_units or upgraded_extra_storage_gib != lease.extra_storage_gib,
         "New container specifications are identical to current lease"

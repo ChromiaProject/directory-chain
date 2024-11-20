@@ -68,6 +68,52 @@ function test_create_container_and_assign_subnode_image_later_success() {
     assert_equals(lease_data2, expected_lease2);
 }
 
+function test_create_container_and_assign_subnode_image_later_fail_when_pending() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val bob = add_provider(rell.test.pubkeys.bob);
+    rell.test.tx().op(create_test_subnode_image(name = "subnode_image1", owner = bob)).run();
+    val container_name = do_create_container(
+        alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 13, cluster_name = cluster_name, container_units = 2);
+
+    val lease = lease @ { container_name };
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, assign_subnode_image_to_container(container_name, "subnode_image1"))
+    ).op(
+        assign_subnode_image_to_container(lease.container_name, "subnode_image1")
+    ).run();
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, assign_subnode_image_to_container(container_name, "subnode_image1"))
+    ).op(
+        assign_subnode_image_to_container(lease.container_name, "subnode_image1")
+    ).run_must_fail("Container %s already has a pending subnode image assignment".format(lease.container_name));
+}
+
+function test_create_container_and_assign_subnode_image_later_when_failed() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val bob = add_provider(rell.test.pubkeys.bob);
+    rell.test.tx().op(create_test_subnode_image(name = "subnode_image1", owner = bob)).run();
+    val container_name = do_create_container(
+        alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 13, cluster_name = cluster_name, container_units = 2);
+
+    val lease = lease @ { container_name };
+
+    do_assign_subnode_image_to_container(
+        rell.test.keypairs.alice, success = false, ticket_id = ticket_id_after_init + 17, current_lease = lease, subnode_image_name = "subnode_image1");
+
+    do_assign_subnode_image_to_container(
+        rell.test.keypairs.alice, success = false, ticket_id = ticket_id_after_init + 19, current_lease = lease, subnode_image_name = "subnode_image1");
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, assign_subnode_image_to_container(container_name, "subnode_image1"))
+    ).op(
+        assign_subnode_image_to_container(lease.container_name, "subnode_image1")
+    ).run();
+}
+
 function test_create_container_with_subnode_image() {
     rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
     val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
@@ -444,6 +490,26 @@ function test_upgrade_container_success() {
 
     val lease_data = require(get_lease_by_container_name(container_name));
     assert_equals(lease_data, expected_lease);
+}
+
+function test_upgrade_container_fail_when_pending() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 2);
+
+    val created_lease = lease @ { container_name };
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, upgrade_container(container_name, 3, 0, cluster_name))
+    ).op(
+        upgrade_container(container_name, 3, 0, cluster_name)
+    ).run();
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, upgrade_container(container_name, 3, 0, cluster_name))
+    ).op(
+        upgrade_container(container_name, 3, 0, cluster_name)
+    ).run_must_fail("Container %s already has a pending upgrade".format(container_name));
 }
 
 function test_upgrade_container_with_subnode_image() {
