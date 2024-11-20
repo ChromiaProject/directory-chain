@@ -523,7 +523,8 @@ query get_assign_subnode_image_to_container_ticket_by_id(ticket_id: integer): co
  * Get leases for an account.
  */
 query get_leases_by_account(account_id: byte_array): list<lease_data> =
-        (lease, @outer lease_subnode_image) @* { .account.id == account_id } (lease_data(
+        (lease, @outer lease_subnode_image @* { .lease == lease }) @* { .account.id == account_id }
+            (lease_data(
                 container_name = .container_name,
                 cluster_name = .cluster.name,
                 container_units = .container_units,
@@ -540,7 +541,8 @@ query get_leases_by_account(account_id: byte_array): list<lease_data> =
  * @param container_name  container name
  */
 query get_lease_by_container_name(container_name: text): lease_data? =
-        (lease, @outer lease_subnode_image) @? { container_name } (lease_data(
+        (lease, @outer lease_subnode_image @* { .lease == lease }) @? { container_name }
+            (lease_data(
                 container_name = .container_name,
                 cluster_name = .cluster.name,
                 container_units = .container_units,

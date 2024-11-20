@@ -73,8 +73,9 @@ function test_create_container_with_subnode_image() {
     val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val bob = add_provider(rell.test.pubkeys.bob);
     rell.test.tx().op(create_test_subnode_image(name = "subnode_image1", owner = bob)).run();
+    rell.test.tx().op(create_test_subnode_image(name = "subnode_image2", owner = bob)).run();
     val container_name = do_create_container(
-        alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 13, cluster_name = cluster_name, container_units = 2, subnode_image_name = "subnode_image1");
+        alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 14, cluster_name = cluster_name, container_units = 2, subnode_image_name = "subnode_image1");
 
     val lease = lease @ { container_name };
 
@@ -83,7 +84,7 @@ function test_create_container_with_subnode_image() {
         cluster_name = cluster_name,
         container_units = 2,
         extra_storage_gib = 0,
-        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*5 + millis_per_week,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*6 + millis_per_week,
         expired = false,
         auto_renew = false,
         subnode_image_name = "subnode_image1",
@@ -93,8 +94,31 @@ function test_create_container_with_subnode_image() {
     assert_equals(leases.size(), 1);
     assert_equals(leases[0], expected_lease);
 
+    val container_name2 = do_create_container(
+        alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 21, cluster_name = cluster_name, container_units = 2,
+            subnode_image_name = "subnode_image2", container_name = "container2");
+
+    val expected_lease2 = lease_data(
+        container_name = "container2",
+        cluster_name = cluster_name,
+        container_units = 2,
+        extra_storage_gib = 0,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*8 + millis_per_week,
+        expired = false,
+        auto_renew = false,
+        subnode_image_name = "subnode_image2",
+    );
+
+    val leases2 = get_leases_by_account(alice.id);
+    assert_equals(leases2.size(), 2);
+    assert_equals(leases2[0], expected_lease);
+    assert_equals(leases2[1], expected_lease2);
+
     val lease_data = require(get_lease_by_container_name(container_name));
     assert_equals(lease_data, expected_lease);
+
+    val lease_data2 = require(get_lease_by_container_name(container_name2));
+    assert_equals(lease_data2, expected_lease2);
 
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, assign_subnode_image_to_container(container_name, "subnode_image1"))
