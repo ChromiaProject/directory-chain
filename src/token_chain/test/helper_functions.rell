@@ -14,7 +14,12 @@ import common_proposal.test.helper_functions.*;
 
 val account_creation_chain_one = "foo".hash();
 
-function setup(auth_privkey: byte_array, initial_mint: big_integer): ft4.accounts.account {
+function setup(
+    auth_privkey: byte_array,
+    initial_mint: big_integer,
+    minting_policies: list<minting_policy> = [],
+    account_creation_brids: list<byte_array> = [account_creation_chain_one, "bar".hash()]
+): ft4.accounts.account {
     rell.test.tx().op(
         init_token_chain()
     ).sign(rell.test.keypairs.alice).run();
@@ -26,15 +31,12 @@ function setup(auth_privkey: byte_array, initial_mint: big_integer): ft4.account
         "TST",
         6,
         "http://test.com",
-        [],
-        [account_creation_chain_one, "bar".hash()]);
+        minting_policies,
+        account_creation_brids);
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)
     ).op(propose_op)
         .run();
-
-    assert_equals(pending_token_proposal @ { .common_proposal.rowid == get_latest_common_proposal_id() }.account_creation_brids,
-        "foo".hash().to_hex() + "," + "bar".hash().to_hex());
 
     return proposer;
 }

@@ -14,8 +14,8 @@ operation ras_iccf(transaction: gtx_transaction, asset_id: byte_array) {
 function iccf_account_details(gtv) {
     val params = struct<ras_iccf>.from_gtv(gtv);
 
-    val asset = ft4.assets.asset @ { .id == params.asset_id };
-    val token = token @ { asset };
+    val asset = ft4.assets.Asset(params.asset_id);
+    val token = require_token(asset);
     val token_account_creation_brids = token_account_creation_brid @ { token } (@set .blockchain_rid);
 
     val account_creation_args = extract_operation_args(params.transaction, token_chain_account_creation_op_name, valid_source_blockchain_rids = token_account_creation_brids);
@@ -35,8 +35,8 @@ function iccf_account_details(gtv) {
 function apply_ras_iccf_action(ft4.accounts.account, strategy_params_gtv: gtv) {
     val params = struct<ras_iccf>.from_gtv(strategy_params_gtv);
 
-    val asset = ft4.assets.asset @ { .id == params.asset_id };
-    val token = token @ { asset };
+    val asset = ft4.assets.Asset(params.asset_id);
+    val token = require_token(asset);
 
     val account_creation_fee = ft4.transfer.resolve_fee_assets(ft4.fee.fee_assets())[get_asset_id()];
     val governance_account = ft4.accounts.account_by_id(get_token_chain_governance_account_id());

@@ -30,19 +30,18 @@ val token_chain_governance_account_type = "TOKEN_CHAIN_GOVERNANCE";
 val pool_account_type = "TOKEN_CHAIN_POOL";
 
 struct minting_policy {
-    // TODO Enforce uniqueness per token
     minters: set<byte_array>;
-    // TODO Big integer amounts?
     /** 0 to disable */
-    max_supply: integer;
-    mining_interval_ms: integer;
-    mining_amount: integer;
+    max_supply: big_integer;
+    minting_interval_ms: integer;
+    minting_amount: big_integer;
     accumulating_amount: boolean;
 }
 
 entity token {
     owner: ft4.accounts.account;
     asset: ft4.assets.asset;
+    creation_time: timestamp;
 }
 
 entity token_account_creation_brid {
@@ -52,9 +51,9 @@ entity token_account_creation_brid {
 
 entity token_account_minting_policy {
     index token;
-    max_supply: integer;
-    mining_interval_ms: integer;
-    mining_amount: integer;
+    max_supply: big_integer;
+    minting_interval_ms: integer;
+    minting_amount: big_integer;
     accumulating_amount: boolean;
 }
 
@@ -110,4 +109,43 @@ function get_asset_id() = (chain_context.args.asset_name, chain_context.args.eco
 function get_asset(): ft4.assets.asset {
     val asset_id = get_asset_id();
     return ft4.assets.asset @ { .id == asset_id };
+}
+
+struct token_data {
+    owner: byte_array;
+    creation_time: timestamp;
+    minting_policy: list<minting_policy>;
+    account_creation_brids: list<byte_array>;
+}
+
+function require_token(ft4.assets.asset) = require(token @? { asset }, "No token for asset id found");
+
+// TODO test
+query get_token_info(asset_id: byte_array) {
+    val asset = ft4.assets.Asset(asset_id);
+    val token = require_token(asset);
+
+    val token_account_minting_policies = token_account_minting_policy @* { token };
+    val minting_policies = list<minting_policy>();
+    for (minting_policy in token_account_minting_policies) {
+        val minters = set<byte_array>();
+        for (minter in token_account_minting_policy_account @* { minting_policy }) {
+            minters.add(minter.account.id);
+        }
+
+        minting_policies.add(minting_policy(
+            minters = minters,
+            max_supply = minting_policy.max_supply,
+            minting_interval_ms = minting_policy.minting_interval_ms,
+            minting_amount = minting_policy.minting_amount,
+            accumulating_amount = minting_policy.accumulating_amount,
+        ));
+    }
+
+    return token_data(
+        token.owner.id,
+        token.creation_time,
+        minting_policies,
+        token_account_creation_brid @* { token } ( .blockchain_rid )
+    );
 }

@@ -14,9 +14,9 @@ entity pending_token_proposal {
 entity pending_token_proposal_minting_policy {
     index pending_token_proposal;
     minters: text;
-    max_supply: integer; // 0 to disable
-    mining_interval_ms: integer;
-    mining_amount: integer;
+    max_supply: big_integer; // 0 to disable
+    minting_interval_ms: integer;
+    minting_amount: big_integer;
     accumulating_amount: boolean;
 }
 
@@ -73,8 +73,8 @@ operation propose_token(
             pending_token_proposal,
             minters = pm.minters.join_to_text(",", "", "", null, "", byte_array_to_hex(*)),
             max_supply = pm.max_supply,
-            mining_interval_ms = pm.mining_interval_ms,
-            mining_amount = pm.mining_amount,
+            minting_interval_ms = pm.minting_interval_ms,
+            minting_amount = pm.minting_amount,
             accumulating_amount = pm.accumulating_amount,
         );
     }
@@ -113,11 +113,13 @@ function apply_token_create(proposal: common_proposal) {
         pending_token.icon
     );
 
-    val token = create token(proposer_account, asset);
+    val token = create token(proposer_account, asset, op_context.last_block_time);
 
     val account_creation_brids = pending_token.account_creation_brids.split(",");
     for (brid in account_creation_brids) {
-        create token_account_creation_brid(token, byte_array.from_hex(brid));
+        if (not brid.empty()) {
+            create token_account_creation_brid(token, byte_array.from_hex(brid));
+        }
     }
 
     // Apply minting
@@ -125,14 +127,17 @@ function apply_token_create(proposal: common_proposal) {
         val token_account_minting_policy = create token_account_minting_policy(
             token = token,
             max_supply = minting_policy.max_supply,
-            mining_interval_ms = minting_policy.mining_interval_ms,
-            mining_amount = minting_policy.mining_amount,
+            minting_interval_ms = minting_policy.minting_interval_ms,
+            minting_amount = minting_policy.minting_amount,
             accumulating_amount = minting_policy.accumulating_amount
         );
 
-        for (minter in minting_policy.minters.split(",")) {
-            create token_account_minting_policy_account(
-                token_account_minting_policy, ft4.accounts.Account(byte_array.from_hex(minter)));
+        val minters = minting_policy.minters.split(",");
+        for (minter in minters) {
+            if (not minter.empty()) {
+                create token_account_minting_policy_account(
+                    token_account_minting_policy, ft4.accounts.Account(byte_array.from_hex(minter)));
+            }
         }
     }
 }
@@ -158,4 +163,55 @@ function cleanup_pending_token_create(proposal: common_proposal) {
 function refund_proposal(ft4.accounts.account, amount: integer) {
     val pool_account = ft4.accounts.account_by_id(get_pool_account_id());
     ft4.assets.Unsafe.transfer(pool_account, account, get_asset(), amount);
+}
+
+struct token_proposal_data {
+    name: text;
+    symbol: text;
+    decimals: integer;
+    icon: text;
+    minting_policy: list<minting_policy>;
+    account_creation_brids: list<byte_array>;
+}
+
+// TODO test
+query get_token_proposal(id: rowid) {
+    val proposal = require_common_proposal(id);
+    val pending_token_proposal = require(pending_token_proposal @? { proposal }, "Proposal %s is not of type token".format(id));
+
+    val account_creation_brids = list<byte_array>();
+    for (brid in pending_token_proposal.account_creation_brids.split(",")) {
+        if (not brid.empty()) {
+            account_creation_brids.add(byte_array.from_hex(brid));
+        }
+    }
+
+    val minting_policies = list<minting_policy>();
+    for (minting_policy in pending_token_proposal_minting_policy @* { pending_token_proposal }) {
+        val minters = set<byte_array>();
+        // TODO function?
+        for (minter in minting_policy.minters.split(",")) {
+            if (not minter.empty()) {
+                minters.add(byte_array.from_hex(minter));
+            }
+        }
+        minting_policies.add(
+            minting_policy(
+                minters = minters,
+                max_supply = minting_policy.max_supply,
+                minting_interval_ms = minting_policy.minting_interval_ms,
+                minting_amount = minting_policy.minting_amount,
+                accumulating_amount = minting_policy.accumulating_amount,
+            )
+        );
+    }
+
+    return token_proposal_data(
+        name = pending_token_proposal.name,
+        symbol = pending_token_proposal.symbol,
+        decimals = pending_token_proposal.decimals,
+        icon = pending_token_proposal.icon,
+        minting_policy = minting_policies,
+        account_creation_brids = account_creation_brids,
+    );
 }
