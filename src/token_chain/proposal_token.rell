@@ -12,10 +12,12 @@ entity pending_token_proposal {
 }
 
 entity pending_token_proposal_minting_policy {
-    pending_token_proposal;
-    account: ft4.accounts.account;
-    key pending_token_proposal, account;
-    initial_amount: integer;
+    index pending_token_proposal;
+    minters: text;
+    max_supply: integer; // 0 to disable
+    mining_interval_ms: integer;
+    mining_amount: integer;
+    accumulating_amount: boolean;
 }
 
 
@@ -59,8 +61,22 @@ operation propose_token(
         account_creation_brids = account_creation_brids.join_to_text(",", "", "", null, "", byte_array_to_hex(*)),
         fee = chain_context.args.listing_fee
     );
+    val minters = set<byte_array>();
     for (pm in minting_policy) {
-        create pending_token_proposal_minting_policy(pending_token_proposal, pm.account, pm.initial_amount);
+        for (minter in pm.minters) {
+            require(minters.contains(minter) == false, "Minter account id %s exists in multiple minting policies".format(minter));
+            minters.add(minter);
+            ft4.accounts.Account(minter);
+        }
+
+        create pending_token_proposal_minting_policy(
+            pending_token_proposal,
+            minters = pm.minters.join_to_text(",", "", "", null, "", byte_array_to_hex(*)),
+            max_supply = pm.max_supply,
+            mining_interval_ms = pm.mining_interval_ms,
+            mining_amount = pm.mining_amount,
+            accumulating_amount = pm.accumulating_amount,
+        );
     }
 }
 
@@ -105,6 +121,20 @@ function apply_token_create(proposal: common_proposal) {
     }
 
     // Apply minting
+    for (minting_policy in pending_token_proposal_minting_policy @* { pending_token }) {
+        val token_account_minting_policy = create token_account_minting_policy(
+            token = token,
+            max_supply = minting_policy.max_supply,
+            mining_interval_ms = minting_policy.mining_interval_ms,
+            mining_amount = minting_policy.mining_amount,
+            accumulating_amount = minting_policy.accumulating_amount
+        );
+
+        for (minter in minting_policy.minters.split(",")) {
+            create token_account_minting_policy_account(
+                token_account_minting_policy, ft4.accounts.Account(byte_array.from_hex(minter)));
+        }
+    }
 }
 
 function cleanup_pending_token_create(proposal: common_proposal) {

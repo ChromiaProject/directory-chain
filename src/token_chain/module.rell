@@ -30,8 +30,14 @@ val token_chain_governance_account_type = "TOKEN_CHAIN_GOVERNANCE";
 val pool_account_type = "TOKEN_CHAIN_POOL";
 
 struct minting_policy {
-    account: ft4.accounts.account;
-    initial_amount: integer;
+    // TODO Enforce uniqueness per token
+    minters: set<byte_array>;
+    // TODO Big integer amounts?
+    /** 0 to disable */
+    max_supply: integer;
+    mining_interval_ms: integer;
+    mining_amount: integer;
+    accumulating_amount: boolean;
 }
 
 entity token {
@@ -40,8 +46,20 @@ entity token {
 }
 
 entity token_account_creation_brid {
-    token;
+    index token;
     blockchain_rid: byte_array;
+}
+
+entity token_account_minting_policy {
+    index token;
+    max_supply: integer;
+    mining_interval_ms: integer;
+    mining_amount: integer;
+    accumulating_amount: boolean;
+}
+
+entity token_account_minting_policy_account {
+    key token_account_minting_policy, ft4.accounts.account;
 }
 
 operation init_token_chain() {
