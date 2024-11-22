@@ -1,0 +1,87 @@
+
+struct bridge_configuration {
+    network_id: integer;
+    bridge_contract: text;
+    token_contract: text;
+    eif.hbridge.bridge_mode;
+    use_snapshots: boolean;
+}
+
+entity pending_bridge_proposal {
+    key proposal: common_proposal;
+    token;
+}
+
+entity pending_bridge_proposal_configuration {
+    pending_bridge_proposal;
+    network_id: integer;
+    bridge_contract: text;
+    token_contract: text;
+    eif.hbridge.bridge_mode;
+    use_snapshots: boolean;
+}
+
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.tc_propose_token_bridge.name: apply_token_bridge_create(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.tc_propose_token_bridge.name: cleanup_pending_token_bridge_create(*)];
+
+function apply_token_bridge_create(proposal: common_proposal) {
+    // TODO
+}
+
+function cleanup_pending_token_bridge_create(proposal: common_proposal) {
+    val bridge_proposal = pending_bridge_proposal @ { proposal };
+    if (proposal.state == common_proposal_state.REVOKED) {
+        require(
+            op_context.last_block_time - proposal.timestamp > chain_context.args.proposal_revoke_timeout_days * millis_per_day,
+            "Can not revoke proposal until %s day(s) has passed since creation".format(chain_context.args.proposal_revoke_timeout_days)
+        );
+    }
+
+    delete pending_bridge_proposal_configuration @* { bridge_proposal };
+    delete bridge_proposal;
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(propose_token_bridge).mount_name,
+    flags = ["T"],
+);
+
+operation propose_token_bridge(asset_id: byte_array, bridge_configurations: list<bridge_configuration>) {
+    val account = ft4.auth.authenticate();
+    val asset = ft4.assets.Asset(asset_id);
+    val token = require_token(asset);
+
+    require(account == token.owner, "Only token owner can propose a bridge");
+    require(empty(pending_bridge_proposal @? { token }), "Token already has a pending bridge proposal");
+
+    val proposal = create common_proposal(op_context.last_block_time, common_proposal_type.tc_propose_token_bridge, account.id,
+        require_common_voter_set(token_chain_governance_voter_set));
+
+    val bridge_proposal = create pending_bridge_proposal(proposal, token);
+    for (bridge_configuration in bridge_configurations) {
+        create pending_bridge_proposal_configuration(
+            bridge_proposal,
+            bridge_configuration.network_id,
+            bridge_contract = bridge_configuration.bridge_contract,
+            token_contract = bridge_configuration.token_contract,
+            bridge_configuration.bridge_mode,
+            bridge_configuration.use_snapshots
+        );
+    }
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(revoke_token_bridge_proposal).mount_name,
+    flags = ["T"],
+);
+
+operation revoke_token_bridge_proposal(proposal_id: rowid) {
+    val account = ft4.auth.authenticate();
+    val prop = require_common_proposal(proposal_id);
+    require(prop.proposal_type == common_proposal_type.tc_propose_token_bridge, "Proposal is not a token bridge proposal");
+    require(prop.proposed_by == account.id, "Proposal must be revoked by proposer");
+
+    revoke_common_proposal_unsafe(prop);
+}
