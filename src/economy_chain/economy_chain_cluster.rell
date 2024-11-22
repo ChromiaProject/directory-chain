@@ -1,23 +1,39 @@
 /**
- * Get a list of all clusters.
+ * Returns information for clusters, including any active special subnode images supported by the cluster.
  */
 query get_clusters(): list<cluster_data> {
-    return cluster @* {} (
-        cluster_data(
-            name = .name,
-            tag_name = .tag.name
-        ));
+    return (cluster, @outer cluster_subnode_image @* { .cluster == cluster, .subnode_image.active }) @* {} (
+        @group name = .name,
+        @group is_operational = .operational,
+        @group cluster_units = .cluster_units,
+        @group extra_storage = .extra_storage,
+        @group tag_name = .tag.name,
+        @list subnode_images = cluster_subnode_image?.subnode_image?.name,
+    ) @* {} (cluster_data(
+        name = .name,
+        is_operational = .is_operational,
+        cluster_units = .cluster_units,
+        extra_storage = .extra_storage,
+        tag_name = .tag_name,
+        subnode_images = .subnode_images @* { $ != null } ($!!),
+   ));
 }
 
 /**
- * Get a cluster by name.
+ * Returns information for a specified cluster, including any active special subnode images supported by the cluster.
  */
-query get_cluster_by_name(name): cluster_data? = cluster @? { name } (
-    cluster_data(
-        name = .name,
-        tag_name = .tag.name
-    )
-);
+query get_cluster_by_name(name): cluster_data? {
+    val cluster = cluster @? { name };
+    if (cluster == null) return null;
+    return cluster_data(
+        name = cluster.name,
+        is_operational = cluster.operational,
+        cluster_units = cluster.cluster_units,
+        extra_storage = cluster.extra_storage,
+        tag_name = cluster.tag.name,
+        subnode_images = cluster_subnode_image @* { cluster, .subnode_image.active } (.subnode_image.name),
+    );
+}
 
 /**
  * See if the cluster was created successfully, is still pending, or failed to be created.
