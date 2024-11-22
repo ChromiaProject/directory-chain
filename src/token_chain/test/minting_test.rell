@@ -28,14 +28,14 @@ function test_duplicate_minters_are_not_allowed() {
         [minting_policy(
             minters = set([proposer.id]),
             max_supply = 0,
-            minting_interval_ms = 0,
-            minting_amount = 0,
+            minting_interval_ms = 1,
+            minting_amount = 1,
             accumulating_amount = false
         ), minting_policy(
             minters = set([proposer.id]),
             max_supply = 0,
-            minting_interval_ms = 0,
-            minting_amount = 0,
+            minting_interval_ms = 1,
+            minting_amount = 1,
             accumulating_amount = false
         )],
         [account_creation_chain_one, "bar".hash()]
@@ -170,8 +170,9 @@ function test_successful_accumulating_mint() {
 
 function test_invalid_mint_account() {
 
+    val minter_account_id = crypto.eth_privkey_to_address(rell.test.keypairs.bob.priv).hash();
     val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee, [minting_policy(
-        minters = set(),
+        minters = set([minter_account_id]),
         max_supply = 0,
         minting_interval_ms = millis_per_day,
         minting_amount = 10,

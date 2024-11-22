@@ -69,6 +69,10 @@ operation propose_token(
             ft4.accounts.Account(minter);
         }
 
+        require(not minters.empty(), "Must provide at least one minter account");
+        require(pm.minting_interval_ms > 0, "Minting interval must be a positive value");
+        require(pm.minting_amount > 0, "Minting amount must be a positive value");
+
         create pending_token_proposal_minting_policy(
             pending_token_proposal,
             minters = pm.minters.join_to_text(",", "", "", null, "", byte_array_to_hex(*)),
@@ -174,30 +178,15 @@ struct token_proposal_data {
     account_creation_brids: list<byte_array>;
 }
 
-// TODO test
 query get_token_proposal(id: rowid) {
     val proposal = require_common_proposal(id);
     val pending_token_proposal = require(pending_token_proposal @? { proposal }, "Proposal %s is not of type token".format(id));
 
-    val account_creation_brids = list<byte_array>();
-    for (brid in pending_token_proposal.account_creation_brids.split(",")) {
-        if (not brid.empty()) {
-            account_creation_brids.add(byte_array.from_hex(brid));
-        }
-    }
-
     val minting_policies = list<minting_policy>();
     for (minting_policy in pending_token_proposal_minting_policy @* { pending_token_proposal }) {
-        val minters = set<byte_array>();
-        // TODO function?
-        for (minter in minting_policy.minters.split(",")) {
-            if (not minter.empty()) {
-                minters.add(byte_array.from_hex(minter));
-            }
-        }
         minting_policies.add(
             minting_policy(
-                minters = minters,
+                minters = minting_policy.minters.split(",") @ {} ( @set byte_array.from_hex($) ),
                 max_supply = minting_policy.max_supply,
                 minting_interval_ms = minting_policy.minting_interval_ms,
                 minting_amount = minting_policy.minting_amount,
@@ -212,6 +201,6 @@ query get_token_proposal(id: rowid) {
         decimals = pending_token_proposal.decimals,
         icon = pending_token_proposal.icon,
         minting_policy = minting_policies,
-        account_creation_brids = account_creation_brids,
+        account_creation_brids = pending_token_proposal.account_creation_brids.split(",") @* {} ( byte_array.from_hex($) ),
     );
 }

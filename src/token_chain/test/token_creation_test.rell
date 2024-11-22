@@ -35,7 +35,6 @@ function test_creating_token_success() {
     assert_false(exists(pending_token_proposal_minting_policy @* {}));
 }
 
-
 function test_creating_token_refund() {
     val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee);
 
@@ -89,3 +88,84 @@ function test_creating_token_revoke() {
     assert_false(exists(pending_token_proposal_minting_policy @* {}));
 }
 
+function test_create_token_validation() {
+
+    maybe_init_token_chain();
+    val proposer = do_create_account(rell.test.keypairs.bob, chain_context.args.auth_privkey, 100);
+
+    // Fail due to empty minting policy accounts
+    var propose_op = create_propose_token(
+        minting_policy = [minting_policy(
+            set<byte_array>(),
+            max_supply = 0,
+            minting_interval_ms = -1,
+            minting_amount = -1,
+            accumulating_amount = false,
+        )]);
+    rell.test.tx().op(ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)).op(propose_op)
+        .run_must_fail("Must provide at least one minter account");
+
+    // Fail due to non positive minting policy interval
+    propose_op = create_propose_token(
+        minting_policy = [minting_policy(
+        set([proposer.id]),
+        max_supply = 0,
+        minting_interval_ms = -1,
+        minting_amount = -1,
+        accumulating_amount = false,
+    )]);
+    rell.test.tx().op(ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)).op(propose_op)
+        .run_must_fail("Minting interval must be a positive value");
+
+    // Fail due to non positive minting policy amount
+    propose_op = create_propose_token(
+        minting_policy = [minting_policy(
+        set([proposer.id]),
+        max_supply = 0,
+        minting_interval_ms = 1,
+        minting_amount = -1,
+        accumulating_amount = false,
+    )]);
+    rell.test.tx().op(ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)).op(propose_op)
+        .run_must_fail("Minting amount must be a positive value");
+}
+
+function test_get_token_proposal() {
+
+    val minting_policy_account1 = do_create_account(rell.test.keypairs.dave, chain_context.args.auth_privkey, chain_context.args.listing_fee);
+    val minting_policy_account2 = do_create_account(rell.test.keypairs.eve, chain_context.args.auth_privkey, chain_context.args.listing_fee);
+    val minting_policy_account3 = do_create_account(rell.test.keypairs.frank, chain_context.args.auth_privkey, chain_context.args.listing_fee);
+    val account_creation_brid1 = x"B0";
+
+    val minting_policies = [
+        minting_policy(
+            minters = set([minting_policy_account1.id, minting_policy_account2.id]),
+            max_supply = 500,
+            minting_interval_ms = 1000,
+            minting_amount = 10,
+            accumulating_amount = true),
+        minting_policy(
+            minters = set([minting_policy_account3.id]),
+            max_supply = 0,
+            minting_interval_ms = 1000,
+            minting_amount = 10,
+            accumulating_amount = false),
+    ];
+
+    setup(
+        chain_context.args.auth_privkey,
+            chain_context.args.listing_fee,
+            minting_policies = minting_policies,
+            account_creation_brids = [account_creation_brid1]
+    );
+
+    assert_equals(get_token_proposal(get_latest_common_proposal_id()),
+        token_proposal_data(
+            name = "Test",
+            symbol = "TST",
+            decimals = 6,
+            icon = "http://test.com",
+            minting_policy = minting_policies,
+            account_creation_brids = [account_creation_brid1]
+        ));
+}
