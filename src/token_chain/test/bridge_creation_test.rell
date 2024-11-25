@@ -24,9 +24,9 @@ function test_bridge_creation_success() {
     val propose_bridge_op = propose_token_bridge(
         test_token.asset.id,
         [bridge_configuration(
-            1,
-            bridge_contract = "bridge_address",
-            token_contract = "token_address",
+            97,
+            bridge_contract = x"00",
+            token_contract = x"01",
             eif.hbridge.bridge_mode.foreign,
             true
         )]
@@ -40,7 +40,7 @@ function test_bridge_creation_success() {
 
     assert_not_null(pending_bridge_proposal @? { test_token });
     assert_not_null(pending_bridge_proposal_configuration @? {
-        .network_id == 1, .bridge_contract == "bridge_address", .token_contract == "token_address", .bridge_mode == eif.hbridge.bridge_mode.foreign, .use_snapshots
+        .network_id == 97, .bridge_contract == x"00", .token_contract == x"01", .bridge_mode == eif.hbridge.bridge_mode.foreign, .use_snapshots
     });
 
     rell.test.tx().op(
@@ -52,10 +52,18 @@ function test_bridge_creation_success() {
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
     assert_null(pending_bridge_proposal @? { test_token });
     assert_null(pending_bridge_proposal_configuration @? {
-        .network_id == 1, .bridge_contract == "bridge_address", .token_contract == "token_address", .bridge_mode == eif.hbridge.bridge_mode.foreign, .use_snapshots
+        .network_id == 97, .bridge_contract == x"00", .token_contract == x"01", .bridge_mode == eif.hbridge.bridge_mode.foreign, .use_snapshots
     });
 
-    // TODO complete when apply is implemented
+    val registered_bridges = eif.hbridge.get_bridge_contracts(97);
+    assert_equals(registered_bridges.size(), 1);
+    val registered_bridge = registered_bridges[0];
+    assert_equals(registered_bridge.contract_address, x"00");
+
+    val registered_bridge_assets = registered_bridge.erc20_assets;
+    assert_equals(registered_bridge_assets.size(), 1);
+    val bridge_asset = registered_bridge_assets[0];
+    assert_equals(bridge_asset.token_address, x"01");
 }
 
 function test_bridge_can_only_be_added_by_token_owner() {
@@ -66,9 +74,9 @@ function test_bridge_can_only_be_added_by_token_owner() {
     val propose_bridge_op = propose_token_bridge(
         test_token.asset.id,
         [bridge_configuration(
-            1,
-            bridge_contract = "bridge_address",
-            token_contract = "token_address",
+            97,
+            bridge_contract = x"00",
+            token_contract = x"01",
             eif.hbridge.bridge_mode.foreign,
             true
         )]
@@ -90,9 +98,9 @@ function test_bridge_proposal_revoke() {
     val propose_bridge_op = propose_token_bridge(
         test_token.asset.id,
         [bridge_configuration(
-            1,
-            bridge_contract = "bridge_address",
-            token_contract = "token_address",
+            97,
+            bridge_contract = x"00",
+            token_contract = x"01",
             eif.hbridge.bridge_mode.foreign,
             true
         )]

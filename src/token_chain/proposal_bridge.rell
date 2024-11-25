@@ -1,8 +1,8 @@
 
 struct bridge_configuration {
     network_id: integer;
-    bridge_contract: text;
-    token_contract: text;
+    bridge_contract: byte_array;
+    token_contract: byte_array;
     eif.hbridge.bridge_mode;
     use_snapshots: boolean;
 }
@@ -15,8 +15,8 @@ entity pending_bridge_proposal {
 entity pending_bridge_proposal_configuration {
     pending_bridge_proposal;
     network_id: integer;
-    bridge_contract: text;
-    token_contract: text;
+    bridge_contract: byte_array;
+    token_contract: byte_array;
     eif.hbridge.bridge_mode;
     use_snapshots: boolean;
 }
@@ -25,7 +25,18 @@ entity pending_bridge_proposal_configuration {
 @extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.tc_propose_token_bridge.name: cleanup_pending_token_bridge_create(*)];
 
 function apply_token_bridge_create(proposal: common_proposal) {
-    // TODO
+    val bridge_proposal = pending_bridge_proposal @ { proposal };
+    val bridge_proposal_configurations = pending_bridge_proposal_configuration @* { bridge_proposal };
+    for (bridge_proposal_configuration in bridge_proposal_configurations) {
+        eif.hbridge.register_bridge_and_token(
+            bridge_proposal_configuration.network_id,
+            bridge_proposal_configuration.token_contract,
+            bridge_proposal.token.asset,
+            bridge_proposal_configuration.bridge_mode,
+            bridge_proposal_configuration.use_snapshots,
+            bridge_proposal_configuration.bridge_contract
+        );
+    }
 }
 
 function cleanup_pending_token_bridge_create(proposal: common_proposal) {
@@ -54,6 +65,7 @@ operation propose_token_bridge(asset_id: byte_array, bridge_configurations: list
 
     require(account == token.owner, "Only token owner can propose a bridge");
     require(empty(pending_bridge_proposal @? { token }), "Token already has a pending bridge proposal");
+    require(exists(bridge_configurations), "Proposal must contain at least one bridge configuration");
 
     val proposal = create common_proposal(op_context.last_block_time, common_proposal_type.tc_propose_token_bridge, account.id,
         require_common_voter_set(token_chain_governance_voter_set));
