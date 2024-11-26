@@ -4,6 +4,7 @@ import ^^.*;
 import ^.helper_functions.*;
 
 namespace eif {
+    import dynamic_config: lib.eif.dynamic_config_common;
     import lib.hbridge;
 }
 
@@ -64,6 +65,15 @@ function test_bridge_creation_success() {
     assert_equals(registered_bridge_assets.size(), 1);
     val bridge_asset = registered_bridge_assets[0];
     assert_equals(bridge_asset.token_address, x"01");
+
+    assert_events(("icmf_message", (
+        topic = eif.dynamic_config.eif_event_receiver_dynamic_config_topic,
+        body = [97: eif.dynamic_config.eif_event_receiver_dynamic_config_message(
+            contracts = [x"00"],
+            events = list<eif.dynamic_config.event_def>()
+        )
+    ].to_gtv()
+    ).to_gtv_pretty()));
 }
 
 function test_bridge_can_only_be_added_by_token_owner() {

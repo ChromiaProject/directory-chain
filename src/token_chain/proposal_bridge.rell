@@ -27,6 +27,7 @@ entity pending_bridge_proposal_configuration {
 function apply_token_bridge_create(proposal: common_proposal) {
     val bridge_proposal = pending_bridge_proposal @ { proposal };
     val bridge_proposal_configurations = pending_bridge_proposal_configuration @* { bridge_proposal };
+    val dynamic_config_messages = map<integer, eif.dynamic_config.eif_event_receiver_dynamic_config_message>();
     for (bridge_proposal_configuration in bridge_proposal_configurations) {
         eif.hbridge.register_bridge_and_token(
             bridge_proposal_configuration.network_id,
@@ -36,7 +37,13 @@ function apply_token_bridge_create(proposal: common_proposal) {
             bridge_proposal_configuration.use_snapshots,
             bridge_proposal_configuration.bridge_contract
         );
+
+        dynamic_config_messages[bridge_proposal_configuration.network_id] = eif.dynamic_config.eif_event_receiver_dynamic_config_message(
+            contracts = [bridge_proposal_configuration.bridge_contract],
+            events = list<eif.dynamic_config.event_def>()
+        );
     }
+    send_message(eif.dynamic_config.eif_event_receiver_dynamic_config_topic, dynamic_config_messages.to_gtv());
 }
 
 function cleanup_pending_token_bridge_create(proposal: common_proposal) {
