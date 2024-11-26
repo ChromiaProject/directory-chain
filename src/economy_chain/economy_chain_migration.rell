@@ -3,6 +3,7 @@ object migration_completed {
     mutable provider_staking_account_entity: boolean = false;
     mutable provider_multi_key: boolean = false;
     mutable publish_staking_state: boolean = false;
+    mutable register_evm_bridge: boolean = false;
 }
 
 function do_migrations() {
@@ -18,6 +19,9 @@ function do_migrations() {
     }
     if (not migration_completed.publish_staking_state) {
         migrate_publish_staking_state();
+    }
+    if (not migration_completed.register_evm_bridge) {
+        try_call(migrate_evm_bridge(*));
     }
 }
 
@@ -90,6 +94,36 @@ function migrate_publish_staking_state() {
             ( struct<migration_staking_account_state_published>($) )
         );
     }
+}
+
+function migrate_evm_bridge() {
+    log("Migrate and register bridge entities...");
+
+    val bsc_erc20_asset = eif.hbridge.erc20_asset @? {
+        .network_id == chain_context.args.bsc_asset_network_id,
+        .token_address == chain_context.args.bsc_asset_address
+    };
+    if (exists(bsc_erc20_asset)) {
+        eif.hbridge.register_bridge_with_assets(
+            chain_context.args.bsc_asset_network_id,
+            chain_context.args.bsc_bridge_address,
+            [bsc_erc20_asset]
+        );
+        log("Registered BSC bridge...");
+    }
+    val eth_erc20_asset = eif.hbridge.erc20_asset @? {
+        .network_id == chain_context.args.eth_asset_network_id,
+        .token_address == chain_context.args.eth_asset_address
+    };
+    if (exists(eth_erc20_asset)) {
+        eif.hbridge.register_bridge_with_assets(
+            chain_context.args.eth_asset_network_id,
+            chain_context.args.eth_bridge_address,
+            [eth_erc20_asset]
+        );
+        log("Registered ETH bridge...");
+    }
+    migration_completed.register_evm_bridge = true;
 }
 
 entity migration_staking_account_state_published {
