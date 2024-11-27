@@ -2,6 +2,7 @@
 
 import ^^.*;
 import common.operations.*;
+import common.queries.*;
 import common.test.ops.*;
 import common.test.config_test_helpers.*;
 import common.test.setup.*;
@@ -92,6 +93,75 @@ function test_blockchain_unarchiving_within_a_node() {
     // assert bc actions are allowed again
     rell.test.tx().op(
         propose_blockchain_action(initial_provider.pub, foo_chain.rid, blockchain_action.pause)
+    ).sign(initial_provider).run();
+}
+
+function test_blockchain_unarchiving_within_a_node_with_removing_src_and_dst_containers() {
+    // setup
+    setup_module(provider_quota_max_containers = 2, cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val ip = provider @ { initial_provider.pub };
+    var conf = apply_required_configuration_properties();
+
+    rell.test.tx().op(
+        // s1 / c1
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1", "s1", 0, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c2", "s1", 0, [initial_provider.pub]),
+        update_node_with_units(initial_provider.pub, test_node.pubkey, cluster_units = 3),
+        add_node_to_cluster(initial_provider.pub, test_node.pubkey, "s1"),
+        // proposing blockchain to the c1
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
+    ).sign(initial_provider).run();
+    val foo_chain = blockchain @ { "foo_chain" };
+
+    // 1. Archive blockchain
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, foo_chain.rid, blockchain_action.archive)
+    ).sign(initial_provider).run();
+    assert_equals(foo_chain.state, blockchain_state.ARCHIVED);
+
+    // 2. Unarchive blockchain from c1 to c2
+    rell.test.tx().op(
+        propose_blockchain_unarchive_action(initial_provider.pub, foo_chain.rid, "c2", 100)
+    ).sign(initial_provider).run();
+    assert_not_null(
+        unarchiving_blockchain @? { foo_chain, .source.name == "c1", .destination.name == "c2" }
+    );
+
+    // Unarchiving is not finished, i.e. `configuration_updated` ICMF message has not been sent/received yet.
+    // Trying to remove container c1 and c2
+    assert_true(empty(get_container_blockchain("c1")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c1")
+    ).sign(initial_provider).run_must_fail("Container c1 is currently a source in an unarchiving blockchain process and can't be deleted");
+    assert_true(exists(get_container_blockchain("c2")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c2")
+    ).sign(initial_provider).run_must_fail("Container c2 is currently a destination in an unarchiving blockchain process and can't be deleted");
+
+    // Sending/receiving `configuration_updated` ICMF message
+    rell.test.tx().op(
+        receive_configuration_updated_op(
+            cluster_anchoring_chain @ { .cluster.name == "s1" } ( .blockchain.rid ),
+            configuration_updated_topic,
+            configuration_updated(
+                blockchain_rid = foo_chain.rid,
+                height = 101,
+                config_hash = x"" // x"" is enough for this test
+            ).to_gtv()
+        )
+    ).run();
+
+    // Removing the src container "c1" succeeds
+    assert_true(empty(get_container_blockchain("c1")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c1")
+    ).sign(initial_provider).run();
+
+    // Removing the dst container "c2" succeeds
+    assert_true(exists(get_container_blockchain("c2")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c2")
     ).sign(initial_provider).run();
 }
 
@@ -223,6 +293,83 @@ function test_blockchain_archiving_and_unarchiving_to_container_running_on_anoth
     assert_null(nm_get_migrating_blockchain_node_info(node1.pubkey, foo_chain.rid));
     // bs state changed from UNARCHIVING to RUNNING
     assert_equals(foo_chain.state, blockchain_state.RUNNING);
+}
+
+function test_blockchain_archiving_and_unarchiving_to_container_running_on_another_node_with_removing_src_and_dst_containers() {
+    // setup
+    setup_module(provider_quota_max_containers = 3, cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val ip = provider @ { initial_provider.pub };
+    val node0 = node @ { test_node.pubkey };
+    val node1_pk = rell.test.pubkeys.trudy;
+    var conf = apply_required_configuration_properties();
+
+    rell.test.tx().op(
+        // s1 / c1
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1", "s1", 0, [initial_provider.pub]),
+        update_node_with_units(initial_provider.pub, node0.pubkey, cluster_units = 2),
+        add_node_to_cluster(initial_provider.pub, node0.pubkey, "s1"),
+        // s2 / c2, c3
+        create_cluster(initial_provider.pub, "s2", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c2", "s2", 0, [initial_provider.pub]),
+        // proposing the blockchain to the c1
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
+    ).sign(initial_provider).run();
+    val foo_chain = blockchain @ { "foo_chain" };
+
+    // Create node1 and add it to cluster s2
+    rell.test.tx().op(
+        create_test_node(ip, node1_pk, cluster @ { .name == "s2" }),
+    ).sign(initial_provider).run();
+
+    // 1. Archive blockchain
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, foo_chain.rid, blockchain_action.archive)
+    ).sign(initial_provider).run();
+
+    // 2. Unarchive blockchain from c1 to c2
+    rell.test.tx().op(
+        propose_blockchain_unarchive_action(initial_provider.pub, foo_chain.rid, "c2", 100)
+    ).sign(initial_provider).run();
+    assert_not_null(
+        unarchiving_blockchain @? { foo_chain, .source.name == "c1", .destination.name == "c2" }
+    );
+
+    // Unarchiving is not finished, i.e. `configuration_updated` ICMF message has not been sent/received yet.
+    // Trying to remove container c1 and c2
+    assert_true(empty(get_container_blockchain("c1")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c1")
+    ).sign(initial_provider).run_must_fail("Container c1 is currently a source in an unarchiving blockchain process and can't be deleted");
+    assert_true(exists(get_container_blockchain("c2")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c2")
+    ).sign(initial_provider).run_must_fail("Container c2 is currently a destination in an unarchiving blockchain process and can't be deleted");
+
+    // Sending/receiving `configuration_updated` ICMF message
+    rell.test.tx().op(
+        receive_configuration_updated_op(
+            cluster_anchoring_chain @ { .cluster.name == "s2" } ( .blockchain.rid ),
+            configuration_updated_topic,
+            configuration_updated(
+                blockchain_rid = foo_chain.rid,
+                height = 101,
+                config_hash = x"" // x"" is enough for this test
+            ).to_gtv()
+        )
+    ).run();
+
+    // Removing the src container "c1" succeeds
+    assert_true(empty(get_container_blockchain("c1")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c1")
+    ).sign(initial_provider).run();
+
+    // Removing the dst container "c2" succeeds
+    assert_true(exists(get_container_blockchain("c2")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c2")
+    ).sign(initial_provider).run();
 }
 
 function test_system_blockchain_archiving_is_not_allowed() {

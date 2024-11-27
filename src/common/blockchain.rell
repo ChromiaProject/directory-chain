@@ -242,6 +242,8 @@ function remove_blockchain(blockchain) {
     delete container_blockchain;
     delete blockchain_replica_node @* { blockchain };
     delete blockchain_dependency @* { .me == blockchain };
+    delete moving_blockchain @* { blockchain };
+    delete unarchiving_blockchain @* { blockchain };
     delete inactive_blockchain @? { blockchain };
     create inactive_blockchain(blockchain, height = op_context.block_height, timestamp = op_context.last_block_time, blockchain_cluster);
 }
@@ -249,6 +251,16 @@ function remove_blockchain(blockchain) {
 @extend(before_remove_container) function remove_container_blockchains(container) {
     val container_blockchains = container_blockchain @* { container }.blockchain;
     for (blockchain in container_blockchains) {
+        remove_blockchain(blockchain);
+    }
+    // Note: Incoming blockchains can be found in `container_blockchain`,
+    // while outgoing blockchains must be retrieved from `moving_blockchain` and `unarchiving_blockchain`.
+    val outgoing_moving_blockchains = moving_blockchain @* { .source == container }.blockchain;
+    for (blockchain in outgoing_moving_blockchains) {
+        remove_blockchain(blockchain);
+    }
+    val outgoing_unarchiving_blockchain = unarchiving_blockchain @* { .source == container }.blockchain;
+    for (blockchain in outgoing_unarchiving_blockchain) {
         remove_blockchain(blockchain);
     }
 }
