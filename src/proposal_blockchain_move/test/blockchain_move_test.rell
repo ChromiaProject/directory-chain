@@ -2,6 +2,7 @@
 
 import ^^.*;
 import common.operations.*;
+import common.queries.*;
 import common.test.ops.*;
 import common.test.config_test_helpers.*;
 import common.test.setup.*;
@@ -106,7 +107,7 @@ function test_blockchain_moving_within_a_node() {
     assert_true(empty(moving_blockchain @? { foo_chain }));
     // asserting migrating_blockchain_info though NM API
     assert_null(nm_get_migrating_blockchain_node_info(test_node.pubkey, foo_chain.rid));
-    // bs state didn't change (RUNNING)
+    // bc state didn't change (RUNNING)
     assert_equals(foo_chain.state, blockchain_state.RUNNING);
 
     // Moving blockchain back to "c1a"
@@ -123,6 +124,77 @@ function test_blockchain_moving_within_a_node() {
     assert_equals(info2.final_height, 456);
     _build_block_after_moving("s1", foo_chain.rid, 457);
     assert_null(nm_get_migrating_blockchain_node_info(test_node.pubkey, foo_chain.rid));
+}
+
+function test_blockchain_moving_within_a_node_with_removing_src_and_dst_containers() {
+    // setup
+    setup_module(provider_quota_max_containers = 2, cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val ip = provider @ { initial_provider.pub };
+    var conf = apply_required_configuration_properties();
+
+    rell.test.tx().op(
+        // s1 / c1
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1", "s1", 0, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c2", "s1", 0, [initial_provider.pub]),
+        update_node_with_units(initial_provider.pub, test_node.pubkey, cluster_units = 3),
+        add_node_to_cluster(initial_provider.pub, test_node.pubkey, "s1"),
+        // proposing blockchain to the c1
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
+    ).sign(initial_provider).run();
+    val foo_chain = blockchain @ { "foo_chain" };
+
+    // 1. start blockchain moving
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c2")
+    ).sign(initial_provider).run();
+    // asserting moving_blockchain
+    val mv_bc = moving_blockchain @? { foo_chain,
+        .source.name == "c1", .destination.name == "c2",
+        .final_height == -1, .remove_on_nodes == x""
+    };
+    assert_not_null(mv_bc);
+
+    // Trying to remove container c1 and c2
+    assert_true(empty(get_container_blockchain("c1")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c1")
+    ).sign(initial_provider).run_must_fail("Container c1 is currently a source in a moving blockchain process and can't be deleted");
+    assert_true(exists(get_container_blockchain("c2")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c2")
+    ).sign(initial_provider).run_must_fail("Container c2 is currently a destination in a moving blockchain process and can't be deleted");
+
+    // 2. finish blockchain moving
+    rell.test.tx().op(
+        propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 123)
+    ).sign(initial_provider).run();
+
+    // Moving is not finished, i.e. `configuration_updated` ICMF message has not been sent/received yet.
+    // Trying to remove container c1 and c2
+    assert_true(empty(get_container_blockchain("c1")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c1")
+    ).sign(initial_provider).run_must_fail("Container c1 is currently a source in a moving blockchain process and can't be deleted");
+    assert_true(exists(get_container_blockchain("c2")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c2")
+    ).sign(initial_provider).run_must_fail("Container c2 is currently a destination in a moving blockchain process and can't be deleted");
+
+    // Sending/receiving `configuration_updated` ICMF message
+    _build_block_after_moving("s1", foo_chain.rid, 124);
+
+    // Removing the src container "c1" succeeds
+    assert_true(empty(get_container_blockchain("c1")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c1")
+    ).sign(initial_provider).run();
+
+    // Removing the dst container "c2" succeeds
+    assert_true(exists(get_container_blockchain("c2")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c2")
+    ).sign(initial_provider).run();
 }
 
 function test_blockchain_moving_between_containers_running_on_different_nodes() {
@@ -241,11 +313,91 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
     // asserting migrating_blockchain_info though NM API
     assert_null(nm_get_migrating_blockchain_node_info(node0.pubkey, foo_chain.rid));
     assert_null(nm_get_migrating_blockchain_node_info(node1.pubkey, foo_chain.rid));
-    // bs state didn't change (RUNNING)
+    // bc state didn't change (RUNNING)
     assert_equals(foo_chain.state, blockchain_state.RUNNING);
 
     // Moving blockchain backward from c2 -> c1
     _test_backward_moving(foo_chain.rid, "c2", node0.pubkey, "c1", "s1", node1.pubkey, 456);
+}
+
+function test_blockchain_moving_between_containers_running_on_different_nodes_with_removing_src_and_dst_containers() {
+    // setup
+    setup_module(provider_quota_max_containers = 3, cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val ip = provider @ { initial_provider.pub };
+    val node0 = node @ { test_node.pubkey };
+    val node1_pubkey = rell.test.pubkeys.trudy;
+    var conf = apply_required_configuration_properties();
+
+    rell.test.tx().op(
+        // s1 / c1
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1", "s1", 0, [initial_provider.pub]),
+        update_node_with_units(initial_provider.pub, node0.pubkey, cluster_units = 2),
+        add_node_to_cluster(initial_provider.pub, node0.pubkey, "s1"),
+        // s2 / c2
+        create_cluster(initial_provider.pub, "s2", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c2", "s2", 0, [initial_provider.pub]),
+        // proposing the blockchain to the c1
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
+    ).sign(initial_provider).run();
+    val foo_chain = blockchain @ { "foo_chain" };
+
+    // Create node1 and add it to cluster s2
+    rell.test.tx().op(
+        create_test_node(ip, node1_pubkey, cluster @ { .name == "s2" }),
+    ).sign(initial_provider).run();
+
+    // 1. start blockchain moving
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c2")
+    ).sign(initial_provider).run();
+    // asserting moving_blockchain
+    val mv_bc = moving_blockchain @? { foo_chain,
+        .source.name == "c1", .destination.name == "c2",
+        .final_height == -1, .remove_on_nodes == x""
+    };
+    assert_not_null(mv_bc);
+
+    // Trying to remove container c1 and c2
+    assert_true(empty(get_container_blockchain("c1")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c1")
+    ).sign(initial_provider).run_must_fail("Container c1 is currently a source in a moving blockchain process and can't be deleted");
+    assert_true(exists(get_container_blockchain("c2")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c2")
+    ).sign(initial_provider).run_must_fail("Container c2 is currently a destination in a moving blockchain process and can't be deleted");
+
+    // 2. finish blockchain moving
+    rell.test.tx().op(
+        propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 123)
+    ).sign(initial_provider).run();
+
+    // Moving is not finished, i.e. `configuration_updated` ICMF message has not been sent/received yet.
+    // Trying to remove container c1 and c2
+    assert_true(empty(get_container_blockchain("c1")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c1")
+    ).sign(initial_provider).run_must_fail("Container c1 is currently a source in a moving blockchain process and can't be deleted");
+    assert_true(exists(get_container_blockchain("c2")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c2")
+    ).sign(initial_provider).run_must_fail("Container c2 is currently a destination in a moving blockchain process and can't be deleted");
+
+    // Sending/receiving `configuration_updated` ICMF message
+    _build_block_after_moving("s2", foo_chain.rid, 124);
+
+    // Removing the src container "c1" succeeds
+    assert_true(empty(get_container_blockchain("c1")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c1")
+    ).sign(initial_provider).run();
+
+    // Removing the dst container "c2" succeeds
+    assert_true(exists(get_container_blockchain("c2")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c2")
+    ).sign(initial_provider).run();
 }
 
 function test_paused_blockchain_moving_between_containers_running_on_different_nodes() {
@@ -326,7 +478,7 @@ function test_paused_blockchain_moving_between_containers_running_on_different_n
     // asserting migrating_blockchain_info though NM API
     assert_null(nm_get_migrating_blockchain_node_info(node0.pubkey, foo_chain.rid));
     assert_null(nm_get_migrating_blockchain_node_info(node1.pubkey, foo_chain.rid));
-    // bs state didn't change (PAUSED)
+    // bc state didn't change (PAUSED)
     assert_equals(foo_chain.state, blockchain_state.PAUSED);
 
     // Moving blockchain backward from c2 -> c1

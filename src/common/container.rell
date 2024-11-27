@@ -29,6 +29,14 @@ function remove_container_impl(container) {
 @extendable function is_container_available_for_removal(container): text? {
     return when {
         container.system -> "System container can't be deleted";
+        exists(moving_blockchain @* { .source == container }) ->
+            "Container %s is currently a source in a moving blockchain process and can't be deleted".format(container.name);
+        exists(moving_blockchain @* { .destination == container }) ->
+            "Container %s is currently a destination in a moving blockchain process and can't be deleted".format(container.name);
+        exists(unarchiving_blockchain @* { .source == container }) ->
+            "Container %s is currently a source in an unarchiving blockchain process and can't be deleted".format(container.name);
+        exists(unarchiving_blockchain @* { .destination == container }) ->
+            "Container %s is currently a destination in an unarchiving blockchain process and can't be deleted".format(container.name);
         else -> null;
     };
 }
