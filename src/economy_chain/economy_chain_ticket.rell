@@ -110,5 +110,24 @@ function receive_ticket_container_result_message(body: gtv) {
                 }
             }
         }
+
+        ticket_type.REMOVE_CONTAINER -> {
+            val specific_ticket = remove_container_ticket @ { ticket };
+            when (ticket.state) {
+                ticket_state.SUCCESS -> {
+                    log("Successfully removed container %s for ticket %d".format(
+                        specific_ticket.container_name, message.ticket_id));
+                    val lease = lease @ { .container_name == specific_ticket.container_name };
+                    on_lease_expired(lease);
+                    on_expired_lease_removed(lease);
+                    delete lease_subnode_image @? { lease };
+                    delete lease;
+                }
+                ticket_state.FAILURE -> {
+                    log("Failed to remove container %s for ticket %d".format(
+                        specific_ticket.container_name, message.ticket_id));
+                }
+            }
+        }
     }
 }
