@@ -1,9 +1,9 @@
 
 /**
- * Return the provider entity from signers if any, or rejects if multiple providers are found.
+ * Return the system provider entity from signers if any. Rejects if multiple providers are found
+ * or if the provider is not a system provider.
  */
 function require_system_provider_signer_entity(): provider {
     val provider_pubkey = require(get_provider_signer(), "Expected system provider signature");
-    return require(provider @? { .active == true, provider_pubkey }, "Expected system provider signature");
+    return require(provider @? { .active == true, .system == true, provider_pubkey }, "Expected system provider signature");
 }
-

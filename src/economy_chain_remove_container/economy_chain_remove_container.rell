@@ -1,0 +1,81 @@
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(remove_container).mount_name,
+    flags = ["T"],
+    message = remove_container_auth_message(*)
+);
+
+function remove_container_auth_message(gtv): text {
+    val args = struct<remove_container>.from_gtv(gtv);
+    return "Please sign the message\nto remove container %s\non account {account_id}".format(
+        args.container_name,
+    );
+}
+
+/**
+ * Remove container without refund.
+ *
+ * An ICMF message will be sent to DC for deleting the container.
+ *
+ * @param container_name  container name
+ */
+operation remove_container(container_name: text) {
+    require_initialized();
+    val lease = require_lease(container_name);
+    require(not has_pending_upgrade(container_name), "Container %s has a pending upgrade".format(container_name));
+    require(not has_pending_subnode_image_assignment(container_name), "Container %s already has a pending subnode image assignment".format(container_name));
+
+    val account = ft4.auth.authenticate();
+    require(lease.account == account, "Lease for container %s was not created by you".format(container_name));
+
+    val ticket = create ticket(type = ticket_type.REMOVE_CONTAINER, account);
+    create remove_container_ticket(ticket,
+        container_name = container_name
+    );
+    send_message(remove_container_topic, remove_container_message(
+        container_name = container_name,
+        ticket_id = ticket.rowid.to_integer(),
+    ).to_gtv());
+}
+
+/**
+ * Returns ticket information for the remove container ticket by transaction RID.
+ *
+ * @param tx_rid  transaction RID
+ */
+query get_remove_container_ticket_by_transaction(tx_rid: byte_array): container_ticket_data? =
+        remove_container_ticket @? { .ticket.transaction.tx_rid == tx_rid }
+            (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
+
+/**
+ * Returns ticket information for the remove container ticket by ticket ID.
+ *
+ * @param ticket_id  ticket ID
+ */
+query get_remove_container_ticket_by_id(ticket_id: integer): container_ticket_data? =
+        remove_container_ticket @? { .ticket.rowid == rowid(ticket_id) }
+            (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
+
+/**
+ * Force removal of a container and its lease without refund.
+ *
+ * An ICMF message will be sent to DC for deleting the container.
+ *
+ * Permission: system provider
+ *
+ * @param container_name  container name
+ */
+operation force_remove_container(container_name: text) {
+    require_initialized();
+
+    require_system_provider_signer_entity();
+
+    val lease = require_lease(container_name);
+
+    send_message(remove_container_topic, remove_container_message(container_name = container_name).to_gtv()); // fire-and-forget
+
+    on_lease_expired(lease);
+    on_expired_lease_removed(lease);
+    delete lease_subnode_image @? { lease };
+    delete lease;
+}
