@@ -18,6 +18,7 @@ namespace ft4 {
     import lib.ft4.accounts.strategies;
     import lib.ft4.accounts.strategies.transfer;
     import lib.ft4.accounts.strategies.transfer.fee;
+    import lib.ft4.crosschain;
 }
 
 struct module_args {
@@ -83,12 +84,16 @@ operation init_token_chain() {
 }
 
 function register_assets() {
-    return ft4.assets.Unsafe.register_asset(
-        chain_context.args.asset_name,
-        chain_context.args.asset_symbol,
-        chain_context.args.asset_decimals,
-        chain_context.args.economy_chain_blockchain_rid,
-        chain_context.args.asset_icon
+    return ft4.crosschain.Unsafe.register_crosschain_asset(
+            asset_id = (chain_context.args.asset_name, chain_context.args.economy_chain_blockchain_rid).hash(),
+            name = chain_context.args.asset_name,
+            symbol = chain_context.args.asset_symbol,
+            decimals = chain_context.args.asset_decimals,
+            issuing_blockchain_rid = chain_context.args.economy_chain_blockchain_rid,
+            icon_url = chain_context.args.asset_icon,
+            type = ft4.assets.ASSET_TYPE_FT4,
+            uniqueness_resolver = x"",
+            origin_blockchain_rid = chain_context.args.economy_chain_blockchain_rid,
     );
 }
 
