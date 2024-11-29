@@ -206,6 +206,7 @@ function bridge_lease_funds_check(bridge_lease) {
         ));
 
         send_bridge_lease_deleted_message(bridge_lease);
+        bridge_lease.enabled = false;
     } else if (balance > bridge_lease.tx_cost_debt) {
 
         log("Enough funds on account %s to cover bridge transaction debt for chain %s and network %s. Bridge is started again.".format(
@@ -215,6 +216,7 @@ function bridge_lease_funds_check(bridge_lease) {
         ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), bridge_lease.tx_cost_debt);
         bridge_lease.tx_cost_debt = 0;
 
+        bridge_lease.enabled = true;
         send_bridge_lease_message(bridge_lease, false);
     }
 }
@@ -226,13 +228,14 @@ function bridge_lease_funds_check(bridge_lease) {
  * @param evm_network_id  the EVM network id
  */
 query get_bridge_lease_for_blockchain(blockchain_rid: byte_array, evm_network_id: integer) = bridge_lease @? { blockchain_rid, evm_network_id } (
-    bridge_lease_data(
+    container_and_bridge_lease_data(
         blockchain_rid = blockchain_rid,
         evm_network_id = evm_network_id,
         container_name = .lease.container_name,
         expired = .lease.expired,
         validator_contract = .validator_contract,
-        bridge_contract = .bridge_contract
+        bridge_contract = .bridge_contract,
+        enabled = .enabled
     )
 );
 
@@ -242,13 +245,14 @@ query get_bridge_lease_for_blockchain(blockchain_rid: byte_array, evm_network_id
  * @param blockchain_rid  blockchain RID
  */
 query get_all_bridge_leases_for_blockchain(blockchain_rid: byte_array) = bridge_lease @* { blockchain_rid } (
-    bridge_lease_data(
+    container_and_bridge_lease_data(
         blockchain_rid = blockchain_rid,
         evm_network_id = .evm_network_id,
         container_name = .lease.container_name,
         expired = .lease.expired,
         validator_contract = .validator_contract,
-        bridge_contract = .bridge_contract
+        bridge_contract = .bridge_contract,
+        enabled = .enabled
     )
 );
 
@@ -258,13 +262,14 @@ query get_all_bridge_leases_for_blockchain(blockchain_rid: byte_array) = bridge_
  * @param container_name  container name
  */
 query get_all_bridge_leases_for_container(container_name: text) = (bridge_lease, lease) @* { lease.container_name == container_name, bridge_lease.lease == lease } (
-    bridge_lease_data(
+    container_and_bridge_lease_data(
         blockchain_rid = .blockchain_rid,
         evm_network_id = .evm_network_id,
         container_name = container_name,
         expired = .lease.expired,
         validator_contract = .validator_contract,
-        bridge_contract = .bridge_contract
+        bridge_contract = .bridge_contract,
+        enabled = .enabled
     )
 );
 
@@ -278,3 +283,11 @@ query get_blockchains_with_bridge_and_anomaly_detection() = bridge_lease @* { .a
         bridge_contract = .bridge_contract
     )
 );
+
+function get_bridge_leases_for_lease(lease) = bridge_lease @* { lease } (bridge_lease_data(
+    blockchain_rid = .blockchain_rid,
+    evm_network_id = .evm_network_id,
+    validator_contract = .validator_contract,
+    bridge_contract = .bridge_contract,
+    enabled = .enabled
+));
