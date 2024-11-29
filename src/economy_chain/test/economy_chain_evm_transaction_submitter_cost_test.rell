@@ -186,7 +186,9 @@ function test_receive_evm_transaction_submitter_cost_message_stop_and_start_brid
     assert_equals(get_account_balance(payer_chain_account), 0);
 
     // The fee not covered by the account is stored as debt
-    assert_equals(bridge_lease @ { payer_chain_brid } ( .tx_cost_debt ), 10);
+    val disabled_bridge_lease = bridge_lease @ { payer_chain_brid };
+    assert_equals(disabled_bridge_lease.tx_cost_debt, 10);
+    assert_false(disabled_bridge_lease.enabled);
 
     // The bridge is removed from TXS (but entity is kept in EC)
     assert_events(("icmf_message", (
@@ -211,6 +213,10 @@ function test_receive_evm_transaction_submitter_cost_message_stop_and_start_brid
     rell.test.tx().op(
         unsafe_transfer_op(get_pool_account(), payer_chain_account, 6)
     ).run();
+
+    val enabled_bridge_lease = bridge_lease @ { payer_chain_brid };
+    assert_equals(disabled_bridge_lease.tx_cost_debt, 0);
+    assert_true(disabled_bridge_lease.enabled);
 
     // Verify it is paused / deleted from TXS
     assert_events(("icmf_message", (
