@@ -3,6 +3,7 @@ module;
 import common_proposal.*;
 import lib.iccf.*;
 import lib.icmf.*;
+import lib.icmf.receiver.*;
 
 namespace eif {
     import dynamic_config: lib.eif.dynamic_config_common;
@@ -159,4 +160,12 @@ query get_token_info(asset_id: byte_array) {
         minting_policies,
         token_account_creation_brid @* { token } ( .blockchain_rid )
     );
+}
+
+@extend(receive_icmf_message) function icmf_message_receive(sender: byte_array, topic: text, body: gtv) {
+
+    when (topic) {
+        eif.messaging.evm_block_events_topic -> eif.messaging.handle_evm_block(eif.messaging.evm_block_message.from_gtv(body));
+        else -> log("Unexpected ICMF topic %s".format(topic));
+    }
 }
