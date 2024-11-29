@@ -245,6 +245,58 @@ blockchains:
       economy_chain_test_mint_on_ras_staking:
         amount_to_mint: 1000000000
       chain_version: *chain_version
+  token_chain_devnet1:
+    module: token_chain
+    config:
+      gtx:
+        modules:
+          - "net.postchain.d1.icmf.IcmfSenderGTXModule"
+          - "net.postchain.d1.icmf.IcmfReceiverGTXModule"
+          - "net.postchain.d1.iccf.IccfGTXModule"
+          - "net.postchain.eif.EifGTXModule"
+      sync_ext:
+        - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
+      icmf:
+        receiver:
+          local:
+            - topic: L_evm_block_events
+              bc-rid: x"0000000000000000000000000000000000000000000000000000000000000000" # Set to EVM token chain receiver bcrid
+    moduleArgs:
+      token_chain:
+        listing_fee: 1
+        init_pubkey: x"03ECD350EEBC617CBBFBEF0A1B7AE553A748021FD65C7C50C5ABB4CA16D4EA5B05" # Setting to alpha provider to make it easy for now
+        asset_name: "Chromia Test"
+        asset_symbol: "tCHR"
+        asset_decimals: 6
+        asset_icon: "https://s3.eu-central-1.amazonaws.com/www.chromiadev.net/assets/tCHR.png"
+        economy_chain_blockchain_rid: x"83A9D1CC62C468A0D20854CAABB5EAD6DF50CD4DC0B2BCC2CDEC71F9DC201F9D" # Set to economy chain RID
+        proposal_revoke_timeout_days: 1
+      lib.hbridge:
+        evm_read_offsets:
+          "97": 10
+      lib.ft4.core.auth:
+        evm_signatures_authorized_operations:
+          - eif.hbridge.link_evm_eoa_account
+      lib.ft4.core.accounts.strategies.transfer:
+        rules:
+          - sender_blockchain:
+              - "$"
+              - x"83A9D1CC62C468A0D20854CAABB5EAD6DF50CD4DC0B2BCC2CDEC71F9DC201F9D" # set to economy chain RID
+            sender: "*"
+            recipient: "*"
+            asset:
+              - name: "Chromia Test" # Should match `economy_chain_module_args.asset_name`
+                min_amount: 10000000L # 10.0 tCHR
+                issuing_blockchain_rid: x"83A9D1CC62C468A0D20854CAABB5EAD6DF50CD4DC0B2BCC2CDEC71F9DC201F9D" # set to economy chain RID
+            timeout_days: 10
+            strategy: "fee"
+      lib.ft4.core.accounts.strategies.transfer.fee:
+        asset:
+          - name: "Chromia Test"  # Should match `economy_chain_module_args.asset_name`
+            amount: 10000000L # 10.0 tCHR
+            issuing_blockchain_rid: x"83A9D1CC62C468A0D20854CAABB5EAD6DF50CD4DC0B2BCC2CDEC71F9DC201F9D" # set to economy chain RID
+        fee_account: x"ADA12B87EAB1C6FCA6E99781A6059E1763E868BAEC5F5385DFCA6C308CF1D605" # TODO - Should probably be foundation account
+
 
 docs:
   title: Directory chain
