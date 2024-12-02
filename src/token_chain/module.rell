@@ -33,6 +33,10 @@ struct module_args {
     proposal_revoke_timeout_days: integer;
 }
 
+object state {
+    mutable initialized: boolean = false;
+}
+
 val millis_per_day = 24 * 60 * 60 * 1000;
 val token_chain_governance_voter_set = "Token chain governance";
 val token_chain_governance_account_type = "TOKEN_CHAIN_GOVERNANCE";
@@ -70,13 +74,22 @@ entity token_account_minting_policy_account {
     key token_account_minting_policy, ft4.accounts.account;
 }
 
+/**
+ * Initializes the token chain
+*/
 operation init_token_chain() {
+    require(state.initialized == false, "Token chain is already initialized");
+    state.initialized = true;
 
     require(op_context.is_signer(chain_context.args.init_pubkey), "Operation must be signed by initial key");
     create_pool_account();
     register_assets();
 
     create_token_chain_governance_account();
+    create_governance_voter_set();
+}
+
+function create_governance_voter_set() {
     val voter_set = create_common_voter_set_internal(
         token_chain_governance_voter_set,
         vote_type = common_proposal_vote_type.VOTER_SET_MEMBER_KEY
@@ -168,4 +181,8 @@ query get_token_info(asset_id: byte_array) {
         eif.messaging.evm_block_events_topic -> eif.messaging.handle_evm_block(eif.messaging.evm_block_message.from_gtv(body));
         else -> log("Unexpected ICMF topic %s".format(topic));
     }
+}
+
+function require_initialized() {
+    require(state.initialized == true, "Token chain is not initialized");
 }

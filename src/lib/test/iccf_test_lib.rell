@@ -1,13 +1,18 @@
 @test module;
 
 import ^^.iccf.*;
-import ^.helper_operations.*;
 
 function iccf_proof_for(blockchain_rid: byte_array, gtx_transaction, height: integer = 0, tx_index: integer = 0, timestamp = 0) {
     val tx_hash = gtx_transaction.to_gtv().hash();
-    return iccf_proof(blockchain_rid, tx_hash,
-        make_confirmation_proof(blockchain_rid, tx_hash, height, tx_index, timestamp), x"", 0, x""
-    );
+
+    return rell.test.op(iccf_op_name, [
+        blockchain_rid.to_gtv(),
+        tx_hash.to_gtv(),
+        make_confirmation_proof(blockchain_rid, tx_hash, height, tx_index, timestamp).to_gtv(),
+        x"".to_gtv(),
+        (0).to_gtv(),
+        x"".to_gtv()
+    ]);
 }
 
 function make_confirmation_proof(blockchain_rid: byte_array, tx_hash: byte_array, height: integer, tx_index: integer, timestamp) =
