@@ -30,6 +30,18 @@ function () = ft4.auth.add_auth_handler(
     flags = ["T"],
 );
 
+/**
+ * Anyone can propose a new token on token chain. The listing fee will be deducted upon proposing the new token and
+ * refunded in case it is not accepted.
+ *
+ * @param name Token name
+ * @param symbol Token symbol
+ * @param decimals Token decimals
+ * @param icon Token icon
+ * @param minting_policy List of policies for minting, a token can have individual policies for each minter
+ * @param account_creation_brids List of blockchain rids for chains that are allowed to create new accounts on token
+ * chain on behalf of the token owner.
+ */
 operation propose_token(
     name: text,
     symbol: text,
@@ -94,6 +106,11 @@ function () = ft4.auth.add_auth_handler(
     flags = ["T"],
 );
 
+/**
+ * Revokes a token proposal
+ *
+ * @param proposal_id Proposal to revoke
+ */
 operation revoke_token_proposal(proposal_id: rowid) {
     val account = ft4.auth.authenticate();
     val prop = require_common_proposal(proposal_id);
@@ -180,6 +197,10 @@ struct token_proposal_data {
     account_creation_brids: list<byte_array>;
 }
 
+/**
+ * @param id Proposal ID
+ * @return Information about a specific token proposal
+ */
 query get_token_proposal(id: rowid) {
     val proposal = require_common_proposal(id);
     val pending_token_proposal = require(pending_token_proposal @? { proposal }, "Proposal %s is not of type token".format(id));

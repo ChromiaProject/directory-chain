@@ -65,6 +65,13 @@ function () = ft4.auth.add_auth_handler(
     flags = ["T"],
 );
 
+/**
+ * Token owner can propose bridge(s). When approved they will be added automatically to the token chain EVM event receiver
+ * and hbridge bridges.
+ *
+ * @param asset_id FT4 asset id of the token
+ * @param bridge_configurations List of bridge configurations (1 per bridge contract).
+ */
 operation propose_token_bridge(asset_id: byte_array, bridge_configurations: list<bridge_configuration>) {
     val account = ft4.auth.authenticate();
     val asset = ft4.assets.Asset(asset_id);
@@ -96,6 +103,11 @@ function () = ft4.auth.add_auth_handler(
     flags = ["T"],
 );
 
+/**
+ * Revokes a token bridge proposal
+ *
+ * @param proposal_id Proposal to revoke
+ */
 operation revoke_token_bridge_proposal(proposal_id: rowid) {
     val account = ft4.auth.authenticate();
     val prop = require_common_proposal(proposal_id);
@@ -104,3 +116,29 @@ operation revoke_token_bridge_proposal(proposal_id: rowid) {
 
     revoke_common_proposal_unsafe(prop);
 }
+
+struct token_bridge_proposal_data {
+    asset_id: byte_array;
+    configurations: list<bridge_configuration>;
+}
+
+/**
+ * @param id Proposal ID
+ * @return Information about a specific token bridge proposal
+ */
+query get_token_bridge_proposal(id: rowid) {
+    val proposal = require_common_proposal(id);
+    val pending_bridge_proposal = require(pending_bridge_proposal @? { proposal }, "Proposal %s is not of type token bridge".format(id));
+
+    return token_bridge_proposal_data(
+        asset_id = pending_bridge_proposal.token.asset.id,
+        configurations = pending_bridge_proposal_configuration @* { pending_bridge_proposal } (bridge_configuration(
+            network_id = .network_id,
+            bridge_contract = .bridge_contract,
+            token_contract = .token_contract,
+            bridge_mode = .bridge_mode,
+            use_snapshots = .use_snapshots
+        )),
+    );
+}
+

@@ -7,6 +7,20 @@ function () = ft4.strategies.add_strategy(
     action = apply_ras_iccf_action(*)
 );
 
+/**
+ * Account creation strategy that utilizes ICCF to authorize account creation.
+ * Each token owner can register a list of authorized chains that can create new accounts on its behalf.
+ * The account creation fee will be subtracted from the token owner account which is acting as a pool.
+ *
+ * The account creation requires a transaction that includes an operation with the following signature:
+ *
+ * create_token_chain_account(main: ft4.accounts.auth_descriptor, disposable: ft4.accounts.auth_descriptor?, additional args...)
+ *
+ * 'disposable' can be omitted as argument in case no additional args are necessary.
+ *
+ * @param transaction Account creation transaction on dApp chain
+ * @param asset_id The FT4 asset id of the token project that authorizes the account creation
+ */
 operation ras_iccf(transaction: gtx_transaction, asset_id: byte_array) {
     ft4.strategies.require_register_account_next_operation();
 }
@@ -23,7 +37,8 @@ function iccf_account_details(gtv) {
 
     val main_auth_descriptor = ft4.accounts.auth_descriptor.from_gtv(account_creation_args[0]);
     val signers = ft4.accounts.get_signers(main_auth_descriptor);
-    val disposable_auth_descriptor = if (account_creation_args.size() > 1) ft4.accounts.auth_descriptor.from_gtv(account_creation_args[1]) else null;
+    val disposable_auth_descriptor = if (account_creation_args.size() > 1 and account_creation_args[1] != null.to_gtv())
+        ft4.accounts.auth_descriptor.from_gtv(account_creation_args[1]) else null;
 
     return ft4.strategies.account_details(
         account_id = ft4.accounts.get_account_id_from_signers(signers),
