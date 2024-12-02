@@ -10,6 +10,12 @@ struct common_proposal_voting_results {
 struct common_proposal_voter {
     pubkey: byte_array;
     vote: boolean;
+
+    /** Transaction rid of this vote */
+    tx_rid: byte_array? = null;
+
+    /** Operation index of this vote */
+    op_index: integer? = null;
 }
 
 /**
@@ -77,7 +83,21 @@ query get_common_proposal_voting_results(rowid): common_proposal_voting_results 
  */
 query get_common_proposal_voter_info(rowid): list<common_proposal_voter> {
     val proposal = require_common_proposal(rowid);
-    return common_vote @* { .proposal.rowid == rowid } (common_proposal_voter(.pubkey, .vote));
+    val all_votes = common_vote @* { proposal } ( .rowid, .pubkey, .vote );
+
+    val votes_with_tx = common_vote_transaction @* { .vote.rowid in all_votes @ {} ( @list .rowid ) }
+        ( vote_rowid = .vote.rowid, tx_rid = .transaction.tx_rid, .op_index );
+
+    val votes = list<common_proposal_voter>();
+    for (vote in all_votes) {
+        votes.add(common_proposal_voter(
+            pubkey = vote.pubkey,
+            vote = vote.vote,
+            tx_rid = votes_with_tx @? { .vote_rowid == vote.rowid } ( .tx_rid ),
+            op_index = votes_with_tx @? { .vote_rowid == vote.rowid } ( .op_index ),
+        ));
+    }
+    return votes;
 }
 
 /**

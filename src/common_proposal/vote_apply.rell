@@ -1,7 +1,8 @@
 
 function internal_common_vote(pubkey, proposal: common_proposal, vote: boolean) {
     require(common_voter_set_member @? { proposal.voter_set, pubkey }, pubkey + " must be a member of the voter set");
-    create common_vote(proposal, pubkey, vote);
+    val common_vote = create common_vote(proposal, pubkey, vote);
+    create common_vote_transaction(common_vote, op_context.transaction, op_context.op_index);
     log("vote '%s' added for proposal %s".format(if (vote) "Yes" else "No", proposal_str(proposal)));
     try_to_apply_proposal(proposal);
 }

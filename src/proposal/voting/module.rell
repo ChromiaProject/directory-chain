@@ -8,6 +8,13 @@ entity vote {
     vote: boolean; // yes | no
 }
 
+/** To track the transaction of each vote */
+entity vote_transaction {
+    key vote;
+    transaction;
+    op_index: integer;
+}
+
 function create_voter_set_internal(name, threshold: integer = 0, governor: voter_set? = null) {
     val vs = create voter_set(name, threshold);
     if (exists(governor)) {
@@ -108,8 +115,10 @@ function retract_vote_internal(proposal_id: integer) {
     require(prop.state == proposal_state.PENDING, "The proposal is already %s".format(prop.state));
     require_voter_set_member(prop.voter_set, provider);
 
-    if (exists(vote @? { prop, provider })) {
-        delete vote @* { prop, provider };
+    val vote = vote @? { prop, provider };
+    if (exists(vote)) {
+        delete vote_transaction @? { vote };
+        delete vote;
         log("vote for proposal retracted:", proposal_str(prop));
         try_to_apply_proposal(prop);
     } else {

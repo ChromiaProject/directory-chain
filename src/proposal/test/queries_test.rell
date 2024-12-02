@@ -1,0 +1,57 @@
+@test module;
+
+import ^^.*;
+import common.test.ops.*;
+import common.test.setup.*;
+import common.test.util.*;
+import proposal.voting.test.ops.*;
+import proposal_voter_set.*;
+import ^.helper_operations.*;
+
+function test_get_proposal_voter_info() {
+
+    setup_module();
+    rell.test.tx().op(
+        create_test_provider("bob", rell.test.pubkeys.bob),
+        create_test_provider("charlie", rell.test.pubkeys.charlie),
+        create_voter_set(rell.test.pubkeys.alice, "test_vs", 0, initials = [
+            rell.test.pubkeys.alice,
+            rell.test.pubkeys.bob,
+            rell.test.pubkeys.charlie,
+        ], governor = null),
+    ).sign(rell.test.keypairs.alice, rell.test.keypairs.bob, rell.test.keypairs.charlie).run();
+
+    rell.test.tx().op(
+        propose_update_voter_set(rell.test.pubkeys.alice, "test_vs",
+            new_threshold = 0, new_governor = null, new_member = [], remove_member = []),
+    ).sign(rell.test.keypairs.alice).run();
+
+    vote_for_last_proposal(rell.test.keypairs.bob, true);
+    vote_for_last_proposal(rell.test.keypairs.charlie, true);
+
+    val proposal_id = last_proposal(proposal_state.APPROVED).rowid;
+    var votes = get_proposal_voter_info(proposal_id);
+    assert_equals(votes.size(), 3);
+    assert_equals(votes[0].provider, x"02466d7fcae563e5cb09a0d1870bb580344804617879a14949cf22285f1bae3f27");
+    assert_not_null(votes[0].tx_rid);
+    assert_equals(votes[0].op_index, 0);
+    assert_not_null(votes[1].tx_rid);
+    assert_equals(votes[1].op_index, 0);
+    assert_not_null(votes[2].tx_rid);
+    assert_equals(votes[2].op_index, 0);
+
+    // Verify return of a vote without transaction
+    rell.test.tx().op(
+        remove_vote_transaction_op(proposal_id, rell.test.pubkeys.alice)
+    ).run();
+
+    votes = get_proposal_voter_info(proposal_id);
+    assert_equals(votes.size(), 3);
+    assert_equals(votes[0].provider, x"02466d7fcae563e5cb09a0d1870bb580344804617879a14949cf22285f1bae3f27");
+    assert_null(votes[0].tx_rid); // Null due to no tx
+    assert_null(votes[0].op_index);  // Null due to no tx
+    assert_not_null(votes[1].tx_rid);
+    assert_equals(votes[1].op_index, 0);
+    assert_not_null(votes[2].tx_rid);
+    assert_equals(votes[2].op_index, 0);
+}

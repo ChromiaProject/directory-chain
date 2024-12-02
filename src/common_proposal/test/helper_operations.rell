@@ -8,7 +8,7 @@ operation create_test_common_proposal(
     voter_set_name: text,
     type: common_proposal_vote_type = common_proposal_vote_type.VOTER_SET_MEMBER_KEY
 ) {
-    var voter_set = create_or_return_voter_set(voter_set_name, type);
+    val voter_set = create_or_return_voter_set(voter_set_name, type);
     create_voter_set_member(voter_set, pubkey);
     create common_proposal(op_context.last_block_time, proposal_type, pubkey, voter_set);
 }
@@ -42,3 +42,6 @@ operation create_common_voter_set_member_op(common_voter_set, pubkey) {
     create common_voter_set_member(common_voter_set, pubkey);
 }
 
+operation remove_common_vote_transaction_op(proposal_id: rowid, pubkey) {
+    delete common_vote_transaction @ { .vote.proposal.rowid == proposal_id, .vote.pubkey == pubkey };
+}
