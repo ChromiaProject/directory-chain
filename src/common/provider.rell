@@ -95,7 +95,11 @@ function disable_provider(provider) {
     // if provider is last to vote on proposals make sure the proposals are voted on
     for (prop in pending_proposals_with_provider_as_voter) {
         // We should delete any vote that the removed provider has cast on the pending proposal (for correctness)
-        delete vote @? { prop, provider };
+        val vote = vote @? { prop, provider };
+        if (exists(vote)) {
+            delete vote_transaction @? { vote };
+            delete vote;
+        }
         try_to_apply_proposal(prop);
     }
     after_provider_updated(provider);

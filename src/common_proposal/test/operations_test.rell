@@ -192,3 +192,33 @@ function test_revoke_proposal_fail_due_to_already_rejected__provider_auth() {
         revoke_common_proposal_v65(get_latest_common_proposal_id())
     ).sign(alice, bob).run();
 }
+
+function test_retract_common_vote() {
+
+    rell.test.tx().op(
+        create_test_common_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
+    ).sign(alice).run();
+    val voter_set = common_voter_set @ {};
+    val proposal_id = get_latest_common_proposal_id();
+
+    assert_equals(get_common_proposal_voter_info(proposal_id).size(), 0);
+
+    // Bob can't revoke a vote since he isn't a member
+    rell.test.tx().op(
+        retract_common_vote(proposal_id)
+    ).sign(bob)
+        .run_must_fail("Operation must be signed by member of voter set");
+
+    rell.test.tx().op(
+        create_common_voter_set_member_op(voter_set, bob.pub),
+        make_common_vote_v65(proposal_id, true),
+    ).sign(bob).run();
+
+    assert_equals(get_common_proposal_voter_info(proposal_id).size(), 1);
+
+    rell.test.tx().op(
+        retract_common_vote(proposal_id)
+    ).sign(bob).run();
+
+    assert_equals(get_common_proposal_voter_info(proposal_id).size(), 0);
+}

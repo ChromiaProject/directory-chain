@@ -97,6 +97,12 @@ struct proposal_voter {
     provider: byte_array;
     provider_name: text;
     vote: boolean;
+
+    /** Transaction rid of this vote */
+    tx_rid: byte_array? = null;
+
+    /** Operation index of this vote */
+    op_index: integer? = null;
 }
 
 /**
@@ -104,7 +110,21 @@ struct proposal_voter {
  */
 query get_proposal_voter_info(rowid): list<proposal_voter> {
     val proposal = require_proposal(rowid);
-    return vote @* { .proposal.rowid == rowid } (proposal_voter(.provider.pubkey, .provider.name, .vote));
+    val all_votes = vote @* { proposal } ( .rowid, provider_pubkey = .provider.pubkey,
+        provider_name = .provider.name, .vote );
+
+    val votes_with_tx = vote_transaction @* { .vote.rowid in all_votes @ {} ( @list .rowid ) }
+        ( vote_rowid = .vote.rowid, tx_rid = .transaction.tx_rid, .op_index );
+
+    val votes = list<proposal_voter>();
+    for (vote in all_votes) {
+        votes.add(proposal_voter(
+            provider = vote.provider_pubkey, vote.provider_name, vote.vote,
+            tx_rid = votes_with_tx @? { .vote_rowid == vote.rowid } ( .tx_rid ),
+            op_index = votes_with_tx @? { .vote_rowid == vote.rowid } ( .op_index ),
+        ));
+    }
+    return votes;
 }
 
 struct blockchain_configuration_attempt_data {

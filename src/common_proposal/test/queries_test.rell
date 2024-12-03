@@ -1,0 +1,57 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import provider_auth.test.helper_operations.*;
+
+val alice = rell.test.keypairs.alice;
+val bob = rell.test.keypairs.bob;
+val charlie = rell.test.keypairs.charlie;
+
+function test_get_common_proposal_voter_info() {
+    rell.test.tx().op(
+        create_test_common_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
+    ).sign(alice).run();
+
+    val voter_set = common_voter_set @ {};
+    val proposal_id = get_latest_common_proposal_id();
+
+    rell.test.tx().op(
+        create_common_voter_set_member_op(voter_set, bob.pub),
+        create_common_voter_set_member_op(voter_set, charlie.pub),
+        make_common_vote_v65(proposal_id, true),
+    ).sign(alice).run();
+
+    rell.test.tx().op(
+        make_common_vote_v65(proposal_id, true),
+    ).sign(bob).run();
+
+    rell.test.tx().op(
+        make_common_vote_v65(proposal_id, true),
+    ).sign(charlie).run();
+
+    var votes = get_common_proposal_voter_info(proposal_id);
+    assert_equals(votes.size(), 3);
+    assert_equals(votes[0].pubkey, alice.pub);
+    assert_not_null(votes[0].tx_rid);
+    assert_not_null(votes[0].op_index);
+    assert_not_null(votes[1].tx_rid);
+    assert_not_null(votes[1].op_index);
+    assert_not_null(votes[2].tx_rid);
+    assert_not_null(votes[2].op_index);
+
+    // Verify return of a vote without transaction
+    rell.test.tx().op(
+        remove_common_vote_transaction_op(proposal_id, alice.pub)
+    ).run();
+
+    votes = get_common_proposal_voter_info(proposal_id);
+    assert_equals(votes.size(), 3);
+    assert_equals(votes[0].pubkey, alice.pub);
+    assert_null(votes[0].tx_rid); // Null due to no tx
+    assert_null(votes[0].op_index);  // Null due to no tx
+    assert_not_null(votes[1].tx_rid);
+    assert_not_null(votes[1].op_index);
+    assert_not_null(votes[2].tx_rid);
+    assert_not_null(votes[2].op_index);
+}

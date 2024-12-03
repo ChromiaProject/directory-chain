@@ -4,7 +4,8 @@
 function internal_vote(provider, proposal, vote: boolean) {
     require(voter_set_member @? { proposal.voter_set, provider },
         "provider %s must be a member of the voter set".format(provider.pubkey));
-    create vote(proposal, provider, vote);
+    val vote_entity = create vote(proposal, provider, vote);
+    create vote_transaction(vote_entity, op_context.transaction, op_context.op_index);
     log("vote '%s' added for proposal %s".format(if (vote) "Yes" else "No", proposal_str(proposal)));
     try_to_apply_proposal(proposal);
 }
