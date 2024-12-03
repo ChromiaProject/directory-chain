@@ -1,0 +1,40 @@
+module;
+
+import ^^.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.assets;
+}
+
+struct module_args {
+    asset_name: text;
+    asset_symbol: text;
+    asset_icon: text;
+    asset_decimals: integer;
+}
+
+operation mint_to(account: ft4.accounts.account, amount: big_integer) {
+    ft4.assets.Unsafe.mint(account, get_asset(), amount);
+}
+
+operation test_init_token_chain() {
+    state.initialized = true;
+
+    create_pool_account();
+    register_test_assets();
+
+    create_token_chain_governance_account();
+    create_governance_voter_set();
+}
+
+// tCHR lives on token chain in tests so we can mint it
+function register_test_assets() {
+    return ft4.assets.Unsafe.register_asset(
+        chain_context.args.asset_name,
+        chain_context.args.asset_symbol,
+        chain_context.args.asset_decimals,
+        chain_context.blockchain_rid,
+        chain_context.args.asset_icon
+    );
+}

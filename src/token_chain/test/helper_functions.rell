@@ -1,0 +1,80 @@
+@test module;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.assets;
+    import lib.ft4.auth;
+    import lib.ft4.accounts.strategies;
+    import test_utils: lib.ft4.test.utils;
+}
+
+import lib.auth;
+import ^.helper_operations.*;
+import common_proposal.test.helper_functions.*;
+
+val account_creation_chain_one = "foo".hash();
+
+function setup(
+    auth_privkey: byte_array,
+    initial_mint: big_integer,
+    minting_policies: list<minting_policy> = [],
+    account_creation_brids: list<byte_array> = [account_creation_chain_one, "bar".hash()]
+): ft4.accounts.account {
+
+    maybe_init_token_chain();
+
+    val proposer = do_create_account(rell.test.keypairs.bob, auth_privkey, initial_mint);
+
+    val propose_op = create_propose_token(
+        minting_policy = minting_policies,
+        account_creation_brids = account_creation_brids);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)
+    ).op(propose_op)
+        .run();
+
+    return proposer;
+}
+
+function do_create_account(keypair: rell.test.keypair, auth_privkey: byte_array, initial_mint: big_integer): ft4.accounts.account {
+
+    maybe_init_token_chain();
+
+    val eth_address = crypto.eth_privkey_to_address(keypair.priv);
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(eth_address, set(["A", "T"]));
+    val signature = ft4.test_utils.evm_sign(auth.get_message_to_sign(), keypair.priv);
+
+    val tx = rell.test.tx().op(
+        auth.register_account(auth_descriptor, signature)
+    ).nop().sign(auth_privkey);
+
+    tx.run();
+    val account_id = eth_address.hash();
+    val account = ft4.accounts.account_by_id(account_id);
+    rell.test.tx().op(
+        mint_to(account, initial_mint)
+    ).run();
+    return account;
+}
+
+function maybe_init_token_chain() {
+    if (not exists(ft4.assets.asset @? { .id == get_asset_id() })) {
+        rell.test.tx().op(
+            test_init_token_chain()
+        ).nop().sign(rell.test.keypairs.alice).run();
+    }
+}
+
+function get_account_balance(ft4.accounts.account): big_integer =
+        (ft4.assets.balance @? { account, get_asset() }.amount) ?: 0L;
+
+function create_propose_token(
+    name: text = "Test",
+    symbol: text = "TST",
+    decimals: integer = 6,
+    icon: text = "http://test.com",
+    minting_policy: list<minting_policy> = [],
+    account_creation_brids: list<byte_array> = [],
+) {
+    return propose_token(name, symbol, decimals, icon, minting_policy, account_creation_brids);
+}

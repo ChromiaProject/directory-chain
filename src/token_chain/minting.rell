@@ -1,0 +1,44 @@
+
+@log entity minting_policy_history {
+    index token_account_minting_policy;
+    amount: big_integer;
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(mint_token).mount_name,
+    flags = ["T"],
+);
+
+/**
+ * Mints new tokens to account. Must be allowed by the token minting policy.
+ *
+ * @param asset_id The FT4 asset id of the asset to mint
+ * @param amount Amount to mint
+ */
+operation mint_token(asset_id: byte_array, amount: big_integer) {
+    val account = ft4.auth.authenticate();
+    val asset = ft4.assets.Asset(asset_id);
+    val token = require_token(asset);
+    val minting_policy = require(
+        token_account_minting_policy_account @? { account, .token_account_minting_policy.token == token }.token_account_minting_policy,
+            "Account not member of minting policy");
+
+    val total_minted = minting_policy_history @ { minting_policy } (@sum .amount);
+    if (minting_policy.accumulating_amount) {
+        // Make it at least one interval with +1
+        val maximim_allowed = (((op_context.last_block_time - token.creation_time) / minting_policy.minting_interval_ms) + 1) * minting_policy.minting_amount;
+        require(amount <= maximim_allowed - total_minted, "Amount exceeds maximum allowed accumulated mint");
+    } else {
+        val minted_during_current_interval = minting_policy_history @ { minting_policy, .transaction.block.timestamp > op_context.last_block_time - minting_policy.minting_interval_ms } (@sum .amount);
+        require(amount + minted_during_current_interval <= minting_policy.minting_amount, "Amount exceeds maximum allowed mint");
+    }
+
+    if (minting_policy.max_supply > 0) {
+        require(amount + total_minted <= minting_policy.max_supply, "Amount exceeds max supply of minting policy");
+    }
+
+    ft4.assets.Unsafe.mint(account, asset, amount);
+
+    create minting_policy_history(minting_policy, amount);
+}

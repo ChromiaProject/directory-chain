@@ -1,0 +1,229 @@
+
+entity pending_token_proposal {
+    key common_proposal;
+    name: text;
+    symbol: text;
+    decimals: integer;
+    icon: text;
+
+    /** Comma separated list of blockchain rids */
+    account_creation_brids: text;
+    fee: integer;
+}
+
+entity pending_token_proposal_minting_policy {
+    index pending_token_proposal;
+    minters: text;
+    max_supply: big_integer; // 0 to disable
+    minting_interval_ms: integer;
+    minting_amount: big_integer;
+    accumulating_amount: boolean;
+}
+
+
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.tc_propose_token.name: apply_token_create(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.tc_propose_token.name: cleanup_pending_token_create(*)];
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(propose_token).mount_name,
+    flags = ["T"],
+);
+
+/**
+ * Anyone can propose a new token on token chain. The listing fee will be deducted upon proposing the new token and
+ * refunded in case it is not accepted.
+ *
+ * @param name Token name
+ * @param symbol Token symbol
+ * @param decimals Token decimals
+ * @param icon Token icon
+ * @param minting_policy List of policies for minting, a token can have individual policies for each minter
+ * @param account_creation_brids List of blockchain rids for chains that are allowed to create new accounts on token
+ * chain on behalf of the token owner.
+ */
+operation propose_token(
+    name: text,
+    symbol: text,
+    decimals: integer,
+    icon: text,
+    minting_policy: list<minting_policy>,
+    account_creation_brids: list<byte_array>,
+) {
+    require_initialized();
+
+    ft4.assets.validate_asset_decimals(decimals);
+    ft4.assets.validate_asset_name(name);
+    ft4.assets.validate_asset_symbol(symbol);
+    ft4.assets.parse_icon_url(icon);
+
+    val account = ft4.auth.authenticate();
+
+    val pool_account = ft4.accounts.account_by_id(get_pool_account_id());
+    ft4.assets.Unsafe.transfer(account, pool_account, get_asset(),
+        chain_context.args.listing_fee);
+
+    val proposal = create common_proposal(op_context.last_block_time, common_proposal_type.tc_propose_token, account.id,
+        require_common_voter_set(token_chain_governance_voter_set));
+
+    val pending_token_proposal = create pending_token_proposal(
+        common_proposal = proposal,
+        name = name,
+        symbol = symbol,
+        decimals = decimals,
+        icon = icon,
+        account_creation_brids = account_creation_brids.join_to_text(",", "", "", null, "", byte_array_to_hex(*)),
+        fee = chain_context.args.listing_fee
+    );
+    val minters = set<byte_array>();
+    for (pm in minting_policy) {
+        for (minter in pm.minters) {
+            require(minters.contains(minter) == false, "Minter account id %s exists in multiple minting policies".format(minter));
+            minters.add(minter);
+            ft4.accounts.Account(minter);
+        }
+
+        require(not minters.empty(), "Must provide at least one minter account");
+        require(pm.minting_interval_ms > 0, "Minting interval must be a positive value");
+        require(pm.minting_amount > 0, "Minting amount must be a positive value");
+
+        create pending_token_proposal_minting_policy(
+            pending_token_proposal,
+            minters = pm.minters.join_to_text(",", "", "", null, "", byte_array_to_hex(*)),
+            max_supply = pm.max_supply,
+            minting_interval_ms = pm.minting_interval_ms,
+            minting_amount = pm.minting_amount,
+            accumulating_amount = pm.accumulating_amount,
+        );
+    }
+}
+
+function byte_array_to_hex(ba: byte_array) = ba.to_hex();
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(revoke_token_proposal).mount_name,
+    flags = ["T"],
+);
+
+/**
+ * Revokes a token proposal
+ *
+ * @param proposal_id Proposal to revoke
+ */
+operation revoke_token_proposal(proposal_id: rowid) {
+    val account = ft4.auth.authenticate();
+    val prop = require_common_proposal(proposal_id);
+    require(prop.proposal_type == common_proposal_type.tc_propose_token, "Proposal is not a token proposal");
+    require(prop.proposed_by == account.id, "Proposal must be revoked by proposer");
+
+    revoke_common_proposal_unsafe(prop);
+}
+
+function apply_token_create(proposal: common_proposal) {
+    val pending_token = pending_token_proposal @ { proposal };
+
+    val pool_account = ft4.accounts.account_by_id(get_pool_account_id());
+    val governance_account = ft4.accounts.account_by_id(get_token_chain_governance_account_id());
+    ft4.assets.Unsafe.transfer(pool_account, governance_account, get_asset(), pending_token.fee);
+
+    val proposer_account = ft4.accounts.account_by_id(proposal.proposed_by);
+    val asset = ft4.assets.Unsafe.register_asset(
+        pending_token.name,
+        pending_token.symbol,
+        pending_token.decimals,
+        chain_context.blockchain_rid,
+        pending_token.icon
+    );
+
+    val token = create token(proposer_account, asset, op_context.last_block_time);
+
+    val account_creation_brids = pending_token.account_creation_brids.split(",");
+    for (brid in account_creation_brids) {
+        if (not brid.empty()) {
+            create token_account_creation_brid(token, byte_array.from_hex(brid));
+        }
+    }
+
+    // Apply minting
+    for (minting_policy in pending_token_proposal_minting_policy @* { pending_token }) {
+        val token_account_minting_policy = create token_account_minting_policy(
+            token = token,
+            max_supply = minting_policy.max_supply,
+            minting_interval_ms = minting_policy.minting_interval_ms,
+            minting_amount = minting_policy.minting_amount,
+            accumulating_amount = minting_policy.accumulating_amount
+        );
+
+        val minters = minting_policy.minters.split(",");
+        for (minter in minters) {
+            if (not minter.empty()) {
+                create token_account_minting_policy_account(
+                    token_account_minting_policy, ft4.accounts.Account(byte_array.from_hex(minter)));
+            }
+        }
+    }
+}
+
+function cleanup_pending_token_create(proposal: common_proposal) {
+    val pending_token = pending_token_proposal @ { proposal };
+
+    // Refund rejected proposals
+    if (proposal.state == common_proposal_state.REJECTED) {
+        refund_proposal(ft4.accounts.account_by_id(proposal.proposed_by), pending_token.fee);
+    } else if (proposal.state == common_proposal_state.REVOKED) {
+        require(
+            op_context.last_block_time - proposal.timestamp > chain_context.args.proposal_revoke_timeout_days * millis_per_day,
+            "Can not revoke proposal until %s day(s) has passed since creation".format(chain_context.args.proposal_revoke_timeout_days)
+        );
+        refund_proposal(ft4.accounts.account_by_id(proposal.proposed_by), pending_token.fee);
+    }
+
+    delete pending_token_proposal_minting_policy @* { pending_token };
+    delete pending_token;
+}
+
+function refund_proposal(ft4.accounts.account, amount: integer) {
+    val pool_account = ft4.accounts.account_by_id(get_pool_account_id());
+    ft4.assets.Unsafe.transfer(pool_account, account, get_asset(), amount);
+}
+
+struct token_proposal_data {
+    name: text;
+    symbol: text;
+    decimals: integer;
+    icon: text;
+    minting_policy: list<minting_policy>;
+    account_creation_brids: list<byte_array>;
+}
+
+/**
+ * @param id Proposal ID
+ * @return Information about a specific token proposal
+ */
+query get_token_proposal(id: rowid) {
+    val proposal = require_common_proposal(id);
+    val pending_token_proposal = require(pending_token_proposal @? { proposal }, "Proposal %s is not of type token".format(id));
+
+    val minting_policies = list<minting_policy>();
+    for (minting_policy in pending_token_proposal_minting_policy @* { pending_token_proposal }) {
+        minting_policies.add(
+            minting_policy(
+                minters = minting_policy.minters.split(",") @ {} ( @set byte_array.from_hex($) ),
+                max_supply = minting_policy.max_supply,
+                minting_interval_ms = minting_policy.minting_interval_ms,
+                minting_amount = minting_policy.minting_amount,
+                accumulating_amount = minting_policy.accumulating_amount,
+            )
+        );
+    }
+
+    return token_proposal_data(
+        name = pending_token_proposal.name,
+        symbol = pending_token_proposal.symbol,
+        decimals = pending_token_proposal.decimals,
+        icon = pending_token_proposal.icon,
+        minting_policy = minting_policies,
+        account_creation_brids = pending_token_proposal.account_creation_brids.split(",") @* {} ( byte_array.from_hex($) ),
+    );
+}

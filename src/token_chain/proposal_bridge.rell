@@ -1,0 +1,146 @@
+
+struct bridge_configuration {
+    network_id: integer;
+    bridge_contract: byte_array;
+    token_contract: byte_array;
+    eif.hbridge.bridge_mode;
+    use_snapshots: boolean;
+}
+
+entity pending_bridge_proposal {
+    key proposal: common_proposal;
+    token;
+}
+
+entity pending_bridge_proposal_configuration {
+    pending_bridge_proposal;
+    network_id: integer;
+    bridge_contract: byte_array;
+    token_contract: byte_array;
+    eif.hbridge.bridge_mode;
+    use_snapshots: boolean;
+}
+
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.tc_propose_token_bridge.name: apply_token_bridge_create(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.tc_propose_token_bridge.name: cleanup_pending_token_bridge_create(*)];
+
+function apply_token_bridge_create(proposal: common_proposal) {
+    val bridge_proposal = pending_bridge_proposal @ { proposal };
+    val bridge_proposal_configurations = pending_bridge_proposal_configuration @* { bridge_proposal };
+    val dynamic_config_messages = map<integer, eif.dynamic_config.eif_event_receiver_dynamic_config_message>();
+    for (bridge_proposal_configuration in bridge_proposal_configurations) {
+        eif.hbridge.register_bridge_and_erc20_asset(
+            bridge_proposal_configuration.network_id,
+            bridge_proposal_configuration.token_contract,
+            bridge_proposal.token.asset,
+            bridge_proposal_configuration.bridge_mode,
+            bridge_proposal_configuration.use_snapshots,
+            bridge_proposal_configuration.bridge_contract
+        );
+
+        dynamic_config_messages[bridge_proposal_configuration.network_id] = eif.dynamic_config.eif_event_receiver_dynamic_config_message(
+            contracts = [bridge_proposal_configuration.bridge_contract],
+            events = list<eif.dynamic_config.event_def>()
+        );
+    }
+    send_message(eif.dynamic_config.eif_event_receiver_dynamic_config_topic, dynamic_config_messages.to_gtv());
+}
+
+function cleanup_pending_token_bridge_create(proposal: common_proposal) {
+    val bridge_proposal = pending_bridge_proposal @ { proposal };
+    if (proposal.state == common_proposal_state.REVOKED) {
+        require(
+            op_context.last_block_time - proposal.timestamp > chain_context.args.proposal_revoke_timeout_days * millis_per_day,
+            "Can not revoke proposal until %s day(s) has passed since creation".format(chain_context.args.proposal_revoke_timeout_days)
+        );
+    }
+
+    delete pending_bridge_proposal_configuration @* { bridge_proposal };
+    delete bridge_proposal;
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(propose_token_bridge).mount_name,
+    flags = ["T"],
+);
+
+/**
+ * Token owner can propose bridge(s). When approved they will be added automatically to the token chain EVM event receiver
+ * and hbridge bridges.
+ *
+ * @param asset_id FT4 asset id of the token
+ * @param bridge_configurations List of bridge configurations (1 per bridge contract).
+ */
+operation propose_token_bridge(asset_id: byte_array, bridge_configurations: list<bridge_configuration>) {
+    val account = ft4.auth.authenticate();
+    val asset = ft4.assets.Asset(asset_id);
+    val token = require_token(asset);
+
+    require(account == token.owner, "Only token owner can propose a bridge");
+    require(empty(pending_bridge_proposal @? { token }), "Token already has a pending bridge proposal");
+    require(exists(bridge_configurations), "Proposal must contain at least one bridge configuration");
+
+    val proposal = create common_proposal(op_context.last_block_time, common_proposal_type.tc_propose_token_bridge, account.id,
+        require_common_voter_set(token_chain_governance_voter_set));
+
+    val bridge_proposal = create pending_bridge_proposal(proposal, token);
+    for (bridge_configuration in bridge_configurations) {
+        require(bridge_configuration.bridge_contract.size() == 20, "Incorrect bridge contract length, expected 20, was %s".format(bridge_configuration.bridge_contract.size()));
+        require(bridge_configuration.token_contract.size() == 20, "Incorrect token contract length, expected 20, was %s".format(bridge_configuration.bridge_contract.size()));
+        create pending_bridge_proposal_configuration(
+            bridge_proposal,
+            bridge_configuration.network_id,
+            bridge_contract = bridge_configuration.bridge_contract,
+            token_contract = bridge_configuration.token_contract,
+            bridge_configuration.bridge_mode,
+            bridge_configuration.use_snapshots
+        );
+    }
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(revoke_token_bridge_proposal).mount_name,
+    flags = ["T"],
+);
+
+/**
+ * Revokes a token bridge proposal
+ *
+ * @param proposal_id Proposal to revoke
+ */
+operation revoke_token_bridge_proposal(proposal_id: rowid) {
+    val account = ft4.auth.authenticate();
+    val prop = require_common_proposal(proposal_id);
+    require(prop.proposal_type == common_proposal_type.tc_propose_token_bridge, "Proposal is not a token bridge proposal");
+    require(prop.proposed_by == account.id, "Proposal must be revoked by proposer");
+
+    revoke_common_proposal_unsafe(prop);
+}
+
+struct token_bridge_proposal_data {
+    asset_id: byte_array;
+    configurations: list<bridge_configuration>;
+}
+
+/**
+ * @param id Proposal ID
+ * @return Information about a specific token bridge proposal
+ */
+query get_token_bridge_proposal(id: rowid) {
+    val proposal = require_common_proposal(id);
+    val pending_bridge_proposal = require(pending_bridge_proposal @? { proposal }, "Proposal %s is not of type token bridge".format(id));
+
+    return token_bridge_proposal_data(
+        asset_id = pending_bridge_proposal.token.asset.id,
+        configurations = pending_bridge_proposal_configuration @* { pending_bridge_proposal } (bridge_configuration(
+            network_id = .network_id,
+            bridge_contract = .bridge_contract,
+            token_contract = .token_contract,
+            bridge_mode = .bridge_mode,
+            use_snapshots = .use_snapshots
+        )),
+    );
+}
+

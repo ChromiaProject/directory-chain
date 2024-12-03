@@ -1,0 +1,193 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+
+namespace ft4 {
+    import lib.ft4.assets;
+    import test_utils: lib.ft4.test.utils;
+}
+
+struct module_args {
+    auth_privkey: byte_array = x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6";
+    listing_fee: integer = 100;
+}
+
+function test_duplicate_minters_are_not_allowed() {
+    rell.test.tx().op(
+            test_init_token_chain()
+        ).sign(rell.test.keypairs.alice).run();
+
+    val proposer = do_create_account(rell.test.keypairs.bob, chain_context.args.auth_privkey, chain_context.args.listing_fee);
+
+    val propose_op = propose_token(
+        "Test",
+        "TST",
+        6,
+        "http://test.com",
+        [minting_policy(
+            minters = set([proposer.id]),
+            max_supply = 0,
+            minting_interval_ms = 1,
+            minting_amount = 1,
+            accumulating_amount = false
+        ), minting_policy(
+            minters = set([proposer.id]),
+            max_supply = 0,
+            minting_interval_ms = 1,
+            minting_amount = 1,
+            accumulating_amount = false
+        )],
+        [account_creation_chain_one, "bar".hash()]
+    );
+    rell.test.tx().op(
+            ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)
+        ).op(propose_op)
+        .run_must_fail("Minter account id %s exists in multiple minting policies".format(proposer.id));
+}
+
+function test_minters_must_have_accounts() {
+    rell.test.tx().op(
+            test_init_token_chain()
+        ).sign(rell.test.keypairs.alice).run();
+
+    val proposer = do_create_account(rell.test.keypairs.bob, chain_context.args.auth_privkey, chain_context.args.listing_fee);
+
+    val propose_op = propose_token(
+        "Test",
+        "TST",
+        6,
+        "http://test.com",
+        [minting_policy(
+            minters = set(["unknown_acc".hash()]),
+            max_supply = 0,
+            minting_interval_ms = 0,
+            minting_amount = 0,
+            accumulating_amount = false
+        )],
+        [account_creation_chain_one, "bar".hash()]
+    );
+    rell.test.tx().op(
+            ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)
+        ).op(propose_op)
+        .run_must_fail("Account not found");
+}
+
+function test_successful_non_accumulating_mint() {
+    val minter_account_id = crypto.eth_privkey_to_address(rell.test.keypairs.bob.priv).hash();
+
+    val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee, [minting_policy(
+        minters = set([minter_account_id]),
+        max_supply = 25,
+        minting_interval_ms = millis_per_day,
+        minting_amount = 10,
+        accumulating_amount = false
+    )]);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val token = token @ { };
+
+    val minting_op = mint_token(token.asset.id, 10);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, minting_op)
+    ).op(
+        minting_op
+    ).run();
+
+    assert_equals(ft4.assets.balance @ { proposer, token.asset }.amount, 10);
+    assert_not_null(minting_policy_history @? { .token_account_minting_policy.token == token, .amount == 10 });
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, minting_op)
+    ).op(
+        minting_op
+    ).nop().run_must_fail("Amount exceeds maximum allowed mint");
+
+    rell.test.set_next_block_time_delta(millis_per_day);
+    rell.test.block().run();
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, minting_op)
+    ).op(
+        minting_op
+    ).nop().run();
+    assert_equals(ft4.assets.balance @ { proposer, token.asset }.amount, 20);
+
+    rell.test.set_next_block_time_delta(millis_per_day);
+    rell.test.block().run();
+    val exceeding_minting_op = mint_token(token.asset.id, 6);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, exceeding_minting_op)
+    ).op(
+        exceeding_minting_op
+    ).nop().run_must_fail("Amount exceeds max supply of minting policy");
+}
+
+function test_successful_accumulating_mint() {
+    val minter_account_id = crypto.eth_privkey_to_address(rell.test.keypairs.bob.priv).hash();
+
+    val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee, [minting_policy(
+        minters = set([minter_account_id]),
+        max_supply = 0,
+        minting_interval_ms = millis_per_day,
+        minting_amount = 10,
+        accumulating_amount = true
+    )]);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val token = token @ { };
+
+    val minting_op = mint_token(token.asset.id, 5);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, minting_op)
+    ).op(
+        minting_op
+    ).run();
+
+    assert_equals(ft4.assets.balance @ { proposer, token.asset }.amount, 5);
+    assert_not_null(minting_policy_history @? { .token_account_minting_policy.token == token, .amount == 5 });
+
+    rell.test.set_next_block_time_delta(millis_per_day);
+    rell.test.block().run();
+    val exceeding_minting_op = mint_token(token.asset.id, 16);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, exceeding_minting_op)
+    ).op(
+        exceeding_minting_op
+    ).nop().run_must_fail("Amount exceeds maximum allowed accumulated mint");
+
+    rell.test.set_next_block_time_delta(millis_per_day);
+    rell.test.block().run();
+    val accumulated_minting_op = mint_token(token.asset.id, 15);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, accumulated_minting_op)
+    ).op(
+        accumulated_minting_op
+    ).nop().run();
+
+    assert_equals(ft4.assets.balance @ { proposer, token.asset }.amount, 20);
+    assert_equals(minting_policy_history @? { .token_account_minting_policy.token == token } ( @sum .amount ), 20);
+}
+
+function test_invalid_mint_account() {
+
+    val minter_account_id = crypto.eth_privkey_to_address(rell.test.keypairs.bob.priv).hash();
+    val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee, [minting_policy(
+        minters = set([minter_account_id]),
+        max_supply = 0,
+        minting_interval_ms = millis_per_day,
+        minting_amount = 10,
+        accumulating_amount = true
+    )]);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val token = token @ { };
+
+    val charlie_account = do_create_account(rell.test.keypairs.charlie, chain_context.args.auth_privkey, 1);
+
+    val minting_op = mint_token(token.asset.id, 5);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.charlie.priv, minting_op)
+    ).op(
+        minting_op
+    ).run_must_fail("Account not member of minting policy");
+}

@@ -1,0 +1,55 @@
+import common.*;
+
+import constants.*;
+import messaging.blockchain_rid.*;
+
+object token_chain {
+    mutable rid: byte_array = x"";
+}
+
+object evm_event_receiver_token_chain {
+    mutable rid: byte_array = x"";
+}
+
+/**
+ * Initializes the token chain
+ *
+ * @param my_pubkey Must be a system provider and signer of transaction
+ * @param token_chain_config Blockchain configuration for the token chain
+ */
+operation init_token_chain(my_pubkey: pubkey, token_chain_config: byte_array) {
+    require_is_provider_with_rate_limit(my_pubkey);
+    require_is_system_provider(my_pubkey);
+
+    require(token_chain.rid == x"", "Token chain is already started");
+
+    val nodes = cluster_node @* { system_cluster() } ( @sort .node.pubkey );
+    // do not write new configuration when size is 0 since it's impossible to recover from that
+    require(nodes.size() > 0, "System cluster must have at least one node");
+
+    log("Adding token chain to system container");
+    val token_blockchain = add_blockchain(token_chain_config, nodes, blockchains.token_chain_name, system_container(), true);
+    update token_chain ( rid = token_blockchain.rid );
+    send_message(blockchain_rid_topic, blockchain_rid(rid = token_chain.rid, name = blockchains.token_chain_name).to_gtv());
+}
+
+operation init_evm_event_receiver_token_chain(my_pubkey: pubkey, event_receiver_token_chain_config: byte_array) {
+    require_is_provider_with_rate_limit(my_pubkey);
+    require_is_system_provider(my_pubkey);
+
+    require(evm_event_receiver_token_chain.rid == x"", "EVM event receiver token chain is already started");
+
+    val nodes = cluster_node @* { system_cluster() } (@sort .node.pubkey);
+    // do not write new configuration when size is 0 since it's impossible to recover from that
+    require(nodes.size() > 0, "System cluster must have at least one node");
+
+    log("Adding EVM event receiver token chain to system container");
+    val evm_event_receiver_token_blockchain = add_blockchain(
+        event_receiver_token_chain_config, nodes, blockchains.evm_event_receiver_token_chain, system_container(), true);
+    update evm_event_receiver_token_chain(rid = evm_event_receiver_token_blockchain.rid);
+    send_message(blockchain_rid_topic, blockchain_rid(rid = evm_event_receiver_token_blockchain.rid, name = blockchains.evm_event_receiver_token_chain).to_gtv());
+}
+
+query get_token_chain_rid() = token_chain.rid;
+
+query get_evm_event_receiver_token_chain_rid() = evm_event_receiver_token_chain.rid;

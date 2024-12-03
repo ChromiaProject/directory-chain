@@ -1,0 +1,271 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import lib.test.iccf_test_lib.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.accounts.strategies;
+    import lib.ft4.accounts.strategies.transfer;
+    import lib.ft4.accounts.strategies.transfer.fee;
+}
+
+struct module_args {
+    auth_privkey: byte_array = x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6";
+    listing_fee: integer = 100;
+}
+
+function test_account_creation_success() {
+    val initial_pool_balance = 1000000000;
+    val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee + 1000000000);
+    assert_equals(pending_token_proposal @ { .common_proposal.rowid == get_latest_common_proposal_id() }.account_creation_brids,
+        "foo".hash().to_hex() + "," + "bar".hash().to_hex());
+
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val test_token = token @ { };
+
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(rell.test.keypairs.charlie.pub, set(["A", "T"]));
+
+    val account_creation_tx = gtx_transaction(
+        gtx_transaction_body(
+            blockchain_rid = account_creation_chain_one,
+            operations = [gtx_operation(
+                name = token_chain_account_creation_op_name,
+                args = [auth_descriptor.to_gtv()]
+            )],
+            signers = []
+        ),
+        signatures = []
+    );
+    val proof_op = iccf_proof_for(account_creation_chain_one, account_creation_tx);
+
+    val iccf_strategy_op = ras_token_iccf(account_creation_tx, test_token.asset.id);
+
+    rell.test.tx().op([
+        proof_op,
+        iccf_strategy_op,
+        ft4.strategies.external.register_account()
+    ]).sign(rell.test.keypairs.charlie).run();
+
+    val account = ft4.accounts.Account(ft4.accounts.get_account_id_from_signers([rell.test.keypairs.charlie.pub]));
+
+    val account_creation_fee = ft4.transfer.resolve_fee_assets(ft4.fee.fee_assets())[get_asset_id()];
+    assert_equals(get_account_balance(proposer), initial_pool_balance - account_creation_fee);
+
+    val governance_account = ft4.accounts.account_by_id(get_token_chain_governance_account_id());
+    assert_equals(get_account_balance(governance_account), chain_context.args.listing_fee + account_creation_fee);
+}
+
+function test_account_creation_fail_when_pool_is_empty() {
+    setup(chain_context.args.auth_privkey, chain_context.args.listing_fee);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val test_token = token @ { };
+
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(rell.test.keypairs.charlie.pub, set(["A", "T"]));
+
+    val account_creation_tx = gtx_transaction(
+        gtx_transaction_body(
+            blockchain_rid = account_creation_chain_one,
+            operations = [gtx_operation(
+                name = token_chain_account_creation_op_name,
+                args = [auth_descriptor.to_gtv()]
+            )],
+            signers = []
+        ),
+        signatures = []
+    );
+    val proof_op = iccf_proof_for(account_creation_chain_one, account_creation_tx);
+
+    val iccf_strategy_op = ras_token_iccf(account_creation_tx, test_token.asset.id);
+
+    rell.test.tx().op([
+        proof_op,
+        iccf_strategy_op,
+        ft4.strategies.external.register_account()
+    ]).sign(rell.test.keypairs.charlie).run_must_fail("User does not have asset");
+}
+
+function test_account_creation_fail_when_pool_balance_is_too_low() {
+    setup(chain_context.args.auth_privkey, chain_context.args.listing_fee + 1);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val test_token = token @ { };
+
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(rell.test.keypairs.charlie.pub, set(["A", "T"]));
+
+    val account_creation_tx = gtx_transaction(
+        gtx_transaction_body(
+            blockchain_rid = account_creation_chain_one,
+            operations = [gtx_operation(
+                name = token_chain_account_creation_op_name,
+                args = [auth_descriptor.to_gtv()]
+            )],
+            signers = []
+        ),
+        signatures = []
+    );
+    val proof_op = iccf_proof_for(account_creation_chain_one, account_creation_tx);
+
+    val iccf_strategy_op = ras_token_iccf(account_creation_tx, test_token.asset.id);
+
+    rell.test.tx().op([
+        proof_op,
+        iccf_strategy_op,
+        ft4.strategies.external.register_account()
+    ]).sign(rell.test.keypairs.charlie).run_must_fail("Balance is too low");
+}
+
+function test_account_creation_spam() {
+    val initial_pool_balance = 1000000000;
+    val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee + 1000000000);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val test_token = token @ { };
+
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(rell.test.keypairs.charlie.pub, set(["A", "T"]));
+
+    val account_creation_tx = gtx_transaction(
+        gtx_transaction_body(
+            blockchain_rid = account_creation_chain_one,
+            operations = [gtx_operation(
+            name = token_chain_account_creation_op_name,
+            args = [auth_descriptor.to_gtv()]
+        )],
+            signers = []
+        ),
+        signatures = []
+    );
+    val proof_op = iccf_proof_for(account_creation_chain_one, account_creation_tx);
+
+    val iccf_strategy_op = ras_token_iccf(account_creation_tx, test_token.asset.id);
+
+    rell.test.tx().op([
+        proof_op,
+        iccf_strategy_op,
+    ]).sign(rell.test.keypairs.charlie).run_must_fail("<ras_token_iccf> must be followed by a register account operation");
+}
+
+function test_account_creation_without_proof() {
+    val initial_pool_balance = 1000000000;
+    val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee + 1000000000);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val test_token = token @ { };
+
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(rell.test.keypairs.charlie.pub, set(["A", "T"]));
+
+    val account_creation_tx = gtx_transaction(
+        gtx_transaction_body(
+            blockchain_rid = account_creation_chain_one,
+            operations = [gtx_operation(
+            name = token_chain_account_creation_op_name,
+            args = [auth_descriptor.to_gtv()]
+        )],
+            signers = []
+        ),
+        signatures = []
+    );
+    val iccf_strategy_op = ras_token_iccf(account_creation_tx, test_token.asset.id);
+
+    rell.test.tx().op([
+        iccf_strategy_op,
+        ft4.strategies.external.register_account()
+    ]).sign(rell.test.keypairs.charlie).run_must_fail("No proof operation present for TX");
+}
+
+function test_account_creation_with_unauthorized_source_chain() {
+    val initial_pool_balance = 1000000000;
+    val fake_chain = "fake".hash();
+    val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee + 1000000000, account_creation_brids = []);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val test_token = token @ { };
+
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(rell.test.keypairs.charlie.pub, set(["A", "T"]));
+
+    val account_creation_tx = gtx_transaction(
+        gtx_transaction_body(
+            blockchain_rid = fake_chain,
+            operations = [gtx_operation(
+            name = token_chain_account_creation_op_name,
+            args = [auth_descriptor.to_gtv()]
+        )],
+            signers = []
+        ),
+        signatures = []
+    );
+    val proof_op = iccf_proof_for(fake_chain, account_creation_tx);
+
+    val iccf_strategy_op = ras_token_iccf(account_creation_tx, test_token.asset.id);
+
+    rell.test.tx().op([
+        proof_op,
+        iccf_strategy_op,
+        ft4.strategies.external.register_account()
+    ]).sign(rell.test.keypairs.charlie).run_must_fail("%s is not a valid source blockchain".format(fake_chain));
+}
+
+function test_account_creation_with_incorrect_proof_op_name() {
+    val initial_pool_balance = 1000000000;
+    val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee + 1000000000);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val test_token = token @ { };
+
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(rell.test.keypairs.charlie.pub, set(["A", "T"]));
+
+    val account_creation_tx = gtx_transaction(
+        gtx_transaction_body(
+            blockchain_rid = account_creation_chain_one,
+            operations = [gtx_operation(
+            name = "invalid_op_name",
+            args = [auth_descriptor.to_gtv()]
+        )],
+            signers = []
+        ),
+        signatures = []
+    );
+    val proof_op = iccf_proof_for(account_creation_chain_one, account_creation_tx);
+
+    val iccf_strategy_op = ras_token_iccf(account_creation_tx, test_token.asset.id);
+
+    rell.test.tx().op([
+        proof_op,
+        iccf_strategy_op,
+        ft4.strategies.external.register_account()
+    ]).sign(rell.test.keypairs.charlie).run_must_fail("Operation with name %s not found in transaction".format(token_chain_account_creation_op_name));
+}
+
+function test_account_creation_with_incorrect_proof_op_arg() {
+    val initial_pool_balance = 1000000000;
+    val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee + 1000000000);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val test_token = token @ { };
+
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(rell.test.keypairs.charlie.pub, set(["A", "T"]));
+
+    val account_creation_tx = gtx_transaction(
+        gtx_transaction_body(
+            blockchain_rid = account_creation_chain_one,
+            operations = [gtx_operation(
+            name = token_chain_account_creation_op_name,
+            args = []
+        )],
+            signers = []
+        ),
+        signatures = []
+    );
+    val proof_op = iccf_proof_for(account_creation_chain_one, account_creation_tx);
+
+    val iccf_strategy_op = ras_token_iccf(account_creation_tx, test_token.asset.id);
+
+    rell.test.tx().op([
+        proof_op,
+        iccf_strategy_op,
+        ft4.strategies.external.register_account()
+    ]).sign(rell.test.keypairs.charlie).run_must_fail("Account creation operation must have at least one argument");
+}
