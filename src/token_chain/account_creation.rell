@@ -2,7 +2,7 @@ val token_chain_account_creation_op_name = "create_token_chain_account";
 
 @extend(ft4.strategies.strategy)
 function () = ft4.strategies.add_strategy(
-    op = rell.meta(ras_iccf),
+    op = rell.meta(ras_token_iccf),
     account_details = iccf_account_details(*),
     action = apply_ras_iccf_action(*)
 );
@@ -21,12 +21,12 @@ function () = ft4.strategies.add_strategy(
  * @param transaction Account creation transaction on dApp chain
  * @param asset_id The FT4 asset id of the token project that authorizes the account creation
  */
-operation ras_iccf(transaction: gtx_transaction, asset_id: byte_array) {
+operation ras_token_iccf(transaction: gtx_transaction, asset_id: byte_array) {
     ft4.strategies.require_register_account_next_operation();
 }
 
 function iccf_account_details(gtv) {
-    val params = struct<ras_iccf>.from_gtv(gtv);
+    val params = struct<ras_token_iccf>.from_gtv(gtv);
 
     val asset = ft4.assets.Asset(params.asset_id);
     val token = require_token(asset);
@@ -48,7 +48,7 @@ function iccf_account_details(gtv) {
 }
 
 function apply_ras_iccf_action(ft4.accounts.account, strategy_params_gtv: gtv) {
-    val params = struct<ras_iccf>.from_gtv(strategy_params_gtv);
+    val params = struct<ras_token_iccf>.from_gtv(strategy_params_gtv);
 
     val asset = ft4.assets.Asset(params.asset_id);
     val token = require_token(asset);

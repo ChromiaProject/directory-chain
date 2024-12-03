@@ -17,6 +17,9 @@ struct module_args {
     listing_fee: integer = 100;
 }
 
+val bridge_contract = x"00".repeat(20);
+val token_contract = x"01".repeat(20);
+
 function test_bridge_creation_success() {
     val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
@@ -26,8 +29,8 @@ function test_bridge_creation_success() {
         test_token.asset.id,
         [bridge_configuration(
             97,
-            bridge_contract = x"00",
-            token_contract = x"01",
+            bridge_contract = bridge_contract,
+            token_contract = token_contract,
             eif.hbridge.bridge_mode.foreign,
             true
         )]
@@ -41,7 +44,7 @@ function test_bridge_creation_success() {
 
     assert_not_null(pending_bridge_proposal @? { test_token });
     assert_not_null(pending_bridge_proposal_configuration @? {
-        .network_id == 97, .bridge_contract == x"00", .token_contract == x"01", .bridge_mode == eif.hbridge.bridge_mode.foreign, .use_snapshots
+        .network_id == 97, .bridge_contract == bridge_contract, .token_contract == token_contract, .bridge_mode == eif.hbridge.bridge_mode.foreign, .use_snapshots
     });
 
     rell.test.tx().op(
@@ -53,23 +56,23 @@ function test_bridge_creation_success() {
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
     assert_null(pending_bridge_proposal @? { test_token });
     assert_null(pending_bridge_proposal_configuration @? {
-        .network_id == 97, .bridge_contract == x"00", .token_contract == x"01", .bridge_mode == eif.hbridge.bridge_mode.foreign, .use_snapshots
+        .network_id == 97, .bridge_contract == bridge_contract, .token_contract == token_contract, .bridge_mode == eif.hbridge.bridge_mode.foreign, .use_snapshots
     });
 
     val registered_bridges = eif.hbridge.get_bridge_contracts(97);
     assert_equals(registered_bridges.size(), 1);
     val registered_bridge = registered_bridges[0];
-    assert_equals(registered_bridge.contract_address, x"00");
+    assert_equals(registered_bridge.contract_address, bridge_contract);
 
     val registered_bridge_assets = registered_bridge.erc20_assets;
     assert_equals(registered_bridge_assets.size(), 1);
     val bridge_asset = registered_bridge_assets[0];
-    assert_equals(bridge_asset.token_address, x"01");
+    assert_equals(bridge_asset.token_address, token_contract);
 
     assert_events(("icmf_message", (
         topic = eif.dynamic_config.eif_event_receiver_dynamic_config_topic,
         body = [97: eif.dynamic_config.eif_event_receiver_dynamic_config_message(
-            contracts = [x"00"],
+            contracts = [bridge_contract],
             events = list<eif.dynamic_config.event_def>()
         )
     ].to_gtv()
@@ -85,8 +88,8 @@ function test_bridge_can_only_be_added_by_token_owner() {
         test_token.asset.id,
         [bridge_configuration(
             97,
-            bridge_contract = x"00",
-            token_contract = x"01",
+            bridge_contract = bridge_contract,
+            token_contract = token_contract,
             eif.hbridge.bridge_mode.foreign,
             true
         )]
@@ -109,8 +112,8 @@ function test_bridge_proposal_revoke() {
         test_token.asset.id,
         [bridge_configuration(
             97,
-            bridge_contract = x"00",
-            token_contract = x"01",
+            bridge_contract = bridge_contract,
+            token_contract = token_contract,
             eif.hbridge.bridge_mode.foreign,
             true
         )]
