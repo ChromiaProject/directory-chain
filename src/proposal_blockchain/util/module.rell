@@ -11,15 +11,33 @@ struct module_args {
     min_inter_block_interval: integer;
     allowed_dapp_chain_gtx_modules: gtv;
     allowed_dapp_chain_sync_exts: gtv;
+    allowed_blockchain_features: gtv;
+    required_blockchain_features: gtv;
     require_revolt_when_should_build_block: boolean = true;
     require_add_primary_key_to_header: boolean = true;
 }
 
 function validate_blockchain_configuration(container, config_data: byte_array, signers: boolean, header_hash: boolean, system_chain: boolean) {
     val config_map = map<text, gtv>.from_gtv(gtv.from_bytes(config_data));
+
     if (signers) {
         require("signers" not in config_map, "Configuration must not contain \"signers\"");
     }
+
+    val allowed_blockchain_features = set<text>.from_gtv(chain_context.args.allowed_blockchain_features);
+    val required_blockchain_features = set<text>.from_gtv(chain_context.args.required_blockchain_features);
+    if ("features" in config_map) {
+        val blockchain_features = map<text, gtv>.from_gtv(config_map["features"]);
+        for (feature in blockchain_features.keys()) {
+            require(feature in allowed_blockchain_features, "Unrecognized feature: %s".format(feature));
+        }
+        for (required_feature in required_blockchain_features) {
+            require(required_feature in blockchain_features.keys(), "Missing required feature: %s".format(required_feature));
+        }
+    } else {
+        require(required_blockchain_features.empty(), "Missing required features: %s".format(required_blockchain_features));
+    }
+
     if (header_hash) {
         require("config_consensus_strategy" in config_map,
             "Configuration must contain \"config_consensus_strategy\"=\"HEADER_HASH\"");
