@@ -37,27 +37,57 @@ function require_unique_blockchain(name: text, base_configuration: byte_array, s
 }
 
 function add_dependencies(raw_config: byte_array, brid: byte_array, height: integer) {
-    val config_map = map<text, gtv>.from_gtv(gtv.from_bytes(raw_config));
-    if (config_map.contains("dependencies")) {
-        require(allow_blockchain_dependencies(), "Blockchain dependencies are not allowed");
-        val dependencies = list<(text, byte_array)>.from_gtv(config_map["dependencies"]);   // Returns e.g.  [brid0, brid22, ..]
+    val config_map = get_config_map(raw_config);
+    if (validate_dependencies(config_map)) {
+        val dependencies = get_dependencies(config_map);
         val blockchain = blockchain @ { brid };
         // In case this is a configuration override, delete any deps from overridden config
         delete blockchain_dependency @* { .me == blockchain, .height == height };
         val container = container_blockchain @ { blockchain }.container;
-        for ((_, dependency_brid) in dependencies) {
-            val dependency_blockchain = blockchain @? { dependency_brid };
-            if (exists(dependency_blockchain)) {
-                require(brid != dependency_brid, "Dependency brid mismatch: %s != %s".format(brid, dependency_brid));
-                require(container_blockchain @ { dependency_blockchain }.container == container,
-                    "Blockchain dependencies are only allowed within the same container");
-                create blockchain_dependency(
-                    me = blockchain,
-                    dependent_on = dependency_blockchain,
-                    height = height);
-            }
+        val blockchain_dependencies_to_create = validate_blockchain_dependencies(dependencies, brid, container, height);
+        for (dependency_blockchain_to_height in blockchain_dependencies_to_create) {
+            create blockchain_dependency(
+                me = blockchain,
+                dependent_on = dependency_blockchain_to_height.dependency_blockchain,
+                height = dependency_blockchain_to_height.height);
         }
     }
+}
+
+function get_config_map(raw_config: byte_array) {
+    return map<text, gtv>.from_gtv(gtv.from_bytes(raw_config));
+}
+
+function validate_dependencies(config_map: map<text, gtv>): boolean {
+    if (config_map.contains("dependencies")) {
+        require(allow_blockchain_dependencies(), "Blockchain dependencies are not allowed");
+        return true;
+    } else {
+        return false;
+    }
+}
+
+function get_dependencies(config_map: map<text, gtv>): list<(text, byte_array)> {
+    return list<(text, byte_array)>.from_gtv(config_map["dependencies"]);   // Returns e.g.  [brid0, brid22, ..]
+}
+
+function validate_blockchain_dependencies(dependencies : list<(text, byte_array)>, brid: byte_array, container, height: integer): list<dependency_blockchain_to_height> {
+    val blockchain_dependencies_to_create = list<dependency_blockchain_to_height>();
+    for ((_, dependency_brid) in dependencies) {
+        val dependency_blockchain = blockchain @? { dependency_brid };
+        if (exists(dependency_blockchain)) {
+            require(brid != dependency_brid, "Dependency brid mismatch: %s != %s".format(brid, dependency_brid));
+            require(container_blockchain @ { dependency_blockchain }.container == container,
+                "Blockchain dependencies are only allowed within the same container");
+            blockchain_dependencies_to_create.add(dependency_blockchain_to_height(dependency_blockchain, height));
+        }
+    }
+    return blockchain_dependencies_to_create;
+}
+
+struct dependency_blockchain_to_height {
+    dependency_blockchain: blockchain;
+    height: integer;
 }
 
 function get_blockchain_signer_nodes(blockchain: blockchain): list<node> {

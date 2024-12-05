@@ -122,7 +122,13 @@ function validate_blockchain_proposal(proposal_details: pending_blockchain) {
     // do not write new configuration when size is 0 since it's impossible to recover from that
     require(nodes.size() > 0, "Cluster must have at least one node");
 
-    require_unique_blockchain(proposal_details.name, proposal_details.data, nodes);
+    val blockchain_rid = require_unique_blockchain(proposal_details.name, proposal_details.data, nodes);
+
+    val config_map = get_config_map(proposal_details.data);
+    if (validate_dependencies(config_map)) {
+        val dependencies = get_dependencies(config_map);
+        validate_blockchain_dependencies(dependencies, blockchain_rid, container, 0);
+    }
 
     return nodes;
 }
