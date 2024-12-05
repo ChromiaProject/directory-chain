@@ -193,6 +193,19 @@ function test_revoke_proposal_fail_due_to_already_rejected__provider_auth() {
     ).sign(alice, bob).run();
 }
 
+function test_approved_proposal() {
+    rell.test.tx().op(
+        create_test_common_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name")
+    ).sign(alice).run();
+
+    rell.test.tx().op(
+        make_common_vote_v65(get_latest_common_proposal_id(), true)
+    ).sign(alice).run();
+
+    val common_proposal = common_proposal @ {.proposal_type == common_proposal_type.ec_cluster_create};
+    assert_equals(common_proposal.state, common_proposal_state.APPROVED);
+}
+
 function test_retract_common_vote() {
 
     rell.test.tx().op(

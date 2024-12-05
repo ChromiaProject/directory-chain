@@ -15,12 +15,7 @@ function add_blockchain(
     system: boolean = false,
     state: blockchain_state = blockchain_state.RUNNING
 ): blockchain {
-    require(empty(blockchain @? { name, .state != blockchain_state.REMOVED }), "A blockchain with the same name already exists");
-    val blockchain_rid = calculate_configuration_hash(base_configuration, signers);
-    require(
-        empty(blockchain @? { .rid == blockchain_rid }),
-        "Another blockchain with same RID %s has previously been deployed to this network. Please ensure that the initial configuration is unique.".format(blockchain_rid)
-    );
+    val blockchain_rid = require_unique_blockchain(name, base_configuration, signers);
     val signer_bytes = signers.to_gtv().to_bytes();
     val blockchain = create blockchain(blockchain_rid, name, system, state);
     compress_and_store_configuration(blockchain, 0, base_configuration);
@@ -29,6 +24,16 @@ function add_blockchain(
     add_dependencies(base_configuration, blockchain_rid, 0);
     signal_signer_list_update(blockchain_rid, signer_bytes);
     return blockchain;
+}
+
+function require_unique_blockchain(name: text, base_configuration: byte_array, signers: list<pubkey>) {
+    require(empty(blockchain @? { name, .state != blockchain_state.REMOVED }), "A blockchain with the same name already exists");
+    val blockchain_rid = calculate_configuration_hash(base_configuration, signers);
+    require(
+        empty(blockchain @? { .rid == blockchain_rid }),
+        "Another blockchain with same RID %s has previously been deployed to this network. Please ensure that the initial configuration is unique.".format(blockchain_rid)
+    );
+    return blockchain_rid;
 }
 
 function add_dependencies(raw_config: byte_array, brid: byte_array, height: integer) {

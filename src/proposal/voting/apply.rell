@@ -40,11 +40,11 @@ function apply_or_delay_proposal(prop: proposal) {
 
     if (blockchain != null and proposal_delay > 0) {
         log("Proposal %s is delayed and will be applied in %s ms".format(prop.rowid, proposal_delay));
+        prop.state = proposal_state.DELAYED;
         add_delayed_event(delay_type.PROPOSAL, proposal_delay, prop.rowid.to_integer());
         set_delayed_event_state(delay_type.PROPOSAL, prop.rowid.to_integer(), blockchain.state == blockchain_state.RUNNING);
     } else {
-        apply_voting_result_handlers()[prop.proposal_type.name](prop);
-        delete_proposal(prop);
+        try_call_apply_voting_result_handlers(prop);
     }
 }
 
@@ -54,9 +54,17 @@ function apply_or_delay_proposal(prop: proposal) {
 function proposal_delayed_apply(proposal_id: integer) {
     val prop = proposal @? { .rowid == rowid(proposal_id) };
     if (prop != null) {
-        apply_voting_result_handlers()[prop.proposal_type.name](prop);
-        delete_proposal(prop);
+        try_call_apply_voting_result_handlers(prop);
     }
+}
+
+function try_call_apply_voting_result_handlers(prop: proposal){
+    if (try_call(apply_voting_result_handlers()[prop.proposal_type.name](prop, *))){
+        prop.state = proposal_state.APPROVED;
+    } else {
+        prop.state = proposal_state.FAILED;
+    }
+    delete_proposal(prop);
 }
 
 /**

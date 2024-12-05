@@ -216,7 +216,6 @@ function test_future_delayed_actions_are_applied_immediately_if_delay_is_removed
     assert_false(exists(delayed_event @? {  }));
 }
 
-// TODO: This behavior should be further improved by adding a failed state to proposals
 function test_that_invalid_delayed_proposal_does_break_chain() {
     setup();
 
@@ -246,6 +245,38 @@ function test_that_invalid_delayed_proposal_does_break_chain() {
     rell.test.block().run();
     assert_false(exists(delayed_event @? {}));
     assert_equals(chain.state, blockchain_state.RUNNING);
+
+    val blockchain_remove_proposal = get_blockchain_action_proposal();
+    assert_equals(blockchain_remove_proposal.state, proposal_state.FAILED);
+}
+
+function test_delayed_proposal_gets_approved() {
+    setup();
+
+    val container = "container";
+    val alice = provider @ { rell.test.pubkeys.alice };
+
+    // 1 block delay
+    val conf = apply_required_configuration_properties([DIRECTORY_CHAIN_CONFIG_KEY : [DIRECTORY_CHAIN_CONFIG_DELAY_CONFIG_KEY : 10000].to_gtv()]);
+    rell.test.tx().op(
+        create_container(alice.pubkey, container, clusters.system, 0, [alice.pubkey]),
+        propose_blockchain(alice.pubkey, conf.to_gtv().to_bytes(), "chain", container),
+    ).sign(rell.test.keypairs.alice).run();
+    val chain = blockchain @ { "chain" };
+
+    // Propose a removal
+    alice_proposes_action(chain, blockchain_action.remove);
+    assert_true(exists(delayed_event @? { .active, .time == rell.test.last_block_time - rell.test.block_interval + 10000 }));
+
+    val blockchain_remove_proposal_delayed = get_blockchain_action_proposal();
+    assert_equals(blockchain_remove_proposal_delayed.state, proposal_state.DELAYED);
+
+    rell.test.block().run();
+    assert_false(exists(delayed_event @? {}));
+    assert_equals(chain.state, blockchain_state.REMOVED);
+
+    val blockchain_remove_proposal_approved = get_blockchain_action_proposal();
+    assert_equals(blockchain_remove_proposal_approved.state, proposal_state.APPROVED);
 }
 
 function alice_proposes_action(bc: blockchain, action: blockchain_action) {
@@ -268,4 +299,8 @@ function assert_action_proposed(action: blockchain_action) {
         pending_blockchain_action @ { last_proposal() } .action,
         action
     );
+}
+
+function get_blockchain_action_proposal(): proposal {
+    return proposal @ {.proposal_type == proposal_type.blockchain_action};
 }

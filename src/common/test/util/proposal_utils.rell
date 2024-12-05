@@ -3,6 +3,10 @@ function last_proposal(state: proposal_state = proposal_state.PENDING): proposal
     return proposal @ { state } ( @omit @sort_desc .rowid, $) limit 1;
 }
 
+function get_last_proposal(): proposal {
+    return proposal @ {} ( @omit @sort_desc .rowid, $ ) limit 1;
+}
+
 function vote_for_last_proposal(approver: rell.test.keypair, vote: boolean = true) {
     val proposal_id = (proposal @ { proposal_state.PENDING } ( @sort_desc .rowid ) limit 1).to_integer();
     rell.test.tx().op(
