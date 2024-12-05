@@ -20,6 +20,7 @@ struct module_args {
 
 val auth_privkey = chain_context.args.auth_privkey;
 val cluster_name = "test_cluster";
+val brid = x"00".repeat(32);
 
 function test_bridge_lease_add_update_and_remove() {
     rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
@@ -29,15 +30,15 @@ function test_bridge_lease_add_update_and_remove() {
     val container_lease = lease @ { container_name };
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)),
-        add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, brid, 1, "validator", "bridge", false)),
+        add_bridge_lease(container_name, brid, 1, "validator", "bridge", false)
     ).sign(rell.test.keypairs.alice).run();
 
     assert_not_null(bridge_lease @? { .lease == container_lease });
     assert_events(("icmf_message", (
         topic = bridge_mapping_topic,
         body = bridge_mapping_message(
-            blockchain_rid = x"",
+            blockchain_rid = brid,
             validator_contract = "validator",
             bridge_contract = "bridge",
             evm_network_id = 1,
@@ -50,17 +51,17 @@ function test_bridge_lease_add_update_and_remove() {
 
     // Duplicates prevented
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)),
-        add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)
-    ).nop().sign(rell.test.keypairs.alice).run_must_fail("Bridge lease already exists for blockchain 0x and EVM network 1");
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, brid, 1, "validator", "bridge", false)),
+        add_bridge_lease(container_name, brid, 1, "validator", "bridge", false)
+    ).nop().sign(rell.test.keypairs.alice).run_must_fail("Bridge lease already exists for blockchain %s and EVM network 1".format(brid));
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, update_bridge_lease(x"", 1, "validator2", "bridge2", true)),
-        update_bridge_lease(x"", 1, "validator2", "bridge2", true)
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, update_bridge_lease(brid, 1, "validator2", "bridge2", true)),
+        update_bridge_lease(brid, 1, "validator2", "bridge2", true)
     ).sign(rell.test.keypairs.alice).run();
     assert_equals(bridge_lease @? { .lease == container_lease } ( .anomaly_detection ), true);
     assert_equals(get_blockchains_with_bridge_and_anomaly_detection(), [bridge_anomaly_detector_data(
-        blockchain_rid = x"",
+        blockchain_rid = brid,
         evm_network_id = 1,
         bridge_contract = "bridge2"
     )]);
@@ -72,7 +73,7 @@ function test_bridge_lease_add_update_and_remove() {
     assert_events(("icmf_message", (
         topic = bridge_mapping_topic,
         body = bridge_mapping_message(
-            blockchain_rid = x"",
+            blockchain_rid = brid,
             validator_contract = "validator2",
             bridge_contract = "bridge2",
             evm_network_id = 1,
@@ -81,8 +82,8 @@ function test_bridge_lease_add_update_and_remove() {
     ).to_gtv_pretty()));
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, remove_bridge_lease(x"", 1)),
-        remove_bridge_lease(x"", 1)
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, remove_bridge_lease(brid, 1)),
+        remove_bridge_lease(brid, 1)
     ).sign(rell.test.keypairs.alice).run();
 
     assert_null(bridge_lease @? { .lease == container_lease });
@@ -96,8 +97,8 @@ function test_expired_container_lease_removes_bridge_leases() {
     val container_lease = lease @ { container_name };
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)),
-        add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, brid, 1, "validator", "bridge", false)),
+        add_bridge_lease(container_name, brid, 1, "validator", "bridge", false)
     ).sign(rell.test.keypairs.alice).run();
 
     assert_not_null(bridge_lease @? { .lease == container_lease });
@@ -115,7 +116,7 @@ function test_expired_container_lease_removes_bridge_leases() {
     ("icmf_message", (
         topic = bridge_mapping_topic,
         body = bridge_mapping_message(
-            blockchain_rid = x"",
+            blockchain_rid = brid,
             validator_contract = "validator",
             bridge_contract = "bridge",
             evm_network_id = 1,
@@ -125,12 +126,12 @@ function test_expired_container_lease_removes_bridge_leases() {
 
     // Assert no mappings can be added/updated when lease is expired
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 2, "validator", "bridge", false)),
-        add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, brid, 2, "validator", "bridge", false)),
+        add_bridge_lease(container_name, brid, 1, "validator", "bridge", false)
     ).sign(rell.test.keypairs.alice).run_must_fail("Container lease is expired");
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, update_bridge_lease(x"", 1, "validator2", "bridge2", false)),
-        update_bridge_lease(x"", 1, "validator2", "bridge2", false)
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, update_bridge_lease(brid, 1, "validator2", "bridge2", false)),
+        update_bridge_lease(brid, 1, "validator2", "bridge2", false)
     ).sign(rell.test.keypairs.alice).run_must_fail("Container lease is expired");
 
     // Assert complete removal when lease is removed
@@ -151,8 +152,8 @@ function test_bridge_leases_are_transferred_on_container_upgrade() {
 
     val container_lease = lease @ { container_name };
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)),
-        add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, brid, 1, "validator", "bridge", false)),
+        add_bridge_lease(container_name, brid, 1, "validator", "bridge", false)
     ).sign(rell.test.keypairs.alice).run();
 
     assert_not_null(bridge_lease @? { .lease == container_lease });
@@ -177,8 +178,8 @@ function test_bridge_lease_add_required_funds() {
     ).run();
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)),
-        add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, brid, 1, "validator", "bridge", false)),
+        add_bridge_lease(container_name, brid, 1, "validator", "bridge", false)
     ).sign(rell.test.keypairs.alice)
         .run_must_fail("An amount of %s is required on account to add a bridge lease".format(economy_constants.bridge_lease_add_min_balance_usd));
 
@@ -188,9 +189,22 @@ function test_bridge_lease_add_required_funds() {
     ).run();
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)),
-        add_bridge_lease(container_name, x"", 1, "validator", "bridge", false)
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, brid, 1, "validator", "bridge", false)),
+        add_bridge_lease(container_name, brid, 1, "validator", "bridge", false)
     ).sign(rell.test.keypairs.alice).run();
 
     assert_not_null(bridge_lease @? { .lease == container_lease });
+}
+
+function test_invalid_bridge_lease_brid() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, cluster_name = cluster_name, container_units = 2);
+
+    val container_lease = lease @ { container_name };
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"01", 1, "validator", "bridge", false)),
+        add_bridge_lease(container_name, x"01", 1, "validator", "bridge", false)
+    ).sign(rell.test.keypairs.alice).run_must_fail("blockchain_rid must be 32 bytes");
 }
