@@ -328,30 +328,74 @@ function test_precise_configuration_update_rejected_invalid_config_no_config_con
     val (anchor_chain, bc_rid) = setup();
 
     val config1 = ["number": (1).to_gtv()];
-    val failure = rell.test.tx().op(
+    rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
-    ).sign(initial_provider).run_must_fail();
-    assert_true(failure.message.contains("Configuration must contain \"config_consensus_strategy\"=\"HEADER_HASH\""));
+    ).sign(initial_provider).run_must_fail("Configuration must contain \"config_consensus_strategy\"=\"HEADER_HASH\"");
 }
 
 function test_precise_configuration_update_rejected_invalid_config_wrong_config_consensus_strategy() {
     val (anchor_chain, bc_rid) = setup();
 
     val config1 = apply_required_configuration_properties(["number": (1).to_gtv(), "config_consensus_strategy": "bogus".to_gtv()]);
-    val failure = rell.test.tx().op(
+    rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
-    ).sign(initial_provider).run_must_fail();
-    assert_true(failure.message.contains("Configuration must contain \"config_consensus_strategy\"=\"HEADER_HASH\""));
+    ).sign(initial_provider).run_must_fail("Configuration must contain \"config_consensus_strategy\"=\"HEADER_HASH\"");
 }
 
 function test_precise_configuration_update_rejected_invalid_config_has_signers() {
     val (anchor_chain, bc_rid) = setup();
 
     val config1 = apply_required_configuration_properties(["number": (1).to_gtv(), "signers": [x"1111".to_gtv(), x"2222".to_gtv()].to_gtv()]);
-    val failure = rell.test.tx().op(
+    rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
-    ).sign(initial_provider).run_must_fail();
-    assert_true(failure.message.contains("Configuration must not contain \"signers\""));
+    ).sign(initial_provider).run_must_fail("Configuration must not contain \"signers\"");
+}
+
+function test_precise_configuration_update_happy_recognized_feature() {
+    val (anchor_chain, bc_rid) = setup();
+
+    val config1 = apply_required_configuration_properties([
+        "number": (1).to_gtv(),
+        "features": ["merkle_hash_version": (1).to_gtv()].to_gtv(),
+    ]);
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
+    ).sign(initial_provider).run();
+}
+
+function test_precise_configuration_update_rejected_unrecognized_feature() {
+    val (anchor_chain, bc_rid) = setup();
+
+    val config1 = apply_required_configuration_properties([
+        "number": (1).to_gtv(),
+        "features": ["bogus": "whatever".to_gtv()].to_gtv(),
+    ]);
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
+    ).sign(initial_provider).run_must_fail("Unrecognized feature: bogus");
+}
+
+function ignore_test_precise_configuration_update_rejected_missing_required_feature() {
+    val (anchor_chain, bc_rid) = setup();
+
+    val config1 = apply_required_configuration_properties([
+        "number": (1).to_gtv(),
+        "features": map<text, text>().to_gtv(),
+    ]);
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
+    ).sign(initial_provider).run_must_fail("Missing required feature: merkle_hash_version");
+}
+
+function ignore_test_precise_configuration_update_rejected_missing_required_features() {
+    val (anchor_chain, bc_rid) = setup();
+
+    val config1 = apply_required_configuration_properties([
+        "number": (1).to_gtv(),
+    ]);
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
+    ).sign(initial_provider).run_must_fail("Missing required features: [\"merkle_hash_version\"]");
 }
 
 function test_precise_configuration_update_rejected_invalid_block_strategy_config() {
