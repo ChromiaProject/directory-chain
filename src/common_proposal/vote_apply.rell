@@ -19,11 +19,18 @@ function try_to_apply_proposal(prop: common_proposal) {
         }
         approved -> {
             log("proposal approved:", prop_str);
-            prop.state = common_proposal_state.APPROVED;
-            apply_common_voting_result(prop);
-            delete_common_proposal(prop);
+            try_call_apply_common_voting_result(prop);
         }
     }
+}
+
+function try_call_apply_common_voting_result(prop: common_proposal){
+    if (try_call(apply_common_voting_result(prop, *))){
+        prop.state = common_proposal_state.APPROVED;
+    } else {
+        prop.state = common_proposal_state.FAILED;
+    }
+    delete_common_proposal(prop);
 }
 
 @extendable function proposal_str(prop: common_proposal): text? = "%s:%d".format(prop.proposal_type, prop.rowid);
