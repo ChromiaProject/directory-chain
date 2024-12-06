@@ -116,11 +116,13 @@ query staking_get_total_delegation_to(pubkey, network? = null) {
         .provider.pubkey == pubkey and (s1.timestamp <= _staking_last_known_time()) and 
             (not exists(network) or .staker_state.network == network) and 
             not exists((s2:staker_state_to_provider) @* { 
-                s2.staker_state ==s1.staker_state,
-                ((s2.timestamp <= _staking_last_known_time()) and (s2.timestamp>s1.timestamp)) 
-                or (s2.timestamp==s1.timestamp and s2 < s1) 
-            }
-        )
+                s2.staker_state == s1.staker_state,
+                s2.timestamp <= _staking_last_known_time(),
+                (
+                    s2.timestamp > s1.timestamp or 
+                    (s2.timestamp == s1.timestamp and s2.rowid > s1.rowid)
+                )
+            })
     } ( @sum .staker_state.balance );
 }
 
@@ -138,11 +140,13 @@ query staking_get_number_of_delegates_to(pubkey, network? = null): integer {
         .provider.pubkey == pubkey and (s1.timestamp <= _staking_last_known_time()) and 
             (not exists(network) or .staker_state.network == network) and 
             not exists((s2:staker_state_to_provider) @* { 
-                s2.staker_state ==s1.staker_state,
-                ((s2.timestamp <= _staking_last_known_time()) and (s2.timestamp>s1.timestamp)) 
-                or (s2.timestamp==s1.timestamp and s2 < s1) 
-            }
-        )
+                s2.staker_state == s1.staker_state,
+                s2.timestamp <= _staking_last_known_time(),
+                (
+                    s2.timestamp > s1.timestamp or 
+                    (s2.timestamp == s1.timestamp and s2.rowid > s1.rowid)
+                )
+            })
     } ( .staker_state.account.id ))} @ {} (@sum 1);
 }
 
@@ -372,12 +376,14 @@ query staking_total_delegated(network? = null) {
     return ( s1: staker_state_to_provider) @ {
         .provider.pubkey != get_null_account() and (s1.timestamp <= _staking_last_known_time()) and 
         (empty(network) or .staker_state.network == network) and 
-            empty((s2:staker_state_to_provider) @* { 
-                s2.staker_state ==s1.staker_state,
-                ((s2.timestamp <= _staking_last_known_time()) and (s2.timestamp>s1.timestamp)) 
-                or (s2.timestamp==s1.timestamp and s2 < s1) 
-            }
-        )
+            not exists((s2:staker_state_to_provider) @* { 
+                s2.staker_state == s1.staker_state,
+                s2.timestamp <= _staking_last_known_time(),
+                (
+                    s2.timestamp > s1.timestamp or 
+                    (s2.timestamp == s1.timestamp and s2.rowid > s1.rowid)
+                )
+            })
     } ( @sum .staker_state.balance );
 }
 
@@ -391,12 +397,14 @@ query staking_total_delegation_accounts(network? = null) {
     return ( s1: staker_state_to_provider) @ {
         .provider.pubkey != get_null_account() and (s1.timestamp <= _staking_last_known_time()) and 
             (empty(network) or .staker_state.network == network) and 
-            empty((s2:staker_state_to_provider) @* { 
-                s2.staker_state ==s1.staker_state,
-                ((s2.timestamp <= _staking_last_known_time()) and (s2.timestamp>s1.timestamp)) 
-                or (s2.timestamp==s1.timestamp and s2 < s1) 
-            }
-        )
+            not exists((s2:staker_state_to_provider) @* { 
+                s2.staker_state == s1.staker_state,
+                s2.timestamp <= _staking_last_known_time(),
+                (
+                    s2.timestamp > s1.timestamp or 
+                    (s2.timestamp == s1.timestamp and s2.rowid > s1.rowid)
+                )
+            })
     } ( @sum 1 );
 }
 
