@@ -7,40 +7,6 @@ definitions:
       - 9870
       - ${GENESIS_API_URL:-http://localhost:7740}
       - ${GENESIS_TERRITORY}
-  config: &common_config
-    config_consensus_strategy: HEADER_HASH
-    revolt:
-      fast_revolt_status_timeout: 2000
-      revolt_when_should_build_block: true
-    signers:
-      - x"0350fe40766bc0ce8d08b3f5b810e49a8352fdd458606bd5fafe5acdcdc8ff3f57"
-    sync_ext:
-      - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
-    gtx:
-      modules:
-        - "net.postchain.d1.icmf.IcmfSenderGTXModule"
-        - "net.postchain.d1.icmf.IcmfReceiverGTXModule"
-        - "net.postchain.eif.transaction.signerupdate.directorychain.SignerUpdateGTXModule"
-    icmf:
-      receiver:
-        anchoring:
-          topics:
-            - G_configuration_updated
-            - G_configuration_failed
-            - G_last_anchored_heights
-        global:
-          topics:
-            - G_create_cluster
-            - G_create_container
-            - G_upgrade_container
-            - G_assign_subnode_image_to_container
-            - G_stop_container
-            - G_restart_container
-            - G_remove_container
-            - G_register_dapp_provider
-            - G_change_dapp_providers_state
-    directory_chain:
-      config_delay: 0
   economy_chain_config: &common_economy_chain
     config_consensus_strategy: HEADER_HASH
     revolt:
@@ -253,7 +219,21 @@ blockchains:
   manager:
     module: management_chain
     config:
-      << : *common_config
+      config_consensus_strategy: HEADER_HASH
+      revolt:
+        fast_revolt_status_timeout: 2000
+        revolt_when_should_build_block: true
+      signers:
+        - x"0350fe40766bc0ce8d08b3f5b810e49a8352fdd458606bd5fafe5acdcdc8ff3f57"
+      sync_ext:
+        - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
+      gtx:
+        modules:
+          - "net.postchain.d1.icmf.IcmfSenderGTXModule"
+          - "net.postchain.d1.icmf.IcmfReceiverGTXModule"
+          - "net.postchain.eif.transaction.signerupdate.directorychain.SignerUpdateGTXModule"
+      directory_chain:
+        config_delay: 0
       icmf:
         receiver:
           anchoring:
@@ -261,6 +241,17 @@ blockchains:
               - G_configuration_updated
               - G_configuration_failed
               - G_last_anchored_heights
+          global:
+            topics:
+              - G_create_cluster
+              - G_create_container
+              - G_upgrade_container
+              - G_assign_subnode_image_to_container
+              - G_stop_container
+              - G_restart_container
+              - G_remove_container
+              - G_register_dapp_provider
+              - G_change_dapp_providers_state
     moduleArgs:
       common.init: *common_init
       common:
