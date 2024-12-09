@@ -320,3 +320,111 @@ function test_parse_integer() {
     assert_equals(parse_integer(x"01010101", 0), 0x1000000 + 0x10000 + 0x100 + 1);
     assert_equals(parse_integer(x"0001010101", 1), 0x1000000 + 0x10000 + 0x100 + 1);
 }
+
+function test_get_node_unavailability_in_24h() {
+    rell.test.tx().op(
+        create_anchor_block(
+            blockchain_rid = BLOCKCHAIN_RID_1,
+            block_height = 0,
+            timestamp = 10,
+            block_rid = BLOCK_RID_1,
+            block_header = BLOCK_HEADER_1,
+            witness = WITNESS_COUNT_4,
+            anchoring_tx_op_index = 0),
+        create_anchor_block(
+            blockchain_rid = BLOCKCHAIN_RID_1,
+            block_height = 1,
+            timestamp = 11,
+            block_rid = BLOCK_RID_2,
+            block_header = BLOCK_HEADER_2,
+            witness = WITNESS_COUNT_3,
+            anchoring_tx_op_index = 0),
+        create_anchor_block(
+            blockchain_rid = BLOCKCHAIN_RID_2,
+            block_height = 0,
+            timestamp = 10,
+            block_rid = BLOCK_RID_1,
+            block_header = BLOCK_HEADER_1,
+            witness = WITNESS_COUNT_4,
+            anchoring_tx_op_index = 0),
+        create_anchor_block(
+            blockchain_rid = BLOCKCHAIN_RID_2,
+            block_height = 1,
+            timestamp = 11,
+            block_rid = BLOCK_RID_2,
+            block_header = BLOCK_HEADER_2,
+            witness = WITNESS_COUNT_3,
+            anchoring_tx_op_index = 0)
+    ).run();
+
+    val blockchain_unavailabilities = get_node_unavailability_in_24h(byte_array.from_hex('03F811D3E806E6D093A4BCCE49C145BA78F9A4B2FBD167753ECAB2A13530B081F8'), 1);
+
+    assert_true(blockchain_unavailabilities.size() == 2);
+    assert_equals(blockchain_unavailabilities[0], blockchain_unavailability(BLOCKCHAIN_RID_1, [interval(start_block_height = 1, end_block_height =  1, start_timestamp = 11, end_timestamp = 11)]));
+    assert_equals(blockchain_unavailabilities[1], blockchain_unavailability(BLOCKCHAIN_RID_2, [interval(start_block_height = 1, end_block_height =  1, start_timestamp = 11, end_timestamp = 11)]));
+}
+
+function test_get_unavailability_intervals_given_one_unsigned_block() {
+    val unsigned_blocks = list<unsigned_blocks>();
+    unsigned_blocks.add(unsigned_blocks(block_height = 1, timestamp = 1001));
+
+    val intervals = get_unavailability_intervals(unsigned_blocks);
+
+    assert_true(intervals.size() == 1);
+    assert_equals(intervals[0], interval(start_block_height = 1, end_block_height =  1, start_timestamp = 1001, end_timestamp = 1001));
+}
+
+function test_get_unavailability_intervals_given_multiple_unsigned_blocks(){
+    val unsigned_blocks = list<unsigned_blocks>();
+    unsigned_blocks.add(unsigned_blocks(block_height = 1, timestamp = 1001));
+    unsigned_blocks.add(unsigned_blocks(block_height = 2, timestamp = 1002));
+    unsigned_blocks.add(unsigned_blocks(block_height = 3, timestamp = 1003));
+
+    val intervals = get_unavailability_intervals(unsigned_blocks);
+
+    assert_true(intervals.size() == 1);
+    assert_equals(intervals[0], interval(start_block_height = 1, end_block_height =  3, start_timestamp = 1001, end_timestamp = 1003));
+}
+
+function test_get_unavailability_intervals_given_two_unsigned_blocks_intervals() {
+    val unsigned_blocks = list<unsigned_blocks>();
+    unsigned_blocks.add(unsigned_blocks(block_height = 1, timestamp = 1001));
+    unsigned_blocks.add(unsigned_blocks(block_height = 2, timestamp = 1002));
+    unsigned_blocks.add(unsigned_blocks(block_height = 3, timestamp = 1003));
+    unsigned_blocks.add(unsigned_blocks(block_height = 7, timestamp = 1001));
+    unsigned_blocks.add(unsigned_blocks(block_height = 8, timestamp = 1002));
+    unsigned_blocks.add(unsigned_blocks(block_height = 9, timestamp = 1003));
+
+    val intervals = get_unavailability_intervals(unsigned_blocks);
+
+    assert_true(intervals.size() == 2);
+    assert_equals(intervals[0], interval(start_block_height = 1, end_block_height =  3, start_timestamp = 1001, end_timestamp = 1003));
+    assert_equals(intervals[1], interval(start_block_height = 7, end_block_height =  9, start_timestamp = 1001, end_timestamp = 1003));
+}
+
+function test_extract_primary_header_from_block_header() {
+    val primary_extra_header = extract_primary_header_from_block_header(byte_array.from_hex("a582010630820102a12204203346a3a594dea882b2139cd2b45712c7afa363a947b26b399caa05dfe2539d20a12204203346a3a594dea882b2139cd2b45712c7afa363a947b26b399caa05dfe2539d20a122042032d69150718081dcd8179814aae2f581010dfba96316f60eca148e93104b9684a30802060193aa392aeaa303020100a0020500a48180307e30310c0b636f6e6669675f68617368a12204203346a3a594dea882b2139cd2b45712c7afa363a947b26b399caa05dfe2539d2030190c1369636d665f616e63686f725f68656164657273a4023000302e0c077072696d617279a12304210350fe40766bc0ce8d08b3f5b810e49a8352fdd458606bd5fafe5acdcdc8ff3f57"));
+    assert_equals(primary_extra_header, x"0350FE40766BC0CE8D08B3F5B810E49A8352FDD458606BD5FAFE5ACDCDC8FF3F57".to_gtv());
+}
+
+function test_primary_extra_header_is_signer_null() {
+    val result = primary_extra_header_is_signer(null, byte_array.from_hex('0350FE40766BC0CE8D08B3F5B810E49A8352FDD458606BD5FAFE5ACDCDC8FF3F57'));
+
+    assert_false(result);
+}
+
+function test_primary_extra_header_is_signer_true() {
+    val primary_extra_header = extract_primary_header_from_block_header(byte_array.from_hex("a582010630820102a12204203346a3a594dea882b2139cd2b45712c7afa363a947b26b399caa05dfe2539d20a12204203346a3a594dea882b2139cd2b45712c7afa363a947b26b399caa05dfe2539d20a122042032d69150718081dcd8179814aae2f581010dfba96316f60eca148e93104b9684a30802060193aa392aeaa303020100a0020500a48180307e30310c0b636f6e6669675f68617368a12204203346a3a594dea882b2139cd2b45712c7afa363a947b26b399caa05dfe2539d2030190c1369636d665f616e63686f725f68656164657273a4023000302e0c077072696d617279a12304210350fe40766bc0ce8d08b3f5b810e49a8352fdd458606bd5fafe5acdcdc8ff3f57"));
+
+    val result = primary_extra_header_is_signer(primary_extra_header, byte_array.from_hex('0350FE40766BC0CE8D08B3F5B810E49A8352FDD458606BD5FAFE5ACDCDC8FF3F57'));
+
+    assert_true(result);
+}
+
+function test_primary_extra_header_is_signer_false() {
+    val primary_extra_header = extract_primary_header_from_block_header(byte_array.from_hex("a582010630820102a12204203346a3a594dea882b2139cd2b45712c7afa363a947b26b399caa05dfe2539d20a12204203346a3a594dea882b2139cd2b45712c7afa363a947b26b399caa05dfe2539d20a122042032d69150718081dcd8179814aae2f581010dfba96316f60eca148e93104b9684a30802060193aa392aeaa303020100a0020500a48180307e30310c0b636f6e6669675f68617368a12204203346a3a594dea882b2139cd2b45712c7afa363a947b26b399caa05dfe2539d2030190c1369636d665f616e63686f725f68656164657273a4023000302e0c077072696d617279a12304210350fe40766bc0ce8d08b3f5b810e49a8352fdd458606bd5fafe5acdcdc8ff3f57"));
+
+    val result = primary_extra_header_is_signer(primary_extra_header, byte_array.from_hex('03F811D3E806E6D093A4BCCE49C145BA78F9A4B2FBD167753ECAB2A13530B081F8'));
+
+    assert_false(result);
+}

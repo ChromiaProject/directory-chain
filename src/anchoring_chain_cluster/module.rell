@@ -5,6 +5,7 @@ import lib.icmf.constants.*;
 import chain_version;
 
 val DEFAULT_HEADERS_WITH_MESSAGES_QUERY_LIMIT = 100;
+val DAY_MS = 86400000; // 1000 * 60 * 60 * 24 = 1 day
 
 struct module_args {
     node_availability_calculation_interval_ms: integer = 1000 * 60 * 60; // 1 hour
@@ -14,4 +15,100 @@ struct module_args {
 
 operation __begin_block(height: integer) {
     do_availability_reporting();
+}
+
+struct blockchain_unavailability {
+    blockchain_rid: byte_array;
+    unavailable_intervals: list<interval>;
+}
+
+struct interval {
+    start_block_height: integer;
+    end_block_height: integer;
+    start_timestamp: integer;
+    end_timestamp: integer;
+}
+
+struct anchor_block_data {
+    block_height: integer;
+    timestamp: integer;
+    primary_extra_header: gtv?;
+}
+
+struct unsigned_blocks {
+    block_height: integer;
+    timestamp: integer;
+}
+
+/**
+ * Identifies intervals of unavailability for a given node within a 24-hour window, grouped by blockchain.
+ */
+query get_node_unavailability_in_24h(
+    pubkey: pubkey,
+    start_timestamp: integer
+): list<blockchain_unavailability> {
+    val end_timestamp = start_timestamp + DAY_MS;
+    val blockchain_unavailabilities = list<blockchain_unavailability>();
+    val blockchain_to_anchor_block = anchor_block @* { .timestamp >= start_timestamp, .timestamp < end_timestamp }
+        (@sort .block_height, .timestamp, .blockchain_rid, .witness,
+            primary_extra_header = extract_primary_header_from_block_header(.block_header))
+        @* {} ( @group .blockchain_rid, @list $ ) ;
+    for ((blockchain_rid, anchor_blocks) in blockchain_to_anchor_block) {
+        val unsigned_blocks = list<unsigned_blocks>();
+        for (anchor_block in anchor_blocks) {
+            val signers = extract_signers_from_witness(anchor_block.witness);
+            if (not(primary_extra_header_is_signer(anchor_block.primary_extra_header, pubkey) or signers.contains(pubkey))) {
+                unsigned_blocks.add(unsigned_blocks(block_height = anchor_block.block_height, timestamp = anchor_block.timestamp));
+            }
+        }
+        if (unsigned_blocks.empty()) continue;
+
+        blockchain_unavailabilities.add(blockchain_unavailability(blockchain_rid, get_unavailability_intervals(unsigned_blocks)));
+    }
+    return blockchain_unavailabilities;
+}
+
+function extract_primary_header_from_block_header(block_header_data: byte_array): gtv? {
+    return block_header.from_gtv(gtv.from_bytes(block_header_data)).extra.get_or_null(PRIMARY_HEADER_KEY);
+}
+
+function primary_extra_header_is_signer(primary_extra_header: gtv?, pubkey: pubkey): boolean {
+    if (primary_extra_header == null) {
+        return false;
+    } else {
+        return primary_extra_header == pubkey.to_gtv();
+    }
+}
+
+function get_unavailability_intervals(unsigned_blocks: list<unsigned_blocks>): list<interval>{
+    val intervals = list<interval>();
+
+    var start_block = unsigned_blocks[0];
+    var end_block = start_block;
+    for (i in range(1, unsigned_blocks.size())) {
+        var current_unsigned_block = unsigned_blocks[i];
+        if (current_unsigned_block.block_height == end_block.block_height + 1) {
+            end_block = current_unsigned_block;
+        } else {
+            intervals.add(interval(
+                start_block_height = start_block.block_height,
+                end_block_height = end_block.block_height,
+                start_timestamp = start_block.timestamp,
+                end_timestamp = end_block.timestamp
+            ));
+            start_block = current_unsigned_block;
+            end_block = current_unsigned_block;
+        }
+    }
+
+    val endBlock = unsigned_blocks[unsigned_blocks.size() - 1];
+    if (intervals.empty() or intervals[intervals.size() - 1].end_block_height != endBlock.block_height) {
+        intervals.add(interval(
+            start_block_height = start_block.block_height,
+            end_block_height = end_block.block_height,
+            start_timestamp = start_block.timestamp,
+            end_timestamp = end_block.timestamp
+        ));
+    }
+    return intervals;
 }
