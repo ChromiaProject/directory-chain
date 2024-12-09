@@ -1,0 +1,50 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import ^.helper_operations.*;
+import ^.helper_constants.*;
+
+// Refund due to failed container upgrade
+function test_receive_ticket_container_result_message__upgrade_failure__revert_charge() {
+
+    rell.test.tx().op(init(), create_test_cluster(
+        cluster_name,
+        scu_price = 12 * units_per_usd,
+        extra_storage_price = 4142)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey, amount_to_mint = 100000000000));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 3);
+
+    val alice_balance_before_upgrade = get_account_balance(alice);
+    val created_lease = lease @ { container_name };
+    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 4, ticket_id = ticket_id_after_init + 6, current_lease = created_lease, container_units = 4);
+    assert_lt(get_account_balance(alice), alice_balance_before_upgrade);
+
+    do_receive_ticket_container_result_message(ticket_container_result_message(ticket_id_after_init + 6,
+        error_message = "Failed to upgrade container",
+        container_name = container_name, cluster_name).to_gtv());
+    assert_equals(get_account_balance(alice), alice_balance_before_upgrade);
+}
+
+// Charge due to failed container downgrade (which should have been cheaper but wasn't due to the failed upgrade)
+function test_receive_ticket_container_result_message__downgrade_failure__revert_refund() {
+
+    rell.test.tx().op(init(), create_test_cluster(
+        cluster_name,
+        scu_price = 12 * units_per_usd,
+        extra_storage_price = 4142)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey, amount_to_mint = 100000000000));
+    val alice_initial_balance = get_account_balance(alice);
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 3);
+    assert_not_equals(alice_initial_balance, get_account_balance(alice));
+
+    val alice_balance_before_upgrade = get_account_balance(alice);
+    val created_lease = lease @ { container_name };
+    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 4, ticket_id = ticket_id_after_init + 6, current_lease = created_lease, container_units = 1, upgraded_extra_storage_gib = 40);
+    assert_gt(get_account_balance(alice), alice_balance_before_upgrade);
+
+    do_receive_ticket_container_result_message(ticket_container_result_message(ticket_id_after_init + 6,
+        error_message = "Failed to upgrade container",
+        container_name = container_name, cluster_name).to_gtv());
+    assert_equals(get_account_balance(alice), alice_balance_before_upgrade);
+}
