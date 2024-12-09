@@ -47,6 +47,7 @@ query get_node_unavailability_in_24h(
     pubkey: pubkey,
     start_timestamp: integer
 ): list<blockchain_unavailability> {
+    val pubkey_gtv = pubkey.to_gtv();
     val end_timestamp = start_timestamp + DAY_MS;
     val blockchain_unavailabilities = list<blockchain_unavailability>();
     val blockchain_to_anchor_block = anchor_block @* { .timestamp >= start_timestamp, .timestamp < end_timestamp }
@@ -57,7 +58,7 @@ query get_node_unavailability_in_24h(
         val unsigned_blocks = list<unsigned_blocks>();
         for (anchor_block in anchor_blocks) {
             val signers = extract_signers_from_witness(anchor_block.witness);
-            if (not(primary_extra_header_is_signer(anchor_block.primary_extra_header, pubkey) or signers.contains(pubkey))) {
+            if (not(primary_extra_header_is_signer(anchor_block.primary_extra_header, pubkey_gtv) or signers.contains(pubkey))) {
                 unsigned_blocks.add(unsigned_blocks(block_height = anchor_block.block_height, timestamp = anchor_block.timestamp));
             }
         }
@@ -72,11 +73,11 @@ function extract_primary_header_from_block_header(block_header_data: byte_array)
     return block_header.from_gtv(gtv.from_bytes(block_header_data)).extra.get_or_null(PRIMARY_HEADER_KEY);
 }
 
-function primary_extra_header_is_signer(primary_extra_header: gtv?, pubkey: pubkey): boolean {
+function primary_extra_header_is_signer(primary_extra_header: gtv?, pubkey_gtv: gtv): boolean {
     if (primary_extra_header == null) {
         return false;
     } else {
-        return primary_extra_header == pubkey.to_gtv();
+        return primary_extra_header == pubkey_gtv;
     }
 }
 
