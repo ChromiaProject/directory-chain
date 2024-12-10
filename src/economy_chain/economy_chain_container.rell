@@ -247,9 +247,16 @@ function upgrade_container_auth_message(gtv): text {
 }
 
 /**
- * If possible upgrade the container to requested specifications.
+ * If possible upgrade (or downgrade) the container to requested specifications.
  *
- * @param container_name  container name
+ * `warning:` Please note that the storage can only be expanded and never reduced. If the number of `container_units`
+ * are reduced you need to compensate it by adding additional storage to `upgraded_extra_storage_gib`. Each removed
+ * `container_units` will require `16` to be added to `upgraded_extra_storage_gib` (based on default storage value
+ * in `standard_cluster_unit.storage`).
+ *
+ * @param upgraded_container_units The new number of container units for this container. Can both be increased and reduced.
+ * @param upgraded_extra_storage_gib The new size of extra storage. This can only be increased, never reduced.
+ * @param upgraded_cluster_name Move this container to a new cluster.
  */
 operation upgrade_container(container_name: text, upgraded_container_units: integer,
     upgraded_extra_storage_gib: integer, upgraded_cluster_name: text) {
@@ -260,9 +267,9 @@ operation upgrade_container(container_name: text, upgraded_container_units: inte
         upgraded_container_units != lease.container_units or upgraded_extra_storage_gib != lease.extra_storage_gib,
         "New container specifications are identical to current lease"
     );
-    var current_total_storage = lease.container_units * standard_cluster_unit.storage + lease.extra_storage_gib * 1024;
-    var upgraded_total_storage = upgraded_container_units * standard_cluster_unit.storage + upgraded_extra_storage_gib * 1024;
-    require(upgraded_total_storage >= current_total_storage, "Upgraded total storage must be greater or equal to current total storage." );
+    val current_total_storage = lease.container_units * standard_cluster_unit.storage + lease.extra_storage_gib * 1024;
+    val upgraded_total_storage = upgraded_container_units * standard_cluster_unit.storage + upgraded_extra_storage_gib * 1024;
+    require(upgraded_total_storage >= current_total_storage, "Upgraded total storage must be greater or equal to current total storage. Did you reduce the number of container units without increasing extra storage?" );
     require(upgraded_extra_storage_gib >= lease.extra_storage_gib, "upgraded_extra_storage_gib must be greater or equal to current lease");
     require_dapp_cluster(upgraded_cluster_name);
 
@@ -392,7 +399,7 @@ function () = ft4.auth.add_auth_handler(
 function cancel_renew_container_auth_message(gtv): text {
     val args = struct<cancel_renew_container>.from_gtv(gtv);
 
-    val lease = require_lease(args.container_name);
+    require_lease(args.container_name);
 
     return "Please sign the message\nto cancel auto-renewal of container %s\non account {account_id}".format(
         args.container_name);
