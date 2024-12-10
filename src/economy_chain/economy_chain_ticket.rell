@@ -88,8 +88,11 @@ function receive_ticket_container_result_message(body: gtv) {
                 }
                 ticket_state.FAILURE -> {
                     log("Failed to upgrade container for ticket %d".format(message.ticket_id));
-
-                    ft4.assets.Unsafe.transfer(get_pool_account(), ticket.account, get_asset(), specific_ticket.cost);
+                    if (specific_ticket.cost > 0) {
+                        ft4.assets.Unsafe.transfer(get_pool_account(), ticket.account, get_asset(), specific_ticket.cost);
+                    } else if (specific_ticket.cost < 0) {
+                        ft4.assets.Unsafe.transfer(ticket.account, get_pool_account(), get_asset(), abs(specific_ticket.cost));
+                    }
                     create lease_refund(ticket.account, specific_ticket.cost);
                 }
             }

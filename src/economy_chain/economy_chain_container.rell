@@ -273,8 +273,12 @@ operation upgrade_container(container_name: text, upgraded_container_units: inte
     val cluster = require_cluster(upgraded_cluster_name);
 
     val cost = calculate_container_cost(lease.duration_millis / millis_per_week, upgraded_container_units, upgraded_extra_storage_gib, cluster.tag)
-    - if (lease.expired) 0 else calculate_remaining_lease_value(lease, op_context.last_block_time);
-    ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), cost);
+        - if (lease.expired) 0 else calculate_remaining_lease_value(lease, op_context.last_block_time);
+    if (cost > 0) {
+        ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), cost);
+    } else if (cost < 0) {
+        ft4.assets.Unsafe.transfer(get_pool_account(), account, get_asset(), abs(cost));
+    }
 
     val ticket = create ticket(type = ticket_type.UPGRADE_CONTAINER, account);
     create upgrade_container_ticket(ticket,

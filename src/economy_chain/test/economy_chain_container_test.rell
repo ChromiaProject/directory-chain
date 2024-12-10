@@ -789,3 +789,39 @@ function test_no_early_removal_of_expired_lease() {
     rell.test.block().run();
     assert_not_null(lease @? { container_name });
 }
+
+function test_downgrade_container_and_reduce_cost() {
+    rell.test.tx().op(init(), create_test_cluster(
+        cluster_name,
+        scu_price = 12 * units_per_usd,
+        extra_storage_price = 4142)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey, amount_to_mint = 100000000000));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 3);
+    val alice_balance_after_container = get_account_balance(alice);
+
+    val created_lease = lease @ { container_name };
+    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 4, ticket_id = ticket_id_after_init + 6, current_lease = created_lease, container_units = 1, upgraded_extra_storage_gib = 40);
+
+    // Got money back
+    val alice_balance_after_upgrade = get_account_balance(alice);
+    assert_gt(alice_balance_after_upgrade, alice_balance_after_container);
+
+    val expected_lease = lease_data(
+        container_name = container_name,
+        cluster_name = cluster_name,
+        container_units = 1, // Should be 1 now
+        extra_storage_gib = 40, // Should be 40 now
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*5 + millis_per_week,
+        expired = false,
+        auto_renew = false,
+        subnode_image_name = "",
+        bridge_leases = []
+    );
+
+    val leases2 = get_leases_by_account(alice.id);
+    assert_equals(leases2.size(), 1);
+    assert_equals(leases2[0], expected_lease);
+
+    val lease_data = require(get_lease_by_container_name(container_name));
+    assert_equals(lease_data, expected_lease);
+}
