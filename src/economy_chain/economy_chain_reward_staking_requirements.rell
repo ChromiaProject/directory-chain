@@ -63,6 +63,9 @@ function provider_meets_staking_requirements(provider): boolean {
         return false;
     }
 
+    log("Provider %s meets staking requirements (own: %d >= %d, total: %d >= %d)"
+        .format(provider.pubkey, current_own, staking_requirements.own, current_total, staking_requirements.total));
+
     return true;
 }
 
@@ -72,6 +75,10 @@ function get_staking_requirements(provider) {
         + nodes.dapp * economy_constants.staking_requirement_dapp_node_own_stake_chr;
     val total_staking = nodes.system * economy_constants.staking_requirement_system_node_total_stake_chr
         + nodes.dapp * economy_constants.staking_requirement_dapp_node_total_stake_chr;
+
+    log("Staking requirements for provider %s. Own: %d, total: %d. Based on system nodes: %d, dapp nodes: %d"
+        .format(provider.pubkey, own_staking, total_staking, nodes.system, nodes.dapp));
+
     return (own = own_staking, total = total_staking);
 }
 
