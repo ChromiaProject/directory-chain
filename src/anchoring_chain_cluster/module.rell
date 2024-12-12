@@ -17,28 +17,23 @@ operation __begin_block(height: integer) {
     do_availability_reporting();
 }
 
-struct anchor_block_availability_data {
+struct anchor_block_data {
     block_height: integer;
     timestamp: integer;
-    primary_extra_header: gtv?;
+    block_header: byte_array;
     witness: byte_array;
 }
 
 /**
- * Retrieve anchor blocks availability data per blockchain for a given node within a 24-hour window.
+ * Retrieve anchor blocks data per blockchain for a given node within a 24-hour window.
  */
 query get_blockhain_to_anchor_blocks_in_24h(
     pubkey: pubkey,
     start_timestamp: integer
-): map<byte_array, list<anchor_block_availability_data>> {
+): map<byte_array, list<anchor_block_data>> {
     val end_timestamp = start_timestamp + DAY_MS;
     return anchor_block @* { .timestamp >= start_timestamp, .timestamp < end_timestamp }
-        (@sort .block_height, .timestamp, .blockchain_rid, .witness,
-            primary_extra_header = extract_primary_header_from_block_header(.block_header))
-        @* {} ( @group .blockchain_rid, @list anchor_block_availability_data(.block_height, .timestamp, .witness, .primary_extra_header) )
+        (@sort .block_height, .timestamp, .blockchain_rid, .witness, .block_header)
+        @* {} ( @group .blockchain_rid, @list anchor_block_data(.block_height, .timestamp, .witness, .block_header) )
         @ {} ( @map $ );
-}
-
-function extract_primary_header_from_block_header(block_header_data: byte_array): gtv? {
-    return block_header.from_gtv(gtv.from_bytes(block_header_data)).extra.get_or_null(PRIMARY_HEADER_KEY);
 }
