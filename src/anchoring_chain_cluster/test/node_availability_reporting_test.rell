@@ -329,7 +329,7 @@ function test_get_node_unavailability_in_24h() {
             block_height = 0,
             timestamp = 10,
             block_rid = BLOCK_RID_1,
-            block_header = BLOCK_HEADER_1,
+            block_header = BLOCK_HEADER_WITH_PRIMARY_HEADER,
             witness = WITNESS_COUNT_4,
             anchoring_tx_op_index = 0),
         create_anchor_block(
@@ -358,74 +358,36 @@ function test_get_node_unavailability_in_24h() {
             anchoring_tx_op_index = 0)
     ).run();
 
-    val blockchain_unavailabilities = get_node_unavailability_in_24h(byte_array.from_hex('03F811D3E806E6D093A4BCCE49C145BA78F9A4B2FBD167753ECAB2A13530B081F8'), 1);
+    val expected = [
+        BLOCKCHAIN_RID_1 : [
+            anchor_block_availability_data(
+                block_height = 0,
+                timestamp = 10,
+                primary_extra_header = x"0350FE40766BC0CE8D08B3F5B810E49A8352FDD458606BD5FAFE5ACDCDC8FF3F57".to_gtv(),
+                witness = WITNESS_COUNT_4),
+            anchor_block_availability_data(
+                block_height = 1,
+                timestamp = 11,
+                primary_extra_header = null,
+                witness = WITNESS_COUNT_3)],
+        BLOCKCHAIN_RID_2 : [
+            anchor_block_availability_data(
+                block_height = 0,
+                timestamp = 10,
+                primary_extra_header = null,
+                witness = WITNESS_COUNT_4),
+            anchor_block_availability_data(
+                block_height = 1,
+                timestamp = 11,
+                primary_extra_header = null,
+                witness = WITNESS_COUNT_3)]];
 
-    assert_true(blockchain_unavailabilities.size() == 2);
-    assert_equals(blockchain_unavailabilities[0], blockchain_unavailability(BLOCKCHAIN_RID_1, [interval(start_block_height = 1, end_block_height =  1, start_timestamp = 11, end_timestamp = 11)]));
-    assert_equals(blockchain_unavailabilities[1], blockchain_unavailability(BLOCKCHAIN_RID_2, [interval(start_block_height = 1, end_block_height =  1, start_timestamp = 11, end_timestamp = 11)]));
-}
+    val blockhain_to_anchor_block_availability_data = get_blockhain_to_anchor_blocks_in_24h(byte_array.from_hex('0350FE40766BC0CE8D08B3F5B810E49A8352FDD458606BD5FAFE5ACDCDC8FF3F57'), 1);
 
-function test_get_unavailability_intervals_given_one_unsigned_block() {
-    val unsigned_blocks = list<unsigned_blocks>();
-    unsigned_blocks.add(unsigned_blocks(block_height = 1, timestamp = 1001));
-
-    val intervals = get_unavailability_intervals(unsigned_blocks);
-
-    assert_true(intervals.size() == 1);
-    assert_equals(intervals[0], interval(start_block_height = 1, end_block_height =  1, start_timestamp = 1001, end_timestamp = 1001));
-}
-
-function test_get_unavailability_intervals_given_multiple_unsigned_blocks(){
-    val unsigned_blocks = list<unsigned_blocks>();
-    unsigned_blocks.add(unsigned_blocks(block_height = 1, timestamp = 1001));
-    unsigned_blocks.add(unsigned_blocks(block_height = 2, timestamp = 1002));
-    unsigned_blocks.add(unsigned_blocks(block_height = 3, timestamp = 1003));
-
-    val intervals = get_unavailability_intervals(unsigned_blocks);
-
-    assert_true(intervals.size() == 1);
-    assert_equals(intervals[0], interval(start_block_height = 1, end_block_height =  3, start_timestamp = 1001, end_timestamp = 1003));
-}
-
-function test_get_unavailability_intervals_given_two_unsigned_blocks_intervals() {
-    val unsigned_blocks = list<unsigned_blocks>();
-    unsigned_blocks.add(unsigned_blocks(block_height = 1, timestamp = 1001));
-    unsigned_blocks.add(unsigned_blocks(block_height = 2, timestamp = 1002));
-    unsigned_blocks.add(unsigned_blocks(block_height = 3, timestamp = 1003));
-    unsigned_blocks.add(unsigned_blocks(block_height = 7, timestamp = 1001));
-    unsigned_blocks.add(unsigned_blocks(block_height = 8, timestamp = 1002));
-    unsigned_blocks.add(unsigned_blocks(block_height = 9, timestamp = 1003));
-
-    val intervals = get_unavailability_intervals(unsigned_blocks);
-
-    assert_true(intervals.size() == 2);
-    assert_equals(intervals[0], interval(start_block_height = 1, end_block_height =  3, start_timestamp = 1001, end_timestamp = 1003));
-    assert_equals(intervals[1], interval(start_block_height = 7, end_block_height =  9, start_timestamp = 1001, end_timestamp = 1003));
+    assert_equals(blockhain_to_anchor_block_availability_data, expected);
 }
 
 function test_extract_primary_header_from_block_header() {
     val primary_extra_header = extract_primary_header_from_block_header(BLOCK_HEADER_WITH_PRIMARY_HEADER);
     assert_equals(primary_extra_header, x"0350FE40766BC0CE8D08B3F5B810E49A8352FDD458606BD5FAFE5ACDCDC8FF3F57".to_gtv());
-}
-
-function test_primary_extra_header_is_signer_null() {
-    val result = primary_extra_header_is_signer(null, byte_array.from_hex('0350FE40766BC0CE8D08B3F5B810E49A8352FDD458606BD5FAFE5ACDCDC8FF3F57').to_gtv());
-
-    assert_false(result);
-}
-
-function test_primary_extra_header_is_signer_true() {
-    val primary_extra_header = extract_primary_header_from_block_header(BLOCK_HEADER_WITH_PRIMARY_HEADER);
-
-    val result = primary_extra_header_is_signer(primary_extra_header, byte_array.from_hex('0350FE40766BC0CE8D08B3F5B810E49A8352FDD458606BD5FAFE5ACDCDC8FF3F57').to_gtv());
-
-    assert_true(result);
-}
-
-function test_primary_extra_header_is_signer_false() {
-    val primary_extra_header = extract_primary_header_from_block_header(BLOCK_HEADER_WITH_PRIMARY_HEADER);
-
-    val result = primary_extra_header_is_signer(primary_extra_header, byte_array.from_hex('03F811D3E806E6D093A4BCCE49C145BA78F9A4B2FBD167753ECAB2A13530B081F8').to_gtv());
-
-    assert_false(result);
 }
