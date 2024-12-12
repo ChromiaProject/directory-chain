@@ -10,6 +10,7 @@ struct bridge_configuration {
 entity pending_bridge_proposal {
     key proposal: common_proposal;
     token;
+    fee: integer;
 }
 
 entity pending_bridge_proposal_configuration {
@@ -43,6 +44,9 @@ function apply_token_bridge_create(proposal: common_proposal) {
             events = list<eif.dynamic_config.event_def>()
         );
     }
+
+    ft4.assets.Unsafe.transfer(get_pool_account(), get_token_chain_governance_account(), get_asset(), bridge_proposal.fee);
+
     send_message(eif.dynamic_config.eif_event_receiver_dynamic_config_topic, dynamic_config_messages.to_gtv());
 }
 
@@ -53,6 +57,10 @@ function cleanup_pending_token_bridge_create(proposal: common_proposal) {
             op_context.last_block_time - proposal.timestamp > chain_context.args.proposal_revoke_timeout_days * millis_per_day,
             "Can not revoke proposal until %s day(s) has passed since creation".format(chain_context.args.proposal_revoke_timeout_days)
         );
+    }
+
+    if (proposal.state == common_proposal_state.REVOKED or proposal.state == common_proposal_state.REJECTED) {
+        ft4.assets.Unsafe.transfer(get_pool_account(), ft4.accounts.account_by_id(proposal.proposed_by), get_asset(), bridge_proposal.fee);
     }
 
     delete pending_bridge_proposal_configuration @* { bridge_proposal };
@@ -81,10 +89,13 @@ operation propose_token_bridge(asset_id: byte_array, bridge_configurations: list
     require(empty(pending_bridge_proposal @? { token }), "Token already has a pending bridge proposal");
     require(exists(bridge_configurations), "Proposal must contain at least one bridge configuration");
 
+    val fee = bridge_configurations.size() * chain_context.args.bridge_fee;
+    ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), fee);
+
     val proposal = create common_proposal(op_context.last_block_time, common_proposal_type.tc_propose_token_bridge, account.id,
         require_common_voter_set(token_chain_governance_voter_set));
 
-    val bridge_proposal = create pending_bridge_proposal(proposal, token);
+    val bridge_proposal = create pending_bridge_proposal(proposal, token, fee);
     for (bridge_configuration in bridge_configurations) {
         require(bridge_configuration.bridge_contract.size() == 20, "Incorrect bridge contract length, expected 20, was %s".format(bridge_configuration.bridge_contract.size()));
         require(bridge_configuration.token_contract.size() == 20, "Incorrect token contract length, expected 20, was %s".format(bridge_configuration.bridge_contract.size()));
