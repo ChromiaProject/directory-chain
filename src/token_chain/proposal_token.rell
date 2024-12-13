@@ -59,8 +59,7 @@ operation propose_token(
 
     val account = ft4.auth.authenticate();
 
-    val pool_account = ft4.accounts.account_by_id(get_pool_account_id());
-    ft4.assets.Unsafe.transfer(account, pool_account, get_asset(),
+    ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(),
         chain_context.args.listing_fee);
 
     val proposal = create common_proposal(op_context.last_block_time, common_proposal_type.tc_propose_token, account.id,
@@ -123,9 +122,7 @@ operation revoke_token_proposal(proposal_id: rowid) {
 function apply_token_create(proposal: common_proposal) {
     val pending_token = pending_token_proposal @ { proposal };
 
-    val pool_account = ft4.accounts.account_by_id(get_pool_account_id());
-    val governance_account = ft4.accounts.account_by_id(get_token_chain_governance_account_id());
-    ft4.assets.Unsafe.transfer(pool_account, governance_account, get_asset(), pending_token.fee);
+    ft4.assets.Unsafe.transfer(get_pool_account(), get_token_chain_governance_account(), get_asset(), pending_token.fee);
 
     val proposer_account = ft4.accounts.account_by_id(proposal.proposed_by);
     val asset = ft4.assets.Unsafe.register_asset(
@@ -184,8 +181,7 @@ function cleanup_pending_token_create(proposal: common_proposal) {
 }
 
 function refund_proposal(ft4.accounts.account, amount: integer) {
-    val pool_account = ft4.accounts.account_by_id(get_pool_account_id());
-    ft4.assets.Unsafe.transfer(pool_account, account, get_asset(), amount);
+    ft4.assets.Unsafe.transfer(get_pool_account(), account, get_asset(), amount);
 }
 
 struct token_proposal_data {

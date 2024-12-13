@@ -15,15 +15,30 @@ namespace ft4 {
 struct module_args {
     auth_privkey: byte_array = x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6";
     listing_fee: integer = 100;
+    bridge_fee: integer = 100;
 }
 
 val bridge_contract = x"00".repeat(20);
 val token_contract = x"01".repeat(20);
 
 function test_bridge_creation_success() {
-    val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee);
+    val proposer = setup(chain_context.args.auth_privkey,
+        chain_context.args.listing_fee + // For token
+        chain_context.args.bridge_fee // for bridge
+    );
+
+    // Funds moved from user to pool
+    assert_equals(get_account_balance(get_pool_account()), chain_context.args.listing_fee);
+    assert_equals(get_account_balance(get_token_chain_governance_account()), 0);
+    assert_equals(get_account_balance(proposer), chain_context.args.bridge_fee);
+
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
     val test_token = token @ { };
+
+    // Token funds moved to governance account
+    assert_equals(get_account_balance(get_pool_account()), 0);
+    assert_equals(get_account_balance(get_token_chain_governance_account()), chain_context.args.listing_fee);
+    assert_equals(get_account_balance(proposer), chain_context.args.bridge_fee);
 
     val propose_bridge_op = propose_token_bridge(
         test_token.asset.id,
@@ -53,11 +68,18 @@ function test_bridge_creation_success() {
         propose_bridge_op
     ).nop().run_must_fail("Token already has a pending bridge proposal");
 
+    assert_equals(get_account_balance(get_pool_account()), chain_context.args.bridge_fee);
+
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
     assert_null(pending_bridge_proposal @? { test_token });
     assert_null(pending_bridge_proposal_configuration @? {
         .network_id == 97, .bridge_contract == bridge_contract, .token_contract == token_contract, .bridge_mode == eif.hbridge.bridge_mode.foreign, .use_snapshots
     });
+
+    // User has payed for token and bridge
+    assert_equals(get_account_balance(get_pool_account()), 0);
+    assert_equals(get_account_balance(get_token_chain_governance_account()), chain_context.args.listing_fee + chain_context.args.bridge_fee);
+    assert_equals(get_account_balance(proposer), 0);
 
     val registered_bridges = eif.hbridge.get_bridge_contracts(97);
     assert_equals(registered_bridges.size(), 1);
@@ -95,7 +117,7 @@ function test_bridge_can_only_be_added_by_token_owner() {
         )]
     );
 
-    val charlie_account = do_create_account(rell.test.keypairs.charlie, chain_context.args.auth_privkey, 1);
+    do_create_account(rell.test.keypairs.charlie, chain_context.args.auth_privkey, 1);
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.charlie.priv, propose_bridge_op)
     ).op(
@@ -103,8 +125,95 @@ function test_bridge_can_only_be_added_by_token_owner() {
     ).run_must_fail("Only token owner can propose a bridge");
 }
 
+function test_bridge_can_only_be_added_with_enough_funds() {
+    // Enough funds for register token and 1 bridge
+    val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee + chain_context.args.bridge_fee);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+    val test_token = token @ { };
+
+    val bridge1 = bridge_configuration(
+        97,
+        bridge_contract = bridge_contract,
+        token_contract = token_contract,
+        eif.hbridge.bridge_mode.foreign,
+        true
+    );
+    val bridge2 = bridge_configuration(
+        56,
+        bridge_contract = bridge_contract,
+        token_contract = token_contract,
+        eif.hbridge.bridge_mode.foreign,
+        true
+    );
+
+    val propose_bridge_fail_op = propose_token_bridge(
+        test_token.asset.id,
+        [bridge1, bridge2]
+    );
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_bridge_fail_op)
+    ).op(
+        propose_bridge_fail_op
+    ).run_must_fail("Balance is too low");
+
+    rell.test.tx().op(
+        mint_to(proposer, chain_context.args.bridge_fee)
+    ).run();
+
+    val propose_bridge_success_op = propose_token_bridge(
+        test_token.asset.id,
+        [bridge1]
+    );
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_bridge_success_op)
+    ).op(
+        propose_bridge_success_op
+    ).run();
+}
+
+function test_bridge_refunded_on_reject() {
+    // Enough funds for register token and 1 bridge
+    val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee + chain_context.args.bridge_fee);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+    val test_token = token @ { };
+
+    val propose_bridge_fail_op = propose_token_bridge(
+        test_token.asset.id,
+        [bridge_configuration(
+            97,
+            bridge_contract = bridge_contract,
+            token_contract = token_contract,
+            eif.hbridge.bridge_mode.foreign,
+            true
+        )]
+    );
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_bridge_fail_op)
+    ).op(
+        propose_bridge_fail_op
+    ).run();
+
+    // Funds locked in pool
+    assert_equals(get_account_balance(get_pool_account()), chain_context.args.bridge_fee);
+    assert_equals(get_account_balance(get_token_chain_governance_account()), chain_context.args.listing_fee);
+    assert_equals(get_account_balance(proposer), 0);
+
+    vote_no_on_latest_proposal(rell.test.keypairs.alice);
+
+    // Bridge money refunded
+    assert_equals(get_account_balance(get_pool_account()), 0);
+    assert_equals(get_account_balance(get_token_chain_governance_account()), chain_context.args.listing_fee);
+    assert_equals(get_account_balance(proposer), chain_context.args.bridge_fee);
+}
+
 function test_bridge_proposal_revoke() {
-    val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee);
+    val proposer = setup(chain_context.args.auth_privkey,
+        chain_context.args.listing_fee + // For token
+        chain_context.args.bridge_fee // for bridge
+    );
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
     val test_token = token @ { };
 
@@ -125,6 +234,11 @@ function test_bridge_proposal_revoke() {
         propose_bridge_op
     ).run();
 
+    // Funds locked in pool
+    assert_equals(get_account_balance(get_pool_account()), chain_context.args.bridge_fee);
+    assert_equals(get_account_balance(get_token_chain_governance_account()), chain_context.args.listing_fee);
+    assert_equals(get_account_balance(proposer), 0);
+
     val proposal_id = get_latest_common_proposal_id();
     val revoke_bridge_op = revoke_token_bridge_proposal(proposal_id);
     rell.test.tx().op(
@@ -142,4 +256,9 @@ function test_bridge_proposal_revoke() {
     ).run();
 
     assert_null(pending_bridge_proposal @? { test_token });
+
+    // Bridge money refunded
+    assert_equals(get_account_balance(get_pool_account()), 0);
+    assert_equals(get_account_balance(get_token_chain_governance_account()), chain_context.args.listing_fee);
+    assert_equals(get_account_balance(proposer), chain_context.args.bridge_fee);
 }

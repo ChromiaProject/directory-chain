@@ -18,7 +18,7 @@ function test_creating_token_success() {
     val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee);
     assert_equals(get_account_balance(proposer), 0);
 
-    val pool_account = ft4.accounts.account_by_id(get_pool_account_id());
+    val pool_account = get_pool_account();
     assert_equals(get_account_balance(pool_account), chain_context.args.listing_fee);
 
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
@@ -28,8 +28,7 @@ function test_creating_token_success() {
     assert_equals(token.asset.name, "Test");
 
     assert_equals(get_account_balance(pool_account), 0);
-    val governance_account = ft4.accounts.account_by_id(get_token_chain_governance_account_id());
-    assert_equals(get_account_balance(governance_account), chain_context.args.listing_fee);
+    assert_equals(get_account_balance(get_token_chain_governance_account()), chain_context.args.listing_fee);
 
     assert_false(exists(pending_token_proposal @* {}));
     assert_false(exists(pending_token_proposal_minting_policy @* {}));
@@ -38,7 +37,7 @@ function test_creating_token_success() {
 function test_creating_token_refund() {
     val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee);
 
-    val pool_account = ft4.accounts.account_by_id(get_pool_account_id());
+    val pool_account = get_pool_account();
     assert_equals(get_account_balance(pool_account), chain_context.args.listing_fee);
 
     vote_no_on_latest_proposal(rell.test.keypairs.alice);
@@ -46,8 +45,7 @@ function test_creating_token_refund() {
     assert_true(empty(token @* {}));
 
     assert_equals(get_account_balance(pool_account), 0);
-    val governance_account = ft4.accounts.account_by_id(get_token_chain_governance_account_id());
-    assert_equals(get_account_balance(governance_account), 0);
+    assert_equals(get_account_balance(get_token_chain_governance_account()), 0);
 
     assert_equals(get_account_balance(proposer), chain_context.args.listing_fee);
 
@@ -58,7 +56,7 @@ function test_creating_token_refund() {
 function test_creating_token_revoke() {
     val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee);
 
-    val pool_account = ft4.accounts.account_by_id(get_pool_account_id());
+    val pool_account = get_pool_account();
     assert_equals(get_account_balance(pool_account), chain_context.args.listing_fee);
 
     val proposal_id = get_latest_common_proposal_id();
@@ -79,8 +77,7 @@ function test_creating_token_revoke() {
     assert_true(empty(token @* {}));
 
     assert_equals(get_account_balance(pool_account), 0);
-    val governance_account = ft4.accounts.account_by_id(get_token_chain_governance_account_id());
-    assert_equals(get_account_balance(governance_account), 0);
+    assert_equals(get_account_balance(get_token_chain_governance_account()), 0);
 
     assert_equals(get_account_balance(proposer), chain_context.args.listing_fee);
 
