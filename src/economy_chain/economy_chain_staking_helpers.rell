@@ -10,3 +10,24 @@ function get_null_account(): pubkey {
 
 function get_latest_staker_state_to_provider(staker: ft4.accounts.account) =
     staker_state_to_provider @? { .staker_state.account == staker } (@sort_desc @omit .timestamp, @sort_desc @omit .rowid, $) limit 1;
+
+struct account_staking_balance {
+    account: byte_array;
+    balance: integer;
+}
+
+function get_paginated_accounts_with_native_stake(page_size: integer?, page_cursor: text?) {
+    val before_rowid = ft4.utils.before_rowid(page_cursor);
+    return staker_state @* {
+        .network == network.CHR,
+        .rowid > (before_rowid ?: rowid(0))
+    } (
+        ft4.utils.pagination_result(
+            data = account_staking_balance( 
+                account = .account.id,
+                balance = .balance
+            ).to_gtv(),
+            rowid = .rowid
+        )
+    ) limit ft4.utils.fetch_data_size(page_size);
+}
