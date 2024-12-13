@@ -328,6 +328,19 @@ query staking_get_native_balance(account_id: byte_array) {
     return staker_state @? { .account == account and .network ==network.CHR } ( .balance ) ?: 0;
 }
 
+/**
+ * List of all accounts that has a native stake
+ *
+ * @param page_size amount of accounts to fetch
+ * @param page_cursor cursor for additional page start
+ * @return Paginated list of accounts and their balances
+*/
+query get_accounts_with_native_stake(page_size: integer, page_cursor: text?) {
+    return ft4.utils.make_page(
+        get_paginated_accounts_with_native_stake(page_size, page_cursor),
+        page_size
+    );
+}
 
 // Statistics
 
@@ -348,21 +361,22 @@ query staking_total_stake_on_network(network)  = staker_state @ { network } ( @s
 
 
 /**
-* All shared staking rewards that have been distributed to users (starting from 2024-10-26)
+* All staking and shared rewards that have been distributed to users (shared rewards included from 2024-10-26)
 *
 * @param from Only get shared rewards after a specific timestamp
 * @param to Only get shared rewards before a specific timestamp
 * @return Amount of CHR in minor units
 */
-query staking_get_all_shared_rewards_paid(
+query staking_get_all_rewards_paid(
     from: timestamp? = null,
     to: timestamp? = null
-): integer {
+) {
     return staking_payment @ {
         (empty(from) or .timestamp > from),
         (empty(to) or .timestamp <= to)
     } (
-        @sum .shared_amount
+        @sum staking_rewards = .amount,
+        @sum shared_rewards = .shared_amount
     );
 }
 
