@@ -64,7 +64,7 @@ struct common_voter_set_update_data {
 
     // Valid dynamic threshold after member list is updated
     val threshold_after_update = new_threshold ?: pending_proposal.voter_set.threshold;
-    require(threshold_after_update >= -1 and threshold_after_update <= (common_voter_set_member @* { pending_proposal.voter_set }).size() + new_members.size() - remove_members.size(),
+    require(threshold_after_update <= common_voter_set_member @ { pending_proposal.voter_set } ( @sum 1 ) + new_members.size() - remove_members.size(),
         "Invalid threshold level, must be in range [-1, voter_set.size()]");
 }
 
@@ -73,8 +73,8 @@ struct common_voter_set_update_data {
  *
  * @param voter_set_name The name of the voter set
  * @param new_threshold The new threshold for this voter set to control number of votes required. Ignored if set to null.
- * @param new_member A list of new members. Ignored if set to null.
- * @param remove_member A list of members to remove. Ignored if set to null.
+ * @param new_member A list of new members.
+ * @param remove_member A list of members to remove.
  */
 operation propose_update_voter_set(
     voter_set_name: text,
