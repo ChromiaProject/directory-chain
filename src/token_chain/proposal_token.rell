@@ -60,10 +60,10 @@ operation propose_token(
     val account = ft4.auth.authenticate();
 
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(),
-        chain_context.args.listing_fee);
+        token_chain_constants.listing_fee);
 
     val proposal = create common_proposal(op_context.last_block_time, common_proposal_type.tc_propose_token, account.id,
-        require_common_voter_set(token_chain_governance_voter_set));
+        require_governance_voter_set());
 
     val pending_token_proposal = create pending_token_proposal(
         common_proposal = proposal,
@@ -72,7 +72,7 @@ operation propose_token(
         decimals = decimals,
         icon = icon,
         account_creation_brids = account_creation_brids.join_to_text(",", "", "", null, "", byte_array_to_hex(*)),
-        fee = chain_context.args.listing_fee
+        fee = token_chain_constants.listing_fee
     );
     val minters = set<byte_array>();
     for (pm in minting_policy) {

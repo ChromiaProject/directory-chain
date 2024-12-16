@@ -11,15 +11,14 @@ namespace ft4 {
 
 struct module_args {
     auth_privkey: byte_array;
-    listing_fee: integer;
 }
 
 function test_creating_token_success() {
-    val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee);
+    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
     assert_equals(get_account_balance(proposer), 0);
 
     val pool_account = get_pool_account();
-    assert_equals(get_account_balance(pool_account), chain_context.args.listing_fee);
+    assert_equals(get_account_balance(pool_account), token_chain_constants.listing_fee);
 
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
 
@@ -28,17 +27,17 @@ function test_creating_token_success() {
     assert_equals(token.asset.name, "Test");
 
     assert_equals(get_account_balance(pool_account), 0);
-    assert_equals(get_account_balance(get_token_chain_governance_account()), chain_context.args.listing_fee);
+    assert_equals(get_account_balance(get_token_chain_governance_account()), token_chain_constants.listing_fee);
 
     assert_false(exists(pending_token_proposal @* {}));
     assert_false(exists(pending_token_proposal_minting_policy @* {}));
 }
 
 function test_creating_token_refund() {
-    val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee);
+    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
 
     val pool_account = get_pool_account();
-    assert_equals(get_account_balance(pool_account), chain_context.args.listing_fee);
+    assert_equals(get_account_balance(pool_account), token_chain_constants.listing_fee);
 
     vote_no_on_latest_proposal(rell.test.keypairs.alice);
 
@@ -47,17 +46,17 @@ function test_creating_token_refund() {
     assert_equals(get_account_balance(pool_account), 0);
     assert_equals(get_account_balance(get_token_chain_governance_account()), 0);
 
-    assert_equals(get_account_balance(proposer), chain_context.args.listing_fee);
+    assert_equals(get_account_balance(proposer), token_chain_constants.listing_fee);
 
     assert_false(exists(pending_token_proposal @* {}));
     assert_false(exists(pending_token_proposal_minting_policy @* {}));
 }
 
 function test_creating_token_revoke() {
-    val proposer = setup(chain_context.args.auth_privkey, chain_context.args.listing_fee);
+    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
 
     val pool_account = get_pool_account();
-    assert_equals(get_account_balance(pool_account), chain_context.args.listing_fee);
+    assert_equals(get_account_balance(pool_account), token_chain_constants.listing_fee);
 
     val proposal_id = get_latest_common_proposal_id();
     rell.test.tx().op(
@@ -79,7 +78,7 @@ function test_creating_token_revoke() {
     assert_equals(get_account_balance(pool_account), 0);
     assert_equals(get_account_balance(get_token_chain_governance_account()), 0);
 
-    assert_equals(get_account_balance(proposer), chain_context.args.listing_fee);
+    assert_equals(get_account_balance(proposer), token_chain_constants.listing_fee);
 
     assert_false(exists(pending_token_proposal @* {}));
     assert_false(exists(pending_token_proposal_minting_policy @* {}));
@@ -88,7 +87,7 @@ function test_creating_token_revoke() {
 function test_create_token_validation() {
 
     maybe_init_token_chain();
-    val proposer = do_create_account(rell.test.keypairs.bob, chain_context.args.auth_privkey, 100);
+    val proposer = do_create_account(rell.test.keypairs.bob, chain_context.args.auth_privkey, token_chain_constants.listing_fee);
 
     // Fail due to empty minting policy accounts
     var propose_op = create_propose_token(
@@ -129,9 +128,9 @@ function test_create_token_validation() {
 
 function test_get_token_proposal() {
 
-    val minting_policy_account1 = do_create_account(rell.test.keypairs.dave, chain_context.args.auth_privkey, chain_context.args.listing_fee);
-    val minting_policy_account2 = do_create_account(rell.test.keypairs.eve, chain_context.args.auth_privkey, chain_context.args.listing_fee);
-    val minting_policy_account3 = do_create_account(rell.test.keypairs.frank, chain_context.args.auth_privkey, chain_context.args.listing_fee);
+    val minting_policy_account1 = do_create_account(rell.test.keypairs.dave, chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    val minting_policy_account2 = do_create_account(rell.test.keypairs.eve, chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    val minting_policy_account3 = do_create_account(rell.test.keypairs.frank, chain_context.args.auth_privkey, token_chain_constants.listing_fee);
     val account_creation_brid1 = x"B0";
 
     val minting_policies = [
@@ -151,7 +150,7 @@ function test_get_token_proposal() {
 
     setup(
         chain_context.args.auth_privkey,
-            chain_context.args.listing_fee,
+            token_chain_constants.listing_fee,
             minting_policies = minting_policies,
             account_creation_brids = [account_creation_brid1]
     );

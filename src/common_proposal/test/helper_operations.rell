@@ -28,6 +28,10 @@ operation create_voter_set_op(name: text) {
     create_or_return_voter_set(name);
 }
 
+operation create_voter_set_name_member_op(voter_set_name: text, pubkey) {
+    create_voter_set_member(require_common_voter_set(voter_set_name), pubkey);
+}
+
 operation create_voter_set_member_op(common_voter_set, pubkey) {
     create_voter_set_member(common_voter_set, pubkey);
 }
@@ -45,3 +49,21 @@ operation create_common_voter_set_member_op(common_voter_set, pubkey) {
 operation remove_common_vote_transaction_op(proposal_id: rowid, pubkey) {
     delete common_vote_transaction @ { .vote.proposal.rowid == proposal_id, .vote.pubkey == pubkey };
 }
+
+
+operation create_test_voter_set_with_member(name: text, pubkey) {
+
+    val voter_set = create common_voter_set(name, 0);
+    create common_voter_set_member(voter_set, pubkey);
+    create common_voter_set_governance(voter_set = voter_set, governor = voter_set);
+}
+
+operation create_test_voter_set_with_members(name: text, members: list<pubkey>, threshold: integer = 0) {
+
+    val voter_set = create common_voter_set(name, threshold);
+    for (m in members) {
+        create common_voter_set_member(voter_set, m);
+    }
+    create common_voter_set_governance(voter_set = voter_set, governor = voter_set);
+}
+

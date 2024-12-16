@@ -1,6 +1,7 @@
 @test module;
 
 import ^^.*;
+import ^.helper_operations.*;
 
 function test_find_dapp_details_with_all_media() {
     val rowid = rowid(1);
@@ -28,3 +29,23 @@ function test_find_dapp_details_with_all_media() {
     assert_equals(dapp_details, expected);
 }
 
+function test_require_is_governor() {
+
+    rell.test.tx().op(require_is_governor_op())
+        .run_must_fail("Voter set Token chain governance does not exist");
+
+    rell.test.tx().op(
+        test_init_token_chain()
+    ).sign(rell.test.keypairs.alice).run();
+
+    rell.test.tx().op(require_is_governor_op())
+        .run_must_fail("Operation must be signed to member of token chain governor voter set");
+
+    rell.test.tx().op(require_is_governor_op())
+        .sign(rell.test.keypairs.bob)
+        .run_must_fail("Operation must be signed to member of token chain governor voter set");
+
+    rell.test.tx().op(require_is_governor_op())
+        .sign(rell.test.keypairs.alice)
+        .run();
+}

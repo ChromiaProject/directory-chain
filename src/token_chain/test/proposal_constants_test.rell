@@ -1,0 +1,49 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import common_proposal.test.helper_functions.*;
+import common_proposal.test.helper_operations.*;
+
+function test_propose_constants() {
+
+    val init_listing_fee = token_chain_constants.listing_fee;
+    val init_bridge_fee = token_chain_constants.bridge_fee;
+
+    rell.test.tx().op(
+        test_init_token_chain()
+    ).sign(rell.test.keypairs.alice).run();
+
+    // First some validations
+    rell.test.tx().op(
+        propose_constants(-3, null)
+    ).sign(rell.test.keypairs.alice)
+        .run_must_fail("Listing fee must be null, zero or positive");
+
+    rell.test.tx().op(
+        propose_constants(0, -2)
+    ).sign(rell.test.keypairs.alice)
+        .run_must_fail("Bridge fee must be null, zero or positive");
+
+    // Successful
+    rell.test.tx().op(
+        propose_constants(init_listing_fee + 1, init_bridge_fee + 1)
+    ).sign(rell.test.keypairs.alice)
+        .run();
+
+    assert_equals(token_chain_constants.listing_fee, init_listing_fee + 1);
+    assert_equals(token_chain_constants.bridge_fee, init_bridge_fee + 1);
+    assert_equals(pending_tc_constants @* {}, list<pending_tc_constants>());
+}
+
+function test_get_constants_proposal() {
+    rell.test.tx().op(
+        test_init_token_chain(),
+        create_voter_set_name_member_op(token_chain_governance_voter_set, rell.test.pubkeys.bob),
+        propose_constants(null, 1)
+    ).sign(rell.test.keypairs.alice).run();
+
+    val pp = get_constants_proposal(get_latest_common_proposal_id());
+    assert_null(pp.listing_fee);
+    assert_equals(pp.bridge_fee, 1);
+}

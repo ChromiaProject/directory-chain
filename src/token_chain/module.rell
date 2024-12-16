@@ -1,7 +1,10 @@
 module;
 
 import common_proposal.*;
+import common_proposal.voter_set_proposal.*;
 import common_vault_dapp_details.*;
+import common_helpers.constants.*;
+import common_helpers.proposals.*;
 import lib.iccf.*;
 import lib.icmf.*;
 import lib.icmf.receiver.*;
@@ -24,8 +27,6 @@ namespace ft4 {
 }
 
 struct module_args {
-    listing_fee: integer;
-    bridge_fee: integer;
     init_pubkey: pubkey;
     asset_name: text;
     asset_symbol: text;
@@ -39,7 +40,14 @@ object state {
     mutable initialized: boolean = false;
 }
 
-val millis_per_day = 24 * 60 * 60 * 1000;
+object token_chain_constants {
+    /** The fee for creating a token */
+    mutable listing_fee: integer = 100000000; // 100.0 CHR
+
+    /** The fee for adding a bridge */
+    mutable bridge_fee: integer = 100000000; // 100.0 CHR
+}
+
 val token_chain_governance_voter_set = "Token chain governance";
 val token_chain_governance_account_type = "TOKEN_CHAIN_GOVERNANCE";
 val pool_account_type = "TOKEN_CHAIN_POOL";
@@ -193,9 +201,25 @@ function require_initialized() {
     require(state.initialized == true, "Token chain is not initialized");
 }
 
+function require_governance_voter_set() =
+    require_common_voter_set(token_chain_governance_voter_set);
+
+function require_is_governor() {
+    return require(common_voter_set_member @? {
+        require_governance_voter_set(),
+        .pubkey in op_context.get_signers()
+    } ( .pubkey ) limit 1, "Operation must be signed to member of token chain governor voter set" );
+}
+
 @extend(vault_dapp_details) function tc_vault_dapp_details() = vault_dapp_details_data(
     name = "Chromia Token Chain",
     description = "Token chain handles native tokens and EVM bridges",
     icon_media_url = "https://assets.chromia.com/chr.png",
     other_media_url = "https://assets.chromia.com/chr-1000.png",
 );
+
+@extend(validate_voter_set_proposal) function common_voter_set_update_allowed_ec(pending_proposal: voter_set_update.pending_proposal) {
+    require(pending_proposal.voter_set.name == token_chain_governance_voter_set,
+        "%s it the only voter set in token chain".format(token_chain_governance_voter_set));
+}
+

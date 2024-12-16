@@ -1,0 +1,82 @@
+
+entity pending_tc_constants {
+    key common_proposal;
+    listing_fee: integer = -1;
+    bridge_fee: integer = -1;
+}
+
+struct pending_tc_constants_data {
+    listing_fee: integer? = null;
+    bridge_fee: integer? = null;
+}
+
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.tc_propose_constants.name: apply_tc_constants(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.tc_propose_constants.name: cleanup_pending_tc_constants(*)];
+
+/**
+ * Propose a change Token chain values such as fees.
+ *
+ * @param listing_fee The cost in CHR for creating a chain in minor units. Set to null to not update the value.
+ * @param bridge_fee The cost in CHR for creating a bridge in minor units. Set to null to not update the value.
+ */
+operation propose_constants(
+    listing_fee: integer?,
+    bridge_fee: integer?,
+) {
+    require_initialized();
+    val proposed_by = require_is_governor();
+
+    val proposal = create common_proposal(
+        op_context.last_block_time,
+        common_proposal_type.tc_propose_constants,
+        proposed_by,
+        require_governance_voter_set());
+
+    val proposal_details = create pending_tc_constants(
+        proposal,
+        listing_fee = listing_fee ?: -1,
+        bridge_fee = bridge_fee ?: -1,
+    );
+
+    validate_tc_proposal(proposal_details);
+    internal_common_vote(proposed_by, proposal, true);
+}
+
+function validate_tc_proposal(proposal_details: pending_tc_constants) {
+    require(proposal_details.listing_fee == -1 or proposal_details.listing_fee >= 0, "Listing fee must be null, zero or positive");
+    require(proposal_details.bridge_fee == -1 or proposal_details.bridge_fee >= 0, "Bridge fee must be null, zero or positive");
+}
+
+function apply_tc_constants(proposal: common_proposal) {
+    val proposal_details = pending_tc_constants @ { proposal };
+
+    validate_tc_proposal(proposal_details);
+
+    if (proposal_details.listing_fee >= 0) {
+        token_chain_constants.listing_fee = proposal_details.listing_fee;
+    }
+    if (proposal_details.bridge_fee >= 0) {
+        token_chain_constants.bridge_fee = proposal_details.bridge_fee;
+    }
+}
+
+function cleanup_pending_tc_constants(proposal: common_proposal) {
+    val proposal_details = pending_tc_constants @ { proposal };
+    delete proposal_details;
+}
+
+/**
+ * Return details of a pending constants proposal.
+ *
+ * @param id Proposal ID
+ * @return Information about a specific token constants proposal
+ */
+query get_constants_proposal(id: rowid) {
+    val proposal = require_common_proposal(id);
+    val proposal_details = require(pending_tc_constants @? { proposal }, "Proposal %s is not of type token chain constants".format(id));
+
+    return pending_tc_constants_data(
+        listing_fee = get_optional_proposal_int(proposal_details.listing_fee),
+        bridge_fee = get_optional_proposal_int(proposal_details.bridge_fee),
+    );
+}
