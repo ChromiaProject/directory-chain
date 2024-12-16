@@ -234,6 +234,58 @@ blockchains:
         evm_transaction_submitters_bonus: 0.1
         container_removal_timeout: 15778800000 # 6 months
       chain_version: *chain_version
+  token_chain_mainnet:
+    module: token_chain
+    config:
+      gtx:
+        modules:
+          - "net.postchain.d1.icmf.IcmfSenderGTXModule"
+          - "net.postchain.d1.icmf.IcmfReceiverGTXModule"
+          - "net.postchain.d1.iccf.IccfGTXModule"
+          - "net.postchain.eif.EifGTXModule"
+      sync_ext:
+        - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
+      icmf:
+        receiver:
+          local:
+            - topic: L_evm_block_events
+              bc-rid: x"0000000000000000000000000000000000000000000000000000000000000000" # Set to EVM token chain receiver bcrid
+    moduleArgs:
+      token_chain:
+        listing_fee: 100000000 # 100.0 CHR
+        bridge_fee: 100000000 # 100.0 CHR
+        init_pubkey: x"0319852651DB3ACA5D5DFDF71D8600566345FE1713BCBC7F2C1B6434B7A8C88C6F" # Chromaway provider
+        asset_name: "Chromia"
+        asset_symbol: "CHR"
+        asset_decimals: 6
+        asset_icon: "https://assets.chromia.com/chr.png"
+        economy_chain_blockchain_rid: x"15C0CA99BEE60A3B23829968771C50E491BD00D2E3AE448580CD48A8D71E7BBA" # economy chain RID
+        proposal_revoke_timeout_days: 1
+      lib.hbridge:
+        evm_read_offsets:
+          "56": 100
+          "1": 50
+      lib.ft4.core.auth:
+        evm_signatures_authorized_operations:
+          - eif.hbridge.link_evm_eoa_account
+      lib.ft4.core.accounts.strategies.transfer:
+        rules:
+          - sender_blockchain: "*"
+            sender: "*"
+            recipient: "*"
+            asset:
+              - name: "Chromia" # Should match `economy_chain_module_args.asset_name`
+                min_amount: 1000000L # 1.0 CHR
+                issuing_blockchain_rid: x"15C0CA99BEE60A3B23829968771C50E491BD00D2E3AE448580CD48A8D71E7BBA" # economy chain RID
+            timeout_days: 10
+            strategy: "fee"
+      lib.ft4.core.accounts.strategies.transfer.fee:
+        asset:
+          - name: "Chromia"  # Should match `economy_chain_module_args.asset_name`
+            amount: 1000000L # 1.0 CHR
+            issuing_blockchain_rid: x"15C0CA99BEE60A3B23829968771C50E491BD00D2E3AE448580CD48A8D71E7BBA" # economy chain RID
+        fee_account: x"B8780A8C8160873FB4254FC4319D6358BD5AB2EA54F0687E04FF8FFE9B8882B6" # Token chain pool account
+
 docs:
   title: Directory chain
   footerMessage: © 2024 Chromia
