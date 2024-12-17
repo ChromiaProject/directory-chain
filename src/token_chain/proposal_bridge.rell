@@ -89,11 +89,11 @@ operation propose_token_bridge(asset_id: byte_array, bridge_configurations: list
     require(empty(pending_bridge_proposal @? { token }), "Token already has a pending bridge proposal");
     require(exists(bridge_configurations), "Proposal must contain at least one bridge configuration");
 
-    val fee = bridge_configurations.size() * chain_context.args.bridge_fee;
+    val fee = bridge_configurations.size() * token_chain_constants.bridge_fee;
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), fee);
 
     val proposal = create common_proposal(op_context.last_block_time, common_proposal_type.tc_propose_token_bridge, account.id,
-        require_common_voter_set(token_chain_governance_voter_set));
+        require_governance_voter_set());
 
     val bridge_proposal = create pending_bridge_proposal(proposal, token, fee);
     for (bridge_configuration in bridge_configurations) {

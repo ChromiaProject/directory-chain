@@ -1,0 +1,177 @@
+@test module;
+
+import ^^.*;
+import ^^^.test.helper_functions.*;
+
+val test_set = "test";
+val test_set2 = "test-2";
+
+function test_propose_update_voter_set() {
+
+    rell.test.tx()
+        .op(
+        propose_update_voter_set(test_set, null, [], [])
+    )
+        .sign(rell.test.keypairs.alice)
+        .run_must_fail("Voter set test does not exist");
+
+    rell.test.tx()
+        .op(
+        create_test_voter_set_with_member(test_set, rell.test.keypairs.alice.pub)
+    ).run();
+
+    rell.test.tx()
+        .op(
+        propose_update_voter_set(test_set, null, [], [])
+    )
+        .run_must_fail("Operation must be signed by");
+
+    rell.test.tx()
+        .op(
+        propose_update_voter_set(test_set, null, [rell.test.keypairs.alice.pub], [])
+    )
+        .sign(rell.test.keypairs.alice)
+        .run_must_fail("%s is already a member of voter set %s".format(rell.test.keypairs.alice.pub, test_set));
+
+    rell.test.tx()
+        .op(
+        propose_update_voter_set(test_set, null, [], [])
+    )
+        .sign(rell.test.keypairs.bob)
+        .run_must_fail("Operation must be signed by member of voter set");
+
+    rell.test.tx()
+        .op(
+        propose_update_voter_set(test_set, null, [], [])
+    )
+        .sign(rell.test.keypairs.alice)
+        .run();
+
+    rell.test.tx()
+        .op(
+        create_test_voter_set_with_members(test_set2, [rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub]),
+        propose_update_voter_set(test_set2, 1, [], []),
+        propose_update_voter_set(test_set2, 1, [], [])
+    )
+        .sign(rell.test.keypairs.alice)
+        .run_must_fail("Cannot have more than one pending proposal involving this voter set");
+}
+
+function test_propose_update_voter_set__cant_remove_a_pubkey_not_member_of_voter_set() {
+
+    rell.test.tx()
+        .op(
+        create_test_voter_set_with_members(test_set, [rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub]),
+        propose_update_voter_set(test_set, 1, [], [rell.test.keypairs.charlie.pub]),
+    )
+        .sign(rell.test.keypairs.alice)
+        .run_must_fail("%s is not a member of voter set".format(rell.test.keypairs.charlie.pub));
+}
+
+function test_propose_update_voter_set_treshold_valid() {
+
+    rell.test.tx()
+        .op(
+        create_test_voter_set_with_members(test_set, [rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub]),
+        propose_update_voter_set(test_set, 1, [], [rell.test.keypairs.bob.pub]),
+    )
+        .sign(rell.test.keypairs.alice)
+        .run();
+}
+
+function test_propose_update_voter_set_treshold_invalid() {
+
+    rell.test.tx()
+        .op(
+        create_test_voter_set_with_members(test_set, [rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub]),
+        propose_update_voter_set(test_set, -2, [], [rell.test.keypairs.bob.pub]),
+    )
+        .sign(rell.test.keypairs.alice)
+        .run_must_fail("Threshold must be -1 (majority), 0 (super-majority) or positive");
+}
+
+function test_propose_update_voter_set_treshold_invalid_due_to_too_few_members() {
+
+    rell.test.tx()
+        .op(
+        create_test_voter_set_with_members(test_set, [rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub]),
+        propose_update_voter_set(test_set, 2, [], [rell.test.keypairs.bob.pub]),
+    )
+        .sign(rell.test.keypairs.alice)
+        .run_must_fail("Invalid threshold level, must be in range [-1, voter_set.size()]");
+}
+
+
+function test_propose_update_voter_set__add_and_remove_member_success() {
+
+    rell.test.tx()
+        .op(
+        create_test_voter_set_with_members(test_set, [rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub], 2),
+        propose_update_voter_set(test_set, null, [rell.test.keypairs.charlie.pub], [rell.test.keypairs.bob.pub]),
+    )
+        .sign(rell.test.keypairs.alice)
+        .run();
+
+    assert_equals(common_voter_set_member @* { require_common_voter_set(test_set) } ( .pubkey ),
+        [rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub]);
+
+    rell.test.tx().op(
+        make_common_vote_v65(get_latest_common_proposal_id(), true)
+    ).sign(rell.test.keypairs.bob).run();
+
+    assert_equals(common_voter_set_member @* { require_common_voter_set(test_set) } ( .pubkey ),
+        [rell.test.keypairs.alice.pub, rell.test.keypairs.charlie.pub]);
+}
+
+function test_propose_update_voter_set_remove_member_fails_due_to_too_low_threshold() {
+
+    rell.test.tx()
+        .op(
+        create_test_voter_set_with_members(test_set, [rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub], 2),
+        propose_update_voter_set(test_set, null, [], [rell.test.keypairs.bob.pub]),
+    )
+        .sign(rell.test.keypairs.alice)
+        .run_must_fail("Invalid threshold level, must be in range [-1, voter_set.size()]");
+}
+
+function test_apply_voter_set_update() {
+
+    // Replace member alice by bob
+    rell.test.tx()
+        .op(
+        create_test_voter_set_with_member(test_set, rell.test.keypairs.alice.pub),
+        propose_update_voter_set(test_set, 1, [rell.test.keypairs.bob.pub], [rell.test.keypairs.alice.pub])
+    )
+        .sign(rell.test.keypairs.alice)
+        .run();
+
+    val voter_set = common_voter_set @ { test_set };
+    val voter_set_members = common_voter_set_member @* { voter_set } ( .pubkey );
+
+    assert_equals(voter_set_members.size(), 1);
+    assert_equals(voter_set_members[0], rell.test.keypairs.bob.pub);
+}
+
+function test_propose_update_voter_set__fail_to_remove_last_member() {
+
+    // Remove bob - successful
+    rell.test.tx()
+        .op(
+        create_test_voter_set_with_members(test_set, [rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub]),
+        propose_update_voter_set(test_set, null, [], [rell.test.keypairs.bob.pub])
+    )
+        .sign(rell.test.keypairs.alice)
+        .run();
+
+    rell.test.tx().op(
+        make_common_vote_v65(get_latest_common_proposal_id(), true)
+    ).sign(rell.test.keypairs.bob).run();
+
+    // Remove alice - fails due to last member
+    rell.test.tx()
+        .op(
+        propose_update_voter_set(test_set, null, [], [rell.test.keypairs.alice.pub])
+    )
+        .sign(rell.test.keypairs.alice)
+        .run_must_fail("Can't remove last member in voter set");
+}

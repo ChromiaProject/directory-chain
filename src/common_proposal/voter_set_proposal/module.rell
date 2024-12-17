@@ -1,0 +1,161 @@
+/**
+ * Import this module to get a generic operation to manage voter sets. Extend `validate_voter_set_proposal`
+ * to restrict usage if needed.
+ */
+
+module;
+
+import common_proposal.*;
+
+namespace voter_set_update {
+    entity pending_proposal {
+        key proposal: common_proposal, voter_set: common_voter_set;
+    }
+
+    entity threshold {
+        key pending_proposal;
+        threshold: integer;
+    }
+
+    entity new_member {
+        index pending_proposal;
+        pubkey;
+    }
+
+    entity remove_member {
+        index pending_proposal;
+        pubkey;
+    }
+}
+
+struct common_voter_set_update_data {
+    voter_set: text;
+    threshold: integer?;
+    add_member: list<pubkey>?;
+    remove_member: list<pubkey>?;
+}
+
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.common_voter_set_update.name: apply_common_voter_set_update(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.common_voter_set_update.name: delete_pending_common_voter_set_update(*)];
+
+/**
+ * Extendable proposal validation function to let each chain control specific voter set requirements, e.g. whitelist
+ * voter sets to be changed etc.
+ */
+@extendable function validate_voter_set_proposal(pending_proposal: voter_set_update.pending_proposal) {
+
+    val remove_members = voter_set_update.remove_member @* { pending_proposal } ( .pubkey );
+    val new_members = voter_set_update.new_member @* { pending_proposal } ( .pubkey );
+
+    // At lest 1 members must exist after update
+    if (remove_members.size() > 0) {
+        val count = common_voter_set_member @ {
+            pending_proposal.voter_set,
+            .pubkey not in remove_members
+        } ( @sum 1 ) + new_members.size();
+        require(count > 0, "Can't remove last member in voter set");
+    }
+
+    // Valid threshold
+    val new_threshold = voter_set_update.threshold @? { pending_proposal } ( .threshold );
+    if (new_threshold != null) {
+        require(is_valid_consensus_threshold(new_threshold), "Threshold must be -1 (majority), 0 (super-majority) or positive");
+    }
+
+    // Valid dynamic threshold after member list is updated
+    val threshold_after_update = new_threshold ?: pending_proposal.voter_set.threshold;
+    require(threshold_after_update <= common_voter_set_member @ { pending_proposal.voter_set } ( @sum 1 ) + new_members.size() - remove_members.size(),
+        "Invalid threshold level, must be in range [-1, voter_set.size()]");
+}
+
+/**
+ * Propose a voter sets change including threshold and/or member list.
+ *
+ * @param voter_set_name The name of the voter set
+ * @param new_threshold The new threshold for this voter set to control number of votes required. Ignored if set to null.
+ * @param new_member A list of new members.
+ * @param remove_member A list of members to remove.
+ */
+operation propose_update_voter_set(
+    voter_set_name: text,
+    new_threshold: integer?,
+    new_member: list<pubkey>,
+    remove_member: list<pubkey>
+) {
+    propose_update_voter_set_internal(voter_set_name, new_threshold, new_member, remove_member);
+}
+
+function apply_common_voter_set_update(proposal: common_proposal) {
+    val vsp = voter_set_update.pending_proposal @? { proposal };
+    if (vsp == null) return;
+    val threshold = voter_set_update.threshold @? { vsp }.threshold;
+    if (threshold != null) vsp.voter_set.threshold = threshold;
+    for (m in voter_set_update.new_member @* { vsp } ( .pubkey )) {
+        create common_voter_set_member(vsp.voter_set, m);
+    }
+    for (m in voter_set_update.remove_member @* { vsp } ( .pubkey )) {
+        delete common_voter_set_member @ { vsp.voter_set, m };
+    }
+}
+
+function delete_pending_common_voter_set_update(proposal: common_proposal) {
+    val p = voter_set_update.pending_proposal @? { proposal };
+    if (p != null) {
+        delete voter_set_update.threshold @? { p };
+        delete voter_set_update.new_member @* { p };
+        delete voter_set_update.remove_member @* { p };
+    }
+    delete p;
+}
+
+function propose_update_voter_set_internal(
+    voter_set_name: text,
+    new_threshold: integer?,
+    new_member: list<pubkey>,
+    remove_member: list<pubkey>
+) {
+    val voter_set = require_common_voter_set(voter_set_name);
+    val voter_set_member = require_voter_set_member_pubkey(voter_set);
+    require_common_voter_set_member_and_signer(voter_set, voter_set_member);
+    require_common_voter_set_governor(voter_set, voter_set_member);
+    require(empty(common_proposal @* { voter_set, (.state == common_proposal_state.PENDING or .state == common_proposal_state.DELAYED) }),
+        "Cannot have more than one pending proposal involving this voter set.");
+
+    val prop = create common_proposal(
+        op_context.last_block_time,
+        common_proposal_type.common_voter_set_update,
+        voter_set_member,
+        voter_set,
+        "Update %s voter set".format(voter_set_name)
+    );
+    val update_prop = create voter_set_update.pending_proposal(prop, voter_set);
+    if (new_threshold != null) {
+        create voter_set_update.threshold(update_prop, new_threshold);
+    }
+    for (m in new_member) {
+        require(
+            empty(common_voter_set_member @? { voter_set, .pubkey == m }),
+            "%s is already a member of voter set %s".format(m, voter_set_name)
+        );
+        create voter_set_update.new_member(update_prop, m);
+    }
+    for (m in remove_member) {
+        require(
+            common_voter_set_member @? { voter_set, .pubkey == m },
+            "%s is not a member of voter set %s".format(m, voter_set_name)
+        );
+        create voter_set_update.remove_member(update_prop, m);
+    }
+    validate_voter_set_proposal(update_prop);
+    internal_common_vote(voter_set_member, prop, true);
+}
+
+query get_voter_set_update_proposal(id: rowid) {
+    val proposal_details = require(voter_set_update.pending_proposal @? { require_common_proposal(id) }, "Proposal is not of type voter set update");
+    return common_voter_set_update_data(
+        voter_set = proposal_details.voter_set.name,
+        threshold = voter_set_update.threshold @? { proposal_details }.threshold,
+        add_member = voter_set_update.new_member @* { proposal_details } .pubkey,
+        remove_member = voter_set_update.remove_member @* { proposal_details } .pubkey
+    );
+}
