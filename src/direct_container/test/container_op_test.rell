@@ -111,3 +111,20 @@ function test_create_container_with_subnode_image() {
     val container = container @ { "foo" };
     assert_not_null(container_subnode_image @? { container, subnode_image });
 }
+
+function test_create_container_with_voterset() {
+    setup_module(provider_quota_max_containers = 1);
+    val deployer1 = rell.test.keypairs.bob;
+    val deployer2 = rell.test.keypairs.trudy;
+
+    rell.test.tx().op(
+        create_test_provider("", deployer1.pub, provider_tier.DAPP_PROVIDER),
+        create_test_provider("", deployer2.pub, provider_tier.DAPP_PROVIDER),
+        create_test_voter_set("test_vs", 1, null),
+        create_container_from(initial_provider.pub, "foo", clusters.system, 1, "test_vs")
+    ).sign(initial_provider).run();
+
+    val test_vs = voter_set @ { .name == "test_vs" };
+    val foo_container = container @ { .name == "foo" };
+    assert_equals(foo_container.deployer, test_vs);
+}
