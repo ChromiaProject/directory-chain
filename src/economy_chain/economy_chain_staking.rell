@@ -373,13 +373,15 @@ function _staking_shared_rewards(pay_reward_result) {
     }
 
     val staker_delegations = ( s1: staker_state_to_provider) @* {
-        .provider == provider_data.provider and not exists(
-            (s2:staker_state_to_provider) @* { 
-                s2.staker_state ==s1.staker_state,
-                (s2.timestamp>s1.timestamp) or 
-                (s2.timestamp==s1.timestamp and s2 < s1) 
-            }
-        )
+        .provider == provider_data.provider and (s1.timestamp <= _staking_last_known_time()) and 
+        not exists((s2:staker_state_to_provider) @* { 
+            s2.staker_state == s1.staker_state,
+            s2.timestamp <= _staking_last_known_time(),
+            (
+                s2.timestamp > s1.timestamp or 
+                (s2.timestamp == s1.timestamp and s2.rowid > s1.rowid)
+            )
+        })
     } (
         @group account = .staker_state.account,
         @sum balance = .staker_state.balance
