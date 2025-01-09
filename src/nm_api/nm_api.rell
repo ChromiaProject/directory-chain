@@ -2,7 +2,7 @@
  * Returns NM API Version
  * NM API Version: 1
  */
-query nm_api_version() = 21;
+query nm_api_version() = 22;
 
 /**
  * Returns peer info list
@@ -319,6 +319,13 @@ query nm_find_next_inactive_blockchains(height: integer): list<inactive_blockcha
     return if (empty(next_height)) []
     else inactive_blockchain @* { .height == next_height } ( inactive_blockchain_info(.blockchain.rid, .blockchain.state, .height) );
 }
+
+/**
+ * Get blockchains that were deactivated (removed, archived) and returns found blockchain RIDs and heights.
+ * NM API Version 22
+ */
+query nm_get_inactive_blockchains(): list<inactive_blockchain_info> =
+    inactive_blockchain @* { } ( @sort @omit .height, inactive_blockchain_info(.blockchain.rid, .blockchain.state, .height) );
 
 /**
  * Returns migrating (moving or unarchiving) blockchain info.

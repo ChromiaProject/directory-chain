@@ -332,7 +332,7 @@ function test_nm_get_blockchain_configuration_options() {
     // This empty stub is potentially for a code coverage tool.
 }
 
-function test_nm_find_next_inactive_blockchains() {
+function test_nm_find_next_inactive_blockchains_and_get_inactive_blockchains() {
     setup_module();
 
     // Adding 3 blockchains
@@ -359,6 +359,9 @@ function test_nm_find_next_inactive_blockchains() {
     assert_equals(removed0, [inactive_blockchain_info(foo, blockchain_state.REMOVED, 2)]); // block 2
     assert_equals(nm_find_next_inactive_blockchains(0), [inactive_blockchain_info(foo, blockchain_state.REMOVED, 2)]);
     assert_true(nm_find_next_inactive_blockchains(2).empty());
+    assert_equals(nm_get_inactive_blockchains(), [
+        inactive_blockchain_info(foo, blockchain_state.REMOVED, 2)
+    ]);
 
     // Action 1: removing `bar` and archiving `foo_bar`
     rell.test.tx().op(
@@ -376,6 +379,11 @@ function test_nm_find_next_inactive_blockchains() {
     assert_equals(nm_find_next_inactive_blockchains(0), [inactive_blockchain_info(foo, blockchain_state.REMOVED, 2)]);
     assert_equals(nm_find_next_inactive_blockchains(2), [inactive_blockchain_info(bar, blockchain_state.REMOVED, 3), inactive_blockchain_info(foo_bar, blockchain_state.ARCHIVED, 3)]);
     assert_true(nm_find_next_inactive_blockchains(3).empty());
+    assert_equals(nm_get_inactive_blockchains(), [
+        inactive_blockchain_info(foo, blockchain_state.REMOVED, 2),
+        inactive_blockchain_info(bar, blockchain_state.REMOVED, 3),
+        inactive_blockchain_info(foo_bar, blockchain_state.ARCHIVED, 3)
+    ]);
 
     // Action 2: removing already archived `foo_chain`
     rell.test.tx().op(
@@ -383,6 +391,11 @@ function test_nm_find_next_inactive_blockchains() {
     ).sign(initial_provider).run();
     assert_equals(nm_find_next_inactive_blockchains(3), [inactive_blockchain_info(foo_bar, blockchain_state.REMOVED, 4)]);
     assert_true(nm_find_next_inactive_blockchains(4).empty());
+    assert_equals(nm_get_inactive_blockchains(), [
+        inactive_blockchain_info(foo, blockchain_state.REMOVED, 2),
+        inactive_blockchain_info(bar, blockchain_state.REMOVED, 3),
+        inactive_blockchain_info(foo_bar, blockchain_state.REMOVED, 4)
+    ]);
 }
 
 function test_nm_is_blockchain_provider() {
