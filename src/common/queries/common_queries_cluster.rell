@@ -7,18 +7,38 @@ query get_cluster(name) = cluster @ { name };
 /**
  * Returns all clusters.
  */
-query get_clusters() {
-    return cluster @* {} (
+query get_clusters(): list<cluster_data> {
+    val counts = map(cluster_node @* {} (@group .cluster, @sum 1));
+    return (cluster, @outer cluster_subnode_image @* { .cluster == cluster }) @* {} (
+        @group name = .name,
+        @group governor = .governance.name,
+        @group is_operational = .operational,
+        @group cluster_units = .cluster_units,
+        @group extra_storage = .extra_storage,
+        @group number_of_nodes = counts.get_or_default(cluster, 0),
+        @group container_units_available = get_available_container_units(cluster),
+        @group extra_storage_available = get_available_extra_storage(cluster),
+        @list subnode_images = cluster_subnode_image?.subnode_image?.name,
+    ) @* {} (cluster_data(
         name = .name,
-        governor = .governance.name,
-        operational = .operational
-    );
+        governor = .governor,
+        is_operational = .is_operational,
+        operational = .is_operational,
+        cluster_units = .cluster_units,
+        extra_storage = .extra_storage,
+        number_of_nodes = .number_of_nodes,
+        container_units_available = .container_units_available,
+        extra_storage_available = .extra_storage_available,
+        subnode_images = .subnode_images @* { $ != null } ($!!),
+    ));
 }
 
 struct cluster_data {
     name;
     governor: text;
     is_operational: boolean;
+    /** Added for backwards compatibility, use `is_operational` instead */
+    operational: boolean;
     cluster_units: integer?;
     extra_storage: integer?;
     number_of_nodes: integer?;
@@ -36,6 +56,7 @@ query get_cluster_data(name) {
         name = cluster.name,
         governor = cluster.governance.name,
         is_operational = cluster.operational,
+        operational = cluster.operational,
         cluster_units = cluster.cluster_units,
         extra_storage = cluster.extra_storage,
         number_of_nodes = number_of_nodes_in_cluster(cluster),
@@ -64,6 +85,7 @@ query get_operational_dapp_clusters(): list<cluster_data> {
         name = .name,
         governor = .governor,
         is_operational = .is_operational,
+        operational = .is_operational,
         cluster_units = .cluster_units,
         extra_storage = .extra_storage,
         number_of_nodes = .number_of_nodes,
