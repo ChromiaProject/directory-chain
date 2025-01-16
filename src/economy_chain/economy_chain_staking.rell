@@ -32,7 +32,6 @@ function _staking_deposit_native_impl(amount: integer, delegate_to: pubkey? = nu
     if (exists(ss)) {
         _update_pending_token_time(ss);
         ss.balance += amount;
-        _staking_clear_upcoming_delegations(staker);
     } else {
         // Create a fresh staker state
         ss = create staker_state (
@@ -134,12 +133,11 @@ function _staking_update_evm_state(staker: ft4.accounts.account, network, new_ba
             provider = provider @ { get_null_account() },
             previous_provider = provider @ { current_delegate ?: get_null_account() },
         );
+        _staking_clear_upcoming_delegations(staker);
     }
 
     ss.balance = new_balance;
     publish_staking_state(staker);
-
-    _staking_clear_upcoming_delegations(staker);
 }
 
 
