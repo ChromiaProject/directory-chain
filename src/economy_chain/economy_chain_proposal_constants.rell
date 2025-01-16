@@ -21,6 +21,38 @@ operation update_economy_constants(
     resource_pool_margin_fee_share: decimal?,
     dapp_provider_risk_share: decimal?
 ) {
+    update_economy_constants_internal(min_lease_time_weeks, max_lease_time_weeks, staking_reward_rate,
+        staking_reward_fee_share, chromia_foundation_fee_share, resource_pool_margin_fee_share,
+        dapp_provider_risk_share, null,
+    );
+}
+
+operation update_economy_constants_v52(
+    min_lease_time_weeks: integer?,
+    max_lease_time_weeks: integer?,
+    staking_reward_rate: decimal?,
+    staking_reward_fee_share: decimal?,
+    chromia_foundation_fee_share: decimal?,
+    resource_pool_margin_fee_share: decimal?,
+    dapp_provider_risk_share: decimal?,
+    scheduled_at: timestamp?,
+) {
+    update_economy_constants_internal(min_lease_time_weeks, max_lease_time_weeks, staking_reward_rate,
+        staking_reward_fee_share, chromia_foundation_fee_share, resource_pool_margin_fee_share,
+        dapp_provider_risk_share, scheduled_at,
+    );
+}
+
+function update_economy_constants_internal(
+    min_lease_time_weeks: integer?,
+    max_lease_time_weeks: integer?,
+    staking_reward_rate: decimal?,
+    staking_reward_fee_share: decimal?,
+    chromia_foundation_fee_share: decimal?,
+    resource_pool_margin_fee_share: decimal?,
+    dapp_provider_risk_share: decimal?,
+    scheduled_at: timestamp?,
+) {
     val provider = require_system_provider_signer_entity();
 
     val proposal = create_system_p_proposal(common_proposal_type.ec_constants_update, provider, "Update economy constants");
@@ -35,6 +67,9 @@ operation update_economy_constants(
         dapp_provider_risk_share = dapp_provider_risk_share?: -1.0
     );
     validate_economy_constants_proposal(proposal_details);
+    if (scheduled_at != null) {
+        add_scheduled_event(delay_type.PROPOSAL, proposal.rowid.to_integer(), scheduled_at);
+    }
 
     internal_common_vote(provider.pubkey, proposal, true);
 }

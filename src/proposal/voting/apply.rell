@@ -1,5 +1,3 @@
-@extend(delayed_event_callback) function() = [delay_type.PROPOSAL: proposal_delayed_apply(*)];
-
 // NB: check authority before calling this function
 function internal_vote(provider, proposal, vote: boolean) {
     require(voter_set_member @? { proposal.voter_set, provider },
@@ -49,9 +47,10 @@ function apply_or_delay_proposal(prop: proposal) {
 }
 
 /**
- * Callback for delayed proposals to run the proposals apply function.
+ * Callback for delayed or scheduled proposals to run the proposals apply function.
  */
-function proposal_delayed_apply(proposal_id: integer) {
+@extend(proposal_delayed_apply)
+function dc_proposal_delayed_apply(proposal_id: integer) {
     val prop = proposal @? { .rowid == rowid(proposal_id) };
     if (prop != null) {
         try_call_apply_voting_result_handlers(prop);
@@ -68,14 +67,35 @@ function try_call_apply_voting_result_handlers(prop: proposal){
 }
 
 /**
- * Call extended handler to get delay for the proposal type.
+ * Call extended handler to get possible delay for the proposal type. This includes both delayed and scheduled proposals
+ * and will return the longest delay if both are set.
  */
-function get_proposal_delay(proposal): (blockchain?, integer) {
-    val handlers = proposal_delay_time_handlers();
-    if (handlers.contains(proposal.proposal_type.name)) {
-        return handlers[proposal.proposal_type.name](proposal);
+function get_proposal_delay(proposal): (blockchain: blockchain?, delay: integer) {
+
+    var delay: (blockchain: blockchain?, delay: integer)? = null;
+    val delay_handlers = proposal_delay_time_handlers();
+    if (delay_handlers.contains(proposal.proposal_type.name)) {
+        delay = delay_handlers[proposal.proposal_type.name](proposal);
     }
-    return (null, 0);
+
+    var scheduled_at_delay: (blockchain: blockchain?, delay: integer)? = null;
+    val scheduled_at_delay_handlers = scheduled_proposal_delay_time_handlers();
+    if (scheduled_at_delay_handlers.contains(proposal.proposal_type.name)) {
+        scheduled_at_delay = scheduled_at_delay_handlers[proposal.proposal_type.name](proposal);
+    }
+
+    if (delay != null and scheduled_at_delay != null) {
+        return if (scheduled_at_delay.delay > delay.delay)
+            scheduled_at_delay
+        else
+            delay;
+    } else if (delay != null) {
+        return delay;
+    } else if (scheduled_at_delay != null) {
+        return scheduled_at_delay;
+    }
+
+    return (blockchain = null, delay = 0);
 }
 
 @extendable function apply_voting_result_handlers(): map<text, (proposal) -> unit>;
@@ -88,4 +108,9 @@ function get_proposal_delay(proposal): (blockchain?, integer) {
  *
  * @return The handler returns the blockchain and delay value.
  */
-@extendable function proposal_delay_time_handlers(): map<text, (proposal) -> (blockchain?, integer)>;
+@extendable function proposal_delay_time_handlers(): map<text, (proposal) -> (blockchain: blockchain?, delay: integer)>;
+
+/**
+ * As `scheduled_proposal_delay_time_handlers` but is used to handle `scheduled at` delays.
+ */
+@extendable function scheduled_proposal_delay_time_handlers(): map<text, (proposal) -> (blockchain: blockchain?, delay: integer)>;

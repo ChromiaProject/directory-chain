@@ -7,6 +7,8 @@ module;
 
 import common_consensus.*;
 import provider_auth.*;
+import delay.*;
+import delay.proposal_callback.*;
 
 function create_common_voter_set_internal(
     name,
@@ -27,7 +29,11 @@ function create_common_voter_set_internal(
 
 @extendable function apply_common_voting_result_handlers(): map<text, (common_proposal) -> unit>;
 
-function delete_common_proposal(common_proposal) = run_common_proposal_event(delete_common_proposal_handlers(), common_proposal);
+function delete_common_proposal(common_proposal) {
+    run_common_proposal_event(delete_common_proposal_handlers(), common_proposal);
+    delete_delayed_event(delay_type.PROPOSAL, common_proposal.rowid.to_integer());
+    delete_scheduled_event(delay_type.PROPOSAL, common_proposal.rowid.to_integer());
+}
 
 function apply_common_voting_result(common_proposal) = run_common_proposal_event(apply_common_voting_result_handlers(), common_proposal);
 
