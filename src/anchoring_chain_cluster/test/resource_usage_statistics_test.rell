@@ -1,0 +1,96 @@
+@test module;
+
+import ^.helpers.*;
+import ^^.*;
+
+function test_resource_usage_statistics() {
+    val node_pubkey1 = rell.test.pubkeys.charlie;
+    val node_pubkey2 = rell.test.pubkeys.bob;
+    rell.test.tx().op(
+        handle_resource_usage_statistics_op(
+            node_pubkey1,
+            "container1",
+            1,
+            resource_type.free_space_left_mib,
+            1000
+        ),
+        handle_resource_usage_statistics_op(
+            node_pubkey1,
+            "container1",
+            1,
+            resource_type.space_usage_mib,
+            10000
+        ),
+        handle_resource_usage_statistics_op(
+            node_pubkey1,
+            "container1",
+            1,
+            resource_type.space_usage_percentage,
+            10
+        ),
+        handle_resource_usage_statistics_op(
+            node_pubkey2,
+            "container1",
+            2,
+            resource_type.free_space_left_mib,
+            1001
+        ),
+        handle_resource_usage_statistics_op(
+            node_pubkey2,
+            "container1",
+            2,
+            resource_type.space_usage_mib,
+            10001
+        ),
+        handle_resource_usage_statistics_op(
+            node_pubkey2,
+            "container1",
+            2,
+            resource_type.space_usage_percentage,
+            11
+        )
+    ).run();
+
+    val all_filters_usage_statistics = get_latest_resource_usage_statistics("container1", resource_type.free_space_left_mib, node_pubkey1);
+    val expected_usage_statistics1 = container_resource_usage_statistics(node_pubkey = node_pubkey1, mesurement_time = 1, resource_type = resource_type.free_space_left_mib, metric_value = 1000);
+
+    assert_equals(all_filters_usage_statistics, [expected_usage_statistics1]);
+
+    val no_filter_usage_statistics = get_latest_resource_usage_statistics("container1", null, null);
+    val expected_usage_statistics2 = [
+        container_resource_usage_statistics(node_pubkey = node_pubkey1, mesurement_time = 1, resource_type = resource_type.free_space_left_mib, metric_value = 1000),
+        container_resource_usage_statistics(node_pubkey = node_pubkey1, mesurement_time = 1, resource_type = resource_type.space_usage_mib, metric_value = 10000),
+        container_resource_usage_statistics(node_pubkey = node_pubkey1, mesurement_time = 1, resource_type = resource_type.space_usage_percentage, metric_value = 10),
+        container_resource_usage_statistics(node_pubkey = node_pubkey2, mesurement_time = 2, resource_type = resource_type.free_space_left_mib, metric_value = 1001),
+        container_resource_usage_statistics(node_pubkey = node_pubkey2, mesurement_time = 2, resource_type = resource_type.space_usage_mib, metric_value = 10001),
+        container_resource_usage_statistics(node_pubkey = node_pubkey2, mesurement_time = 2, resource_type = resource_type.space_usage_percentage, metric_value = 11)
+    ];
+
+    assert_equals(no_filter_usage_statistics, expected_usage_statistics2);
+}
+
+function test_update_resource_usage_statistics() {
+    val node_pubkey1 = rell.test.pubkeys.charlie;
+    rell.test.tx().op(
+        handle_resource_usage_statistics_op(
+            node_pubkey1,
+            "container1",
+            1,
+            resource_type.free_space_left_mib,
+            1000
+        ),
+        handle_resource_usage_statistics_op(
+            node_pubkey1,
+            "container1",
+            2,
+            resource_type.free_space_left_mib,
+            2000
+        )
+    ).run();
+
+    val usage_statistics = get_latest_resource_usage_statistics("container1", resource_type.free_space_left_mib, node_pubkey1);
+    val expected_usage_statistics = container_resource_usage_statistics(node_pubkey = node_pubkey1, mesurement_time = 2, resource_type = resource_type.free_space_left_mib, metric_value = 2000);
+
+    assert_equals(usage_statistics, [expected_usage_statistics]);
+
+}
