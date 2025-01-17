@@ -1777,3 +1777,38 @@ function test_staking_shared_reward_calculation_delayed_delegation() {
     assert_equals(staking_get_shared_rewards_paid(test_account_alice.id), 25 * units_per_asset);
     assert_equals(staking_get_shared_rewards_paid(test_account_bob.id), 5 * units_per_asset);
 }
+
+function test_staking_pending_delegation_new_stake() {
+    rell.test.tx().op(init()).run();
+
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
+    do_evm_stake_update_bsc(alice_evm_address, 100 * units_per_asset);
+    val test_account_alice = require(do_create_account_using_ras_staking(rell.test.keypairs.alice));
+
+    val test_account_bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
+    rell.test.tx().op(mint_to(test_account_bob, 200 * units_per_asset)).sign(admin_privkey).run();
+    do_staking_deposit_native(rell.test.keypairs.bob, 100 * units_per_asset);
+
+    add_provider(rell.test.keypairs.charlie.pub);
+    add_provider(rell.test.keypairs.dave.pub);
+
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.charlie.pub);
+    do_staking_delegate(rell.test.keypairs.bob, rell.test.keypairs.charlie.pub);
+    rell.test.set_next_block_time_delta(millis_per_year + staking_delegation_delay_ms);
+    rell.test.block().run();
+
+    assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.charlie.pub);
+    assert_equals(staking_get_current_delegate(test_account_bob.id), rell.test.keypairs.charlie.pub);
+
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.dave.pub);
+    do_staking_delegate(rell.test.keypairs.bob, rell.test.keypairs.dave.pub);
+
+    do_evm_stake_update_bsc(alice_evm_address, 200 * units_per_asset);
+    do_staking_deposit_native(rell.test.keypairs.bob, 100 * units_per_asset);
+
+    rell.test.set_next_block_time_delta(millis_per_year + staking_delegation_delay_ms);
+    rell.test.block().run();
+
+    assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.dave.pub);
+    assert_equals(staking_get_current_delegate(test_account_bob.id), rell.test.keypairs.dave.pub);
+}
