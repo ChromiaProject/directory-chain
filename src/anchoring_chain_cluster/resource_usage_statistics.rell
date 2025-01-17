@@ -1,0 +1,61 @@
+operation __resource_usage_statistics(node_pubkey: pubkey, container_name: text, mesurement_time: timestamp, resource_type: resource_type, metric_value: decimal) {
+    handle_resource_usage_statistics(node_pubkey, container_name, mesurement_time, resource_type, metric_value);
+}
+
+function handle_resource_usage_statistics(node_pubkey: pubkey, container_name: text, mesurement_time: timestamp, resource_type: resource_type, metric_value: decimal) {
+    val resource_usage_statistic =  resource_usage_statistics @? { node_pubkey, resource_type, container_name };
+
+    if (resource_usage_statistic != null) {
+        resource_usage_statistic.mesurement_time = mesurement_time;
+        resource_usage_statistic.metric_value = metric_value;
+    } else {
+        create resource_usage_statistics(node_pubkey, container_name, mesurement_time, resource_type, metric_value);
+    }
+
+}
+
+/**
+ * Types of system resources that can be monitored.
+ */
+enum resource_type {
+    /**
+     * Amount of free space available on a storage device, expressed in Mebibyte.
+     */
+    free_space_left_mib,
+    /**
+     * Amount of used space on a storage device, expressed in Mebibyte.
+     */
+    space_usage_mib,
+    /**
+     * Percentage of total storage capacity that is occupied by data.
+     */
+    space_usage_percentage,
+}
+
+/**
+ * Resource usage value and its associated measurement time by node for each container.
+ */
+entity resource_usage_statistics {
+    node_pubkey: pubkey;
+    container_name: text;
+    mutable mesurement_time: timestamp;
+    resource_type: resource_type;
+    mutable metric_value: decimal;
+}
+
+/**
+ * Represents the measured value of a specific resource for a container on a specific node.
+ */
+struct container_resource_usage_statistics {
+    node_pubkey: pubkey;
+    mesurement_time: timestamp;
+    resource_type: resource_type;
+    metric_value: decimal;
+}
+
+/**
+ * Retrieves last measured resource usage statistics across nodes, for a given container optionally filtered by resource type and node.
+ */
+query get_latest_resource_usage_statistics(container_name: text, resource_type: resource_type?, node_pubkey: pubkey?) {
+    return resource_usage_statistics @* { container_name, resource_type == null or .resource_type == resource_type, node_pubkey == null or .node_pubkey == node_pubkey } ( container_resource_usage_statistics(.node_pubkey, .mesurement_time, .resource_type, .metric_value ));
+}
