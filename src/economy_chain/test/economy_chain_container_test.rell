@@ -515,9 +515,9 @@ function test_renew_container_blocked_when_upgrading() {
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init);
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, upgrade_container(container_name, 3, 0, "Bob's cluster"))
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, upgrade_container(container_name, 3, 0, "Bob's cluster", 1))
     ).op(
-        upgrade_container(container_name, 3, 0, "Bob's cluster")
+        upgrade_container(container_name, 3, 0, "Bob's cluster", 1)
     ).run();
 
     rell.test.tx().op(
@@ -533,14 +533,14 @@ function test_upgrade_container_success() {
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 2);
 
     val created_lease = lease @ { container_name };
-    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 4, ticket_id = ticket_id_after_init + 6, current_lease = created_lease, container_units = 3);
+    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 4, ticket_id = ticket_id_after_init + 6, current_lease = created_lease, container_units = 3, upgraded_duration_weeks = 2);
 
     val expected_lease = lease_data(
         container_name = container_name,
         cluster_name = cluster_name,
         container_units = 3, // Should be 3 now
         extra_storage_gib = 0,
-        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*5 + millis_per_week,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*5 + 2 * millis_per_week,
         expired = false,
         auto_renew = false,
         subnode_image_name = "",
@@ -563,15 +563,15 @@ function test_upgrade_container_fail_when_pending() {
     val created_lease = lease @ { container_name };
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, upgrade_container(container_name, 3, 0, cluster_name))
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, upgrade_container(container_name, 3, 0, cluster_name, 1))
     ).op(
-        upgrade_container(container_name, 3, 0, cluster_name)
+        upgrade_container(container_name, 3, 0, cluster_name, 1)
     ).run();
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, upgrade_container(container_name, 3, 0, cluster_name))
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, upgrade_container(container_name, 3, 0, cluster_name, 1))
     ).op(
-        upgrade_container(container_name, 3, 0, cluster_name)
+        upgrade_container(container_name, 3, 0, cluster_name, 1)
     ).run_must_fail("Container %s already has a pending upgrade".format(container_name));
 }
 
@@ -640,9 +640,9 @@ function test_upgrade_container_insufficient_funds() {
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 2);
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, upgrade_container(container_name, 10000, 0, cluster_name))
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, upgrade_container(container_name, 10000, 0, cluster_name, 1))
     ).op(
-        upgrade_container(container_name, 10000, 0, cluster_name)
+        upgrade_container(container_name, 10000, 0, cluster_name, 1)
     ).run_must_fail("Balance is too low");
 }
 
@@ -652,15 +652,15 @@ function test_upgrade_container_lower_total_storage() {
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 2);
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, upgrade_container(container_name, 1, 15, cluster_name))
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, upgrade_container(container_name, 1, 15, cluster_name, 1))
     ).op(
-        upgrade_container(container_name, 1, 15, cluster_name)
+        upgrade_container(container_name, 1, 15, cluster_name, 1)
     ).run_must_fail("Upgraded total storage must be greater or equal to current total storage.");
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, upgrade_container(container_name, 1, 16, cluster_name))
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, upgrade_container(container_name, 1, 16, cluster_name, 1))
     ).op(
-        upgrade_container(container_name, 1, 16, cluster_name),
+        upgrade_container(container_name, 1, 16, cluster_name, 1),
     ).run();
 }
 
@@ -702,9 +702,9 @@ function test_expire_lease_not_done_when_upgrade_is_pending() {
 
     // Make a pending upgrade
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, upgrade_container(container_name, 3, 0, cluster_name))
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, upgrade_container(container_name, 3, 0, cluster_name, 1))
     ).op(
-        upgrade_container(container_name, 3, 0, cluster_name)
+        upgrade_container(container_name, 3, 0, cluster_name, 1)
     ).run();
 
     assert_false(lease @ { container_name } (.expired));
@@ -732,7 +732,7 @@ function test_auth_messages() {
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 2);
 
     assert_equals(
-        upgrade_container_auth_message([container_name.to_gtv(), (2).to_gtv(), (0).to_gtv(), cluster_name.to_gtv()].to_gtv()),
+        upgrade_container_auth_message([container_name.to_gtv(), (2).to_gtv(), (0).to_gtv(), cluster_name.to_gtv(), (1).to_gtv()].to_gtv()),
         "Please sign the message\nto upgrade container container name\nto have 2 SCUs and 0 GiB extra storage\nin cluster Bob's cluster\nfor 1 weeks\ncosting (before applying refund of current lease) 70.000000 tCHR\non account {account_id}"
     );
 

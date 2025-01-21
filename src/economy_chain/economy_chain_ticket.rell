@@ -58,7 +58,6 @@ function receive_ticket_container_result_message(body: gtv) {
                     log("Successfully upgraded container %s for ticket %d".format(upgraded_container_name, message.ticket_id));
                     val current_lease = lease @ { .container_name == specific_ticket.container_name };
                     val currently_auto_renewed = current_lease.auto_renew;
-                    val current_duration = current_lease.duration_millis;
                     val bridge_leases = delete_bridge_leases(current_lease);
                     val lease_dapp_providers = delete_lease_dapp_providers(current_lease);
                     val maybe_lease_subnode_image = lease_subnode_image @? { current_lease };
@@ -77,7 +76,7 @@ function receive_ticket_container_result_message(body: gtv) {
                         extra_storage_gib = specific_ticket.extra_storage_gib,
                         cluster = cluster,
                         start_time = op_context.last_block_time,
-                        duration_millis = current_duration,
+                        duration_millis = specific_ticket.duration_weeks * millis_per_week,
                         auto_renew = currently_auto_renewed
                     );
                     if (current_subnode_image != null) {

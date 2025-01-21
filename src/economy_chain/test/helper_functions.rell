@@ -257,22 +257,23 @@ function do_upgrade_container(
     container_units: integer = 2,
     auto_renew: boolean = false,
     upgraded_container_name: text? = null,
-    upgraded_extra_storage_gib: integer = 0
+    upgraded_extra_storage_gib: integer = 0,
+    upgraded_duration_weeks: integer = 1
 ): text {
     val container_name = current_lease.container_name;
     val new_container_name = if (upgraded_container_name != null) upgraded_container_name else current_lease.container_name;
     val tag = cluster @ { .name == cluster_name }.tag;
 
-    val cost = calculate_container_cost(1, container_units, upgraded_extra_storage_gib, tag) - calculate_remaining_lease_value(current_lease, rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL * block_height);
+    val cost = calculate_container_cost(upgraded_duration_weeks, container_units, upgraded_extra_storage_gib, tag) - calculate_remaining_lease_value(current_lease, rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL * block_height);
 
     val initial_balance = get_account_balance(account);
     val initial_pool_balance = get_pool_balance();
     val initial_lease_investment = total_lease_investment();
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(keypair.priv, upgrade_container(container_name, container_units, upgraded_extra_storage_gib, cluster_name))
+        ft4.test_utils.evm_auth_operation_for(keypair.priv, upgrade_container(container_name, container_units, upgraded_extra_storage_gib, cluster_name, upgraded_duration_weeks))
     ).op(
-        upgrade_container(container_name, container_units, upgraded_extra_storage_gib, cluster_name)
+        upgrade_container(container_name, container_units, upgraded_extra_storage_gib, cluster_name, upgraded_duration_weeks)
     ).run();
     val tx_rid = transaction @ {} (@sort_desc @omit .rowid, .tx_rid) limit 1;
 
