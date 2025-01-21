@@ -232,15 +232,14 @@ function () = ft4.auth.add_auth_handler(
 function upgrade_container_auth_message(gtv): text {
     val args = struct<upgrade_container>.from_gtv(gtv);
     val lease = require_lease(args.container_name);
-    val lease_duration_in_weeks = lease.duration_millis / millis_per_week;
     val tag = require_cluster(args.upgraded_cluster_name).tag;
-    val cost = calculate_container_cost(lease_duration_in_weeks, args.upgraded_container_units, args.upgraded_extra_storage_gib, tag);
+    val cost = calculate_container_cost(args.upgraded_duration_weeks, args.upgraded_container_units, args.upgraded_extra_storage_gib, tag);
     return "Please sign the message\nto upgrade container %s\nto have %s SCUs and %s GiB extra storage\nin cluster %s\nfor %s weeks\ncosting (before applying refund of current lease) %s %s\non account {account_id}".format(
         args.container_name,
         args.upgraded_container_units,
         args.upgraded_extra_storage_gib,
         args.upgraded_cluster_name,
-        lease_duration_in_weeks,
+        args.upgraded_duration_weeks,
         ft4.assets.format_amount_with_decimals(cost, chain_context.args.asset_decimals),
         chain_context.args.asset_symbol
     );
@@ -257,9 +256,10 @@ function upgrade_container_auth_message(gtv): text {
  * @param upgraded_container_units The new number of container units for this container. Can both be increased and reduced.
  * @param upgraded_extra_storage_gib The new size of extra storage. This can only be increased, never reduced.
  * @param upgraded_cluster_name Move this container to a new cluster.
+ * @param upgraded_duration_weeks Duration for the new upgraded lease
  */
 operation upgrade_container(container_name: text, upgraded_container_units: integer,
-    upgraded_extra_storage_gib: integer, upgraded_cluster_name: text) {
+    upgraded_extra_storage_gib: integer, upgraded_cluster_name: text, upgraded_duration_weeks: integer) {
     require_initialized();
     val lease = require_lease(container_name);
     require(not has_pending_upgrade(container_name), "Container %s already has a pending upgrade".format(container_name));
@@ -267,6 +267,7 @@ operation upgrade_container(container_name: text, upgraded_container_units: inte
         upgraded_container_units != lease.container_units or upgraded_extra_storage_gib != lease.extra_storage_gib,
         "New container specifications are identical to current lease"
     );
+    require_lease_duration(upgraded_duration_weeks);
     val current_total_storage = lease.container_units * standard_cluster_unit.storage + lease.extra_storage_gib * 1024;
     val upgraded_total_storage = upgraded_container_units * standard_cluster_unit.storage + upgraded_extra_storage_gib * 1024;
     require(upgraded_total_storage >= current_total_storage, "Upgraded total storage must be greater or equal to current total storage. Did you reduce the number of container units without increasing extra storage?" );
@@ -279,7 +280,7 @@ operation upgrade_container(container_name: text, upgraded_container_units: inte
 
     val cluster = require_cluster(upgraded_cluster_name);
 
-    val cost = calculate_container_cost(lease.duration_millis / millis_per_week, upgraded_container_units, upgraded_extra_storage_gib, cluster.tag)
+    val cost = calculate_container_cost(upgraded_duration_weeks, upgraded_container_units, upgraded_extra_storage_gib, cluster.tag)
         - if (lease.expired) 0 else calculate_remaining_lease_value(lease, op_context.last_block_time);
     if (cost > 0) {
         ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), cost);
@@ -293,7 +294,8 @@ operation upgrade_container(container_name: text, upgraded_container_units: inte
         container_units = upgraded_container_units,
         extra_storage_gib = upgraded_extra_storage_gib,
         cost = cost,
-        cluster_name = cluster.name
+        cluster_name = cluster.name,
+        duration_weeks = upgraded_duration_weeks
     );
     send_message(upgrade_container_topic, upgrade_container_message(
         ticket_id = ticket.rowid.to_integer(),
