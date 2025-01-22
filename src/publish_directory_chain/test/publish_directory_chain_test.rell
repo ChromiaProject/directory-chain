@@ -1,0 +1,69 @@
+@test module;
+
+import ^.helpers.*;
+import ^^.*;
+
+function test_container_blockchain_update_message() {
+    val BLOCKCHAIN_RID_1 = byte_array.from_hex("F435688B2F74933C71F8AA1952E1CFBCDAA421EF378A441EFF4EC5900896F1FA");
+    val BLOCKCHAIN_RID_2 = byte_array.from_hex("2222688B2F74933C71F8AA1952E1CFBCDAA421EF378A441EFF4EC5900896F1FA");
+
+    val pubkey1 = rell.test.pubkeys.charlie;
+    val pubkey2 = rell.test.pubkeys.bob;
+
+    rell.test.tx().op(
+        create_container_from_container_name_op("container1", pubkey1),
+        create_container_from_container_name_op("container2", pubkey2),
+        create_blockchain_op(BLOCKCHAIN_RID_1," blockchain1"),
+        create_blockchain_op(BLOCKCHAIN_RID_2," blockchain2"),
+    ).run();
+
+    val container1 = container @ { "container1" };
+    val blockchain1 = blockchain @ { BLOCKCHAIN_RID_1};
+    val container2 = container @ { "container2" };
+    val blockchain2 = blockchain @ { BLOCKCHAIN_RID_2};
+
+    rell.test.tx().op(
+        create_container_blockchain_op(container1, blockchain1),
+        create_container_blockchain_op(container2, blockchain2),
+    ).run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = container_blockchain_update_topic,
+            body = container_blockchain_update_message(
+                container_name = "container1",
+                blockchain_rid = BLOCKCHAIN_RID_1,
+                deleted = false).to_gtv()).to_gtv_pretty()
+        ),
+        ("icmf_message", (
+            topic = container_blockchain_update_topic,
+            body = container_blockchain_update_message(
+            container_name = "container2",
+            blockchain_rid = BLOCKCHAIN_RID_2,
+            deleted = false).to_gtv()).to_gtv_pretty()
+        )
+    );
+    val container_blockchain1 = container_blockchain @ { container1 };
+
+    rell.test.tx().op(
+        delete_container_blockchain_op(container_blockchain1),
+        delete_container_blockchain_by_blockchain_op(blockchain2),
+    ).run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = container_blockchain_update_topic,
+            body = container_blockchain_update_message(
+            container_name = "container1",
+            blockchain_rid = BLOCKCHAIN_RID_1,
+            deleted = true).to_gtv()).to_gtv_pretty()
+        ),
+        ("icmf_message", (
+            topic = container_blockchain_update_topic,
+            body = container_blockchain_update_message(
+            container_name = "container2",
+            blockchain_rid = BLOCKCHAIN_RID_2,
+            deleted = true).to_gtv()).to_gtv_pretty()
+        )
+    );
+}

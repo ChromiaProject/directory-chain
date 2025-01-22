@@ -3,6 +3,9 @@
 import ^.helpers.*;
 import ^^.*;
 
+val BLOCKCHAIN_RID_1 = byte_array.from_hex("F435688B2F74933C71F8AA1952E1CFBCDAA421EF378A441EFF4EC5900896F1FA");
+val BLOCKCHAIN_RID_2 = byte_array.from_hex("2222688B2F74933C71F8AA1952E1CFBCDAA421EF378A441EFF4EC5900896F1FA");
+
 function test_resource_usage_statistics() {
     val node_pubkey1 = rell.test.pubkeys.charlie;
     val node_pubkey2 = rell.test.pubkeys.bob;
@@ -93,4 +96,96 @@ function test_update_resource_usage_statistics() {
 
     assert_equals(usage_statistics, [expected_usage_statistics]);
 
+}
+
+function test_get_excluded_blockchains() {
+    val node_pubkey1 = rell.test.pubkeys.charlie;
+    val node_pubkey2 = rell.test.pubkeys.bob;
+    val node_pubkey3 = rell.test.pubkeys.alice;
+    val node_pubkey4 = rell.test.pubkeys.trudy;
+    rell.test.tx().op(
+        handle_resource_usage_statistics_op(
+            node_pubkey1,
+            "container1",
+            1,
+            resource_type.space_usage_percentage,
+            9
+        ),
+        handle_resource_usage_statistics_op(
+            node_pubkey2,
+            "container1",
+            1,
+            resource_type.space_usage_percentage,
+            9
+        ),
+        handle_resource_usage_statistics_op(
+            node_pubkey3,
+            "container1",
+            1,
+            resource_type.space_usage_percentage,
+            10
+        ),
+        handle_resource_usage_statistics_op(
+            node_pubkey4,
+            "container1",
+            1,
+            resource_type.space_usage_percentage,
+            10
+        ),
+        handle_resource_usage_statistics_op(
+            node_pubkey1,
+            "container2",
+            1,
+            resource_type.space_usage_percentage,
+            9
+        ),
+        handle_resource_usage_statistics_op(
+            node_pubkey2,
+            "container2",
+            1,
+            resource_type.space_usage_percentage,
+            9
+        ),
+        handle_resource_usage_statistics_op(
+            node_pubkey3,
+            "container2",
+            1,
+            resource_type.space_usage_percentage,
+            9
+        ),
+        handle_resource_usage_statistics_op(
+            node_pubkey4,
+            "container2",
+            1,
+            resource_type.space_usage_percentage,
+            10
+        ),
+        create_container_blockchain_op("container1", BLOCKCHAIN_RID_1),
+        create_container_blockchain_op("container2", BLOCKCHAIN_RID_2)
+    ).run();
+
+    val excluded_blockchains = get_excluded_blockchains();
+
+    assert_equals(excluded_blockchains, [BLOCKCHAIN_RID_2]);
+}
+
+function test_container_blockchain_create_message() {
+    rell.test.tx().op(
+        receive_container_blockchain_update_op(x"", container_blockchain_update_topic, body = container_blockchain_update_message(
+            container_name = "container1", blockchain_rid = BLOCKCHAIN_RID_1, deleted = false).to_gtv())
+    ).run();
+
+    assert_not_null(container_blockchain @? {.container_name == "container1", .blockchain_rid == BLOCKCHAIN_RID_1});
+}
+
+function test_container_blockchain_delete_message() {
+    rell.test.tx().op(
+        create_container_blockchain_op("container1", BLOCKCHAIN_RID_1)
+    ).run();
+    rell.test.tx().op(
+        receive_container_blockchain_update_op(x"", container_blockchain_update_topic, body = container_blockchain_update_message(
+            container_name = "container1", blockchain_rid = BLOCKCHAIN_RID_1, deleted = true).to_gtv())
+    ).run();
+
+    assert_null(container_blockchain @? {.container_name == "container1", .blockchain_rid == BLOCKCHAIN_RID_1});
 }

@@ -95,7 +95,7 @@ function fetch_blocks_and_calculate_and_store_node_availability(start_time: inte
 
 function fetch_blocks_and_calculate_node_availability(start_time: integer, end_time: integer, block_range_size: integer): map<byte_array, decimal> {
     log("Calculating node availability, between timestamps %d and %d".format(start_time, end_time));
-    val anchored_blocks = anchor_block @* { .timestamp >= start_time, .timestamp < end_time }
+    val anchored_blocks = anchor_block @* { .timestamp >= start_time, .timestamp < end_time, .blockchain_rid not in get_excluded_blockchains() }
         (@sort @omit .timestamp, .blockchain_rid, .witness,
             primary_extra_header = block_header.from_gtv(gtv.from_bytes(.block_header)).extra.get_or_null(PRIMARY_HEADER_KEY)
         );

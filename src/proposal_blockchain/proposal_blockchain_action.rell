@@ -96,12 +96,12 @@ function _apply_unarchive_blockchain(action: pending_blockchain_action, proposal
         create blockchain_replica_node(action.blockchain, node);
     }
     // remove bc from container
-    delete container_blockchain @* { action.blockchain };
+    delete_container_blockchain_by_blockchain(action.blockchain);
 
     // add bc to the dst container
     val dst_container = require_container(args.destination_container);
     require_container_is_not_full(dst_container);
-    create container_blockchain(dst_container, action.blockchain);
+    create_container_blockchain(dst_container, action.blockchain);
     // remove dst cluster/container nodes from bc replicas
     val dst_nodes = cluster_node @* { dst_container.cluster } (@omit @sort .node.pubkey, .node);
     require(dst_nodes.size() > 0, "Cluster %s must have at least one node".format(dst_container.cluster.name));

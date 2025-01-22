@@ -59,3 +59,39 @@ struct container_resource_usage_statistics {
 query get_latest_resource_usage_statistics(container_name: text, resource_type: resource_type?, node_pubkey: pubkey?) {
     return resource_usage_statistics @* { container_name, resource_type == null or .resource_type == resource_type, node_pubkey == null or .node_pubkey == node_pubkey } ( container_resource_usage_statistics(.node_pubkey, .mesurement_time, .resource_type, .metric_value ));
 }
+
+@extend(receive_icmf_message) function receive_container_blockchain_update(sender: byte_array, topic: text, body: gtv) {
+    if (topic != container_blockchain_update_topic) return;
+    receive_container_blockchain_update_impl(body);
+}
+
+function receive_container_blockchain_update_impl(body: gtv){
+    val message = container_blockchain_update_message.from_gtv(body);
+    if (message.deleted) {
+        delete container_blockchain @* { message.container_name, message.blockchain_rid };
+    } else {
+        create container_blockchain(message.container_name, message.blockchain_rid);
+    }
+}
+
+//////////////////////////////////
+// directory-chain synced entities
+entity container_blockchain {
+    container_name: text;
+    blockchain_rid: byte_array;
+}
+
+function get_excluded_blockchains() {
+    val excluded_containers = list<text>();
+    val treshold = 10;
+    val space_usage_percentage_by_container = resource_usage_statistics @* { .resource_type == resource_type.space_usage_percentage} ( @group .container_name, @list .metric_value ) @ {} ( @map $ );
+    for (container in space_usage_percentage_by_container.keys()) {
+        val space_usage_percentage = space_usage_percentage_by_container[container];
+        val number_of_nodes_measuring = space_usage_percentage.size();
+        val low_treshold_nodes = space_usage_percentage @* { $ < treshold };
+        if (low_treshold_nodes.size() >= (number_of_nodes_measuring - (number_of_nodes_measuring - 1) / 3 )) {
+            excluded_containers.add(container);
+        }
+    }
+    return container_blockchain @* { .container_name in excluded_containers } ( .blockchain_rid );
+}
