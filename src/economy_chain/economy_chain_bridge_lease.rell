@@ -35,7 +35,7 @@ operation add_bridge_lease(container_name: text, blockchain_rid: byte_array, evm
     val account = ft4.auth.authenticate();
     require(lease.account == account, "Lease for container %s was not created by you".format(container_name));
     require((bridge_lease @* { lease }).size() < chain_context.args.max_bridge_leases_per_container, "Container lease already has max amount of bridge leases");
-    require(convert_chr_to_usd(get_account_balance(lease.account)) >= economy_constants.bridge_lease_add_min_balance_usd,
+    require(decimal(get_account_balance(lease.account)) / economy_constants.chr_per_usd >= economy_constants.bridge_lease_add_min_balance_usd,
         "An amount of %s is required on account to add a bridge lease".format(economy_constants.bridge_lease_add_min_balance_usd));
 
     require(

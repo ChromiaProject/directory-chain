@@ -61,6 +61,7 @@ struct module_args {
     dapp_provider_creation_cost: integer = 10000000; // 10 CHR
     container_removal_timeout: integer;
     migration_staking_account_state_send_limit: integer = 100;
+    token_rate_update_interval_ms: integer;
 }
 
 val units_per_asset = (10).pow(chain_context.args.asset_decimals);
@@ -81,7 +82,7 @@ operation init() {
     create_chromia_foundation_account();
 
     __staking_init();
-    price_oracle_init();
+    set_initial_token_rates();
 
     log("Economy chain was initialized");
 }
@@ -96,6 +97,7 @@ operation __begin_block(height: integer) {
         if (not try_call(delete_expired_leases(op_context.last_block_time, *))) log("Failed to delete expired leases.");
         if (not try_call(__staking_begin_block(height, *))) log("Failed staking begin block hook.");
         if (not try_call(__evm_links_begin_block(*))) log("Failed evm links begin block hook.");
+        if (not try_call(price_oracle_updates_begin_block(op_context.last_block_time, *))) log("Failed price oracle begin block hook.");
     }
 }
 

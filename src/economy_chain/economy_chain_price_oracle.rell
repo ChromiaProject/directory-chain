@@ -1,3 +1,49 @@
+function receive_price_oracle_update(sender: byte_array, body: gtv) {
+
+    require(exists(sender_blockchain @? { .name == blockchains.price_oracle_chain_name, .rid == sender }),
+        "Received price oracle message from sender: %s that is not tracked by economy chain.".format(sender));
+
+    val message = token_price_changed_body.from_gtv(body);
+
+    handle_price_oracle_update(message.symbol, message.name, message.price, message.tvl ?: 1.0);
+}
+
+function handle_price_oracle_update(symbol: text, name, price: decimal, tvl: decimal) {
+    require(price > 0, "Received incorrect rate from price oracle for %s (%s): %s".format(name, symbol, price));
+    require(tvl > 0, "Received incorrect tvl from price oracle for %s (%s): %s".format(name, symbol, tvl));
+
+    val price_oracle_update = price_oracle_update @? { .symbol == symbol };
+    if (price_oracle_update == null) {
+        create price_oracle_update(symbol = symbol, name = name, price_tvl = price * tvl, tvl);
+    } else {
+        price_oracle_update.price_tvl += price * tvl;
+        price_oracle_update.tvl += tvl;
+    }
+}
+
+function price_oracle_updates_begin_block(current_time_millis: integer) {
+    if (current_time_millis - price_oracle_update_state.last_update_millis > chain_context.args.token_rate_update_interval_ms) {
+        log("Updating token rates");
+        for (pou in price_oracle_update @* {}) {
+            val average_price = pou.price_tvl / pou.tvl;
+            set_token_rate(pou.symbol, pou.name, average_price);
+            delete pou;
+        }
+
+        price_oracle_update_state.last_update_millis = current_time_millis;
+    }
+}
+
+object price_oracle_update_state {
+    mutable last_update_millis: integer = 0;
+}
+
+entity price_oracle_update {
+    key symbol: text;
+    name: text;
+    mutable price_tvl: decimal;
+    mutable tvl: decimal;
+}
 
 // All currencies stored as usd-per-crypto (the opposite to chr_per_usd constant)
 entity price_oracle_rates {
@@ -12,27 +58,15 @@ struct price_oracle_rates_data {
     price: decimal;
 }
 
-function price_oracle_init() {
-
-    log("Initializing price oracle");
+function set_initial_token_rates() {
 
     // Set default values
-    set_price_oracle_rate("CHR", "Chromia - USD per CHR", 1 / economy_constants.chr_per_usd);
-    set_price_oracle_rate("ETH", "Ether - USD per ETH", 3375.0);
-    set_price_oracle_rate("BNB", "Binance - USD per BNB", 575.0);
+    set_token_rate("CHR", "Chromia - USD per CHR", 1 / economy_constants.chr_per_usd);
+    set_token_rate("ETH", "Ether - USD per ETH", 3375.0);
+    set_token_rate("BNB", "Binance - USD per BNB", 575.0);
 }
 
-function receive_price_oracle_update(sender: byte_array, body: gtv) {
-
-    require(exists(sender_blockchain @? { .name == blockchains.price_oracle_chain_name, .rid == sender }),
-        "Received price oracle message from sender: %s that is not tracked by economy chain.".format(sender));
-
-    val message = token_price_changed_body.from_gtv(body);
-
-    set_price_oracle_rate(message.symbol, message.name, message.price);
-}
-
-function set_price_oracle_rate(symbol: text, name, price: decimal) {
+function set_token_rate(symbol: text, name, price: decimal) {
 
     if (price > 0) {
 
@@ -63,7 +97,7 @@ query get_price_oracle_rates() {
     return price_oracle_rates @* {} (price_oracle_rates_data(.symbol, .name, .price));
 }
 
-function price_oracle_convert(
+function convert_token_rate(
     amount: big_integer,
     from_symbol: text,
     from_units: big_integer,
@@ -99,8 +133,3 @@ function price_oracle_convert(
 
     return null;
 }
-
-function convert_chr_to_usd(amount: big_integer) {
-    return decimal(amount) / economy_constants.chr_per_usd;
-}
-
