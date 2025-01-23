@@ -2,6 +2,7 @@
 
 import ^^.*;
 import ^.helper_functions.*;
+import ^.helper_operations.*;
 
 function test_propose_price_oracle_rate_require_system_provider_signer() {
 
@@ -37,19 +38,7 @@ function test_propose_price_oracle_rate_update_and_add_saucessfully() {
 
     add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
 
-    // Create sender
-    rell.test.tx().op(
-        icmf_message_op(x"", blockchain_rid_topic, body = blockchain_rid(rid = x"", name = blockchains.price_oracle_chain_name).to_gtv())
-    ).run();
-
-    // Create entity
-    rell.test.tx().op(
-        icmf_message_op(x"", token_price_changed_topic, body = token_price_changed_body(
-            symbol = "CHR",
-            name = "Chromia",
-            1.1
-        ).to_gtv())
-    ).run();
+    rell.test.tx().op(create_price_oracle_rates_op(symbol = "CHR", name = "Chromia", price = 1.1)).run();
 
     assert_equals(price_oracle_rates @ { .symbol == "CHR" } ( .price ), 1.1);
 
@@ -72,19 +61,7 @@ function test_get_price_oracle_rate_proposal() {
     add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
     add_provider(rell.test.keypairs.bob.pub, true, provider_tier.NODE_PROVIDER);
 
-    // Create sender
-    rell.test.tx().op(
-        icmf_message_op(x"", blockchain_rid_topic, body = blockchain_rid(rid = x"", name = blockchains.price_oracle_chain_name).to_gtv())
-    ).run();
-
-    // Create entity
-    rell.test.tx().op(
-        icmf_message_op(x"", token_price_changed_topic, body = token_price_changed_body(
-            symbol = "CHR",
-            name = "Chromia",
-            1.1
-        ).to_gtv())
-    ).run();
+    rell.test.tx().op(create_price_oracle_rates_op(symbol = "CHR", name = "Chromia", price = 1.1)).run();
 
     rell.test.tx().op(
         propose_price_oracle_rate([

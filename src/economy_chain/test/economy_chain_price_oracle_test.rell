@@ -4,51 +4,77 @@ import ^^.*;
 import ^.helper_operations.*;
 
 function test_receive_price_oracle_update() {
+    rell.test.tx().op(init()).run();
 
     val symbol = "tCHR";
-    val second_symbol = "BTC";
+    val second_symbol = "ETH";
 
     // Create sender
     rell.test.tx().op(
         icmf_message_op(x"", blockchain_rid_topic, body = blockchain_rid(rid = x"", name = blockchains.price_oracle_chain_name).to_gtv())
     ).run();
 
+    rell.test.block().run();
+
     // Create entity
     rell.test.tx().op(
         icmf_message_op(x"", token_price_changed_topic, body = token_price_changed_body(
             name = "N1",
             symbol = symbol,
-            1.1
+            price = 2.0,
+            tvl = 2.0,
         ).to_gtv())
     ).run();
 
-    assert_equals(price_oracle_rates @ { .symbol == symbol } ( .price ), 1.1);
-    assert_equals(economy_constants.chr_per_usd, 0.90909090909090909091); // Inverted to chr per usd
+    assert_equals(price_oracle_update @? { .symbol == symbol } ( .price_tvl ), 4.0);
+    assert_equals(price_oracle_update @? { .symbol == symbol } ( .tvl ), 2.0);
+
+    // Not updated yet
+    assert_null(price_oracle_rates @? { .symbol == symbol });
+    assert_equals(economy_constants.chr_per_usd, 5);
 
     // Update entity
     rell.test.tx().op(
         icmf_message_op(x"", token_price_changed_topic, body = token_price_changed_body(
             name = "N1",
             symbol = symbol,
-            1.123456
+            price = 3.0,
+            tvl = 6.0,
         ).to_gtv())
     ).run();
 
-    assert_equals(price_oracle_rates @ { .symbol == symbol } ( .price ), 1.123456);
-    assert_equals(economy_constants.chr_per_usd, 0.890110516121681668);
+    assert_equals(price_oracle_update @? { .symbol == symbol } ( .price_tvl ), 22);
+    assert_equals(price_oracle_update @? { .symbol == symbol } ( .tvl ), 8);
+
+    // Not updated yet
+    assert_null(price_oracle_rates @? { .symbol == symbol });
+    assert_equals(economy_constants.chr_per_usd, 5);
+
+    rell.test.set_next_block_time_delta(61000);
+    rell.test.block().run();
+    rell.test.block().run();
+
+    assert_equals(price_oracle_rates @ { .symbol == symbol } ( .price ), 2.75);
+    assert_equals(economy_constants.chr_per_usd, 0.36363636363636363636);
+    assert_null(price_oracle_update @? { .symbol == symbol });
 
     // Create a second entity - keeps the first one unchanged
     rell.test.tx().op(
         icmf_message_op(x"", token_price_changed_topic, body = token_price_changed_body(
             name = "N2",
             symbol = second_symbol,
-            3.4
+            price = 3.4,
+            tvl = 2.0,
         ).to_gtv())
     ).run();
 
+    rell.test.set_next_block_time_delta(61000);
+    rell.test.block().run();
+    rell.test.block().run();
+
     assert_equals(price_oracle_rates @ { .symbol == second_symbol } ( .price ), 3.4);
-    assert_equals(price_oracle_rates @ { .symbol == symbol } ( .price ), 1.123456);
-    assert_equals(economy_constants.chr_per_usd, 0.890110516121681668);
+    assert_equals(price_oracle_rates @ { .symbol == symbol } ( .price ), 2.75);
+    assert_equals(economy_constants.chr_per_usd, 0.36363636363636363636);
 }
 
 function test_receive_price_oracle_update_invalid_sender() {
@@ -57,7 +83,8 @@ function test_receive_price_oracle_update_invalid_sender() {
         icmf_message_op(x"", token_price_changed_topic, body = token_price_changed_body(
             name = "Chromia",
             symbol = "CHR",
-            1.1
+            price = 1.1,
+            tvl = 1.0,
         ).to_gtv())
     ).run_must_fail("0x that is not tracked by economy chain");
 }
@@ -69,12 +96,7 @@ function test_price_oracle_convert() {
         create_price_oracle_rates_op("ETH", "Ether", 2.00)
     ).run();
 
-    assert_null(price_oracle_convert(6L * units_per_txs_evm_cost, "no", units_per_txs_evm_cost, "CHR", units_per_asset));
-    assert_equals(price_oracle_convert(6L * units_per_txs_evm_cost, "ETH", units_per_txs_evm_cost, "CHR", units_per_asset), 12000000);
-    assert_equals(price_oracle_convert(12000000, "CHR", units_per_asset, "ETH", units_per_txs_evm_cost), 6L * units_per_txs_evm_cost);
-}
-
-function test_convert_chr_to_usd() {
-
-    assert_equals(convert_chr_to_usd(30), 6);
+    assert_null(convert_token_rate(6L * units_per_txs_evm_cost, "no", units_per_txs_evm_cost, "CHR", units_per_asset));
+    assert_equals(convert_token_rate(6L * units_per_txs_evm_cost, "ETH", units_per_txs_evm_cost, "CHR", units_per_asset), 12000000);
+    assert_equals(convert_token_rate(12000000, "CHR", units_per_asset, "ETH", units_per_txs_evm_cost), 6L * units_per_txs_evm_cost);
 }
