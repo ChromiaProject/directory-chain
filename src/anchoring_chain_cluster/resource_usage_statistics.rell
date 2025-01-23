@@ -83,13 +83,12 @@ entity container_blockchain {
 
 function get_excluded_blockchains() {
     val excluded_containers = list<text>();
-    val treshold = 10;
     val space_usage_percentage_by_container = resource_usage_statistics @* { .resource_type == resource_type.space_usage_percentage} ( @group .container_name, @list .metric_value ) @ {} ( @map $ );
     for (container in space_usage_percentage_by_container.keys()) {
         val space_usage_percentage = space_usage_percentage_by_container[container];
         val number_of_nodes_measuring = space_usage_percentage.size();
-        val low_treshold_nodes = space_usage_percentage @* { $ < treshold };
-        if (low_treshold_nodes.size() >= (number_of_nodes_measuring - (number_of_nodes_measuring - 1) / 3 )) {
+        val number_of_nodes_exceeding_threshold = space_usage_percentage @* { $ > chain_context.args.space_usage_percentage_threshold };
+        if (number_of_nodes_exceeding_threshold.size() >= (number_of_nodes_measuring - (number_of_nodes_measuring - 1) / 3 )) {
             excluded_containers.add(container);
         }
     }

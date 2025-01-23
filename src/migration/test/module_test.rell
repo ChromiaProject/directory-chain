@@ -7,6 +7,7 @@ import common.*;
 import common.test.setup.*;
 import roles.test.ops.*;
 import common.test.helper_operations.*;
+import publish_directory_chain.test.helpers.*;
 
 function test_migrate_provider_keys() {
 
@@ -46,4 +47,60 @@ function test_migrate_provider_keys() {
         provider_is_signer_op(rell.test.keypairs.alice.pub, [provider_key_role.main]),
         provider_is_signer_op(rell.test.keypairs.alice.pub, [provider_key_role.main, provider_key_role.configuration_proposal_vote]),
     ).sign(rell.test.keypairs.alice).run();
+}
+
+function test_send_container_blockchain_messages() {
+    val BLOCKCHAIN_RID_1 = byte_array.from_hex("F435688B2F74933C71F8AA1952E1CFBCDAA421EF378A441EFF4EC5900896F1FA");
+    val BLOCKCHAIN_RID_2 = byte_array.from_hex("2222688B2F74933C71F8AA1952E1CFBCDAA421EF378A441EFF4EC5900896F1FA");
+
+    val pubkey1 = rell.test.pubkeys.charlie;
+    val pubkey2 = rell.test.pubkeys.bob;
+
+    rell.test.tx().op(
+        create_container_from_container_name_op("container1", pubkey1),
+        create_container_from_container_name_op("container2", pubkey2),
+        create_blockchain_op(BLOCKCHAIN_RID_1," blockchain1"),
+        create_blockchain_op(BLOCKCHAIN_RID_2," blockchain2"),
+    ).run();
+
+    val container1 = container @ { "container1" };
+    val blockchain1 = blockchain @ { BLOCKCHAIN_RID_1};
+    val container2 = container @ { "container2" };
+    val blockchain2 = blockchain @ { BLOCKCHAIN_RID_2};
+
+    rell.test.tx().op(
+        create_container_blockchain_op(container1, blockchain1),
+        create_container_blockchain_op(container2, blockchain2),
+        set_send_container_blockchain_messages_false()
+    ).run();
+
+    rell.test.tx().op(
+        begin_block_migration_op()
+    ).run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = container_blockchain_update_topic,
+            body = container_blockchain_update_message(
+            container_name = "container1",
+            blockchain_rid = BLOCKCHAIN_RID_1,
+            deleted = false).to_gtv()).to_gtv_pretty()
+        ),
+        ("icmf_message", (
+            topic = container_blockchain_update_topic,
+            body = container_blockchain_update_message(
+            container_name = "container2",
+            blockchain_rid = BLOCKCHAIN_RID_2,
+            deleted = false).to_gtv()).to_gtv_pretty()
+        )
+    );
+
+    assert_true(migration_completed.send_container_blockchain_messages);
+
+    rell.test.tx().op(
+        begin_block_migration_op()
+    ).nop().run();
+
+    assert_events();
+
 }
