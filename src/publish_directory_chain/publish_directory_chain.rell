@@ -1,0 +1,21 @@
+@extend(after_create_container_blockchain) function(container, blockchain) {
+    send_container_blockchain_message(container, blockchain, false);
+}
+
+@extend(before_delete_container_blockchain) function(container_blockchain) {
+    send_container_blockchain_message(container_blockchain.container, container_blockchain.blockchain, true);
+}
+
+@extend(before_delete_container_blockchain_by_blockchain) function(container_blockchain_list: list<container_blockchain>) {
+    for (container_blockchain in container_blockchain_list) {
+        send_container_blockchain_message(container_blockchain.container, container_blockchain.blockchain, true);
+    }
+}
+
+function send_container_blockchain_message(container, blockchain, deleted: boolean) {
+    send_message(container_blockchain_update_topic, container_blockchain_update_message(
+        container.name,
+        blockchain.rid,
+        deleted
+    ).to_gtv());
+}

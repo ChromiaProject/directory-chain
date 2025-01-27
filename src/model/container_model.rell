@@ -28,6 +28,27 @@ entity container_blockchain {
     key container, blockchain; 
 }
 
+function create_container_blockchain(container, blockchain) {
+    create container_blockchain(container, blockchain);
+    after_create_container_blockchain(container, blockchain);
+}
+
+@extendable function after_create_container_blockchain(container, blockchain) {}
+
+function delete_container_blockchain(container_blockchain) {
+    before_delete_container_blockchain(container_blockchain);
+    delete container_blockchain;
+}
+
+@extendable function before_delete_container_blockchain(container_blockchain) {}
+
+function delete_container_blockchain_by_blockchain(blockchain) {
+    before_delete_container_blockchain_by_blockchain(container_blockchain @* { blockchain });
+    delete container_blockchain @* { blockchain };
+}
+
+@extendable function before_delete_container_blockchain_by_blockchain(container_blockchain_list: list<container_blockchain>) {}
+
 object standard_container_unit {
     mutable cpu: integer = 50; // Percent of cpus, i.e. 50 = 0.5 vCPU
     mutable ram: integer = 2048; // MiB

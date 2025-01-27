@@ -88,6 +88,59 @@ function test_fetch_blocks_and_calculate_node_availability_given_one_blockchain_
     assert_equals(node_availability, expected_node_availability);
 }
 
+function test_fetch_blocks_and_calculate_node_availability_given_excluded_blockchains() {
+    val node_pubkey1 = rell.test.pubkeys.charlie;
+    val node_pubkey2 = rell.test.pubkeys.bob;
+    val node_pubkey3 = rell.test.pubkeys.alice;
+    val node_pubkey4 = rell.test.pubkeys.trudy;
+    val BLOCKCHAIN_RID_1 = byte_array.from_hex("F435688B2F74933C71F8AA1952E1CFBCDAA421EF378A441EFF4EC5900896F1FA");
+    rell.test.tx().op(
+        handle_resource_usage_statistics_op(
+            node_pubkey1,
+            "container1",
+            1,
+            resource_type.space_usage_percentage,
+            91
+        ),
+        handle_resource_usage_statistics_op(
+            node_pubkey2,
+            "container1",
+            1,
+            resource_type.space_usage_percentage,
+            91
+        ),
+        handle_resource_usage_statistics_op(
+            node_pubkey3,
+            "container1",
+            1,
+            resource_type.space_usage_percentage,
+            91
+        ),
+        handle_resource_usage_statistics_op(
+            node_pubkey4,
+            "container1",
+            1,
+            resource_type.space_usage_percentage,
+            91
+        ),
+        create_container_blockchain_op("container1", BLOCKCHAIN_RID_1)
+    ).run();
+    rell.test.tx().op(
+        create_anchor_block(
+            blockchain_rid = BLOCKCHAIN_RID_1,
+            block_height = 0,
+            timestamp = 10,
+            block_rid = BLOCK_RID_1,
+            block_header = BLOCK_HEADER_1,
+            witness = WITNESS_COUNT_4,
+            anchoring_tx_op_index = 0),
+    ).run();
+
+    val node_availability = fetch_blocks_and_calculate_node_availability(9, 12, 1);
+
+    assert_equals(node_availability, map<byte_array, decimal>());
+}
+
 function test_fetch_and_aggregate_node_availability_given_two_blockchains_and_four_nodes() {
     rell.test.tx().op(
         create_anchor_block(
