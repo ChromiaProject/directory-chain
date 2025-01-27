@@ -43,7 +43,12 @@ We use the following syntax for semver: a.b.c
 - b: minor version / api version
 - c: patch version / internal changes to the source code
 
-## ICMF
+# Cross-chain Communication
+
+By default, blockchains in the Chromia ecosystem cannot transact directly with one another. Chromia provides two 
+facilities for communication between blockchains.
+
+## Inter-Chain Messaging Facility (ICMF)
 
 To include the ICMF module in your rell project, specify in your config file:
 ```yaml
@@ -56,7 +61,7 @@ libs:
 ```
 Then use `chr install` to install the icmf-library.
 
-## ICCF
+## Inter-Chain Confirmation Facility (ICCF)
 
 To include the ICCF module in your rell project, specify in your config file:
 ```yaml
