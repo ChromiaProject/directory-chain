@@ -234,12 +234,14 @@ function test_forced_configuration() {
     val bc = blockchain @ { .name == "foo_chain" };
     assert_equals(bc.state, blockchain_state.RUNNING);
 
+    conf["nonce"] = (10).to_gtv();
+    conf["name"] = "testConf".to_gtv();
+    force_config(bc.rid, conf, 10).run_must_fail("Forcing configuration only allowed on PAUSED blockchains.");
+
     alice_proposes_action(bc, blockchain_action.pause);
     bob_votes();
     assert_equals(bc.state, blockchain_state.PAUSED);
 
-    conf["nonce"] = (10).to_gtv();
-    conf["name"] = "testConf".to_gtv();
     force_config(bc.rid, conf, 10).run();
     val fcp = get_forced_configuration_proposal_v64(null)!!;
     assert_equals(fcp.blockchain_rid, bc.rid);
