@@ -92,5 +92,9 @@ function get_excluded_blockchains() {
             excluded_containers.add(container);
         }
     }
-    return container_blockchain @* { .container_name in excluded_containers } ( .blockchain_rid );
+    val result = container_blockchain @* { .container_name in excluded_containers } ( .blockchain_rid );
+    if (not result.empty()) {
+        log("This blockchains are excluded from availability calculation due to low free storage space: %s".format(result));
+    }
+    return result;
 }
