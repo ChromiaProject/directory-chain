@@ -1,23 +1,10 @@
 // The main entry point to the configuration updates handling
 function handle_configuration_update() {
-    _try_to_update_bsc_asset();
+    _try_to_update_assets();
 }
 
-function _try_to_update_bsc_asset() {
+function _try_to_update_assets() {
     val asset = get_asset();
 
-    val expected_bsc_asset = eif.hbridge.get_erc20_for_asset(asset.id) @? {
-        .network_id == chain_context.args.bsc_asset_network_id,
-        .token_address == chain_context.args.bsc_asset_address
-    };
-
-    if (empty(expected_bsc_asset)) {
-        eif.hbridge.register_erc20_asset(
-            chain_context.args.bsc_asset_network_id,
-            chain_context.args.bsc_asset_address,
-            asset,
-            // Should be native for mainnet
-            eif.hbridge.bridge_mode.foreign
-        );
-    }
+    register_and_link_bridge_and_erc20_asset(asset);
 }
