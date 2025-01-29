@@ -78,6 +78,7 @@ operation init() {
 
     __staking_init();
     set_initial_token_rates();
+    set_initial_config_hash(chain_context.raw_config.hash());
 
     log("Economy chain was initialized");
 }
@@ -87,7 +88,7 @@ operation __begin_block(height: integer) {
     do_migrations();
 
     if (state.initialized) {
-        handle_configuration_update();
+        if (not try_call(handle_configuration_update(*))) log("Handling configuration update failed");
         if (not try_call(expire_leases(op_context.last_block_time, *))) log("Failed lease expiry.");
         if (not try_call(delete_expired_leases(op_context.last_block_time, *))) log("Failed to delete expired leases.");
         if (not try_call(__staking_begin_block(height, *))) log("Failed staking begin block hook.");

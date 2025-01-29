@@ -1,6 +1,18 @@
+object configuration_state {
+    mutable config_hash: byte_array = x"";
+}
+
+function set_initial_config_hash(config_hash: byte_array) {
+    configuration_state.config_hash = config_hash;
+}
+
 // The main entry point to the configuration updates handling
 function handle_configuration_update() {
-    _try_to_update_assets();
+    val current_config_hash = chain_context.raw_config.hash();
+    if (current_config_hash != configuration_state.config_hash) {
+        configuration_state.config_hash = current_config_hash;
+        _try_to_update_assets();
+    }
 }
 
 function _try_to_update_assets() {
