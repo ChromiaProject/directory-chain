@@ -5,6 +5,8 @@ entity pending_cluster {
     governor_voter_set_name: text;
     voter_set_name: text;
     cluster_units: integer;
+
+    /** extra storage in MiB */
     extra_storage: integer;
     proposal: common_proposal;
     mutable status: pending_cluster_status;
@@ -13,6 +15,9 @@ entity pending_cluster {
 @extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_cluster_create.name: apply_cluster_create(*)];
 @extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_cluster_create.name: cleanup_pending_cluster_create(*)];
 
+/**
+ * @param extra_storage MiB
+ */
 operation create_cluster(
     name,
     governor_voter_set_name: text,
