@@ -49,6 +49,9 @@ function require_cluster_extra_storage(cluster, wanted_extra_storage: integer) {
     }
 }
 
+/**
+ * @return extra storage in MiB
+ */
 function get_available_extra_storage(cluster): integer {
     return cluster.extra_storage - get_used_extra_storage_for_cluster(cluster);
 }
@@ -75,10 +78,16 @@ function get_minimum_cluster_units_for_current_container_units(cluster): integer
     return currently_used_container_units / standard_cluster_unit.container_units + 1;
 }
 
+/**
+ * @return extra storage in MiB
+ */
 function get_minimum_extra_storage_for_clusters(clusters: list<cluster>): integer {
     return clusters @ {} (@sum .extra_storage);
 }
 
+/**
+ * @return extra storage in MiB
+ */
 function get_used_extra_storage_for_cluster(cluster): integer {
     return container_resource_limit @ {
         .container.cluster == cluster,
