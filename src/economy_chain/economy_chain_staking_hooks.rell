@@ -1,3 +1,28 @@
+// Oracles
+
+/**
+ * 
+ * Called by a trusted staking oracle to tell us when a withdrawal request has been made on an EVM chain.
+ * 
+ * Performs the same logic as a native withdrawal request.
+ * 
+ * @param from EVM address making the withdrawal request
+ * @param network_id Chain ID of the EVM chain the withdrawal request was detected on
+ */
+operation staking_oracle_withdrawal_request(from: byte_array, network_id: integer) {
+    require_staking_oracle();
+
+    val ft4_account = eif.hbridge.find_ft4_account_for_address(from, network_id);
+
+    if (exists(ft4_account)) {
+        val current_network = _staking_network_id_to_enum(network_id);
+        _staking_request_withdrawal(ft4_account, current_network);
+    }
+}
+
+
+// Provider Actions
+
 @extend(remove_provider_handler)
 function(
     provider
@@ -14,6 +39,9 @@ function(pay_reward_result, has_delegation_share: boolean) {
         }
     }
 }
+
+
+// Block Actions
 
 function __staking_begin_block(height: integer) {
     if (
@@ -61,3 +89,8 @@ function __staking_begin_block_withdrawals() : unit {
 function __staking_init() {
     create provider ( get_null_account(), system = true, provider_tier.NODE_PROVIDER, active = true );
 }
+
+
+// Helpers
+
+function require_staking_oracle() =require(op_context.is_signer(chain_context.args.staking_oracle_pubkey), "Expected staking oracle signature");

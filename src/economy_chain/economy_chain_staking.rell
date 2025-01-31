@@ -60,6 +60,11 @@ function _staking_deposit_native_impl(amount: integer, delegate_to: pubkey? = nu
     if (delegate_to != null) {
         // Down this path everything is updated anyway
         _staking_delegate(staker, delegate_to);
+    } else {
+        // Deactivate withdraw requests in any case
+        update staker_withdrawal_request @* {
+             .active and .staker_state.network == network.CHR and .staker_state.account == staker
+        } ( .active = false );
     }
 
     publish_staking_state(staker);
@@ -117,13 +122,6 @@ function _staking_update_evm_state(staker: ft4.accounts.account, network, new_ba
     // Handle the balance disappearing, eg. a withdrawal
     if (0 == new_balance) {
         log("Detected an EVM withdrawal for %s on network %s".format(staker.id, network));
-        update staker_withdrawal_request @* {
-                .active
-            and .staker_state.network == network
-            and .staker_state == ss
-        } (
-            .active = false
-        );
 
         // Immediately delegate to null
         val current_delegate = staking_get_current_delegate_on_network(ss.account.id, network);
@@ -135,6 +133,14 @@ function _staking_update_evm_state(staker: ft4.accounts.account, network, new_ba
         );
         _staking_clear_upcoming_delegations(staker);
     }
+
+    update staker_withdrawal_request @* {
+            .active
+        and .staker_state.network == network
+        and .staker_state == ss
+    } (
+        .active = false
+    );
 
     ss.balance = new_balance;
     publish_staking_state(staker);
@@ -156,6 +162,19 @@ function _staking_request_withdrawal(user: ft4.accounts.account, _network: netwo
         require(not exists(active_withdraw_request), "Only one withdrawal request allowed at a time");
     }
     require(ss.balance > 0, "Balance must be over 0");
+
+    // Clear future delegation states (not the current one)
+    delete staker_state_to_provider @* { .staker_state == ss and .timestamp > _staking_last_known_time() };
+
+    // Update appropriate staker states with null provider
+    val null_provider = require(provider @? { get_null_account() }, "No provider for this public key.");
+    val current_delegate = staking_get_current_delegate_on_network(user.id, _network);
+    create staker_state_to_provider (
+        timestamp = _staking_last_known_time() + chain_context.args.staking_delegation_delay_ms,
+        staker_state = ss,
+        provider = null_provider,
+        previous_provider = provider @ { current_delegate ?: get_null_account() },
+    );
 
     // Let's consolidate as we've touched the delegation state
     _update_pending_token_time(ss);
@@ -199,15 +218,6 @@ function _staking_distribute_withdrawals() {
                 withdrawal.staker_state.balance
             );
         log("Withdrawal of amount %s sent back to %s.".format(withdrawal.staker_state.balance, withdrawal.staker_state.account));
-
-        // Immediately delegate to null
-        val current_delegate = staking_get_current_delegate_on_network(withdrawal.staker_state.account.id, network.CHR);
-        create staker_state_to_provider (
-            timestamp = _staking_last_known_time(),
-            staker_state = withdrawal.staker_state,
-            provider = provider @ { get_null_account() },
-            previous_provider = provider @ { current_delegate ?: get_null_account() },
-        );
     }
 
     update staker_states ( .balance = 0 );
