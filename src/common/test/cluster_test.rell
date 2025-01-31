@@ -198,3 +198,69 @@ function test_add_another_providers_node_to_a_cluster_fails() {
         add_node_to_cluster(rell.test.pubkeys.bob, test_node.pubkey, "cluster1")
     ).sign(rell.test.keypairs.bob).run_must_fail("It is only allowed to add own node to a cluster");
 }
+
+function test_propose_cluster_limits__units_limits() {
+    setup_module();
+
+    // Adding a new cluster
+    rell.test.tx().op(
+        create_cluster(rell.test.pubkeys.alice, "cluster1", voter_sets.system_p, list())
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Asserting cluster1 added
+    val cluster1 = cluster @? { .name == "cluster1" };
+    assert_not_null(cluster1);
+    assert_equals(cluster1.cluster_units, 1);
+
+    val container_units_available = standard_cluster_unit.container_units - system_container_defaults.container_units;
+
+    // Adding with total - 5 container units
+    rell.test.tx().op(
+        create_container_with_resource_limits(
+            rell.test.pubkeys.alice, "container1", cluster1.name, -1, [rell.test.pubkeys.alice],
+        map([container_resource_limit_type.container_units: container_units_available - 5]))
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Test update cluster units
+    rell.test.tx().op(
+        propose_cluster_limits(rell.test.pubkeys.alice, "cluster1"), // no change is fine
+        propose_cluster_limits(rell.test.pubkeys.alice, "cluster1", cluster_units = 2), // increase is fine
+        propose_cluster_limits(rell.test.pubkeys.alice, "cluster1", cluster_units = 1), // decrease is fine
+        propose_remove_container(rell.test.pubkeys.alice, "container1"),
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Adding container with all units occupied
+    rell.test.tx().op(
+        propose_cluster_limits(rell.test.pubkeys.alice, "cluster1", cluster_units = 1),
+        create_container_with_resource_limits(
+            rell.test.pubkeys.alice, "container2", cluster1.name, -1, [rell.test.pubkeys.alice],
+            map([container_resource_limit_type.container_units: container_units_available]))
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Test update cluster units
+    rell.test.tx().op(
+        propose_cluster_limits(rell.test.pubkeys.alice, "cluster1"), // no change is fine
+        propose_cluster_limits(rell.test.pubkeys.alice, "cluster1", cluster_units = 2), // increase is fine
+        propose_cluster_limits(rell.test.pubkeys.alice, "cluster1", cluster_units = 1), // decrease from 2 is fine
+        propose_remove_container(rell.test.pubkeys.alice, "container2"),
+    ).sign(rell.test.keypairs.alice).nop().run();
+
+    // Adding container which will make the cluster occupy more than 1 cluster unit
+    rell.test.tx().op(
+        propose_cluster_limits(rell.test.pubkeys.alice, "cluster1", cluster_units = 2),
+        create_container_with_resource_limits(
+            rell.test.pubkeys.alice, "container3", cluster1.name, -1, [rell.test.pubkeys.alice],
+            map([container_resource_limit_type.container_units: container_units_available+ 3]))
+    ).sign(rell.test.keypairs.alice).nop().run();
+
+    // Test update cluster units
+    rell.test.tx().op(
+        propose_cluster_limits(rell.test.pubkeys.alice, "cluster1"), // no change is fine
+        propose_cluster_limits(rell.test.pubkeys.alice, "cluster1", cluster_units = 3), // increase is fine
+        propose_cluster_limits(rell.test.pubkeys.alice, "cluster1", cluster_units = 2), // decrease from 2 is fine
+    ).sign(rell.test.keypairs.alice).nop().run();
+
+    rell.test.tx().op(
+        propose_cluster_limits(rell.test.pubkeys.alice, "cluster1", cluster_units = 1), // decrease from 2 must fail
+    ).sign(rell.test.keypairs.alice).nop().run_must_fail("Minimum cluster_units is 2");
+}
