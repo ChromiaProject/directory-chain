@@ -7,7 +7,7 @@ val iccf_description = "Proposed via ICCF";
 
 /**
  * Make it possible to use an operation from another blockchain to authenticate this provider.
- * The provider needs to sign this transaction (but not subsequent operation which are authenticated by the other blockchain).
+ * The provider needs to sign this transaction (but not subsequent operations which are authenticated by the other blockchain).
  *
  * @param blockchain_rid   the other blockchain
  */
@@ -24,13 +24,14 @@ operation add_provider_blockchain_auth(blockchain_rid: byte_array) {
 
 /**
  * Make it no longer possible to use the operation from the blockchain to authenticate this provider.
+ * The transaction needs to include ICCF proof of `tx_to_prove`.
  *
  * @param tx_to_prove      the transaction from other chain to use for authentication
  * @param op_index         index of the relevant operation in tx_to_prove
- * @param provider_pubkey  pubkey identifying the provider
+ * @param my_pubkey        pubkey of provider
  */
-operation remove_provider_blockchain_auth(tx_to_prove: gtx_transaction, op_index: integer, provider_pubkey: pubkey) {
-    val provider = require_provider(provider_pubkey);
+operation remove_provider_blockchain_auth(tx_to_prove: gtx_transaction, op_index: integer, my_pubkey: pubkey) {
+    val provider = require_provider(my_pubkey);
     require_provider_with_iccf_proof_and_rate_limit(tx_to_prove, op_index,
         rell.meta(remove_provider_blockchain_auth).mount_name, 0,
         provider);
