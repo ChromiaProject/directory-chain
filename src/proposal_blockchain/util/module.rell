@@ -18,6 +18,9 @@ struct module_args {
 
     /** When `true` it will reject all chain configs with a negative eif `skip_to_height` value. */
     require_positive_eif_skip_to_height: boolean = true;
+
+    /** When set require the specific EIF snapshot version in chain configs, or accept any version when null */
+    require_eif_snapshot_version: integer? = null;
 }
 
 function validate_blockchain_configuration(container, config_data: byte_array, signers: boolean, header_hash: boolean, system_chain: boolean) {
@@ -210,9 +213,17 @@ function validate_eif(config_map: map<text, gtv>) {
             for (chain_name in chains.keys()) {
                 val chain_map = map<text, gtv>.from_gtv(chains[chain_name]);
                 if (chain_map.contains("skip_to_height")) {
-                    require(integer.from_gtv(chain_map["skip_to_height"]) >= 0, "EIF skip_to_height for %s can't be negative".format(chain_name));
+                    require(integer.from_gtv(chain_map["skip_to_height"]) >= 0,
+                        "EIF skip_to_height for %s can't be negative".format(chain_name));
                 }
             }
+        }
+    }
+    if (chain_context.args.require_eif_snapshot_version != null) {
+        val snapshot_version = extract_config_path(config_map, ["eif", "snapshot"])?.get("version");
+        if (snapshot_version != null) {
+            require(integer.from_gtv(snapshot_version) == chain_context.args.require_eif_snapshot_version,
+                "EIF snapshot version must be version %d".format(chain_context.args.require_eif_snapshot_version));
         }
     }
 }
