@@ -118,6 +118,15 @@ function test_blockchain_configuration_validation() {
         propose_blockchain(alice.pubkey, conf3.to_gtv().to_bytes(), "foo_chain", container)
     ).sign(rell.test.keypairs.alice)
         .run_must_fail("EIF skip_to_height for ethereum can't be negative");
+
+    val conf4 = apply_required_configuration_properties();
+    conf4["eif"] = ["snapshot": [
+        "version": 2
+    ]].to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf4.to_gtv().to_bytes(), "foo_chain", container)
+    ).sign(rell.test.keypairs.alice)
+        .run_must_fail("EIF snapshot version must be version 1");
 }
 
 function test_propose_configuration() {
