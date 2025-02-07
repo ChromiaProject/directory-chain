@@ -107,6 +107,17 @@ function test_blockchain_configuration_validation() {
         propose_blockchain(alice.pubkey, conf2.to_gtv().to_bytes(), "foo_chain", container)
     ).sign(rell.test.keypairs.alice)
         .run_must_fail("Some of the configured synchronization infrastructure extensions are not in the allowed set");
+
+    val conf3 = apply_required_configuration_properties();
+    conf3["eif"] = ["chains": [
+        "bsc": ["skip_to_height": 100],
+        "base": ["evm_read_offset": 0],
+        "ethereum": ["skip_to_height": -100]
+    ]].to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf3.to_gtv().to_bytes(), "foo_chain", container)
+    ).sign(rell.test.keypairs.alice)
+        .run_must_fail("EIF skip_to_height for ethereum can't be negative");
 }
 
 function test_propose_configuration() {

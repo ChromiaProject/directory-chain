@@ -15,6 +15,9 @@ struct module_args {
     required_blockchain_features: gtv;
     require_revolt_when_should_build_block: boolean = true;
     require_add_primary_key_to_header: boolean = true;
+
+    /** When `true` it will reject all chain configs with a negative eif `skip_to_height` value. */
+    require_positive_eif_skip_to_height: boolean = true;
 }
 
 function validate_blockchain_configuration(container, config_data: byte_array, signers: boolean, header_hash: boolean, system_chain: boolean) {
@@ -79,6 +82,7 @@ function validate_blockchain_configuration(container, config_data: byte_array, s
     }
 
     validate_compression(config_data);
+    validate_eif(config_map);
 }
 
 function validate_block_strategy_config(block_strategy_config: map<text, gtv>) {
@@ -197,6 +201,20 @@ function validate_compression(config_data: byte_array) {
         total_config_size <= chain_context.args.max_config_size,
         "Configuration exceeds maximum allowed size %d".format(chain_context.args.max_config_size)
     );
+}
+
+function validate_eif(config_map: map<text, gtv>) {
+    if (chain_context.args.require_positive_eif_skip_to_height) {
+        val chains = extract_config_path(config_map, ["eif", "chains"]);
+        if (chains != null) {
+            for (chain_name in chains.keys()) {
+                val chain_map = map<text, gtv>.from_gtv(chains[chain_name]);
+                if (chain_map.contains("skip_to_height")) {
+                    require(integer.from_gtv(chain_map["skip_to_height"]) >= 0, "EIF skip_to_height for %s can't be negative".format(chain_name));
+                }
+            }
+        }
+    }
 }
 
 function extract_config_path(config_map: map<text, gtv>, path: list<text>): map<text, gtv>? {
