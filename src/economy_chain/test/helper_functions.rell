@@ -17,7 +17,6 @@ val ticket_id_after_init = 27;
 
 struct module_args {
     amount_to_mint: big_integer = 1000000000;
-    oracle_privkey: byte_array;
 }
 
 function do_create_account(
@@ -478,26 +477,52 @@ function do_evm_withdrawal_request_bsc(ft4.accounts.account) {
     // Derive the EVM address of the FT4 account
     val evm_address = ft4.accounts.auth_descriptor_signer @ {.account_auth_descriptor.account == account} ( @omit @sort .rowid, .id );
 
-    // Call the oracle
+    // Create an EVM event
+    val evm_event = eif.messaging.event_data(
+        tnx_hash = "NULL".hash(),
+        log_index = 0,
+        signature = "NULL".hash(),
+        contract_address = x"753218363422002DF74F3D0D8d67f6CB38bE32D0",
+        name = "WithdrawRequest",
+        indexed_values = [evm_address.to_gtv()],
+        non_indexed_values = [integer(-1).to_gtv()]
+    );
+
+    // Submit mock EVM block
     rell.test.tx().op(
-        staking_oracle_withdrawal_request(evm_address, 97)
-    )
-    .nop()
-    .sign(chain_context.args.oracle_privkey)
-    .run();
+        do_test_evm_block(
+            97, // network id
+            1,
+            "NULL".hash(),
+            [evm_event]
+        )
+    ).nop().run();
 }
 
 function do_evm_withdrawal_request_eth(ft4.accounts.account) {
     // Derive the EVM address of the FT4 account
     val evm_address = ft4.accounts.auth_descriptor_signer @ {.account_auth_descriptor.account == account} ( @omit @sort .rowid, .id );
 
-    // Call the oracle
+    // Create an EVM event
+    val evm_event = eif.messaging.event_data(
+        tnx_hash = "NULL".hash(),
+        log_index = 0,
+        signature = "NULL".hash(),
+        contract_address = x"753218363422002DF74F3D0D8d67f6CB38bE32D0",
+        name = "WithdrawRequest",
+        indexed_values = [evm_address.to_gtv()],
+        non_indexed_values = [integer(-1).to_gtv()]
+    );
+
+    // Submit mock EVM block
     rell.test.tx().op(
-        staking_oracle_withdrawal_request(evm_address, network.ETH.value)
-    )
-    .nop()
-    .sign(chain_context.args.oracle_privkey)
-    .run();
+        do_test_evm_block(
+            1, // network id
+            1,
+            "NULL".hash(),
+            [evm_event]
+        )
+    ).nop().run();
 }
 
 function create_provider_and_proposal(provider_key: rell.test.keypair, common_proposal_type: common_proposal_type) {
