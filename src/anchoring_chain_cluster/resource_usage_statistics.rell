@@ -1,9 +1,13 @@
+@extendable function on_resource_usage_statistics_update(node_pubkey: pubkey, container_name: text, mesurement_time: timestamp, resource_type: resource_type, metric_value: decimal, previous_value: resource_usage_statistics?) {}
+
 operation __resource_usage_statistics(node_pubkey: pubkey, container_name: text, mesurement_time: timestamp, resource_type: resource_type, metric_value: decimal) {
     handle_resource_usage_statistics(node_pubkey, container_name, mesurement_time, resource_type, metric_value);
 }
 
 function handle_resource_usage_statistics(node_pubkey: pubkey, container_name: text, mesurement_time: timestamp, resource_type: resource_type, metric_value: decimal) {
-    val resource_usage_statistic =  resource_usage_statistics @? { node_pubkey, resource_type, container_name };
+    val resource_usage_statistic = resource_usage_statistics @? { node_pubkey, resource_type, container_name };
+
+    on_resource_usage_statistics_update(node_pubkey, container_name, mesurement_time, resource_type, metric_value, resource_usage_statistic);
 
     if (resource_usage_statistic != null) {
         resource_usage_statistic.mesurement_time = mesurement_time;
@@ -11,25 +15,29 @@ function handle_resource_usage_statistics(node_pubkey: pubkey, container_name: t
     } else {
         create resource_usage_statistics(node_pubkey, container_name, mesurement_time, resource_type, metric_value);
     }
-
 }
 
-/**
- * Types of system resources that can be monitored.
- */
-enum resource_type {
-    /**
-     * Amount of free space available on a storage device, expressed in Mebibyte.
-     */
-    free_space_left_mib,
-    /**
-     * Amount of used space on a storage device, expressed in Mebibyte.
-     */
-    space_usage_mib,
-    /**
-     * Percentage of total storage capacity that is occupied by data.
-     */
-    space_usage_percentage,
+@extend(on_resource_usage_statistics_update)
+function send_resource_usage_statistics_update(
+    node_pubkey: pubkey,
+    container_name: text,
+    mesurement_time: timestamp,
+    type: resource_type,
+    metric_value: decimal,
+    previous_value: resource_usage_statistics? = null
+) {
+    if (type == resource_type.space_usage_mib) {
+        send_message(
+            resource_usage_statistics_topic,
+            resource_usage_statistics_message(
+                node_pubkey,
+                container_name,
+                mesurement_time,
+                type = type.name,
+                metric_value,
+            ).to_gtv()
+        );
+    }
 }
 
 /**

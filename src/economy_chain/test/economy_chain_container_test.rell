@@ -646,7 +646,7 @@ function test_upgrade_container_insufficient_funds() {
     ).run_must_fail("Balance is too low");
 }
 
-function test_upgrade_container_lower_total_storage() {
+function test_upgrade_container_lower_total_storage_missing_space_data() {
     rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
     val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 2);
@@ -655,13 +655,128 @@ function test_upgrade_container_lower_total_storage() {
         ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, upgrade_container(container_name, 1, 15, cluster_name, 1))
     ).op(
         upgrade_container(container_name, 1, 15, cluster_name, 1)
-    ).run_must_fail("Upgraded total storage must be greater or equal to current total storage.");
+    ).run_must_fail("Can't reduce space: No space data available for container container name");
+}
+
+function test_eceive_resource_usage_statistics_cleanup() {
+    rell.test.set_next_block_time(1);
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 2);
+
+    // Add a container
+    rell.test.tx().op(
+        wipe_upgrade_container_tickets(container_name),
+        receive_resource_usage_statistics_message_op(resource_usage_statistics_message(
+            rell.test.pubkeys.alice,
+            container_name = container_name,
+            mesurement_time = get_last_blocktime(),
+            type = resource_type.space_usage_mib.name,
+            metric_value = 0
+        ).to_gtv())
+    ).nop().run();
+
+    assert_not_null(node_container_space_usage @? { container_name });
+
+    // Roward time 1 week and add another container, this should remove the first container
+    rell.test.set_next_block_time_delta(millis_per_week);
+    rell.test.block().run();
+    rell.test.tx().op(
+        wipe_upgrade_container_tickets(container_name),
+        receive_resource_usage_statistics_message_op(resource_usage_statistics_message(
+            rell.test.pubkeys.alice,
+            container_name = "container 2",
+            mesurement_time = get_last_blocktime() + millis_per_week,
+            type = resource_type.space_usage_mib.name,
+            metric_value = 0
+        ).to_gtv())
+    ).nop().run();
+
+    // container_name removed, we only have "container 2"
+    assert_null(node_container_space_usage @? { container_name });
+    assert_not_null(node_container_space_usage @? { "container 2" });
+}
+
+function test_upgrade_container_lower_total_storage_too_old_space_data() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 2);
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, upgrade_container(container_name, 1, 16, cluster_name, 1))
+        wipe_upgrade_container_tickets(container_name),
+        receive_resource_usage_statistics_message_op(resource_usage_statistics_message(
+            rell.test.pubkeys.alice,
+            container_name = container_name,
+            mesurement_time = get_last_blocktime(),
+            type = resource_type.space_usage_mib.name,
+            metric_value = 0
+        ).to_gtv())
+    ).nop().run();
+
+    rell.test.set_next_block_time_delta(60 * 10 * 1000 + 1); // Default value fo container_reduce_space_resource_usage_statistics_expire_ms
+    rell.test.block().run();
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, upgrade_container(container_name, 1, 15, cluster_name, 1))
     ).op(
-        upgrade_container(container_name, 1, 16, cluster_name, 1),
-    ).run();
+        upgrade_container(container_name, 1, 15, cluster_name, 1)
+    ).run_must_fail("Can't reduce space: Container space data is too old to be able to continue");
+}
+
+function test_upgrade_container_lower_total_storage_success() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey, amount_to_mint = integer.MAX_VALUE));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 2);
+    val lease = lease @ {};
+
+    // Reducing SCU with 75% space usage is not allowed
+    run_container_upgrade(container_name, integer(lease.container_units * standard_cluster_unit.storage * 0.75), 1, 0)
+        .run_must_fail("Can't reduce space: 16384 is not enough container space. Container is currently using 24576 MiB, and with a margin of 4915 MiB the minimum total allowed space is 29491 MiB");
+
+    // 12 is not enough
+    run_container_upgrade(container_name, integer(lease.container_units * standard_cluster_unit.storage * 0.75), 1, 12)
+        .run_must_fail("28672 is not enough container space.");
+
+    // 13 is enough
+    run_container_upgrade(container_name, integer(lease.container_units * standard_cluster_unit.storage * 0.75), 1, 13)
+        .run();
+
+    // 3 is not enough with 50% disk usage
+    run_container_upgrade(container_name, integer(lease.container_units * standard_cluster_unit.storage * 0.5), 1, 3)
+        .run_must_fail("Can't reduce space: 19456 is not enough container space. Container is currently using 16384 MiB, and with a margin of 3276 MiB the minimum total allowed space is 19660 MiB");
+
+    // ...but 4 is
+    run_container_upgrade(container_name, integer(standard_cluster_unit.storage * 0.5), 1, 4)
+        .run();
+
+    // Reset to 1 SCU and 10 gib of extra storage
+    run_container_upgrade(container_name, 0, 1, 10).run();
+
+    // Remove extra storage
+    run_container_upgrade(container_name, integer(standard_cluster_unit.storage * 1.0), 1, 0).run_must_fail();
+    run_container_upgrade(container_name, integer(standard_cluster_unit.storage * 0.4), 1, 0).run();
+    run_container_upgrade(container_name, 0, 1, 0).run();
+}
+
+function run_container_upgrade(container_name: text, space_usage: integer, upgraded_scus: integer, upgraded_extra_storage: integer) {
+
+    rell.test.tx().op(
+        wipe_upgrade_container_tickets(container_name),
+        receive_resource_usage_statistics_message_op(resource_usage_statistics_message(
+            rell.test.pubkeys.alice,
+            container_name = container_name,
+            mesurement_time = integer.MAX_VALUE,
+            type = resource_type.space_usage_mib.name,
+            metric_value = space_usage
+        ).to_gtv())
+    ).nop().run();
+
+    val ft4_op = upgrade_container(container_name, upgraded_scus, upgraded_extra_storage, cluster_name, 1);
+    return rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, ft4_op)
+    ).op(
+        ft4_op
+    ).nop();
 }
 
 function test_remaining_lease_value_is_correct() {

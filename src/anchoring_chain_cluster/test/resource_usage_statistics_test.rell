@@ -6,9 +6,12 @@ import ^^.*;
 val BLOCKCHAIN_RID_1 = byte_array.from_hex("F435688B2F74933C71F8AA1952E1CFBCDAA421EF378A441EFF4EC5900896F1FA");
 val BLOCKCHAIN_RID_2 = byte_array.from_hex("2222688B2F74933C71F8AA1952E1CFBCDAA421EF378A441EFF4EC5900896F1FA");
 
+val node_pubkey1 = rell.test.pubkeys.charlie;
+val node_pubkey2 = rell.test.pubkeys.bob;
+val node_pubkey3 = rell.test.pubkeys.alice;
+val node_pubkey4 = rell.test.pubkeys.trudy;
+
 function test_resource_usage_statistics() {
-    val node_pubkey1 = rell.test.pubkeys.charlie;
-    val node_pubkey2 = rell.test.pubkeys.bob;
     rell.test.tx().op(
         handle_resource_usage_statistics_op(
             node_pubkey1,
@@ -73,7 +76,6 @@ function test_resource_usage_statistics() {
 }
 
 function test_update_resource_usage_statistics() {
-    val node_pubkey1 = rell.test.pubkeys.charlie;
     rell.test.tx().op(
         handle_resource_usage_statistics_op(
             node_pubkey1,
@@ -98,11 +100,73 @@ function test_update_resource_usage_statistics() {
 
 }
 
+function test_send_resource_usage_statistics_update_message() {
+    rell.test.tx().op(
+        handle_resource_usage_statistics_op(
+            node_pubkey1,
+            "container1",
+            1,
+            resource_type.space_usage_percentage,
+            1000
+        ),
+        handle_resource_usage_statistics_op(
+            node_pubkey1,
+            "container2",
+            2,
+            resource_type.space_usage_percentage,
+            2000
+        )
+    ).run();
+
+    // We ignore other types than space percentage
+    assert_events();
+
+    // Send space percentage metric
+    rell.test.tx().op(
+        handle_resource_usage_statistics_op(
+            node_pubkey1,
+            "container1",
+            1,
+            resource_type.space_usage_mib,
+            75
+        ),
+    ).run();
+
+    assert_events(("icmf_message", (
+        topic = resource_usage_statistics_topic,
+        body = resource_usage_statistics_message(
+        node_pubkey1,
+        container_name = "container1",
+        mesurement_time = 1,
+        type = resource_type.space_usage_mib.name,
+        metric_value = 75,
+    ).to_gtv()
+    ).to_gtv_pretty()));
+
+    // Send again with value updated
+    rell.test.tx().op(
+        handle_resource_usage_statistics_op(
+            node_pubkey1,
+            "container1",
+            1,
+            resource_type.space_usage_mib,
+            80
+        ),
+    ).nop().run();
+
+    assert_events(("icmf_message", (
+        topic = resource_usage_statistics_topic,
+        body = resource_usage_statistics_message(
+        node_pubkey1,
+        container_name = "container1",
+        mesurement_time = 1,
+        type = resource_type.space_usage_mib.name,
+        metric_value = 80,
+    ).to_gtv()
+    ).to_gtv_pretty()));
+}
+
 function test_get_excluded_blockchains() {
-    val node_pubkey1 = rell.test.pubkeys.charlie;
-    val node_pubkey2 = rell.test.pubkeys.bob;
-    val node_pubkey3 = rell.test.pubkeys.alice;
-    val node_pubkey4 = rell.test.pubkeys.trudy;
     rell.test.tx().op(
         handle_resource_usage_statistics_op(
             node_pubkey1,
