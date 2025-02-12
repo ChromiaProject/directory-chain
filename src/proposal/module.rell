@@ -105,7 +105,7 @@ function revoke_proposal_internal(proposal_rowid: rowid) {
 
     require(
         prop.state == proposal_state.PENDING or
-        (prop.state == proposal_state.APPROVED and get_delayed_event_time(delay_type.PROPOSAL, prop.rowid.to_integer()) != null),
+        prop.state == proposal_state.DELAYED,
         "The proposal is already %s".format(prop.state));
     require(prop.proposed_by == me, "It is only allowed to revoke own proposals");
     prop.state = proposal_state.REVOKED;
@@ -119,6 +119,7 @@ function create_proposal(proposal_type, proposed_by: provider, deployer: voter_s
 
 function delete_proposal(prop: proposal) {
     delete_delayed_event(delay_type.PROPOSAL, prop.rowid.to_integer());
+    delete_scheduled_event(delay_type.PROPOSAL, prop.rowid.to_integer());
     delete_proposal_handlers()[prop.proposal_type.name](prop);
 }
 

@@ -4,8 +4,7 @@
 
 module;
 
-import model.*;
-import common.*;
+import common_helpers.block.*;
 
 enum delay_type {
     PROPOSAL,
@@ -18,7 +17,7 @@ entity delayed_event {
     key type, ref_id;
     type: delay_type;
 
-    /** Reference id do distinguish callbacks of the same type */
+    /** Reference id to distinguish callbacks of the same type */
     ref_id: integer;
 
     /** When event is active this is the time to be triggered, otherwise the time left until it should be triggered */
@@ -33,7 +32,9 @@ entity delayed_event {
  */
 @extendable function delayed_event_callback(): map<delay_type, (integer) -> unit>;
 
-@extend(before_begin_block)
+/**
+ * Must be called by each chains __begin_block.
+ */
 function begin_block_delay(height: integer) {
     val events = delayed_event @* { .active, .time <= op_context.last_block_time };
 

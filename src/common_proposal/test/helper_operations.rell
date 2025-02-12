@@ -6,11 +6,15 @@ operation create_test_common_proposal(
     proposal_type: common_proposal_type,
     pubkey,
     voter_set_name: text,
-    type: common_proposal_vote_type = common_proposal_vote_type.VOTER_SET_MEMBER_KEY
+    type: common_proposal_vote_type = common_proposal_vote_type.VOTER_SET_MEMBER_KEY,
+    scheduled_at: timestamp? = null
 ) {
     val voter_set = create_or_return_voter_set(voter_set_name, type);
     create_voter_set_member(voter_set, pubkey);
-    create common_proposal(op_context.last_block_time, proposal_type, pubkey, voter_set);
+    val proposal = create common_proposal(op_context.last_block_time, proposal_type, pubkey, voter_set);
+    if (scheduled_at != null) {
+        add_scheduled_event(delay_type.PROPOSAL, proposal.rowid.to_integer(), scheduled_at);
+    }
 }
 
 function create_or_return_voter_set(

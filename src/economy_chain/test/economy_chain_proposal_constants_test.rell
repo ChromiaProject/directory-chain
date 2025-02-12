@@ -2,6 +2,7 @@
 
 import ^^.*;
 import ^.helper_functions.*;
+import common_proposal.test.helper_functions.*;
 
 function test_update_economy_constants_validate_input() {
 
@@ -43,6 +44,12 @@ function test_update_economy_constants_validate_input() {
     rell.test.tx().op(
         update_economy_constants(1, 2, 3, 0.5, 0.5, 0.5, 0.5)
     ).sign(rell.test.keypairs.alice).run_must_fail("The sum (2.200000) of all economy chain share values must be between 0 and 1.0 inclusive");
+
+    // Invalid time
+    rell.test.set_next_block_time_delta(1000);
+    rell.test.tx().op(
+        update_economy_constants(1, null, null, null, null, null, null, get_last_blocktime())
+    ).sign(rell.test.keypairs.alice).run_must_fail("Scheduled time must be later than last block time");
 }
 
 function test_update_economy_constants() {
@@ -82,4 +89,46 @@ function test_update_economy_constants() {
     assert_equals(updated_constants.resource_pool_margin_fee_share, 0.06);
     assert_equals(updated_constants.system_provider_risk_share, 0.1); // Unchanged
     assert_equals(updated_constants.dapp_provider_risk_share, 0.07);
+}
+
+function test_update_economy_constants_scheduld_at() {
+    add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
+    add_provider(rell.test.keypairs.bob.pub, true, provider_tier.NODE_PROVIDER);
+    val original_min_lease_time_weeks = get_economy_constants().min_lease_time_weeks;
+
+    // Update constants
+    rell.test.set_next_block_time_delta(1000);
+    rell.test.tx().op(
+        init(),
+        update_economy_constants(original_min_lease_time_weeks + 1, null, null, null, null, null, null, get_last_blocktime() + 5000)
+    ).sign(rell.test.keypairs.alice).run();
+
+    // Pending
+    var proposal = get_common_proposal(get_latest_common_proposal_id())!!;
+    assert_equals(proposal.state, common_proposal_state.PENDING);
+    assert_null(proposal.apply_at);
+    assert_not_null(proposal.scheduled_at);
+    assert_equals(proposal.scheduled_at, get_last_blocktime() + 5000 - 1000);
+
+    // Bob votes yes
+    rell.test.set_next_block_time_delta(1000);
+    vote_yes_on_latest_proposal(rell.test.keypairs.bob);
+
+    // Delayed
+    proposal = get_common_proposal(get_latest_common_proposal_id())!!;
+    assert_equals(proposal.state, common_proposal_state.DELAYED);
+    assert_equals(proposal.apply_at, get_last_blocktime() + 5000 - 2000);
+    assert_not_null(proposal.scheduled_at);
+    assert_equals(proposal.scheduled_at, get_last_blocktime() + 5000 - 2000);
+    assert_equals(get_economy_constants().min_lease_time_weeks, original_min_lease_time_weeks);
+
+    rell.test.set_next_block_time_delta(5000);
+    rell.test.block().run();
+    rell.test.block().run();
+
+    // Applied
+    proposal = get_common_proposal(get_latest_common_proposal_id())!!;
+    assert_equals(proposal.state, common_proposal_state.APPROVED);
+    assert_equals(get_economy_constants().min_lease_time_weeks, original_min_lease_time_weeks + 1);
+    assert_true(empty(scheduled_event @* {}));
 }

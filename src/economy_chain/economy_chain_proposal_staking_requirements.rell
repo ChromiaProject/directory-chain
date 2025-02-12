@@ -32,6 +32,7 @@ operation propose_staking_requirement_constants(
     system_node_total_stake_chr: integer? = null,
     dapp_node_own_stake_chr: integer? = null,
     dapp_node_total_stake_chr: integer? = null,
+    scheduled_at: timestamp? = null,
 ) {
     val provider = require_system_provider_signer_entity();
 
@@ -46,6 +47,9 @@ operation propose_staking_requirement_constants(
         dapp_node_total_stake_chr = dapp_node_total_stake_chr ?: -1,
     );
     validate_staking_requirement_constants_proposal(proposal_details);
+    if (scheduled_at != null) {
+        add_scheduled_event(delay_type.PROPOSAL, proposal.rowid.to_integer(), scheduled_at);
+    }
 
     internal_common_vote(provider.pubkey, proposal, true);
 }

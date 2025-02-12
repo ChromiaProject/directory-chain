@@ -1,0 +1,47 @@
+/**
+ * Each entity represents a scheduled event to be triggered at a specific time. It is however not part of the
+ * delay implementation, but used to keep the time and later turn it into a delayed event.
+ */
+entity scheduled_event {
+    key type, ref_id;
+    type: delay_type;
+
+    /** Reference id to distinguish callbacks of the same type */
+    ref_id: integer;
+
+    scheduled_at: timestamp;
+}
+
+/**
+ * Store information about a scheduled event. This will not execute it on time, just store it.
+ * @param delay_type Type of event.
+ * @param ref_id Reference id to keep track of the delayed event in callback.
+ * @param scheduled_at The time of this event to be executed.
+ */
+function add_scheduled_event(delay_type, ref_id: integer, scheduled_at: timestamp) {
+    require(scheduled_at > get_last_blocktime(), "Scheduled time must be later than last block time (%s > %s)".format(scheduled_at, get_last_blocktime()));
+    require(empty(scheduled_event @* { delay_type, ref_id }), "Can't add multiple scheduled at for type %s and ref id %d".format(delay_type, ref_id));
+    create scheduled_event(delay_type, ref_id, scheduled_at);
+}
+
+/**
+ * Get the approximately time (delay) from "now" (last block time) to the scheduled_at time.
+ */
+function get_scheduled_event_delay(delay_type, ref_id: integer) {
+    val scheduled_at_time = scheduled_event @? { delay_type, ref_id } ( .scheduled_at );
+    if (exists(scheduled_at_time)) {
+        val last_block_time = get_last_blocktime();
+        if (scheduled_at_time >= last_block_time) {
+            return scheduled_at_time - last_block_time;
+        }
+    }
+    return null;
+}
+
+function get_scheduled_event_time(delay_type, ref_id: integer) {
+    return scheduled_event @? { delay_type, ref_id } ( .scheduled_at );
+}
+
+function delete_scheduled_event(delay_type, ref_id: integer) {
+    delete scheduled_event @* { delay_type, ref_id };
+}

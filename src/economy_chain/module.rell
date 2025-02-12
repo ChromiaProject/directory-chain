@@ -14,9 +14,11 @@ import common_proposal.voter_set_proposal.*;
 import common_vault_dapp_details.*;
 import common_helpers.constants.*;
 import common_helpers.proposals.*;
+import common_helpers.block.*;
 import constants.*;
 import provider_auth.*;
 import chain_version;
+import delay.*;
 
 namespace eif {
     import messaging: lib.eif.messaging;
@@ -95,6 +97,7 @@ operation __begin_block(height: integer) {
         if (not try_call(__staking_begin_block(height, *))) log("Failed staking begin block hook.");
         if (not try_call(__evm_links_begin_block(*))) log("Failed evm links begin block hook.");
         if (not try_call(price_oracle_updates_begin_block(op_context.last_block_time, *))) log("Failed price oracle begin block hook.");
+        if (not try_call(begin_block_delay(height, *))) log("Failed to run delayed jobs");
     }
 }
 

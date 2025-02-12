@@ -1,0 +1,39 @@
+@test module;
+
+import ^^.*;
+import ^.helper_operations.*;
+import model.*;
+import common.test.helper_operations.*;
+import common.test.setup.*;
+import common.test.util.*;
+import direct_container.*;
+import common.test.ops.*;
+
+function test_add_add_scheduled_at__create_and_remove() {
+
+    rell.test.set_next_block_time(2000);
+    rell.test.tx().op(
+        add_scheduled_at_op(delay_type.PROPOSAL, 123, 4000)
+    ).run();
+
+    assert_equals(get_scheduled_event_delay(delay_type.PROPOSAL, 123), 4000 - 2000);
+
+    rell.test.tx().op(
+        delete_scheduled_at_op(delay_type.PROPOSAL, 123),
+        delete_scheduled_at_op(delay_type.PROPOSAL, 123),
+    ).run();
+
+    assert_null(get_scheduled_event_delay(delay_type.PROPOSAL, 123));
+}
+
+function test_add_add_scheduled_at__validation() {
+
+    rell.test.tx().op(
+        add_scheduled_at_op(delay_type.PROPOSAL, 123, -2)
+    ).run_must_fail("Scheduled time must be later than last block time");
+
+    rell.test.tx().op(
+        add_scheduled_at_op(delay_type.PROPOSAL, 123, get_last_blocktime() + 1),
+        add_scheduled_at_op(delay_type.PROPOSAL, 123, get_last_blocktime() + 1)
+    ).run_must_fail("Can't add multiple scheduled at for type PROPOSAL and ref id 123");
+}

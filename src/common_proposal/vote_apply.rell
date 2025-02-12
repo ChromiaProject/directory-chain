@@ -19,8 +19,31 @@ function try_to_apply_proposal(prop: common_proposal) {
         }
         approved -> {
             log("proposal approved:", prop_str);
-            try_call_apply_common_voting_result(prop);
+            apply_or_delay_proposal(prop);
         }
+    }
+}
+
+function apply_or_delay_proposal(prop: common_proposal) {
+    val proposal_delay = get_scheduled_event_delay(delay_type.PROPOSAL, prop.rowid.to_integer()) ?: 0;
+    if (proposal_delay > 0) {
+        log("Proposal %s is delayed and will be applied in %s ms".format(prop.rowid, proposal_delay));
+        prop.state = common_proposal_state.DELAYED;
+        add_delayed_event(delay_type.PROPOSAL, proposal_delay, prop.rowid.to_integer());
+        set_delayed_event_state(delay_type.PROPOSAL, prop.rowid.to_integer(), true);
+    } else {
+        try_call_apply_common_voting_result(prop);
+    }
+}
+
+/**
+ * Callback for delayed or scheduled proposals to run the proposals apply function.
+ */
+@extend(proposal_delayed_apply)
+function common_proposal_delayed_apply(proposal_id: integer) {
+    val prop = common_proposal @? { .rowid == rowid(proposal_id) };
+    if (prop != null) {
+        try_call_apply_common_voting_result(prop);
     }
 }
 

@@ -6,8 +6,11 @@ struct proposal_data {
     description: text;
     state: proposal_state;
 
-    /** If proposal is approved and the delay mechanism is enabled this will contain the time it will be applied  */
+    /** If proposal is approved and the delay mechanism is enabled this will contain the time it will be applied */
     apply_at: timestamp?;
+
+    /** The scheduled time to apply the proposal if it gets approved before this time */
+    scheduled_at: timestamp?;
 
     /** Voter set name to control voting for this proposal */
     voter_set_name: text? = null;
@@ -55,6 +58,7 @@ query get_proposal(id: rowid?): proposal_data? {
         description = result.description,
         state = result.state,
         apply_at = get_delayed_event_time(delay_type.PROPOSAL, result.rowid.to_integer()),
+        scheduled_at = get_scheduled_event_time(delay_type.PROPOSAL, result.rowid.to_integer()),
         voter_set_name = result.voter_set.name,
         tx_rid = result.transaction.tx_rid,
     );

@@ -1,6 +1,7 @@
 @test module;
 
 import ^^.*;
+import common.*;
 import common.test.ops.*;
 import common.test.setup.*;
 import common.test.util.*;
@@ -318,6 +319,47 @@ function test_forced_configuration_delay() {
     conf["nonce"] = (10).to_gtv();
     conf["name"] = "testConf".to_gtv();
     force_config(bc.rid, conf, 10).run_must_fail("only allowed on chain with configuration delay disabled");
+}
+
+function test_propose_scheduled_configuration() {
+
+    setup();
+    val bob = provider @ { rell.test.pubkeys.bob };
+    rell.test.tx().op(add_test_member(system_p_voter_set(), bob)).run();
+
+    var conf = apply_required_configuration_properties();
+    val directory_chain = blockchain @ { blockchains.directory_chain };
+    val scheduled_at_time = get_last_blocktime() + 10000000;
+
+    rell.test.set_next_block_time_delta(1000);
+    conf["nonce"] = (17).to_gtv();
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, directory_chain.rid, conf.to_gtv().to_bytes(), scheduled_at = scheduled_at_time)
+    ).sign(initial_provider).run();
+    val proposal_id = last_proposal().rowid;
+    var proposal = get_proposal(proposal_id)!!;
+    assert_equals(proposal.state, proposal_state.PENDING);
+    assert_not_null(proposal.scheduled_at);
+    assert_equals(proposal.scheduled_at!!, scheduled_at_time);
+    assert_true(get_scheduled_event_delay(delay_type.PROPOSAL, proposal_id.to_integer())!! > 0);
+
+    rell.test.set_next_block_time_delta(1000);
+    bob_votes();
+
+    proposal = get_proposal(proposal_id)!!;
+    assert_equals(proposal.state, proposal_state.DELAYED);
+    assert_equals(get_scheduled_event_delay(delay_type.PROPOSAL, proposal_id.to_integer())!!, 10000000 - 2000);
+
+    rell.test.set_next_block_time(scheduled_at_time);
+    rell.test.block().run();
+    rell.test.block().run();
+
+    proposal = get_proposal(proposal_id)!!;
+    assert_equals(proposal.state, proposal_state.APPROVED);
+    assert_null(get_scheduled_event_delay(delay_type.PROPOSAL, proposal_id.to_integer()));
+
+    val attempt = get_blockchain_configuration_update_attempt_state_by_proposal(proposal_id)!!;
+    assert_equals(attempt.state, blockchain_configuration_update_state.PENDING);
 }
 
 function force_config(brid: byte_array, conf: map<text, gtv>, height: integer) {
