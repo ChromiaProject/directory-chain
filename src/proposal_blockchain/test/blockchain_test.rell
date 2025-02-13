@@ -110,6 +110,9 @@ function test_blockchain_configuration_validation() {
         .run_must_fail("Some of the configured synchronization infrastructure extensions are not in the allowed set");
 
     val conf3 = apply_required_configuration_properties();
+    conf3["gtx"] = [
+        "modules" : ["net.postchain.eif.EifGTXModule"]
+    ].to_gtv();
     conf3["eif"] = ["chains": [
         "bsc": ["skip_to_height": 100],
         "base": ["evm_read_offset": 0],
@@ -120,7 +123,7 @@ function test_blockchain_configuration_validation() {
     ).sign(rell.test.keypairs.alice)
         .run_must_fail("EIF skip_to_height for ethereum can't be negative");
 
-    // Unsupported EIF snapshot version
+    // Blockchain doesn't support EIF, the snapshot version is unsupported, tx succeeds
     val conf4 = apply_required_configuration_properties();
     conf4["eif"] = ["snapshot": [
         "version": 1
@@ -128,17 +131,46 @@ function test_blockchain_configuration_validation() {
     rell.test.tx().op(
         propose_blockchain(alice.pubkey, conf4.to_gtv().to_bytes(), "foo_chain", container)
     ).sign(rell.test.keypairs.alice)
-        .run_must_fail("EIF snapshot version must be version 2");
+        .run();
 
-    // EIF snapshot version is absent
+    // Blockchain supports EIF, the snapshot version is unsupported, tx fails
     val conf5 = apply_required_configuration_properties();
-    conf5["eif"] = ["snapshot": [
-        "levels_per_page" : 1
-    ]].to_gtv();
+    conf5["gtx"] = [
+        "modules" : ["net.postchain.eif.EifGTXModule"]
+    ].to_gtv();
+    conf5["eif"] = [
+        "snapshot": ["version": 1]
+    ].to_gtv();
     rell.test.tx().op(
         propose_blockchain(alice.pubkey, conf5.to_gtv().to_bytes(), "foo_chain", container)
     ).sign(rell.test.keypairs.alice)
+        .run_must_fail("EIF snapshot version must be version 2");
+
+    // Blockchain supports EIF, the snapshot version is correct, tx succeeds
+    val conf6 = apply_required_configuration_properties();
+    conf6["gtx"] = [
+        "modules" : ["net.postchain.eif.EifGTXModule"]
+    ].to_gtv();
+    conf6["eif"] = [
+        "snapshot": ["version": 2]
+    ].to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf6.to_gtv().to_bytes(), "foo_chain", container)
+    ).sign(rell.test.keypairs.alice)
         .run();
+
+    // Blockchain supports EIF, the snapshot version is absent, tx fails
+    val conf7 = apply_required_configuration_properties();
+    conf7["gtx"] = [
+        "modules" : ["net.postchain.eif.EifGTXModule"]
+    ].to_gtv();
+    conf7["eif"] = [
+        "snapshot": ["levels_per_page": 2]
+    ].to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf7.to_gtv().to_bytes(), "foo_chain", container)
+    ).sign(rell.test.keypairs.alice)
+        .run_must_fail("EIF snapshot version must be version 2");
 }
 
 function test_propose_configuration() {

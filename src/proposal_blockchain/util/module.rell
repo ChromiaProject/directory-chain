@@ -207,6 +207,11 @@ function validate_compression(config_data: byte_array) {
 }
 
 function validate_eif(config_map: map<text, gtv>) {
+    val modules = extract_config_path(config_map, ["gtx"])?.get_or_null("modules");
+    if (modules == null or not list<text>.from_gtv(modules).contains("net.postchain.eif.EifGTXModule")) {
+        return;
+    }
+
     if (chain_context.args.require_positive_eif_skip_to_height) {
         val chains = extract_config_path(config_map, ["eif", "chains"]);
         if (chains != null) {
@@ -219,12 +224,12 @@ function validate_eif(config_map: map<text, gtv>) {
             }
         }
     }
+
     if (chain_context.args.require_eif_snapshot_version != null) {
+        val message = "EIF snapshot version must be version %d".format(chain_context.args.require_eif_snapshot_version);
         val snapshot_version = extract_config_path(config_map, ["eif", "snapshot"])?.get_or_null("version");
-        if (snapshot_version != null) {
-            require(integer.from_gtv(snapshot_version) == chain_context.args.require_eif_snapshot_version,
-                "EIF snapshot version must be version %d".format(chain_context.args.require_eif_snapshot_version));
-        }
+        require(snapshot_version, message);
+        require(integer.from_gtv(snapshot_version) == chain_context.args.require_eif_snapshot_version, message);
     }
 }
 
