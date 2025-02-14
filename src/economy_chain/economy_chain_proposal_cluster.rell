@@ -10,7 +10,6 @@ entity pending_cluster {
     extra_storage: integer;
     proposal: common_proposal;
     mutable status: pending_cluster_status;
-    max_nodes: integer = integer.MAX_VALUE;
 }
 
 @extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_cluster_create.name: apply_cluster_create(*)];
@@ -25,8 +24,7 @@ operation create_cluster(
     voter_set_name: text,
     cluster_units: integer,
     extra_storage: integer,
-    tag_name: text,
-    max_nodes: integer = integer.MAX_VALUE
+    tag_name: text
 ) {
     val provider = require_system_provider_signer_entity();
 
@@ -46,8 +44,7 @@ operation create_cluster(
         cluster_units,
         extra_storage,
         proposal,
-        pending_cluster_status.PENDING_APPROVAL,
-        max_nodes = max_nodes
+        pending_cluster_status.PENDING_APPROVAL
     );
 
     internal_common_vote(provider.pubkey, proposal, true);
@@ -84,8 +81,7 @@ function apply_cluster_create(proposal: common_proposal) {
             voter_set_name = pending_cluster.voter_set_name,
             cluster_units = pending_cluster.cluster_units,
             extra_storage = pending_cluster.extra_storage,
-            proposer_pubkey = pending_cluster.proposer_pubkey,
-            max_nodes = pending_cluster.max_nodes);
+            proposer_pubkey = pending_cluster.proposer_pubkey);
 
         send_message(create_cluster_topic, create_cluster_message.to_gtv());
 
