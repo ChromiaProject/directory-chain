@@ -277,7 +277,15 @@ function propose_config_at(brid: byte_array, conf: map<text, gtv>, height: integ
     ).sign(initial_provider);
 }
 
-function test_forced_configuration() {
+function test_forced_configuration_not_resume() {
+    forced_configuration(false);
+}
+
+function test_forced_configuration_resume() {
+    forced_configuration(true);
+}
+
+function forced_configuration(resume_chain: boolean = false) {
     setup();
 
     val cl = system_cluster();
@@ -300,13 +308,13 @@ function test_forced_configuration() {
 
     conf["nonce"] = (10).to_gtv();
     conf["name"] = "testConf".to_gtv();
-    force_config(bc.rid, conf, 10).run_must_fail("Forcing configuration only allowed on PAUSED blockchains.");
+    force_config(bc.rid, conf, 10, resume_chain).run_must_fail("Forcing configuration only allowed on PAUSED blockchains.");
 
     alice_proposes_action(bc, blockchain_action.pause);
     bob_votes();
     assert_equals(bc.state, blockchain_state.PAUSED);
 
-    force_config(bc.rid, conf, 10).run();
+    force_config(bc.rid, conf, 10, resume_chain).run();
     val fcp = get_forced_configuration_proposal_v64(null)!!;
     assert_equals(fcp.blockchain_rid, bc.rid);
     assert_equals(fcp.current_height, 0);
@@ -327,6 +335,7 @@ function test_forced_configuration() {
         forced_configuration_data[0],
         forced_configuration_data(blockchain_rid = bc.rid, 10, config_hash = actual_config_bytes.hash())
     );
+    assert_equals(bc.state, if (resume_chain) blockchain_state.RUNNING else blockchain_state.PAUSED);
 }
 
 function test_forced_configuration_delay() {
@@ -361,7 +370,7 @@ function test_forced_configuration_delay() {
 
     conf["nonce"] = (10).to_gtv();
     conf["name"] = "testConf".to_gtv();
-    force_config(bc.rid, conf, 10).run_must_fail("only allowed on chain with configuration delay disabled");
+    force_config(bc.rid, conf, 10, false).run_must_fail("only allowed on chain with configuration delay disabled");
 }
 
 function test_propose_scheduled_configuration() {
@@ -405,9 +414,9 @@ function test_propose_scheduled_configuration() {
     assert_equals(attempt.state, blockchain_configuration_update_state.PENDING);
 }
 
-function force_config(brid: byte_array, conf: map<text, gtv>, height: integer) {
+function force_config(brid: byte_array, conf: map<text, gtv>, height: integer, resume_chain: boolean) {
     return rell.test.tx().op(
-        propose_forced_configuration(initial_provider.pub, brid, conf.to_gtv().to_bytes(), height)
+        propose_forced_configuration(initial_provider.pub, brid, conf.to_gtv().to_bytes(), height, resume_chain)
     ).sign(initial_provider);
 }
 

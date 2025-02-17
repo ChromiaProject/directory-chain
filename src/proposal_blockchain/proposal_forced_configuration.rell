@@ -3,6 +3,7 @@ entity proposed_forced_configuration {
     blockchain;
     height: integer;
     config_data: byte_array;
+    resume_chain: boolean = false;
 }
 
 entity forced_configuration {
@@ -23,9 +24,10 @@ entity forced_configuration {
  *
  * @param my_pubkey pubkey of provider
  */
-operation propose_forced_configuration(my_pubkey: pubkey, blockchain_rid: byte_array, config_data: byte_array, height: integer, description: text = "") {
+operation propose_forced_configuration(my_pubkey: pubkey, blockchain_rid: byte_array, config_data: byte_array,
+        height: integer, resume_chain: boolean = false, description: text = "") {
     val provider = require_is_provider_with_rate_limit(my_pubkey);
-    val proposal = create_forced_configuration_proposal(provider, blockchain_rid, config_data, height, description);
+    val proposal = create_forced_configuration_proposal(provider, blockchain_rid, config_data, height, resume_chain, description);
     internal_vote(provider, proposal, true);
 }
 
@@ -48,12 +50,14 @@ operation propose_forced_configuration_iccf(tx_to_prove: gtx_transaction, op_ind
     val blockchain_rid = byte_array.from_gtv(args[0]);
     val config_data = byte_array.from_gtv(args[1]);
     val height = integer.from_gtv(args[2]);
+    val resume_chain = if (args.size() > 3) boolean.from_gtv(args[3]) else false;
 
-    val proposal = create_forced_configuration_proposal(provider, blockchain_rid, config_data, height, iccf_description);
+    val proposal = create_forced_configuration_proposal(provider, blockchain_rid, config_data, height, resume_chain, iccf_description);
     apply_iccf_proposal(proposal);
 }
 
-function create_forced_configuration_proposal(provider, blockchain_rid: byte_array, config_data: byte_array, height: integer, description: text): proposal {
+function create_forced_configuration_proposal(provider, blockchain_rid: byte_array, config_data: byte_array,
+        height: integer, resume_chain: boolean, description: text): proposal {
     val blockchain = require_active_blockchain(blockchain_rid);
     require(blockchain.state == blockchain_state.PAUSED, "Forcing configuration only allowed on PAUSED blockchains. Blockchain rid: %s, state: %s".format(blockchain.rid, blockchain.state));
     require(not is_blockchain_config_delayed(blockchain.rid), "Forced configuration only allowed on chain with configuration delay disabled");
@@ -66,7 +70,7 @@ function create_forced_configuration_proposal(provider, blockchain_rid: byte_arr
     validate_blockchain_configuration(container, config_data, true, header_hash = true, system_chain = blockchain.system);
 
     val prop = create_proposal(proposal_type.force_configuration, provider, container.deployer, description);
-    create proposed_forced_configuration(prop, blockchain, height, config_data);
+    create proposed_forced_configuration(prop, blockchain, height, config_data, resume_chain);
     return prop;
 }
 
@@ -96,6 +100,10 @@ function apply_proposed_forced_configuration(proposal) {
     delete signer_excluded_from_pending_configuration @* {blockchain};
 
     add_dependencies(config_data, blockchain.rid, pfc.height);
+
+    if (pfc.resume_chain) {
+        blockchain.state = blockchain_state.RUNNING;
+    }
 }
 
 function delete_proposed_forced_configuration(proposal) {
@@ -107,6 +115,7 @@ struct proposed_forced_configuration_data {
     blockchain;
     height: integer;
     config_data: byte_array;
+    resume_chain: boolean = false;
 }
 
 struct forced_configuration_data {
@@ -127,7 +136,7 @@ query get_proposed_forced_configuration(rowid?): (
     val proposal = get_latest_proposal(rowid, proposal_type.force_configuration);
     if (proposal == null) return null;
     val config = proposed_forced_configuration @? { require_proposal(proposal.rowid) }
-        (proposed_forced_configuration_data(.proposal, .blockchain, .height, decompress_configuration(.config_data)));
+        (proposed_forced_configuration_data(.proposal, .blockchain, .height, decompress_configuration(.config_data), .resume_chain));
     if (config == null) return null;
 
     val current = get_latest_blockchain_configuration_data(config.blockchain);
