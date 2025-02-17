@@ -16,7 +16,7 @@ import direct_container.*;
 import direct_cluster.*;
 import nm_api.*;
 
-function test_blockchain_moving_within_a_node_fail_due_to_changed_deployer_set() {
+function test_blockchain_move_within_a_node_fail_due_to_changed_deployer_set() {
     // setup
     setup_module(provider_quota_max_containers = 2, cluster_anchoring_config = ["any": "value".to_gtv()]);
     var conf = apply_required_configuration_properties();
@@ -31,12 +31,12 @@ function test_blockchain_moving_within_a_node_fail_due_to_changed_deployer_set()
     ).sign(initial_provider).run();
     val foo_chain = blockchain @ { "foo_chain" };
 
-    // 1. start blockchain moving
+    // 1. start blockchain move
     rell.test.tx().op(
         propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c1b")
     ).sign(initial_provider).run();
 
-    // 2. finish blockchain moving
+    // 2. finish blockchain move
     rell.test.tx().op(
         // Change source container deployer by adding Bob
         create_test_provider("bob", rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
@@ -45,7 +45,7 @@ function test_blockchain_moving_within_a_node_fail_due_to_changed_deployer_set()
     ).sign(initial_provider).run_must_fail("Deployers of source and destination container must be identical");
 }
 
-function test_blockchain_moving_within_a_node() {
+function test_blockchain_move_within_a_node() {    
     // setup
     setup_module(provider_quota_max_containers = 2, cluster_anchoring_config = ["any": "value".to_gtv()]);
     val ip = provider @ { initial_provider.pub };
@@ -63,7 +63,7 @@ function test_blockchain_moving_within_a_node() {
     ).sign(initial_provider).run();
     val foo_chain = blockchain @ { "foo_chain" };
 
-    // 1. start blockchain moving
+    // 1. start blockchain move
     rell.test.tx().op(
         propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c1b")
     ).sign(initial_provider).run();
@@ -126,7 +126,7 @@ function test_blockchain_moving_within_a_node() {
     assert_null(nm_get_migrating_blockchain_node_info(test_node.pubkey, foo_chain.rid));
 }
 
-function test_blockchain_moving_within_a_node_with_removing_src_and_dst_containers() {
+function test_blockchain_move_within_a_node_with_removing_src_and_dst_containers() {
     // setup
     setup_module(provider_quota_max_containers = 2, cluster_anchoring_config = ["any": "value".to_gtv()]);
     val ip = provider @ { initial_provider.pub };
@@ -144,7 +144,7 @@ function test_blockchain_moving_within_a_node_with_removing_src_and_dst_containe
     ).sign(initial_provider).run();
     val foo_chain = blockchain @ { "foo_chain" };
 
-    // 1. start blockchain moving
+    // 1. start blockchain move
     rell.test.tx().op(
         propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c2")
     ).sign(initial_provider).run();
@@ -165,12 +165,12 @@ function test_blockchain_moving_within_a_node_with_removing_src_and_dst_containe
         remove_container(initial_provider.pub, "c2")
     ).sign(initial_provider).run_must_fail("Container c2 is currently a destination in a moving blockchain process and can't be deleted");
 
-    // 2. finish blockchain moving
+    // 2. finish blockchain move
     rell.test.tx().op(
         propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 123)
     ).sign(initial_provider).run();
 
-    // Moving is not finished, i.e. `configuration_updated` ICMF message has not been sent/received yet.
+    // The move is not finished, i.e. `configuration_updated` ICMF message has not been sent/received yet.
     // Trying to remove container c1 and c2
     assert_true(empty(get_container_blockchain("c1")));
     rell.test.tx().op(
@@ -197,7 +197,61 @@ function test_blockchain_moving_within_a_node_with_removing_src_and_dst_containe
     ).sign(initial_provider).run();
 }
 
-function test_blockchain_moving_between_containers_running_on_different_nodes() {
+function test_cancel_blockchain_move_within_node() {
+    // setup
+    setup_module(provider_quota_max_containers = 2, cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val ip = provider @ { initial_provider.pub };
+    var conf = apply_required_configuration_properties();
+
+    rell.test.tx().op(
+        // s1 / c1
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1a", "s1", 0, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1b", "s1", 0, [initial_provider.pub]),
+        update_node_with_units(initial_provider.pub, test_node.pubkey, cluster_units = 3),
+        add_node_to_cluster(initial_provider.pub, test_node.pubkey, "s1"),
+        // proposing blockchain to the c1a
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1a")
+    ).sign(initial_provider).run();
+    val foo_chain = blockchain @ { "foo_chain" };
+
+    // 1. try to cancel the blockchain move for a blockchain that is not being moved
+    rell.test.tx().op(
+        propose_blockchain_move_cancel(initial_provider.pub, foo_chain.rid)
+    ).sign(initial_provider)
+        .run_must_fail("Blockchain %s is not being moved".format(foo_chain.rid));
+
+    // 2. start blockchain move
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c1b")
+    ).sign(initial_provider).run();
+    assert_not_null(moving_blockchain @? { foo_chain });
+    assert_null(container_blockchain @? { foo_chain, .container.name == "c1a" });
+    assert_not_null(container_blockchain @? { foo_chain, .container.name == "c1b" });
+
+    // 3. cancel the blockchain move
+    rell.test.tx().op(
+        propose_blockchain_move_cancel(initial_provider.pub, foo_chain.rid)
+    ).sign(initial_provider).run();
+    assert_null(moving_blockchain @? { foo_chain });
+    assert_not_null(container_blockchain @? { foo_chain, .container.name == "c1a" });
+    assert_null(container_blockchain @? { foo_chain, .container.name == "c1b" });
+
+    // 4. move blockchain again and try to cancel after finalizing of blockchain move
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c1b"),
+        propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 123)
+    ).sign(initial_provider).run();
+    assert_not_null(moving_blockchain @? { foo_chain, .final_height == 123 });
+    assert_null(container_blockchain @? { foo_chain, .container.name == "c1a" });
+    assert_not_null(container_blockchain @? { foo_chain, .container.name == "c1b" });
+    rell.test.tx().op(
+        propose_blockchain_move_cancel(initial_provider.pub, foo_chain.rid)
+    ).nop().sign(initial_provider)
+        .run_must_fail("Cannot cancel an already finalized blockchain move for blockchain %s".format(foo_chain.rid));
+}
+
+function test_blockchain_move_between_containers_running_on_different_nodes() {
     // setup
     setup_module(provider_quota_max_containers = 3, cluster_anchoring_config = ["any": "value".to_gtv()]);
     val ip = provider @ { initial_provider.pub };
@@ -229,7 +283,7 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
     ).sign(initial_provider).run();
     val node1 = node @ { rell.test.pubkeys.trudy };
 
-    // 1. start blockchain moving
+    // 1. start blockchain move
     // Trying to move the blockchain to a full container c3 -- must fail
     rell.test.tx().op(
         propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c3")
@@ -283,7 +337,7 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
         propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c1") // c2 -> c1
     ).sign(initial_provider).run_must_fail("Blockchain %s is being moved".format(foo_chain.rid));
 
-    // 2. finish blockchain moving
+    // 2. finish blockchain move
     rell.test.tx().op(
         propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 123)
     ).sign(initial_provider).run();
@@ -320,7 +374,7 @@ function test_blockchain_moving_between_containers_running_on_different_nodes() 
     _test_backward_moving(foo_chain.rid, "c2", node0.pubkey, "c1", "s1", node1.pubkey, 456);
 }
 
-function test_blockchain_moving_between_containers_running_on_different_nodes_with_removing_src_and_dst_containers() {
+function test_blockchain_move_between_containers_running_on_different_nodes_with_removing_src_and_dst_containers() {
     // setup
     setup_module(provider_quota_max_containers = 3, cluster_anchoring_config = ["any": "value".to_gtv()]);
     val ip = provider @ { initial_provider.pub };
@@ -368,12 +422,12 @@ function test_blockchain_moving_between_containers_running_on_different_nodes_wi
         remove_container(initial_provider.pub, "c2")
     ).sign(initial_provider).run_must_fail("Container c2 is currently a destination in a moving blockchain process and can't be deleted");
 
-    // 2. finish blockchain moving
+    // 2. finish blockchain move
     rell.test.tx().op(
         propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 123)
     ).sign(initial_provider).run();
 
-    // Moving is not finished, i.e. `configuration_updated` ICMF message has not been sent/received yet.
+    // The move is not finished, i.e. `configuration_updated` ICMF message has not been sent/received yet.
     // Trying to remove container c1 and c2
     assert_true(empty(get_container_blockchain("c1")));
     rell.test.tx().op(
@@ -398,6 +452,93 @@ function test_blockchain_moving_between_containers_running_on_different_nodes_wi
     rell.test.tx().op(
         remove_container(initial_provider.pub, "c2")
     ).sign(initial_provider).run();
+}
+
+function test_cancel_blockchain_move_between_containers_running_on_different_nodes() {
+    // setup
+    setup_module(provider_quota_max_containers = 3, cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val ip = provider @ { initial_provider.pub };
+    val node0 = node @ { test_node.pubkey };
+    var conf = apply_required_configuration_properties();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, rell.test.pubkeys.bob, true),
+        // s1 / c1
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1", "s1", 0, [initial_provider.pub, rell.test.pubkeys.bob]),
+        update_node_with_units(initial_provider.pub, node0.pubkey, cluster_units = 2),
+        add_node_to_cluster(initial_provider.pub, node0.pubkey, "s1"),
+        // s2 / c2, c3
+        create_cluster(initial_provider.pub, "s2", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c2", "s2", 0, [initial_provider.pub, rell.test.pubkeys.bob]),
+        // proposing the blockchain to the c1
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
+    ).sign(initial_provider).run();
+    bob_votes();
+    val foo_chain = blockchain @ { "foo_chain" };
+
+    rell.test.tx().op(
+        create_test_node(ip, rell.test.pubkeys.trudy, cluster @ { .name == "s2" }),
+    ).sign(initial_provider).run();
+    val node1 = node @ { rell.test.pubkeys.trudy };
+
+    // 1. try to cancel the blockchain move for a blockchain that is not being moved
+    rell.test.tx().op(
+        propose_blockchain_move_cancel(initial_provider.pub, foo_chain.rid)
+    ).sign(initial_provider)
+        .run_must_fail("Blockchain %s is not being moved".format(foo_chain.rid));
+
+    // 2. start blockchain move
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c2")
+    ).sign(initial_provider).run();
+    // Trying to propose an blockchain_move_cancel, must fail due to non-null pending_blockchain_move
+    rell.test.tx().op(
+        propose_blockchain_move_cancel(initial_provider.pub, foo_chain.rid)
+    ).sign(initial_provider).run_must_fail("Blockchain %s is not being moved".format(foo_chain.rid));
+    // Continuing with pending_blockchain_move
+    bob_votes();
+    assert_not_null(moving_blockchain @? { foo_chain });
+    assert_null(container_blockchain @? { foo_chain, .container.name == "c1" });
+    assert_not_null(container_blockchain @? { foo_chain, .container.name == "c2" });
+    
+    // 3. cancel the blockchain move
+    rell.test.tx().op(
+        propose_blockchain_move_cancel(initial_provider.pub, foo_chain.rid)
+    ).sign(initial_provider).run();
+    // Trying to propose an blockchain_move_cancel again
+    rell.test.tx().op(
+        propose_blockchain_move_cancel(initial_provider.pub, foo_chain.rid)
+    ).nop().sign(initial_provider)
+        .run_must_fail("Canceling of blockchain move %s is already proposed".format(foo_chain.rid));
+    // Trying to propose an blockchain_action
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, foo_chain.rid, blockchain_action.pause)
+    ).nop().sign(initial_provider)
+        .run_must_fail("Moving blockchain can't be paused: %s".format(foo_chain.rid));
+    // Continuing with pending_blockchain_move_cancel
+    bob_votes();
+    assert_null(moving_blockchain @? { foo_chain });
+    assert_not_null(container_blockchain @? { foo_chain, .container.name == "c1" });
+    assert_null(container_blockchain @? { foo_chain, .container.name == "c2" });
+
+    // 4. move blockchain again and try to cancel after finalizing of blockchain move
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c2")
+    ).nop().sign(initial_provider).run();
+    bob_votes();
+    rell.test.tx().op(
+        propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 123)
+    ).nop().sign(initial_provider).run();
+    bob_votes();
+    assert_not_null(moving_blockchain @? { foo_chain, .final_height == 123 });
+    assert_null(container_blockchain @? { foo_chain, .container.name == "c1a" });
+    assert_not_null(container_blockchain @? { foo_chain, .container.name == "c1b" });
+    rell.test.tx().op(
+        propose_blockchain_move_cancel(initial_provider.pub, foo_chain.rid)
+    ).nop().sign(initial_provider)
+        .run_must_fail("Cannot cancel an already finalized blockchain move for blockchain %s".format(foo_chain.rid));
 }
 
 function test_paused_blockchain_moving_between_containers_running_on_different_nodes() {
@@ -432,7 +573,7 @@ function test_paused_blockchain_moving_between_containers_running_on_different_n
     assert_equals(foo_chain.state, blockchain_state.PAUSED);
     val node1 = node @ { rell.test.pubkeys.trudy };
 
-    // 1. start blockchain moving
+    // 1. start blockchain move
     rell.test.tx().op(
         propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c2")
     ).sign(initial_provider).run();
@@ -451,7 +592,7 @@ function test_paused_blockchain_moving_between_containers_running_on_different_n
     assert_equals(nm_get_blockchain_containers_for_node(node0.pubkey, foo_chain.rid), ["c1"]);
     assert_equals(nm_get_blockchain_containers_for_node(node1.pubkey, foo_chain.rid), ["c2"]);
 
-    // 2. finish blockchain moving
+    // 2. finish blockchain move
     rell.test.tx().op(
         propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 123)
     ).sign(initial_provider).run();
@@ -508,7 +649,7 @@ function test_removed_blockchain_moving_is_not_allowed() {
     ).sign(initial_provider).run_must_fail("Only blockchains in RUNNING | PAUSED states can be moved; current state of blockchain %s is: REMOVED".format(foo_chain.rid));
 }
 
-function test_blockchain_moving_is_not_allowed_due_to_pending_blockchain_action_proposal() {
+function test_blockchain_move_is_not_allowed_due_to_pending_blockchain_action_proposal() {
     // setup
     setup_module();
     // adding system provider bob
@@ -543,14 +684,14 @@ function test_blockchain_moving_is_not_allowed_due_to_pending_blockchain_action_
     );
 }
 
-function test_system_blockchain_moving_is_not_allowed() {
+function test_system_blockchain_move_is_not_allowed() {
     setup_module();
     rell.test.tx().op(
         propose_blockchain_move(initial_provider.pub, blockchain @ { blockchains.directory_chain } (.rid), "c1")
     ).sign(initial_provider).run_must_fail("Moving of system chains is not allowed: ");
 }
 
-function test_blockchain_moving_is_not_allowed_if_src_and_dst_containers_are_identical() {
+function test_blockchain_move_is_not_allowed_if_src_and_dst_containers_are_identical() {
     setup_module();
     var conf = apply_required_configuration_properties();
     rell.test.tx().op(
@@ -564,7 +705,7 @@ function test_blockchain_moving_is_not_allowed_if_src_and_dst_containers_are_ide
     ).sign(initial_provider).run_must_fail("Source and destination containers must be different");
 }
 
-function test_blockchain_moving_invalid_signer_not_src_deployer() {
+function test_blockchain_move_invalid_signer_not_src_deployer() {
 
     setup_module(provider_quota_max_containers = 2, cluster_anchoring_config = ["any": "value".to_gtv()]);
     var conf = apply_required_configuration_properties();
@@ -584,7 +725,7 @@ function test_blockchain_moving_invalid_signer_not_src_deployer() {
     ).sign(initial_provider).run_must_fail("Provider 0x02466d7fcae563e5cb09a0d1870bb580344804617879a14949cf22285f1bae3f27 is not a deployer of container c1a");
 }
 
-function test_blockchain_moving_invalid_signer_not_dst_deployer() {
+function test_blockchain_move_invalid_signer_not_dst_deployer() {
 
     setup_module(provider_quota_max_containers = 2, cluster_anchoring_config = ["any": "value".to_gtv()]);
     var conf = apply_required_configuration_properties();
@@ -603,7 +744,7 @@ function test_blockchain_moving_invalid_signer_not_dst_deployer() {
     ).sign(initial_provider).run_must_fail("Provider 0x02466d7fcae563e5cb09a0d1870bb580344804617879a14949cf22285f1bae3f27 is not a deployer of container c1b");
 }
 
-function test_blockchain_moving_invalid_src_and_dst_deployer_voter_set() {
+function test_blockchain_move_invalid_src_and_dst_deployer_voter_set() {
 
     setup_module(provider_quota_max_containers = 2, cluster_anchoring_config = ["any": "value".to_gtv()]);
     var conf = apply_required_configuration_properties();
