@@ -1,0 +1,73 @@
+import common.*;
+
+entity pending_blockchain_move_cancel {
+    key proposal;
+    blockchain;
+    destination: container;
+}
+
+/**
+ * Propose canceling a blockchain move
+ * 
+ * Permission: container deployer
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ */
+operation propose_blockchain_move_cancel(my_pubkey: pubkey, blockchain_rid: byte_array, description: text = "") {
+    val me = require_is_provider_with_rate_limit(my_pubkey);
+    val blockchain = require_active_blockchain(blockchain_rid);
+    require(empty(pending_blockchain_move_cancel @? { blockchain }), "Canceling of blockchain move %s is already proposed".format(blockchain.rid));
+    val mv_bc = validate_blockchain_move_cancel_proposal(blockchain);
+
+    val prop = create_proposal(proposal_type.blockchain_move_cancel, me, mv_bc.destination.deployer, description);
+    create pending_blockchain_move_cancel(prop, blockchain, mv_bc.destination);
+    internal_vote(me, prop, true);
+}
+
+/**
+ * Returns a proposal object for canceling a blockchain move.
+ */
+query get_blockchain_move_cancel_proposal(rowid?):
+        (blockchain_rid: byte_array, blockchain_name: text, cluster: text, container: text)? {
+    val proposal = get_latest_proposal(rowid, proposal_type.blockchain_import);
+    if (proposal == null) return null;
+    return pending_blockchain_move_cancel @ { proposal } (
+        blockchain_rid = .blockchain.rid,
+        blockchain_name = .blockchain.name,
+        cluster = .destination.cluster.name,
+        container = .destination.name,
+    );
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.blockchain_move_cancel.name: apply_blockchain_move_cancel(*)];
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.blockchain_move_cancel.name: delete_pending_blockchain_move_cancel(*)];
+
+function apply_blockchain_move_cancel(proposal) {
+    val pbmc = pending_blockchain_move_cancel @ { proposal } ( $.to_struct() );
+    val mv_bc = validate_blockchain_move_cancel_proposal(pbmc.blockchain);
+
+    // remove bc from destination container
+    delete_container_blockchain_by_blockchain(mv_bc.blockchain);
+    // add bc to source container
+    create_container_blockchain(mv_bc.source, mv_bc.blockchain);
+
+    delete mv_bc;
+}
+
+function delete_pending_blockchain_move_cancel(proposal) {
+    delete pending_blockchain_move_cancel @? { proposal };
+}
+
+function validate_blockchain_move_cancel_proposal(blockchain: blockchain): moving_blockchain {
+    val proposal_details = require(moving_blockchain @? { blockchain }, "Blockchain %s is not being moved".format(blockchain.rid));
+
+    // require there no pending blockchain actions (pause, resume, remove, archive, unarchive)
+    val pba = pending_blockchain_action @? { blockchain };
+    require(empty(pba), "Blockchain move %s cannot be proposed due to a pending proposal %s related to it".format(blockchain.rid, pba?.proposal));
+
+    require(proposal_details.final_height == -1, "Cannot cancel an already finalized blockchain move for blockchain %s".format(blockchain.rid));
+
+    return proposal_details;
+}
