@@ -3,7 +3,7 @@ entity node_container_space_usage {
     key node_pubkey: pubkey,
         container_name: text;
     mutable space_usage_mib: integer;
-    mutable mesurement_time: timestamp;
+    mutable measurement_time: timestamp;
 }
 
 function receive_resource_usage_statistics_message(body: gtv) {
@@ -14,20 +14,20 @@ function receive_resource_usage_statistics_message(body: gtv) {
         val space_entity = node_container_space_usage @? { message.node_pubkey, message.container_name };
         if (space_entity != null) {
             space_entity.space_usage_mib = message.metric_value.to_integer();
-            space_entity.mesurement_time = message.mesurement_time;
+            space_entity.measurement_time = message.measurement_time;
         } else {
             create node_container_space_usage(message.node_pubkey, message.container_name,
-                space_usage_mib = message.metric_value.to_integer(), mesurement_time = message.mesurement_time);
+                space_usage_mib = message.metric_value.to_integer(), measurement_time = message.measurement_time);
         }
     }
 
-    delete node_container_space_usage @* { .mesurement_time < op_context.last_block_time - millis_per_week };
+    delete node_container_space_usage @* { .measurement_time < op_context.last_block_time - millis_per_week };
 }
 
 function is_anchoring_data_up_to_date(container_name: text) {
     return exists(node_container_space_usage @* {
         container_name,
-        .mesurement_time >= op_context.last_block_time - chain_context.args.container_reduce_space_resource_usage_statistics_expire_ms
+        .measurement_time >= op_context.last_block_time - chain_context.args.container_reduce_space_resource_usage_statistics_expire_ms
     });
 }
 

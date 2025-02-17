@@ -658,7 +658,7 @@ function test_upgrade_container_lower_total_storage_missing_space_data() {
     ).run_must_fail("Can't reduce space: No space data available for container container name");
 }
 
-function test_eceive_resource_usage_statistics_cleanup() {
+function test_receive_resource_usage_statistics_cleanup() {
     rell.test.set_next_block_time(1);
     rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
     val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
@@ -670,7 +670,7 @@ function test_eceive_resource_usage_statistics_cleanup() {
         receive_resource_usage_statistics_message_op(resource_usage_statistics_message(
             rell.test.pubkeys.alice,
             container_name = container_name,
-            mesurement_time = get_last_blocktime(),
+            measurement_time = get_last_blocktime(),
             type = resource_type.space_usage_mib.name,
             metric_value = 0
         ).to_gtv())
@@ -678,7 +678,7 @@ function test_eceive_resource_usage_statistics_cleanup() {
 
     assert_not_null(node_container_space_usage @? { container_name });
 
-    // Roward time 1 week and add another container, this should remove the first container
+    // Forward time 1 week and add another container, this should remove the first container
     rell.test.set_next_block_time_delta(millis_per_week);
     rell.test.block().run();
     rell.test.tx().op(
@@ -686,7 +686,7 @@ function test_eceive_resource_usage_statistics_cleanup() {
         receive_resource_usage_statistics_message_op(resource_usage_statistics_message(
             rell.test.pubkeys.alice,
             container_name = "container 2",
-            mesurement_time = get_last_blocktime() + millis_per_week,
+            measurement_time = get_last_blocktime() + millis_per_week,
             type = resource_type.space_usage_mib.name,
             metric_value = 0
         ).to_gtv())
@@ -707,7 +707,7 @@ function test_upgrade_container_lower_total_storage_too_old_space_data() {
         receive_resource_usage_statistics_message_op(resource_usage_statistics_message(
             rell.test.pubkeys.alice,
             container_name = container_name,
-            mesurement_time = get_last_blocktime(),
+            measurement_time = get_last_blocktime(),
             type = resource_type.space_usage_mib.name,
             metric_value = 0
         ).to_gtv())
@@ -765,7 +765,7 @@ function run_container_upgrade(container_name: text, space_usage: integer, upgra
         receive_resource_usage_statistics_message_op(resource_usage_statistics_message(
             rell.test.pubkeys.alice,
             container_name = container_name,
-            mesurement_time = integer.MAX_VALUE,
+            measurement_time = integer.MAX_VALUE,
             type = resource_type.space_usage_mib.name,
             metric_value = space_usage
         ).to_gtv())
