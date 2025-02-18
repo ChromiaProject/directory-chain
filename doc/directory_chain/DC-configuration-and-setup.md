@@ -113,6 +113,8 @@ From economy-chain:
       auth_service:
         pubkey: x"02B6F2967CF9AFC4D289EF475A2C2DDEC9EAB79AC60C1C99683E3134074619E635"
         include_system_cluster: true
+      proposal_blockchain_move:
+        provider_quota_move_cost: 35
       proposal_blockchain.util: 
         max_config_path_depth: 10
         max_config_size: 5242880 # 5 MiB
