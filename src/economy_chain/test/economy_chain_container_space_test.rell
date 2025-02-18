@@ -1,0 +1,41 @@
+@test module;
+
+import ^^.*;
+import ^.helper_operations.*;
+import common_helpers.resource_usage_statistics.*;
+
+function test_receive_resource_usage_statistics_message() {
+
+    assert_null(get_most_container_space_usage_mib("container1"));
+
+    rell.test.tx().op(
+        receive_resource_usage_statistics_message_op(resource_usage_statistics_message(
+            rell.test.pubkeys.charlie,
+            container_name = "container1",
+            measurement_time = 1,
+            type = resource_type.space_usage_mib.name,
+            metric_value = 12345
+        ).to_gtv())
+    ).run();
+
+    assert_equals(get_most_container_space_usage_mib("container1"), 12345);
+
+    rell.test.tx().op(
+        receive_resource_usage_statistics_message_op(resource_usage_statistics_message(
+            rell.test.pubkeys.eve,
+            container_name = "container1",
+            measurement_time = get_last_blocktime(),
+            type = resource_type.space_usage_mib.name,
+            metric_value = 15000
+        ).to_gtv()),
+        receive_resource_usage_statistics_message_op(resource_usage_statistics_message(
+            rell.test.pubkeys.dave,
+            container_name = "container1",
+            measurement_time = get_last_blocktime(),
+            type = resource_type.space_usage_mib.name,
+            metric_value = 13000
+        ).to_gtv())
+    ).run();
+
+    assert_equals(get_most_container_space_usage_mib("container1"), 15000);
+}

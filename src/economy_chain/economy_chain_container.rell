@@ -231,7 +231,7 @@ function () = ft4.auth.add_auth_handler(
 
 function upgrade_container_auth_message(gtv): text {
     val args = struct<upgrade_container>.from_gtv(gtv);
-    val lease = require_lease(args.container_name);
+    require_lease(args.container_name);
     val tag = require_cluster(args.upgraded_cluster_name).tag;
     val cost = calculate_container_cost(args.upgraded_duration_weeks, args.upgraded_container_units, args.upgraded_extra_storage_gib, tag);
     return "Please sign the message\nto upgrade container %s\nto have %s SCUs and %s GiB extra storage\nin cluster %s\nfor %s weeks\ncosting (before applying refund of current lease) %s %s\non account {account_id}".format(
@@ -248,13 +248,11 @@ function upgrade_container_auth_message(gtv): text {
 /**
  * If possible upgrade (or downgrade) the container to requested specifications.
  *
- * `warning:` Please note that the storage can only be expanded and never reduced. If the number of `container_units`
- * are reduced you need to compensate it by adding additional storage to `upgraded_extra_storage_gib`. Each removed
- * `container_units` will require `16` to be added to `upgraded_extra_storage_gib` (based on default storage value
- * in `standard_cluster_unit.storage`).
+ * `warning:` Please note that reducing the storage only works as long as the container still has at least
+ * 20% of free space (or what is configured in `container_reduce_space_margin_requirement`).
  *
  * @param upgraded_container_units The new number of container units for this container. Can both be increased and reduced.
- * @param upgraded_extra_storage_gib The new size of extra storage. This can only be increased, never reduced.
+ * @param upgraded_extra_storage_gib The new size of extra storage.
  * @param upgraded_cluster_name Move this container to a new cluster.
  * @param upgraded_duration_weeks Duration for the new upgraded lease
  */
@@ -268,10 +266,10 @@ operation upgrade_container(container_name: text, upgraded_container_units: inte
         "New container specifications are identical to current lease"
     );
     require_lease_duration(upgraded_duration_weeks);
-    val current_total_storage = lease.container_units * standard_cluster_unit.storage + lease.extra_storage_gib * 1024;
-    val upgraded_total_storage = upgraded_container_units * standard_cluster_unit.storage + upgraded_extra_storage_gib * 1024;
-    require(upgraded_total_storage >= current_total_storage, "Upgraded total storage must be greater or equal to current total storage. Did you reduce the number of container units without increasing extra storage?" );
-    require(upgraded_extra_storage_gib >= lease.extra_storage_gib, "upgraded_extra_storage_gib must be greater or equal to current lease");
+
+    val current_total_storage_mib = calculate_lease_storage_mib(lease);
+    val upgraded_total_storage_mib = calculate_storage_mib(upgraded_container_units, upgraded_extra_storage_gib);
+    require_enough_space(container_name, current_total_storage_mib, upgraded_total_storage_mib);
     require_dapp_cluster(upgraded_cluster_name);
 
     val account = ft4.auth.authenticate();
@@ -310,6 +308,31 @@ operation upgrade_container(container_name: text, upgraded_container_units: inte
         container_units = upgraded_container_units, extra_storage_gib = upgraded_extra_storage_gib,
         price = cost, lease_purchase_type.UPGRADE
     );
+}
+
+function calculate_lease_storage_mib(lease) {
+    return calculate_storage_mib(lease.container_units, lease.extra_storage_gib);
+}
+
+function calculate_storage_mib(container_units: integer, extra_storage_gib: integer) {
+    return container_units * standard_cluster_unit.storage + extra_storage_gib * 1024;
+}
+
+function require_enough_space(container_name: text, current_total_storage_mib: integer, upgraded_total_storage_mib: integer) {
+    if (upgraded_total_storage_mib < current_total_storage_mib) {
+        val most_space_usage_mib = get_most_container_space_usage_mib(container_name);
+        require(most_space_usage_mib != null, "Can't reduce space: No space data available for container %s"
+            .format(container_name));
+        require(is_anchoring_data_up_to_date(container_name),
+            "Can't reduce space: Container space data is too old to be able to continue");
+
+        val req_margin_in_mib = integer(most_space_usage_mib!! * chain_context.args.container_reduce_space_margin_requirement);
+        val req_storage_in_mib = most_space_usage_mib + req_margin_in_mib;
+
+        require(upgraded_total_storage_mib >= req_storage_in_mib,
+            "Can't reduce space: %s is not enough container space. Container is currently using %d MiB, and with a margin of %d MiB the minimum total allowed space is %d MiB".format(
+                upgraded_total_storage_mib, most_space_usage_mib, req_margin_in_mib, req_storage_in_mib));
+    }
 }
 
 @extend(ft4.auth.auth_handler)
