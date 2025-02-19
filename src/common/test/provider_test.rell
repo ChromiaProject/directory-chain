@@ -2,6 +2,7 @@
 
 import ^.setup.*;
 import ^.util.*;
+import ^.helper_operations.*;
 import ^^.*;
 import ^^.operations.*;
 import ^^.queries.*;
@@ -541,4 +542,42 @@ function _provider_votes(voter: rell.test.keypair) {
     rell.test.tx().op(
         make_vote_v65(last_proposal().rowid.to_integer(), true)
     ).sign(voter).run();
+}
+
+function test_provider_rate_limit() {
+    setup_module();
+
+    val provider = provider @ { rell.test.pubkeys.alice };
+    val points_per_day = provider_quota @ {
+        .tier == provider.tier,
+        provider_quota_type.max_actions_per_day
+    } .value;
+
+    rell.test.tx().op(
+        provider_rate_limit_op(provider)
+    ).sign(rell.test.keypairs.alice).run();
+    assert_equals(provider_rl_state @ { provider } ( .points ), points_per_day - 1);
+
+    rell.test.tx().op(
+        provider_rate_limit_op(provider, 10)
+    ).sign(rell.test.keypairs.alice).run();
+    assert_equals(provider_rl_state @ { provider } ( .points ), points_per_day - 1 - 10);
+
+    rell.test.tx().op(
+        provider_rate_limit_op(provider, points_per_day - 1 - 10)
+    ).sign(rell.test.keypairs.alice).run();
+
+    rell.test.tx().op(
+        provider_rate_limit_op(provider, points_per_day)
+    ).sign(rell.test.keypairs.alice).run_must_fail("Provider %s has not enough points to spend. Has 0 but needs %s"
+        .format(provider.pubkey, points_per_day));
+
+    rell.test.set_next_block_time_delta(millis_per_day / 2);
+    rell.test.block().run();
+
+    rell.test.tx().op(
+        provider_rate_limit_op(provider, 25)
+    ).sign(rell.test.keypairs.alice).run();
+
+    assert_equals(provider_rl_state @ { provider, .points >= 0 } ( .points ), 25);
 }

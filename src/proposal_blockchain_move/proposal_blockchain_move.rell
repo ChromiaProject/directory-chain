@@ -16,7 +16,7 @@ entity pending_blockchain_move {
  * @param my_pubkey pubkey of provider
  */
 operation propose_blockchain_move(my_pubkey: pubkey, blockchain_rid: byte_array, destination_container: text, description: text = "") {
-    val me = require_is_provider_with_rate_limit(my_pubkey);
+    val me = require_is_provider_with_rate_limit(my_pubkey, cost = chain_context.args.provider_quota_move_cost);
     val blockchain = require(blockchain @? { blockchain_rid }, "Unknown blockchain " + blockchain_rid);
     // require blockchain is not system
     require(not(blockchain.system), "Moving of system chains is not allowed: " + blockchain_rid);

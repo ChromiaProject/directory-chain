@@ -23,37 +23,43 @@ function _is_node_provider(tier: provider_tier) = tier == provider_tier.NODE_PRO
     after_provider_registered(provider, cluster);
 }
 
-// Recover provider's action points and consume one, if possible
-function provider_rate_limit(provider) {
+/**
+ * Recover provider's action points and consume `cost`, if possible
+ *
+ * @param cost Number of points to consume for this operation.
+ */
+function provider_rate_limit(provider, cost: integer = 1) {
     val max_actions_per_day = provider_quota @ {
             .tier == provider.tier,
             provider_quota_type.max_actions_per_day
     } .value;
 
     // We recover max_actions_per_day in 24 hours, find time needed to recover 1 point
-    val recovery_time = (86400 * 1000) / max_actions_per_day;
+    val recovery_time = millis_per_day / max_actions_per_day;
     val state = provider_rl_state @ { provider } (.points, .last_update);
     val time_delta = op_context.last_block_time - state.last_update;
-    var got_points = 0;
+    var recovered_points = 0;
     var update_time = state.last_update;
 
     if (time_delta > recovery_time) {
-        got_points = time_delta / recovery_time;
+        recovered_points = time_delta / recovery_time;
         // advance  update_time to a multiple of recovery_time to avoid wasting time
-        update_time = state.last_update + got_points * recovery_time;
-        if (got_points + state.points > max_actions_per_day) {
-            got_points = max_actions_per_day - state.points;
+        update_time = state.last_update + recovered_points * recovery_time;
+        if (recovered_points + state.points > max_actions_per_day) {
+            recovered_points = max_actions_per_day - state.points;
             // if user is at the maximum reset his timer
             update_time = op_context.last_block_time;
         }
     }
 
-    require(state.points + got_points > 0, "Provider has no points to spend: " + provider.pubkey);
-
     update provider_rl_state @ { provider } (
-        .points += got_points - 1,
+        .points += recovered_points - cost,
         .last_update = update_time
     );
+
+    require(exists(provider_rl_state @? { provider, .points >= 0 }),
+        "Provider %s has not enough points to spend. Has %s but needs %s"
+            .format(provider.pubkey, state.points + recovered_points, cost));
 }
 
 function require_provider_quota(provider, quota_type: provider_quota_type) {

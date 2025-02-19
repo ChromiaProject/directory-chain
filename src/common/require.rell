@@ -76,9 +76,13 @@ function require_voter_set_member(voter_set, provider) {
     require(exists(voter_set_member @* { voter_set, provider}), "Provider is not a member of voter set " + voter_set.name);
 }
 
-function require_is_provider_with_rate_limit(pubkey, provider_key_roles: list<provider_key_role> = [provider_key_role.main]) {
+function require_is_provider_with_rate_limit(
+    pubkey,
+    provider_key_roles: list<provider_key_role> = [provider_key_role.main],
+    cost: integer = 1
+) {
     val provider = require_provider(pubkey);
-    require_provider_auth_with_rate_limit(provider, provider_key_roles);
+    require_provider_auth_with_rate_limit(provider, provider_key_roles, cost);
     return provider;
 }
 
@@ -87,12 +91,17 @@ function require_is_provider_with_rate_limit(pubkey, provider_key_roles: list<pr
  *
  * @param provider The provider that must sign this transaction.
  * @param provider_key_roles The type of auth keys to use for this authentication. Main is default.
+ * @param cost The number of points this operation costs.
  */
-function require_provider_auth_with_rate_limit(provider, provider_key_roles: list<provider_key_role> = [provider_key_role.main]) {
+function require_provider_auth_with_rate_limit(
+    provider,
+    provider_key_roles: list<provider_key_role> = [provider_key_role.main],
+    cost: integer = 1
+) {
     require(empty(provider_auth_blockchain @* { provider }), "Blockchain authentication is enabled for provider %s".format(provider.pubkey));
     require(provider_is_signer(provider.pubkey, provider_key_roles), "Operation must be signed by provider key(s)");
     require(provider.active, "Provider is not enabled");
-    provider_rate_limit(provider);
+    provider_rate_limit(provider, cost);
 }
 
 /**
