@@ -112,7 +112,10 @@ function calculate_configuration_hash(base_config: byte_array, signers: list<pub
     val decompressed_config = decompress_configuration(base_config);
     val full_config = map<text, gtv>.from_gtv(gtv.from_bytes(decompressed_config));
     full_config["signers"] = signers.to_gtv();
-    return full_config.to_gtv().hash();    
+    val config_hash_version = if ("features" in full_config) integer.from_gtv(
+        map<text, gtv>.from_gtv(full_config["features"]).get_or_default("merkle_hash_version", (1).to_gtv())
+    ) else 1;
+    return gtv.legacy_hash(full_config, config_hash_version);
 }
 
 function get_blockchain_configuration(blockchain_rid: byte_array, height: integer):

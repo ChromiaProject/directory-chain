@@ -7,6 +7,7 @@ import ^^.operations.*;
 import ^^.queries.*;
 import ^^.test.ops.*;
 import ^^.test.setup.*;
+import nm_api.*;
 import proposal_blockchain.*;
 import proposal_container.*;
 import proposal_provider.*;
@@ -217,4 +218,39 @@ function test_set_latest_blockchain_configuration_values_default() {
     val chain = blockchain @ { "foo_chain" };
 
     assert_equals(latest_blockchain_configuration_values @ { chain } ( .config_delay ), 0);
+}
+
+function test_generate_config_hash_based_on_hash_version() {
+    setup_module();
+
+    // Test v1 case
+    val config_v1 = apply_required_configuration_properties(["conflict": [["a"]].to_gtv()]);
+
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p),
+        propose_blockchain(initial_provider.pub, config_v1.to_gtv().to_bytes(),
+            "v1_chain", "container1")
+    ).sign(initial_provider).run();
+
+    val v1_chain_rid = blockchain @ { "v1_chain" }.rid;
+    val v1_chain_raw_config = gtv.from_bytes(nm_get_blockchain_configuration(v1_chain_rid, 0)!!);
+    val v1_chain_config_hash_v1 = gtv.legacy_hash(v1_chain_raw_config, 1);
+    val v1_chain_config_hash_v2 = gtv.legacy_hash(v1_chain_raw_config, 2);
+    assert_not_equals(v1_chain_config_hash_v1, v1_chain_config_hash_v2);
+    assert_equals(v1_chain_rid, v1_chain_config_hash_v1);
+
+    // Test v2 case
+    val config_v2 = apply_required_configuration_properties(["features": ["merkle_hash_version": 2].to_gtv(), "conflict": [["a"]].to_gtv()]);
+
+    rell.test.tx().op(
+        propose_blockchain(initial_provider.pub, config_v2.to_gtv().to_bytes(),
+            "v2_chain", "container1")
+    ).sign(initial_provider).run();
+
+    val v2_chain_rid = blockchain @ { "v2_chain" }.rid;
+    val v2_chain_raw_config = gtv.from_bytes(nm_get_blockchain_configuration(v2_chain_rid, 0)!!);
+    val v2_chain_config_hash_v1 = gtv.legacy_hash(v2_chain_raw_config, 1);
+    val v2_chain_config_hash_v2 = gtv.legacy_hash(v2_chain_raw_config, 2);
+    assert_not_equals(v2_chain_config_hash_v1, v2_chain_config_hash_v2);
+    assert_equals(v2_chain_rid, v2_chain_config_hash_v2);
 }
