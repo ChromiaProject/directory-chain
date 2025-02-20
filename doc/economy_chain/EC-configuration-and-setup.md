@@ -86,6 +86,7 @@ Example:
           anchoring:
             topics:
               - G_node_availability_report
+              - G_resource_usage_statistics
           directory-chain:
             topics:
               - L_create_cluster_error

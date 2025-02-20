@@ -1,35 +1,43 @@
-operation __resource_usage_statistics(node_pubkey: pubkey, container_name: text, mesurement_time: timestamp, resource_type: resource_type, metric_value: decimal) {
-    handle_resource_usage_statistics(node_pubkey, container_name, mesurement_time, resource_type, metric_value);
+@extendable function on_resource_usage_statistics_update(node_pubkey: pubkey, container_name: text, measurement_time: timestamp, resource_type: resource_type, metric_value: decimal, previous_value: resource_usage_statistics?) {}
+
+operation __resource_usage_statistics(node_pubkey: pubkey, container_name: text, measurement_time: timestamp, resource_type: resource_type, metric_value: decimal) {
+    handle_resource_usage_statistics(node_pubkey, container_name, measurement_time, resource_type, metric_value);
 }
 
-function handle_resource_usage_statistics(node_pubkey: pubkey, container_name: text, mesurement_time: timestamp, resource_type: resource_type, metric_value: decimal) {
-    val resource_usage_statistic =  resource_usage_statistics @? { node_pubkey, resource_type, container_name };
+function handle_resource_usage_statistics(node_pubkey: pubkey, container_name: text, measurement_time: timestamp, resource_type: resource_type, metric_value: decimal) {
+    val resource_usage_statistic = resource_usage_statistics @? { node_pubkey, resource_type, container_name };
+
+    on_resource_usage_statistics_update(node_pubkey, container_name, measurement_time, resource_type, metric_value, resource_usage_statistic);
 
     if (resource_usage_statistic != null) {
-        resource_usage_statistic.mesurement_time = mesurement_time;
+        resource_usage_statistic.measurement_time = measurement_time;
         resource_usage_statistic.metric_value = metric_value;
     } else {
-        create resource_usage_statistics(node_pubkey, container_name, mesurement_time, resource_type, metric_value);
+        create resource_usage_statistics(node_pubkey, container_name, measurement_time, resource_type, metric_value);
     }
-
 }
 
-/**
- * Types of system resources that can be monitored.
- */
-enum resource_type {
-    /**
-     * Amount of free space available on a storage device, expressed in Mebibyte.
-     */
-    free_space_left_mib,
-    /**
-     * Amount of used space on a storage device, expressed in Mebibyte.
-     */
-    space_usage_mib,
-    /**
-     * Percentage of total storage capacity that is occupied by data.
-     */
-    space_usage_percentage,
+@extend(on_resource_usage_statistics_update)
+function send_resource_usage_statistics_update(
+    node_pubkey: pubkey,
+    container_name: text,
+    measurement_time: timestamp,
+    type: resource_type,
+    metric_value: decimal,
+    previous_value: resource_usage_statistics? = null
+) {
+    if (type == resource_type.space_usage_mib) {
+        send_message(
+            resource_usage_statistics_topic,
+            resource_usage_statistics_message(
+                node_pubkey,
+                container_name,
+                measurement_time,
+                type = type.name,
+                metric_value,
+            ).to_gtv()
+        );
+    }
 }
 
 /**
@@ -38,7 +46,7 @@ enum resource_type {
 entity resource_usage_statistics {
     node_pubkey: pubkey;
     container_name: text;
-    mutable mesurement_time: timestamp;
+    mutable measurement_time: timestamp;
     resource_type: resource_type;
     mutable metric_value: decimal;
 }
@@ -48,7 +56,7 @@ entity resource_usage_statistics {
  */
 struct container_resource_usage_statistics {
     node_pubkey: pubkey;
-    mesurement_time: timestamp;
+    measurement_time: timestamp;
     resource_type: resource_type;
     metric_value: decimal;
 }
@@ -57,7 +65,7 @@ struct container_resource_usage_statistics {
  * Retrieves last measured resource usage statistics across nodes, for a given container optionally filtered by resource type and node.
  */
 query get_latest_resource_usage_statistics(container_name: text, resource_type: resource_type?, node_pubkey: pubkey?) {
-    return resource_usage_statistics @* { container_name, resource_type == null or .resource_type == resource_type, node_pubkey == null or .node_pubkey == node_pubkey } ( container_resource_usage_statistics(.node_pubkey, .mesurement_time, .resource_type, .metric_value ));
+    return resource_usage_statistics @* { container_name, resource_type == null or .resource_type == resource_type, node_pubkey == null or .node_pubkey == node_pubkey } ( container_resource_usage_statistics(.node_pubkey, .measurement_time, .resource_type, .metric_value ));
 }
 
 @extend(receive_icmf_message) function receive_container_blockchain_update(sender: byte_array, topic: text, body: gtv) {
