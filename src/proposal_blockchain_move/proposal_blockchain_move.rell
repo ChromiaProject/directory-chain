@@ -7,7 +7,7 @@ entity pending_blockchain_move {
 }
 
 /**
- * Propose blockchain move.
+ * Propose a blockchain move
  * 
  * Permission: container deployer
  * 
@@ -17,8 +17,8 @@ entity pending_blockchain_move {
  */
 operation propose_blockchain_move(my_pubkey: pubkey, blockchain_rid: byte_array, destination_container: text, description: text = "") {
     val me = require_is_provider_with_rate_limit(my_pubkey, cost = chain_context.args.provider_quota_move_cost);
-    val blockchain = require(blockchain @? { blockchain_rid }, "Unknown blockchain " + blockchain_rid);
-    // require blockchain is not system
+
+    val blockchain = require_blockchain(blockchain_rid);
     require(not(blockchain.system), "Moving of system chains is not allowed: " + blockchain_rid);
 
     val dst_container = validate_blockchain_move_proposal(blockchain, me, destination_container);
@@ -29,7 +29,7 @@ operation propose_blockchain_move(my_pubkey: pubkey, blockchain_rid: byte_array,
 }
 
 /**
- * Returns blockchain move proposal.
+ * Returns a proposal object for moving a blockchain.
  */
 query get_blockchain_move_proposal(rowid?):
         (blockchain_rid: byte_array, blockchain_name: text, container: text, cluster: text)? {
@@ -117,7 +117,8 @@ function validate_blockchain_move_proposal(blockchain, proposed_by: provider, de
 
     require(
         get_voter_set_members_sorted(src_container.deployer.name) == get_voter_set_members_sorted(dst_container.deployer.name),
-        "Deployers of source and destination container must be identical");
+        "Deployers of source and destination container must be identical"
+    );
 
     return dst_container;
 }

@@ -8,7 +8,7 @@ entity pending_blockchain_move_finish {
 }
 
 /**
- * Propose blockchain move finish.
+ * Propose finishing a blockchain move
  * 
  * Permission: container deployer
  * 
@@ -27,7 +27,7 @@ operation propose_blockchain_move_finish(my_pubkey: pubkey, blockchain_rid: byte
 }
 
 /**
- * Returns blockchain move finish proposal.
+ * Returns a proposal object for finalizing a blockchain move.
  */
 query get_blockchain_move_finish_proposal(rowid?):
         (blockchain_rid: byte_array, blockchain_name: text, cluster: text, container: text, final_height: integer)? {
@@ -71,6 +71,10 @@ function delete_pending_blockchain_move_finish(proposal) {
 function validate_blockchain_move_finish_proposal(blockchain) {
 
     val proposal_details = require(moving_blockchain @? { blockchain }, "Blockchain %s is not being moved".format(blockchain.rid));
+
+    // require there no pending blockchain actions (pause, resume, remove, archive, unarchive)
+    val pba = pending_blockchain_action @? { blockchain };
+    require(empty(pba), "Blockchain move %s cannot be proposed due to a pending proposal %s related to it".format(blockchain.rid, pba?.proposal));
 
     require(
         get_voter_set_members_sorted(proposal_details.source.deployer.name) == get_voter_set_members_sorted(proposal_details.destination.deployer.name),
