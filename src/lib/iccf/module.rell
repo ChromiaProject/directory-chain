@@ -220,9 +220,9 @@ function _get_proof(
     return proofs_and_headers @? { .tx_hash == gtv.legacy_hash(gtx_transaction.to_gtv(), _get_hash_version(.block_header)) };
 }
 
-function _get_hash_version(block_header) = if ("features" in block_header.extra) integer.from_gtv(
-        map<text, gtv>.from_gtv(block_header.extra["features"]).get_or_default("merkle_hash_version", (1).to_gtv())
-    ) else 1;
+function _get_hash_version(block_header) = integer.from_gtv(
+    block_header.extra.get_or_default("merkle_hash_version", (1).to_gtv())
+);
 
 /**
  * Prevents this transaction to be proved multiple times by storing the hash
