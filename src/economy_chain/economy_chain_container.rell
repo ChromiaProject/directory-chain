@@ -246,6 +246,100 @@ function upgrade_container_auth_message(gtv): text {
 }
 
 /**
+ * Proposes container lease ownership transfer to a receiver FT4 account.
+ * ft4.ft_auth operation by current container lease owner is required to propose transfer.
+ * Receiver FT4 account needs to accept the transfer by using the `operation accept_container_lease_ownership_transfer`
+ * @param container_name container lease to be transferred
+ * @param receiver_account_id FT4 account to receive lease ownership
+ */
+operation propose_container_lease_ownership_transfer(container_name: text, receiver_account_id: byte_array) {
+    require_initialized();
+    val lease = require_lease(container_name);
+    ft4.accounts.account_by_id(receiver_account_id);
+    val account = ft4.auth.authenticate();
+    require(lease.account == account, "Lease for container: %s was not created by you.".format(container_name));
+    require(account.id != receiver_account_id, "You cannot transfer lease ownership to yourself.");
+    require(not(exists(container_lease_ownership_transfer_proposal @? { container_name })), "Proposal for container: %s already exists!".format(container_name));
+    create container_lease_ownership_transfer_proposal(container_name, receiver_account_id);
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(propose_container_lease_ownership_transfer).mount_name,
+    flags = ["T"],
+    message = propose_container_lease_ownership_transfer_auth_message(*)
+);
+
+function propose_container_lease_ownership_transfer_auth_message(gtv): text {
+    val args = struct<propose_container_lease_ownership_transfer>.from_gtv(gtv);
+    return "Please sign the message\nto propose transfer of lease ownership of container %s\nto account %s".format(
+        args.container_name,
+        args.receiver_account_id,
+    );
+}
+
+/**
+ * Remove proposed lease ownership transfer.
+ * ft4.ft_auth operation by current container lease owner is required to remove proposal.
+ * @param container_name container lease to be transferred
+ */
+operation remove_container_lease_ownership_transfer_proposal(container_name: text) {
+    require_initialized();
+    val lease = require_lease(container_name);
+    val account = ft4.auth.authenticate();
+    require(lease.account == account, "Lease for container %s was not created by you.".format(container_name));
+    delete container_lease_ownership_transfer_proposal @* {container_name};
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(remove_container_lease_ownership_transfer_proposal).mount_name,
+    flags = ["T"],
+    message = remove_container_lease_ownership_transfer_proposal_auth_message(*)
+);
+
+function remove_container_lease_ownership_transfer_proposal_auth_message(gtv): text {
+    val args = struct<remove_container_lease_ownership_transfer_proposal>.from_gtv(gtv);
+    val receiver_account_id = container_lease_ownership_transfer_proposal @? {args.container_name} (.receiver_account_id);
+    return "Please sign the message\nto remove lease ownership transfer of container %s\nto %s".format(
+        args.container_name,
+        receiver_account_id
+    );
+}
+
+/**
+ * Accept proposed lease ownership transfer.
+ * ft4.ft_auth operation by container lease receiver account is required to accept proposal.
+ * @param container_name container lease to be transferred
+ */
+operation accept_container_lease_ownership_transfer_proposal(container_name: text) {
+    val lease = require_lease(container_name);
+    val receiver_account = ft4.auth.authenticate();
+    val transfer = container_lease_ownership_transfer_proposal @? {.container_name == container_name, .receiver_account_id == receiver_account.id};
+    require(transfer, "There is no lease ownership transfer proposed for you to accept.");
+
+    val current_lease = lease @ { transfer.container_name };
+    current_lease.account = receiver_account;
+    delete transfer;
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(accept_container_lease_ownership_transfer_proposal).mount_name,
+    flags = ["T"],
+    message = accept_container_lease_ownership_transfer_proposal_auth_message(*)
+);
+
+function accept_container_lease_ownership_transfer_proposal_auth_message(gtv): text {
+    val args = struct<accept_container_lease_ownership_transfer_proposal>.from_gtv(gtv);
+    val transfer = container_lease_ownership_transfer_proposal @? { args.container_name };
+    return "Please sign the message\nto accept transfer of lease ownership of container %s\nto account %s".format(
+        args.container_name,
+        transfer?.receiver_account_id,
+    );
+}
+
+/**
  * If possible upgrade (or downgrade) the container to requested specifications.
  *
  * `warning:` Please note that reducing the storage only works as long as the container still has at least
@@ -695,4 +789,8 @@ query get_lease_refunds_by_account(account_id: byte_array, page_size: integer?, 
 
 query total_lease_investment(): integer {
     return lease_purchase @ {} (@sum .price) - lease_refund @ {} (@sum .amount);
+}
+
+query get_container_lease_ownership_transfer_proposal(container_name: text): container_lease_ownership_transfer_proposal_data? {
+    return container_lease_ownership_transfer_proposal @? { container_name } (container_lease_ownership_transfer_proposal_data(.container_name, .receiver_account_id));
 }
