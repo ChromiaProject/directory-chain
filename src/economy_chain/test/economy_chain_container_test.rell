@@ -3,6 +3,7 @@
 import ^^.*;
 import ^.helper_functions.*;
 import ^.helper_operations.*;
+import test: ^.ft4;
 
 namespace ft4 {
     import lib.ft4.accounts;
@@ -939,4 +940,168 @@ function test_downgrade_container_and_reduce_cost() {
 
     val lease_data = require(get_lease_by_container_name(container_name));
     assert_equals(lease_data, expected_lease);
+}
+
+function test_container_lease_ownership_transfer() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
+
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 7);
+
+    assert_equals(
+        offer_container_lease_ownership_transfer_auth_message([container_name.to_gtv(), bob.id.to_gtv()].to_gtv()),
+        "Please sign the message\nto offer transfer of lease ownership of container %s\nto account %s".format(container_name, bob.id)
+    );
+
+    rell.test.tx()
+        .op(test.evm_auth_operation_for(rell.test.keypairs.alice.priv, offer_container_lease_ownership_transfer(container_name, bob.id)))
+        .op(offer_container_lease_ownership_transfer(container_name, bob.id))
+        .run();
+
+    val offer = get_container_lease_ownership_transfer_offer(container_name);
+
+    assert_equals(offer, container_lease_ownership_transfer_offer_data(container_name, bob.id));
+
+    assert_equals(
+        accept_container_lease_ownership_transfer_offer_auth_message([container_name.to_gtv()].to_gtv()),
+        "Please sign the message\nto accept transfer of lease ownership of container %s\n".format(container_name)
+    );
+
+    rell.test.tx()
+        .op(test.evm_auth_operation_for(rell.test.keypairs.bob.priv, accept_container_lease_ownership_transfer_offer(container_name)))
+        .op(accept_container_lease_ownership_transfer_offer(container_name))
+        .run();
+
+    assert_null(get_container_lease_ownership_transfer_offer(container_name));
+
+    val expected_lease = lease_data(
+        container_name = container_name,
+        cluster_name = cluster_name,
+        container_units = 2,
+        extra_storage_gib = 0,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL * 5 + millis_per_week,
+        expired = false,
+        auto_renew = false,
+        subnode_image_name = "",
+        bridge_leases = []
+    );
+
+    assert_equals(get_leases_by_account(alice.id), list<lease_data>());
+    assert_equals(get_leases_by_account(bob.id), [expected_lease]);
+}
+
+function test_wrong_call_offer_container_lease_ownership_transfer_operation() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
+
+    rell.test.tx()
+        .op(offer_container_lease_ownership_transfer("container_name", bob.id))
+        .run_must_fail("No current lease for container container_name");
+
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 7);
+
+    rell.test.tx()
+        .op(offer_container_lease_ownership_transfer(container_name, rell.test.keypairs.charlie.pub))
+        .run_must_fail("Account not found: '%s'".format(rell.test.keypairs.charlie.pub));
+
+    rell.test.tx()
+        .op(offer_container_lease_ownership_transfer(container_name, bob.id))
+        .run_must_fail("Expected at least two operations, make sure that you included auth operation.");
+
+    rell.test.tx()
+        .op(test.evm_auth_operation_for(rell.test.keypairs.bob.priv, offer_container_lease_ownership_transfer(container_name, bob.id)))
+        .op(offer_container_lease_ownership_transfer(container_name, bob.id))
+        .run_must_fail("Lease for container: %s was not created by you.".format(container_name));
+
+    rell.test.tx()
+        .op(test.evm_auth_operation_for(rell.test.keypairs.alice.priv, offer_container_lease_ownership_transfer(container_name, alice.id)))
+        .op(offer_container_lease_ownership_transfer(container_name, alice.id))
+        .run_must_fail("You cannot transfer lease ownership to yourself.");
+
+    rell.test.tx()
+        .op(test.evm_auth_operation_for(rell.test.keypairs.alice.priv, offer_container_lease_ownership_transfer(container_name, bob.id)))
+        .op(offer_container_lease_ownership_transfer(container_name, bob.id))
+        .run();
+
+    rell.test.tx()
+        .op(test.evm_auth_operation_for(rell.test.keypairs.alice.priv, offer_container_lease_ownership_transfer(container_name, bob.id)))
+        .op(offer_container_lease_ownership_transfer(container_name, bob.id))
+        .run_must_fail("Offer for container: %s already exists!".format(container_name));
+}
+
+function test_remove_container_lease_ownership_transfer_offer() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
+
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 7);
+
+    rell.test.tx()
+        .op(test.evm_auth_operation_for(rell.test.keypairs.alice.priv, offer_container_lease_ownership_transfer(container_name, bob.id)))
+        .op(offer_container_lease_ownership_transfer(container_name, bob.id))
+        .run();
+
+    val offer = get_container_lease_ownership_transfer_offer(container_name);
+
+    assert_equals(offer, container_lease_ownership_transfer_offer_data(container_name, bob.id));
+
+    assert_equals(
+        remove_container_lease_ownership_transfer_offer_auth_message([container_name.to_gtv()].to_gtv()),
+        "Please sign the message\nto remove lease ownership transfer offer of container %s\nto %s".format(container_name, bob.id));
+
+    rell.test.tx()
+        .op(test.evm_auth_operation_for(rell.test.keypairs.alice.priv, remove_container_lease_ownership_transfer_offer(container_name)))
+        .op(remove_container_lease_ownership_transfer_offer(container_name))
+        .run();
+
+    assert_null(get_container_lease_ownership_transfer_offer(container_name));
+}
+
+function test_wrong_remove_container_lease_ownership_transfer_offer() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+
+    rell.test.tx()
+        .op(remove_container_lease_ownership_transfer_offer(""))
+        .run_must_fail("No current lease for container");
+
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
+
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 7);
+
+    rell.test.tx()
+        .op(remove_container_lease_ownership_transfer_offer(container_name))
+        .run_must_fail("Expected at least two operations, make sure that you included auth operation.");
+
+    rell.test.tx()
+        .op(test.evm_auth_operation_for(rell.test.keypairs.bob.priv, remove_container_lease_ownership_transfer_offer(container_name)))
+        .op(remove_container_lease_ownership_transfer_offer(container_name))
+        .run_must_fail("Lease for container container name was not created by you.");
+}
+
+function test_wrong_accept_container_lease_ownership_transfer() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+
+    rell.test.tx()
+        .op(accept_container_lease_ownership_transfer_offer(""))
+        .run_must_fail("No current lease for container");
+
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
+
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 7);
+
+    rell.test.tx()
+        .op(accept_container_lease_ownership_transfer_offer(container_name))
+        .run_must_fail("Expected at least two operations, make sure that you included auth operation.");
+
+    rell.test.tx()
+        .op(test.evm_auth_operation_for(rell.test.keypairs.alice.priv, accept_container_lease_ownership_transfer_offer(container_name)))
+        .op(accept_container_lease_ownership_transfer_offer(container_name))
+        .run_must_fail("There is no lease ownership transfer offer for you to accept.");
 }
