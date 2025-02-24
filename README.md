@@ -69,7 +69,21 @@ libs:
   iccf:
     registry: https://gitlab.com/chromaway/core/directory-chain
     path: src/lib/iccf
+    tagOrBranch: 1.81.0
+    rid: x"9C359787B75927733034EA1CEE74EEC8829D2907E4FC94790B5E9ABE4396575D"
+```
+
+Then use `chr install` to install the iccf-library.
+
+The above version requires Rell version >= 0.14.5. If you need to use a lower Rell version then install:
+
+```yaml
+libs:
+  iccf:
+    registry: https://gitlab.com/chromaway/core/directory-chain
+    path: src/lib/iccf
     tagOrBranch: 1.66.1
     rid: x"23BB9A9B967EED88642E08FFA336D7E35A6A49BFA7E86776FFBDCDA047D018F4"
 ```
-Then use `chr install` to install the iccf-library.
+
+**Note**: With this version it's not possible to verify transactions on chains that is using merkle hash version 2.
