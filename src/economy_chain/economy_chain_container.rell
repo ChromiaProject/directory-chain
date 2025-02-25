@@ -600,6 +600,24 @@ function refund_lease(lease: lease) {
 }
 
 /**
+ * Returns information for any ticket by transaction RID.
+ *
+ * @param tx_rid  transaction RID
+ */
+query get_ticket_by_transaction(tx_rid: byte_array): ticket_data? =
+        ticket @? { .transaction.tx_rid == tx_rid }
+            (ticket_data(.rowid.to_integer(), .type, .state, .error_message));
+
+/**
+ * Returns information for any ticket by ID.
+ *
+ * @param ticket_id  ticket ID
+ */
+query get_ticket_by_id(ticket_id: integer): ticket_data? =
+        ticket @? { .rowid == rowid(ticket_id) }
+            (ticket_data(.rowid.to_integer(), .type, .state, .error_message));
+
+/**
  * Returns ticket information for the create container ticket by transaction RID.
  *
  * @param tx_rid  transaction RID
