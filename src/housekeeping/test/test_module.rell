@@ -1,0 +1,37 @@
+@test module;
+
+import ^^.*;
+import common.test.setup.*;
+import common.test.ops.*;
+import common.test.helper_operations.*;
+import common.test.util.constants.*;
+import proposal_cluster.*;
+import direct_container.*;
+
+function test_housekeeping_empty_container() {
+
+    setup_module(provider_quota_max_containers = 2);
+    val deployer1 = rell.test.keypairs.bob;
+    val container_name1 = "delete_me";
+    val container_name2 = "keep_me";
+
+    rell.test.tx().op(
+        create_test_provider("", deployer1.pub, provider_tier.DAPP_PROVIDER),
+        create_container_with_units(initial_provider.pub, container_name1, clusters.system, 1, [deployer1.pub], 1),
+        create_container_with_units(initial_provider.pub, container_name2, clusters.system, 1, [deployer1.pub], 1),
+    ).sign(initial_provider).run();
+
+    assert_not_null(container @? { container_name1 });
+    assert_not_null(container @? { container_name2 });
+
+    rell.test.tx().op(
+        create_blockchain_and_add_to_container_op(container @ { container_name2 }, "bc2", x"FF")
+    ).sign(initial_provider).run();
+
+    rell.test.set_next_block_time_delta(259200000 + 1);
+    rell.test.block().run();
+    rell.test.block().run();
+
+    assert_null(container @? { container_name1 });
+    assert_not_null(container @? { container_name2 });
+}

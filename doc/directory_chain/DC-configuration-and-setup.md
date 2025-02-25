@@ -11,6 +11,7 @@ The Directory Chain has the following module args:
 | `common`              | Module args for `common` module.              | map        | :white_check_mark: |         |
 | `proposal_blockchain` | Module args for `proposal_blockchain` module. | map        | :white_check_mark: |         |
 | `auth_service`        | Module args for `auth_service` module.        | map        | :white_check_mark: |         |
+| `housekeeping`        | Module args for `housekeeping` module.        | map        | :white_check_mark: |         |
 
 
 Module args for `common` module:
@@ -38,6 +39,12 @@ Module args for `auth_service` module:
 |--------------------------|-------------------------------------------------------|---------|--------------------|---------|
 | `pubkey`                 | Pubkey used to sign `auth_service` module operations. | pubkey  | :white_check_mark: |         |
 | `include_system_cluster` | Include system cluster.                               | boolean | :white_check_mark: |         |
+
+Module args for `housekeeping` module:
+
+| Name                       | Description                                                    | Type    | Required           | Default |
+|----------------------------|----------------------------------------------------------------|---------|--------------------|---------|
+| `max_empty_container_time` | Maximum time the container can live empty before housekeeping. | integer | :white_check_mark: |         |
 
 Config type
 
