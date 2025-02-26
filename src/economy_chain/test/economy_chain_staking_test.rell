@@ -1865,3 +1865,37 @@ function test_staking_pending_delegation_new_stake() {
     assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.dave.pub);
     assert_equals(staking_get_current_delegate(test_account_bob.id), rell.test.keypairs.dave.pub);
 }
+
+function test_delegation_no_staking_states() {
+    rell.test.tx().op(init()).run();
+
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
+    do_evm_stake_update_bsc(alice_evm_address, 100 * units_per_asset);
+    val test_account_alice = require(do_create_account_using_ras_staking(rell.test.keypairs.alice));
+    do_evm_stake_update_bsc(alice_evm_address, 0);
+
+    add_provider(rell.test.keypairs.bob.pub);
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_delegate(rell.test.keypairs.bob.pub))
+    ).op(
+        staking_delegate(rell.test.keypairs.bob.pub)
+    ).run_must_fail("Need stake to delegate.");
+
+    do_evm_stake_update_bsc(alice_evm_address,100 * units_per_asset);
+
+     rell.test.tx().op(
+        staking_request_withdrawal_on_network(test_account_alice, network.BSC)
+    ).run();
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_delegate(rell.test.keypairs.bob.pub))
+    ).op(
+        staking_delegate(rell.test.keypairs.bob.pub)
+    ).run_must_fail("No available staker states to delegate");
+
+    do_evm_stake_update_bsc(alice_evm_address,150 * units_per_asset);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.bob.pub);
+
+    assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.bob.pub);
+}
