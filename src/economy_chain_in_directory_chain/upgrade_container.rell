@@ -17,7 +17,12 @@ entity ec_pending_last_anchored_heights_request {
 function receive_upgrade_container_impl(body: gtv) {
     val message = upgrade_container_message.from_gtv(body);
 
-    val container = container @ { message.container_name };
+    val container = container @? { message.container_name };
+    if (container == null) {
+        send_upgrade_container_result(message, "Unable to upgrade non-existing container %s".format(message.container_name));
+        return;
+    }
+
     if (container.cluster.name == message.cluster_name) {
         val upgrade_result = try_call(check_and_upgrade_container(container, message, *));
         send_upgrade_container_result(message, if (upgrade_result) null else "Unable to upgrade container %s".format(message.container_name));
