@@ -2,6 +2,15 @@
 
 This guide assumes that you have Chromia CLI installed and configured to use a node in the relevant network.
 
+To get detailed type information of the queries and transactions listed below, please refer to the auto-generated
+documentation: https://chromaway.gitlab.io/core/directory-chain/-directory%20chain/token_chain/index.html
+
+To get the blockchain RID of token chain in a network:
+
+```
+chr query --blockchain-rid DIRECTORY_CHAIN_RID get_token_chain_rid
+```
+
 ## Create an account
 
 You can create an account on token chain by transferring CHR from economy chain to your own account ID on token chain.
