@@ -2,13 +2,14 @@
 
 This guide assumes that you have Chromia CLI installed and configured to use a node in the relevant network.
 
-To get detailed type information of the queries and transactions listed below, please refer to the auto-generated
-documentation: https://chromaway.gitlab.io/core/directory-chain/-directory%20chain/token_chain/index.html
+Placeholders in the commands below are written as `${PLACEHOLDER}` and should be replaced by actual value. 
+To get detailed type information for these values, please refer to the auto-generated documentation: 
+https://chromaway.gitlab.io/core/directory-chain/-directory%20chain/token_chain/index.html
 
 To get the blockchain RID of token chain in a network:
 
 ```
-chr query --blockchain-rid DIRECTORY_CHAIN_RID get_token_chain_rid
+chr query --blockchain-rid ${DIRECTORY_CHAIN_RID} get_token_chain_rid
 ```
 
 ## Create an account
@@ -25,33 +26,33 @@ In order to propose a token on token chain you need to have enough funds to cove
 You can see the price for listing a token (or adding a bridge with query):
 
 ```
-chr query --blockchain-rid TOKEN_CHAIN_RID get_token_chain_constants
+chr query --blockchain-rid ${TOKEN_CHAIN_RID} get_token_chain_constants
 ```
 
-Use Chromia CLI to propose the token (replace the placeholder text with the actual values, see more details about minting and account creation below):
+Use Chromia CLI to propose the token:
 
 ```
-chr tx --evm-auth EVM_WALLET_ADDRESS --blockchain-rid TOKEN_CHAIN_RID propose_token NAME SYMBOL DECIMALS ICON [MINTING_POLICY] [ACCOUNT_CREATION_BRIDS]
+chr tx --evm-auth EVM_WALLET_ADDRESS --blockchain-rid ${TOKEN_CHAIN_RID} propose_token ${NAME} ${SYMBOL} ${DECIMALS} ${ICON} ${[MINTING_POLICY]} ${[ACCOUNT_CREATION_BRIDS]}
 ```
 
 To check the status of your token proposal:
 
 ```
-chr query --blockchain-rid TOKEN_CHAIN_RID get_proposals_by_proposer proposer=YOUR_ACCOUNT_ID
+chr query --blockchain-rid ${TOKEN_CHAIN_RID} get_proposals_by_proposer proposer=${YOUR_ACCOUNT_ID}
 ```
 
 Once approved you can fetch the asset ID of your newly created asset:
 
 ```
-chr query --blockchain-rid TOKEN_CHAIN_RID ft4.get_assets_by_name name=YOUR_TOKEN_NAME page_size=null page_cursor=null
+chr query --blockchain-rid ${TOKEN_CHAIN_RID} ft4.get_assets_by_name name=${YOUR_TOKEN_NAME} page_size=null page_cursor=null
 ```
 
 ## Propose a bridge for the token
 
-Use Chromia CLI to propose the token bridge (replace the placeholder text with the actual values, see more details about minting and account creation below):
+Use Chromia CLI to propose the token bridge:
 
 ```
-chr tx --evm-auth EVM_WALLET_ADDRESS --blockchain-rid TOKEN_CHAIN_RID propose_token_bridge ASSET_ID [BRIDGE_CONFIGURATION]
+chr tx --evm-auth EVM_WALLET_ADDRESS --blockchain-rid ${TOKEN_CHAIN_RID} propose_token_bridge ${ASSET_ID} ${[BRIDGE_CONFIGURATION]}
 ```
 
 Where bridge configurations are defined by the following struct:
@@ -86,7 +87,7 @@ struct minting_policy {
 If you are a minter and the policy allows it you can mint new tokens to your account by calling the operation below:
 
 ```
-chr tx --evm-auth EVM_WALLET_ADDRESS --blockchain-rid TOKEN_CHAIN_RID mint_token ASSET_ID AMOUNT
+chr tx --evm-auth EVM_WALLET_ADDRESS --blockchain-rid ${TOKEN_CHAIN_RID} mint_token ${ASSET_ID} ${AMOUNT}
 ```
 
 ## User account creation
