@@ -227,9 +227,12 @@ function validate_eif(config_map: map<text, gtv>) {
 
     if (chain_context.args.require_eif_snapshot_version != null) {
         val message = "EIF snapshot version must be version %d".format(chain_context.args.require_eif_snapshot_version);
-        val snapshot_version = extract_config_path(config_map, ["eif", "snapshot"])?.get_or_null("version");
-        require(snapshot_version, message);
-        require(integer.from_gtv(snapshot_version) == chain_context.args.require_eif_snapshot_version, message);
+        val snapshot_config = extract_config_path(config_map, ["eif", "snapshot"]);
+        if (snapshot_config != null) {
+            val snapshot_version = snapshot_config.get_or_null("version");
+            require(snapshot_version, message);
+            require(integer.from_gtv(snapshot_version) == chain_context.args.require_eif_snapshot_version, message);
+        }
     }
 }
 
