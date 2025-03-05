@@ -171,6 +171,16 @@ function test_blockchain_configuration_validation() {
         propose_blockchain(alice.pubkey, conf7.to_gtv().to_bytes(), "foo_chain", container)
     ).sign(rell.test.keypairs.alice)
         .run_must_fail("EIF snapshot version must be version 2");
+
+    // Blockchain supports EIF, the snapshot configuration is completely absent, tx succeeds
+    val conf8 = apply_required_configuration_properties();
+    conf8["gtx"] = [
+        "modules" : ["net.postchain.eif.EifGTXModule"]
+    ].to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf8.to_gtv().to_bytes(), "foo_chain", container)
+    ).sign(rell.test.keypairs.alice)
+        .run();
 }
 
 function test_propose_configuration() {
