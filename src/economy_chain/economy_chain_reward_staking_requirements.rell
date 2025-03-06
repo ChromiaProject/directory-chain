@@ -6,18 +6,18 @@
 query get_provider_staking_status(pubkey) {
     val provider = require_provider(pubkey);
     val provider_staking_account = provider_staking_account @ { provider };
-    val own_staking_chr = staking_get_provider_stake(provider.pubkey);
-    val total_staking_chr = staking_get_total_delegation_to(provider.pubkey);
-    val approved = provider_meets_staking_requirements(provider);
+    val staking_details = check_required_provider_staking_status(provider);
     val (days_since_approved, days_until_stop, pay_out_reward) = get_staking_requirement_payout_stop(provider_staking_account);
 
     return provider_staking_status(
         staking_account_id = provider_staking_account.staking_account.id,
-        own_staking_chr = own_staking_chr,
-        total_staking_chr = total_staking_chr,
-        approved = approved,
+        own_staking_chr = staking_details.staked_own,
+        total_staking_chr = staking_details.staked_total,
+        required_own_staking_chr = staking_details.required_own,
+        required_total_staking_chr = staking_details.required_total,
+        approved = staking_details.approved,
         days_since_last_approved = if (provider_staking_account.last_approved_stake_requirements > 0) days_since_approved else null,
-        days_until_reward_stops = if (approved == false) max(0, days_until_stop) else null
+        days_until_reward_stops = if (staking_details.approved == false) max(0, days_until_stop) else null
     );
 }
 
@@ -26,7 +26,7 @@ function is_staking_approved(provider, reward: big_integer): boolean {
     if (economy_constants.staking_requirements_enabled) {
         val provider_staking_account = provider_staking_account @ { provider };
 
-        if (provider_meets_staking_requirements(provider)) {
+        if (check_required_provider_staking_status(provider).approved) {
             provider_staking_account.last_approved_stake_requirements = op_context.last_block_time;
         } else {
             val (days_since_approved_staking, days_until_stopped_payout, pay_out_reward) = get_staking_requirement_payout_stop(provider_staking_account);
@@ -45,28 +45,40 @@ function is_staking_approved(provider, reward: big_integer): boolean {
     return true;
 }
 
-function provider_meets_staking_requirements(provider): boolean {
+struct required_provider_staking_details {
+    staked_own: integer;
+    staked_total: integer;
+    required_own: integer;
+    required_total: integer;
+    approved: boolean;
+}
+
+function check_required_provider_staking_status(provider): required_provider_staking_details {
 
     val provider_account_id = provider_staking_account @ { .provider.pubkey == provider.pubkey } ( .staking_account.id );
     val current_own = staking_get_native_balance(provider_account_id);
     val current_total = staking_get_total_delegation_to(provider.pubkey);
     val staking_requirements = get_staking_requirements(provider);
+    var approved = false;
 
     if (current_own < staking_requirements.own) {
         log("Provider %s has not enough own staking (%s < %s)".format(provider.pubkey, current_own, staking_requirements.own));
-        return false;
-    }
-
-    if (current_total < staking_requirements.total) {
+    } else if (current_total < staking_requirements.total) {
         log("Provider %s has not enough total staking (%s < %s)"
             .format(provider.pubkey, current_total, staking_requirements.total));
-        return false;
+    } else {
+        log("Provider %s meets staking requirements (own: %d >= %d, total: %d >= %d)"
+            .format(provider.pubkey, current_own, staking_requirements.own, current_total, staking_requirements.total));
+        approved = true;
     }
 
-    log("Provider %s meets staking requirements (own: %d >= %d, total: %d >= %d)"
-        .format(provider.pubkey, current_own, staking_requirements.own, current_total, staking_requirements.total));
-
-    return true;
+    return required_provider_staking_details(
+        staked_own = current_own,
+        staked_total = current_total,
+        required_own = staking_requirements.own,
+        required_total = staking_requirements.total,
+        approved
+    );
 }
 
 function get_staking_requirements(provider) {
