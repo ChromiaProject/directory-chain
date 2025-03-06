@@ -7,7 +7,7 @@ namespace ft4 {
     import lib.ft4.accounts;
     import lib.ft4.assets;
     import lib.ft4.auth;
-    import test_utils: lib.ft4.test.utils;
+    import test_utils: lib.ft4.test.core;
 }
 import lib.auth;
 
@@ -137,26 +137,26 @@ function test_faucet_works_after_rate_limit_end() {
 function test_create_account() {
     init().run();
     
-    val id = x"aabb".hash();
-    create_account(x"aabb")
+    val id = rell.test.keypairs.alice.pub.hash();
+    create_account(rell.test.keypairs.alice.pub)
         .sign(chain_context.args.account_creator_privkey)
         .run();
 
     assert_equals((accounts.account @* { id }).size(), 1);
     assert_equals(
         accounts.account_auth_descriptor @ {} (.args),
-        [ set(["A", "T"]).to_gtv(), x"aabb".to_gtv() ].to_gtv().to_bytes()
+        [ set(["A", "T"]).to_gtv(), rell.test.keypairs.alice.pub.to_gtv() ].to_gtv().to_bytes()
     );
 }
 
 function test_create_account_prevents_duplicates() {
     init().run();
 
-    create_account(x"aabb")
+    create_account(rell.test.keypairs.alice.pub)
         .sign(chain_context.args.account_creator_privkey)
         .run();
 
-    create_account(x"aabb")
+    create_account(rell.test.keypairs.alice.pub)
         .sign(chain_context.args.account_creator_privkey)
         .nop()
         .run_must_fail("duplicate key");
@@ -165,7 +165,7 @@ function test_create_account_prevents_duplicates() {
 function test_create_account_fails_without_admin() {
     init().run();
 
-    create_account(x"aabb")
+    create_account(rell.test.keypairs.alice.pub)
         .sign(rell.test.keypairs.alice)
         .run_must_fail("Please use the Faucet");
 }
@@ -173,11 +173,11 @@ function test_create_account_fails_without_admin() {
 function test_create_account_links_evm() {
     init().run();
 
-    create_account(x"aabb")
+    create_account(rell.test.keypairs.alice.pub)
         .sign(chain_context.args.account_creator_privkey)
         .run();
 
     assert_not_null(
-        eif.hbridge.evm_eoa_account_link @? { .address==x"aabb", .account.id==x"aabb".hash() }
+        eif.hbridge.evm_eoa_account_link @? { .address==rell.test.keypairs.alice.pub, .account.id==rell.test.keypairs.alice.pub.hash() }
     );
 }
