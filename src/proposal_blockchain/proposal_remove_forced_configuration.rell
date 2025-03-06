@@ -1,0 +1,79 @@
+entity pending_remove_forced_configuration {
+    key blockchain, height: integer;
+    index proposal;
+}
+
+struct pending_remove_forced_configuration_data {
+    blockchain_rid: byte_array;
+    height: integer;
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.remove_forced_configuration.name: delete_pending_remove_forced_configuration_proposal(*)];
+@extend(apply_voting_result_handlers) function() = [proposal_type.remove_forced_configuration.name: apply_remove_forced_configuration_proposal(*)];
+
+/**
+ * Propose removal of forced configuration.
+ *
+ * Permission: container deployer
+ *
+ * Rate limit: actions
+ *
+ * @param blockchain_rid Blockchain RID to remove the configuration from.
+ * @param height The height to remove the configuration from.
+ * @param description A description for this proposal to explain why is should be approved.
+ */
+operation propose_remove_forced_configuration(blockchain_rid: byte_array, height: integer, description: text = "") {
+
+    val proposed_by_provider = require_provider_signer_with_rate_limit();
+    val blockchain = require_active_blockchain(blockchain_rid);
+    val container = container_blockchain @ { blockchain }.container;
+    require_container_deployer(container, proposed_by_provider);
+
+    val proposal = create_proposal(proposal_type.remove_forced_configuration, proposed_by_provider, container.deployer, description);
+    val proposal_details = create pending_remove_forced_configuration(proposal, blockchain, height);
+    validate_remove_forced_configuration_proposal(proposal_details);
+    internal_vote(proposed_by_provider, proposal, true);
+}
+
+function delete_pending_remove_forced_configuration_proposal(proposal) {
+    delete pending_remove_forced_configuration @? { proposal };
+}
+
+function apply_remove_forced_configuration_proposal(proposal) {
+    val proposal_details = pending_remove_forced_configuration @? {proposal};
+    if (proposal_details == null) return;
+
+    validate_remove_forced_configuration_proposal(proposal_details);
+
+    val forced_config = forced_configuration @? { proposal_details.blockchain, proposal_details.height };
+    if (exists(forced_config)) {
+        val config = blockchain_configuration @? { proposal_details.blockchain, forced_config.height };
+        if (exists(config)) {
+            val decompressed = decompress_configuration(config.data);
+            if (decompressed.hash() == forced_config.config_hash) {
+                delete config;
+                delete blockchain_configuration_signers @* { proposal_details.blockchain, proposal_details.height };
+            }
+        }
+        delete forced_config;
+
+        log("Forced configuration removed from blockchain %s on height %s".format(proposal_details.blockchain.rid,
+            proposal_details.height));
+    }
+}
+
+/**
+ * Return details for a forced configuration removal proposal.
+ *
+ * @param rowid The proposal id
+ */
+query get_remove_forced_configuration_proposal(rowid) {
+    return pending_remove_forced_configuration @? { require_proposal(rowid) }
+        ( pending_remove_forced_configuration_data(.blockchain.rid, .height) );
+}
+
+function validate_remove_forced_configuration_proposal(proposal_details: pending_remove_forced_configuration) {
+    require(proposal_details.height > 0, "Height must be greater than 0");
+    require(exists(forced_configuration @* { proposal_details.blockchain, proposal_details.height }),
+        "No forced configuration exists on height %s".format(proposal_details.height));
+}

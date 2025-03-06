@@ -1,0 +1,126 @@
+@test module;
+
+import ^^.*;
+import common.test.ops.*;
+import common.test.setup.*;
+import common.test.util.*;
+import proposal.voting.test.helper_operations.*;
+import direct_container.*;
+import ^.helper_operations.*;
+
+val container = "container";
+val chain_name = "chain";
+
+function test_propose_remove_forced_configuration() {
+    setup_module();
+
+    val alice = provider @ { rell.test.pubkeys.alice };
+
+    var conf = apply_required_configuration_properties();
+    val initial_configuration = conf.to_gtv().to_bytes();
+    rell.test.tx().op(
+        create_container(alice.pubkey, container, clusters.system, 0, [alice.pubkey]),
+        propose_blockchain(alice.pubkey, initial_configuration, chain_name, container),
+    ).sign(rell.test.keypairs.alice).run();
+    val bc = blockchain @ { chain_name };
+
+    rell.test.tx().op(
+        propose_remove_forced_configuration(bc.rid, 0, "")
+    ).sign(rell.test.keypairs.bob).run_must_fail("Transaction must be signed by provider");
+
+    rell.test.tx().op(
+        propose_remove_forced_configuration(x"00", 0, "")
+    ).sign(rell.test.keypairs.alice).run_must_fail("Unknown blockchain 0x00");
+
+    rell.test.tx().op(
+        propose_remove_forced_configuration(bc.rid, 0, "")
+    ).sign(rell.test.keypairs.alice).run_must_fail("Height must be greater than 0");
+
+    rell.test.tx().op(
+        propose_remove_forced_configuration(bc.rid, 2, "")
+    ).sign(rell.test.keypairs.alice).run_must_fail("No forced configuration exists on height 2");
+
+    conf["nonce"] = (10).to_gtv();
+    conf["name"] = "testConf".to_gtv();
+    rell.test.tx().op(
+        propose_blockchain_action(rell.test.pubkeys.alice, bc.rid, blockchain_action.pause),
+        propose_forced_configuration(initial_provider.pub, bc.rid, conf.to_gtv().to_bytes(), 2, "", true)
+    ).sign(rell.test.keypairs.alice).run();
+
+    rell.test.block().run();
+    rell.test.block().run();
+    rell.test.block().run();
+
+    assert_true(exists(blockchain_configuration @* { bc, 2 }));
+    assert_true(exists(blockchain_configuration_signers @* { bc, 2 }));
+    assert_true(exists(forced_configuration @* { bc, 2 }));
+
+    rell.test.tx().op(
+        propose_remove_forced_configuration(bc.rid, 2, "")
+    ).sign(rell.test.keypairs.alice).run();
+
+    assert_true(empty(blockchain_configuration @* { bc, 2 }));
+    assert_true(empty(blockchain_configuration_signers @* { bc, 2 }));
+    assert_true(empty(forced_configuration @* { bc, 2 }));
+}
+
+function test_propose_remove_forced_configuration__conflict_with_ordinary_update() {
+    setup_module();
+    val directory_chain = blockchain @ { blockchains.directory_chain };
+
+    rell.test.tx().op(
+        stage_partly_applied_forced_config(directory_chain, 10, x"00")
+    ).sign(initial_provider).run();
+
+    assert_true(exists(blockchain_configuration @* { directory_chain, 10 }));
+    assert_true(exists(blockchain_configuration_signers @* { directory_chain, 10 }));
+    assert_true(exists(forced_configuration @* { directory_chain, 10, x"00" }));
+
+    rell.test.tx().op(
+        propose_remove_forced_configuration(directory_chain.rid, 10, "")
+    ).sign(rell.test.keypairs.alice).run();
+
+    assert_true(exists(blockchain_configuration @* { directory_chain, 10 }));
+    assert_true(exists(blockchain_configuration_signers @* { directory_chain, 10 }));
+    assert_true(empty(forced_configuration @* { directory_chain, 10 }));
+}
+
+function test_get_remove_forced_configuration_proposal() {
+
+    setup_module();
+    rell.test.tx().op(create_test_provider("bob", rell.test.pubkeys.bob)).run();
+
+    val alice = provider @ { rell.test.pubkeys.alice };
+
+    var conf = apply_required_configuration_properties();
+    val initial_configuration = conf.to_gtv().to_bytes();
+    rell.test.tx().op(
+        create_container(alice.pubkey, container, clusters.system, 0, [alice.pubkey, rell.test.pubkeys.bob]),
+        propose_blockchain(alice.pubkey, initial_configuration, chain_name, container),
+    ).sign(rell.test.keypairs.alice).run();
+    vote_for_last_proposal(rell.test.keypairs.bob);
+    val bc = blockchain @ { chain_name };
+
+    conf["nonce"] = (10).to_gtv();
+    conf["name"] = "testConf".to_gtv();
+    rell.test.tx().op(
+        propose_blockchain_action(rell.test.pubkeys.alice, bc.rid, blockchain_action.pause),
+    ).sign(rell.test.keypairs.alice).run();
+
+    vote_for_last_proposal(rell.test.keypairs.bob, type = proposal_type.blockchain_action);
+
+    rell.test.tx().op(
+        propose_forced_configuration(initial_provider.pub, bc.rid, conf.to_gtv().to_bytes(), 2, "", true),
+    ).sign(rell.test.keypairs.alice).run();
+
+    vote_for_last_proposal(rell.test.keypairs.bob, type = proposal_type.force_configuration);
+
+    rell.test.tx().op(
+        propose_remove_forced_configuration(bc.rid, 2, "")
+    ).sign(rell.test.keypairs.alice).run();
+
+    val proposal = get_remove_forced_configuration_proposal(get_latest_proposal_id());
+    assert_not_null(proposal);
+    assert_equals(proposal.blockchain_rid, bc.rid);
+    assert_equals(proposal.height, 2);
+}
