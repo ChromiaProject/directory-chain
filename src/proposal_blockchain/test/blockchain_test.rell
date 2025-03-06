@@ -65,7 +65,7 @@ function test_propose_blockchain() {
     assert_equals(find_blockchain_rid(tx_rid), bc.rid);
 }
 
-function test_blockchain_configuration_validation() {
+function setup_blockchain_configuration_validation() {
     setup();
     val cl = system_cluster();
     val container = "container";
@@ -75,18 +75,20 @@ function test_blockchain_configuration_validation() {
 
     rell.test.tx().op(
         propose_subnode_image(alice.pubkey, "subnode_image1", "url", "digest", subnode_image_type.COMMON,
-        "one", "some.gtx.module,other.gtx.module", "")
+            "one", "some.gtx.module,other.gtx.module", "")
     ).sign(rell.test.keypairs.alice).run();
-    rell.test.tx().op(
-        make_vote_v65(last_proposal().rowid.to_integer(), true)
-    ).sign(rell.test.keypairs.bob).run();
+    bob_votes();
 
     rell.test.tx().op(
         propose_container_with_subnode_image(alice.pubkey, clusters.system, container, voter_sets.system_p, "subnode_image1"),
     ).sign(rell.test.keypairs.alice).run();
-    rell.test.tx().op(
-        make_vote_v65(last_proposal().rowid.to_integer(), true)
-    ).sign(rell.test.keypairs.bob).run();
+    bob_votes();
+
+    return (container, alice, bob);
+}
+
+function test_blockchain_configuration_gtx_validation() {
+    val (container, alice, bob) = setup_blockchain_configuration_validation();
 
     var conf0 = apply_required_configuration_properties();
     conf0["gtx"] = ["modules": ["some.gtx.module"]].to_gtv();
@@ -108,79 +110,175 @@ function test_blockchain_configuration_validation() {
         propose_blockchain(alice.pubkey, conf2.to_gtv().to_bytes(), "foo_chain", container)
     ).sign(rell.test.keypairs.alice)
         .run_must_fail("Some of the configured synchronization infrastructure extensions are not in the allowed set");
+}
 
-    val conf3 = apply_required_configuration_properties();
-    conf3["gtx"] = [
+function test_blockchain_configuration_eif_skip_to_height_validation() {
+    val (container, alice, bob) = setup_blockchain_configuration_validation();
+
+    val conf0 = apply_required_configuration_properties();
+    conf0["gtx"] = [
         "modules" : ["net.postchain.eif.EifGTXModule"]
     ].to_gtv();
-    conf3["eif"] = ["chains": [
+    conf0["eif"] = ["chains": [
         "bsc": ["skip_to_height": 100],
         "base": ["evm_read_offset": 0],
         "ethereum": ["skip_to_height": -100]
     ]].to_gtv();
     rell.test.tx().op(
-        propose_blockchain(alice.pubkey, conf3.to_gtv().to_bytes(), "foo_chain", container)
+        propose_blockchain(alice.pubkey, conf0.to_gtv().to_bytes(), "foo_chain", container)
     ).sign(rell.test.keypairs.alice)
         .run_must_fail("EIF skip_to_height for ethereum can't be negative");
+}
 
-    // Blockchain doesn't support EIF, the snapshot version is unsupported, tx succeeds
-    val conf4 = apply_required_configuration_properties();
-    conf4["eif"] = ["snapshot": [
+function test_blockchain_configuration_eif_validation_fails_without_gtx_module() {
+    val (container, alice, bob) = setup_blockchain_configuration_validation();
+
+    // Blockchain doesn't support EIF, eif config is present, tx fails
+    val conf0 = apply_required_configuration_properties();
+    conf0["eif"] = ["snapshot": [
         "version": 1
     ]].to_gtv();
     rell.test.tx().op(
-        propose_blockchain(alice.pubkey, conf4.to_gtv().to_bytes(), "foo_chain", container)
+        propose_blockchain(alice.pubkey, conf0.to_gtv().to_bytes(), "foo_chain", container)
     ).sign(rell.test.keypairs.alice)
-        .run();
+        .run_must_fail("EIF configuration must be empty when 'net.postchain.eif.EifGTXModule' is not included in the modules list");
+}
 
-    // Blockchain supports EIF, the snapshot version is unsupported, tx fails
-    val conf5 = apply_required_configuration_properties();
-    conf5["gtx"] = [
+function test_blockchain_configuration_eif_snapshot_validation() {
+    val (container, alice, bob) = setup_blockchain_configuration_validation();
+
+    // snapshot version is unsupported, tx fails
+    val conf0 = apply_required_configuration_properties();
+    conf0["gtx"] = [
         "modules" : ["net.postchain.eif.EifGTXModule"]
     ].to_gtv();
-    conf5["eif"] = [
+    conf0["eif"] = [
         "snapshot": ["version": 1]
     ].to_gtv();
     rell.test.tx().op(
-        propose_blockchain(alice.pubkey, conf5.to_gtv().to_bytes(), "foo_chain", container)
+        propose_blockchain(alice.pubkey, conf0.to_gtv().to_bytes(), "foo_chain", container)
     ).sign(rell.test.keypairs.alice)
         .run_must_fail("EIF snapshot version must be version 2");
 
-    // Blockchain supports EIF, the snapshot version is correct, tx succeeds
-    val conf6 = apply_required_configuration_properties();
-    conf6["gtx"] = [
+    // snapshot version is correct, tx succeeds
+    val conf1 = apply_required_configuration_properties();
+    conf1["gtx"] = [
         "modules" : ["net.postchain.eif.EifGTXModule"]
     ].to_gtv();
-    conf6["eif"] = [
+    conf1["eif"] = [
         "snapshot": ["version": 2]
     ].to_gtv();
     rell.test.tx().op(
-        propose_blockchain(alice.pubkey, conf6.to_gtv().to_bytes(), "foo_chain", container)
+        propose_blockchain(alice.pubkey, conf1.to_gtv().to_bytes(), "foo_chain", container)
     ).sign(rell.test.keypairs.alice)
         .run();
 
-    // Blockchain supports EIF, the snapshot version is absent, tx fails
-    val conf7 = apply_required_configuration_properties();
-    conf7["gtx"] = [
+    // snapshot version is absent, tx fails
+    val conf2 = apply_required_configuration_properties();
+    conf2["gtx"] = [
         "modules" : ["net.postchain.eif.EifGTXModule"]
     ].to_gtv();
-    conf7["eif"] = [
+    conf2["eif"] = [
         "snapshot": ["levels_per_page": 2]
     ].to_gtv();
     rell.test.tx().op(
-        propose_blockchain(alice.pubkey, conf7.to_gtv().to_bytes(), "foo_chain", container)
+        propose_blockchain(alice.pubkey, conf2.to_gtv().to_bytes(), "foo_chain", container)
     ).sign(rell.test.keypairs.alice)
         .run_must_fail("EIF snapshot version must be version 2");
 
-    // Blockchain supports EIF, the snapshot configuration is completely absent, tx succeeds
-    val conf8 = apply_required_configuration_properties();
-    conf8["gtx"] = [
+    // snapshot configuration is completely absent, tx succeeds
+    val conf3 = apply_required_configuration_properties();
+    conf3["gtx"] = [
         "modules" : ["net.postchain.eif.EifGTXModule"]
     ].to_gtv();
     rell.test.tx().op(
-        propose_blockchain(alice.pubkey, conf8.to_gtv().to_bytes(), "foo_chain", container)
+        propose_blockchain(alice.pubkey, conf3.to_gtv().to_bytes(), "foo_chain", container)
     ).sign(rell.test.keypairs.alice)
         .run();
+}
+
+function test_blockchain_configuration_eif_levels_per_page_validation() {
+    val (container, alice, bob) = setup_blockchain_configuration_validation();
+
+    // initial_config: [present], proposed_config: [absent] -> FAILURE
+    val conf0 = apply_required_configuration_properties();
+    conf0["nonce"] = (0).to_gtv();
+    conf0["gtx"] = [ "modules" : ["net.postchain.eif.EifGTXModule"]].to_gtv();
+    conf0["eif"] = [ "snapshot": [ "version": 2, "levels_per_page": 2]].to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf0.to_gtv().to_bytes(), "foo_chain0", container)
+    ).sign(rell.test.keypairs.alice).run();
+    bob_votes();
+    val conf0_update = conf0;
+    conf0_update["eif"] = [ "snapshot": [ "version": 2 ]].to_gtv();
+    rell.test.tx().op(
+        propose_configuration(alice.pubkey, brid("foo_chain0"), conf0_update.to_gtv().to_bytes())
+    ).sign(rell.test.keypairs.alice)
+        .run_must_fail("EIF snapshot 'levels_per_page' must not change between configurations");
+
+    // initial_config: [absent], proposed_config: [present] -> FAILURE
+    val conf1 = apply_required_configuration_properties();
+    conf1["nonce"] = (1).to_gtv();
+    conf1["gtx"] = [ "modules" : ["net.postchain.eif.EifGTXModule"]].to_gtv();
+    conf1["eif"] = [ "snapshot": [ "version": 2]].to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf1.to_gtv().to_bytes(), "foo_chain1", container)
+    ).sign(rell.test.keypairs.alice).run();
+    bob_votes();
+    val conf1_update = conf1;
+    conf1_update["eif"] = [ "snapshot": [ "version": 2, "levels_per_page": 2 ]].to_gtv();
+    rell.test.tx().op(
+        propose_configuration(alice.pubkey, brid("foo_chain1"), conf1_update.to_gtv().to_bytes())
+    ).sign(rell.test.keypairs.alice)
+        .run_must_fail("EIF snapshot 'levels_per_page' must not change between configurations");
+
+    // initial_config: [absent], proposed_config: [absent]-> SUCCESS
+    val conf2 = apply_required_configuration_properties();
+    conf2["nonce"] = (2).to_gtv();
+    conf2["gtx"] = ["modules" : ["net.postchain.eif.EifGTXModule"]].to_gtv();
+    conf2["eif"] = [ "snapshot": [ "version": 2]].to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf2.to_gtv().to_bytes(), "foo_chain2", container)
+    ).sign(rell.test.keypairs.alice).run();
+    bob_votes();
+    val conf2_update = conf2;
+    conf2_update["eif"] = [ "snapshot": [ "version": 2 ]].to_gtv();
+    rell.test.tx().op(
+        propose_configuration(alice.pubkey, brid("foo_chain2"), conf2_update.to_gtv().to_bytes())
+    ).sign(rell.test.keypairs.alice).run();
+
+    // initial_config: [present], proposed_config: [present], and the same -> SUCCESS
+    val conf3 = apply_required_configuration_properties();
+    conf3["nonce"] = (3).to_gtv();
+    conf3["gtx"] = ["modules" : ["net.postchain.eif.EifGTXModule"]].to_gtv();
+    conf3["eif"] = [ "snapshot": [ "version": 2, "levels_per_page": 3 ]].to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf3.to_gtv().to_bytes(), "foo_chain3", container)
+    ).sign(rell.test.keypairs.alice).run();
+    bob_votes();
+    val conf3_update = conf3;
+    conf3_update["nonce"] = (30).to_gtv();
+    conf3_update["eif"] = [ "snapshot": [ "version": 2, "levels_per_page": 3 ]].to_gtv();
+    rell.test.tx().op(
+        propose_configuration(alice.pubkey, brid("foo_chain3"), conf3_update.to_gtv().to_bytes())
+    ).sign(rell.test.keypairs.alice).run();
+
+    // initial_config: [present], proposed_config: [present], but different -> FAILURE
+    val conf4 = apply_required_configuration_properties();
+    conf4["nonce"] = (4).to_gtv();
+    conf4["gtx"] = ["modules" : ["net.postchain.eif.EifGTXModule"]].to_gtv();
+    conf4["eif"] = [ "snapshot": [ "version": 2, "levels_per_page": 3 ]].to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf4.to_gtv().to_bytes(), "foo_chain4", container)
+    ).sign(rell.test.keypairs.alice).run();
+    bob_votes();
+    val conf4_update = conf4;
+    conf4_update["nonce"] = (30).to_gtv();
+    conf4_update["eif"] = [ "snapshot": [ "version": 2, "levels_per_page": 4 ]].to_gtv();
+    rell.test.tx().op(
+        propose_configuration(alice.pubkey, brid("foo_chain4"), conf4_update.to_gtv().to_bytes())
+    ).sign(rell.test.keypairs.alice)
+        .run_must_fail("EIF snapshot 'levels_per_page' must not change between configurations");
 }
 
 function test_propose_configuration() {
