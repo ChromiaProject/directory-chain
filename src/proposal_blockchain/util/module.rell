@@ -23,7 +23,7 @@ struct module_args {
     require_eif_snapshot_version: integer? = null;
 }
 
-function validate_blockchain_configuration(container, config_data: byte_array, signers: boolean, header_hash: boolean, system_chain: boolean) {
+function validate_blockchain_configuration(blockchain?, container, config_data: byte_array, signers: boolean, header_hash: boolean, system_chain: boolean) {
     val config_map = map<text, gtv>.from_gtv(gtv.from_bytes(config_data));
 
     if (signers) {
@@ -84,8 +84,8 @@ function validate_blockchain_configuration(container, config_data: byte_array, s
         validate_sync_infra(config_map);
     }
 
-    validate_compression(config_data);
-    validate_eif(config_map);
+    validate_compression(config_map);
+    validate_eif(blockchain, config_map);
 }
 
 function validate_block_strategy_config(block_strategy_config: map<text, gtv>) {
@@ -154,8 +154,7 @@ function validate_sync_infra(config_map: map<text, gtv>) {
     );
 }
 
-function validate_compression(config_data: byte_array) {
-    val config_map = map<text, gtv>.from_gtv(gtv.from_bytes(config_data));
+function validate_compression(config_map: map<text, gtv>) {
     var total_config_size = 0;
 
     if (config_map.contains(COMPRESSED_ROOTS_CONFIG_KEY)) {
@@ -206,12 +205,19 @@ function validate_compression(config_data: byte_array) {
     );
 }
 
-function validate_eif(config_map: map<text, gtv>) {
+function validate_eif(blockchain?, config_map: map<text, gtv>) {
     val modules = extract_config_path(config_map, ["gtx"])?.get_or_null("modules");
+
+    // Ensure EIF configuration is empty if the `EifGTXModule` module is not included
     if (modules == null or not list<text>.from_gtv(modules).contains("net.postchain.eif.EifGTXModule")) {
+        require(
+            empty(extract_config_path(config_map, ["eif"])),
+            "EIF configuration must be empty when 'net.postchain.eif.EifGTXModule' is not included in the modules list"
+        );
         return;
     }
 
+    // Verify `skip_to_height`
     if (chain_context.args.require_positive_eif_skip_to_height) {
         val chains = extract_config_path(config_map, ["eif", "chains"]);
         if (chains != null) {
@@ -225,6 +231,7 @@ function validate_eif(config_map: map<text, gtv>) {
         }
     }
 
+    // Verify `eif.snapshot.version`
     if (chain_context.args.require_eif_snapshot_version != null) {
         val message = "EIF snapshot version must be version %d".format(chain_context.args.require_eif_snapshot_version);
         val snapshot_config = extract_config_path(config_map, ["eif", "snapshot"]);
@@ -233,6 +240,15 @@ function validate_eif(config_map: map<text, gtv>) {
             require(snapshot_version, message);
             require(integer.from_gtv(snapshot_version) == chain_context.args.require_eif_snapshot_version, message);
         }
+    }
+
+    // Ensure that the `eif.snapshot.levels_per_page` remains unchanged between configurations
+    if (blockchain??) {
+        val current_config = get_latest_blockchain_configuration_data(blockchain).config;
+        val current_config_map = map<text, gtv>.from_gtv(gtv.from_bytes(current_config));
+        val current_levels_per_page = extract_config_path(current_config_map, ["eif", "snapshot"])?.get_or_null("levels_per_page");
+        val new_levels_per_page = extract_config_path(config_map, ["eif", "snapshot"])?.get_or_null("levels_per_page");
+        require(current_levels_per_page == new_levels_per_page, "EIF snapshot 'levels_per_page' must not change between configurations");
     }
 }
 
