@@ -45,12 +45,21 @@ function apply_remove_forced_configuration_proposal(proposal) {
 
     validate_remove_forced_configuration_proposal(proposal_details);
 
-    delete blockchain_configuration @* { proposal_details.blockchain, proposal_details.height };
-    delete blockchain_configuration_signers @* { proposal_details.blockchain, proposal_details.height };
-    delete forced_configuration @* { proposal_details.blockchain, proposal_details.height };
+    val forced_config = forced_configuration @? { proposal_details.blockchain, proposal_details.height };
+    if (exists(forced_config)) {
+        val config = blockchain_configuration @? { proposal_details.blockchain, forced_config.height };
+        if (exists(config)) {
+            val decompressed = decompress_configuration(config.data);
+            if (decompressed.hash() == forced_config.config_hash) {
+                delete config;
+                delete blockchain_configuration_signers @* { proposal_details.blockchain, proposal_details.height };
+            }
+        }
+        delete forced_config;
 
-    log("Forced configuration removed from blockchain %s on height %s".format(proposal_details.blockchain.rid,
-        proposal_details.height));
+        log("Forced configuration removed from blockchain %s on height %s".format(proposal_details.blockchain.rid,
+            proposal_details.height));
+    }
 }
 
 /**

@@ -4,12 +4,9 @@ import ^^.*;
 import common.test.ops.*;
 import common.test.setup.*;
 import common.test.util.*;
-import proposal.voting.test.ops.*;
 import proposal.voting.test.helper_operations.*;
-import proposal_container.*;
 import direct_container.*;
-import delay.test.helper_operations.*;
-import ^.utils.*;
+import ^.helper_operations.*;
 
 val container = "container";
 val chain_name = "chain";
@@ -65,6 +62,27 @@ function test_propose_remove_forced_configuration() {
     assert_true(empty(blockchain_configuration @* { bc, 2 }));
     assert_true(empty(blockchain_configuration_signers @* { bc, 2 }));
     assert_true(empty(forced_configuration @* { bc, 2 }));
+}
+
+function test_propose_remove_forced_configuration__conflict_with_ordinary_update() {
+    setup_module();
+    val directory_chain = blockchain @ { blockchains.directory_chain };
+
+    rell.test.tx().op(
+        stage_partly_applied_forced_config(directory_chain, 10, x"00")
+    ).sign(initial_provider).run();
+
+    assert_true(exists(blockchain_configuration @* { directory_chain, 10 }));
+    assert_true(exists(blockchain_configuration_signers @* { directory_chain, 10 }));
+    assert_true(exists(forced_configuration @* { directory_chain, 10, x"00" }));
+
+    rell.test.tx().op(
+        propose_remove_forced_configuration(directory_chain.rid, 10, "")
+    ).sign(rell.test.keypairs.alice).run();
+
+    assert_true(exists(blockchain_configuration @* { directory_chain, 10 }));
+    assert_true(exists(blockchain_configuration_signers @* { directory_chain, 10 }));
+    assert_true(empty(forced_configuration @* { directory_chain, 10 }));
 }
 
 function test_get_remove_forced_configuration_proposal() {
