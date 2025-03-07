@@ -56,6 +56,8 @@ function test_get_provider_staking_status_approved() {
         staking_account_id = provider_staking_account.staking_account.id,
         own_staking_chr = 9999999999999,
         total_staking_chr = 9999999999999,
+        required_own_staking_chr = 0,
+        required_total_staking_chr = 0,
         approved = true,
         days_since_last_approved = 7,
         days_until_reward_stops = null
@@ -78,6 +80,8 @@ function test_get_provider_staking_status_never_approved() {
         staking_account_id = provider_account.account.id,
         own_staking_chr = 0,
         total_staking_chr = 0,
+        required_own_staking_chr = 90000000000,
+        required_total_staking_chr = 900000000000,
         approved = false,
         days_since_last_approved = null,
         days_until_reward_stops = 0
@@ -105,6 +109,8 @@ function test_get_provider_staking_status_not_approved() {
         staking_account_id = provider_staking_account.staking_account.id,
         own_staking_chr = 0,
         total_staking_chr = 0,
+        required_own_staking_chr = 90000000000,
+        required_total_staking_chr = 900000000000,
         approved = false,
         days_since_last_approved = 7,
         days_until_reward_stops = 7
@@ -130,12 +136,12 @@ function test_provider_meets_staking_requirements__require_native_staking() {
     ).sign(provider_key).run();
 
     assert_equals(staking_get_provider_stake(provider_pubkey), 2);
-    assert_false(provider_meets_staking_requirements(provider));
+    assert_false(check_required_provider_staking_status(provider).approved);
 
     rell.test.tx().op(
         add_staking(provider_staking_account, 1, network.CHR),
     ).sign(provider_key).run();
 
     assert_equals(staking_get_provider_stake(provider_pubkey), 3);
-    assert_true(provider_meets_staking_requirements(provider));
+    assert_true(check_required_provider_staking_status(provider).approved);
 }
