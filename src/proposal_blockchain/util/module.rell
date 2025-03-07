@@ -239,16 +239,16 @@ function validate_eif(blockchain?, config_map: map<text, gtv>) {
             val snapshot_version = snapshot_config.get_or_null("version");
             require(snapshot_version, message);
             require(integer.from_gtv(snapshot_version) == chain_context.args.require_eif_snapshot_version, message);
-        }
-    }
 
-    // Ensure that the `eif.snapshot.levels_per_page` remains unchanged between configurations
-    if (blockchain??) {
-        val current_config = get_latest_blockchain_configuration_data(blockchain).config;
-        val current_config_map = map<text, gtv>.from_gtv(gtv.from_bytes(current_config));
-        val current_levels_per_page = extract_config_path(current_config_map, ["eif", "snapshot"])?.get_or_null("levels_per_page");
-        val new_levels_per_page = extract_config_path(config_map, ["eif", "snapshot"])?.get_or_null("levels_per_page");
-        require(current_levels_per_page == new_levels_per_page, "EIF snapshot 'levels_per_page' must not change between configurations");
+            // Ensure that the `eif.snapshot.levels_per_page` remains unchanged between configurations
+            if (blockchain??) {
+                val current_config = get_latest_blockchain_configuration_data(blockchain).config;
+                val current_config_map = map<text, gtv>.from_gtv(gtv.from_bytes(current_config));
+                val current_levels_per_page = extract_config_path(current_config_map, ["eif", "snapshot"])?.get_or_null("levels_per_page");
+                val new_levels_per_page = snapshot_config.get_or_null("levels_per_page");
+                require(current_levels_per_page == new_levels_per_page, "EIF snapshot 'levels_per_page' must not change between configurations");
+            }
+        }
     }
 }
 
