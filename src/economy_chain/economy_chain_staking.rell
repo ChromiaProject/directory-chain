@@ -447,6 +447,25 @@ function _staking_shared_rewards(pay_reward_result) {
         @sum balance = .staker_state.balance
     );
 
+    if (delegation_migration_state.migration_active) {
+        val old_states = staker_state @* { $ not in delegation_state @* {} ( .staker_state )};
+        val old_delegations = (s1: staker_state_to_provider) @* {
+            .staker_state in old_states and .provider == provider_data.provider and (s1.timestamp <= _staking_last_known_time()) and 
+            not exists((s2:staker_state_to_provider) @* { 
+                s2.staker_state == s1.staker_state,
+                s2.timestamp <= _staking_last_known_time(),
+                (
+                    s2.timestamp > s1.timestamp or 
+                    (s2.timestamp == s1.timestamp and s2.rowid > s1.rowid)
+                )
+            })
+        } (
+            @group account = .staker_state.account,
+            @sum balance = .staker_state.balance
+        );
+        staker_delegations.add_all(old_delegations);
+    }
+
     // Get total and divide through
     val total_delegation = staker_delegations @ { } ( @sum .balance );
 
