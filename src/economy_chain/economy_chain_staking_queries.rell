@@ -22,28 +22,8 @@ query staking_get_rewards_start(): timestamp = chain_context.args.staking_reward
  * @return Public key of the delegated to provider, or null if currently undelegated
 */
 query staking_get_current_delegate_on_network(account_id: byte_array, network): byte_array? {
-    /// @dev This query needs to amended at the same time as `staking_get_current_delegate`
-    val _provider_pubkey = (s: staker_state_to_provider) @? {
-            .staker_state.account.id == account_id // for this account
-        and _staking_last_known_time() >= .timestamp // that are active
-        and .provider.pubkey != get_null_account() // not undelegated
-        and .staker_state.network == network
-        and empty ( // not superceded
-            (ss: staker_state_to_provider) @* {
-                    ss.staker_state.account.id == s.staker_state.account.id
-                and _staking_last_known_time() >= ss.timestamp
-                and ss.timestamp > s.timestamp
-                and s.staker_state.network == ss.staker_state.network
-            }
-        )
-    } (
-        @omit @sort_desc .timestamp, @omit @sort_desc .rowid,
-        .provider.pubkey
-    ) limit 1;
-    return when {
-        empty(_provider_pubkey) -> null;
-        else -> _provider_pubkey;
-    };
+    val d_state = delegation_state @? { .staker_state.account.id == account_id and .staker_state.network == network };
+    return _get_current_provider_pubkey(d_state);
 }
 
 /**
@@ -54,27 +34,17 @@ query staking_get_current_delegate_on_network(account_id: byte_array, network): 
  * @return Public key of the last delegated to provider, or null if last undelegated
 */
 query staking_get_current_delegate(account_id: byte_array) {
-    /// @dev This query needs to amended at the same time as `staking_get_current_delegate_on_network`
-    val _provider_pubkey = (s: staker_state_to_provider) @? {
-            .staker_state.account.id == account_id // for this account
-        and _staking_last_known_time() >= .timestamp // that are active
-        and .provider.pubkey != get_null_account() // not undelegated
-        and empty ( // not superceded
-            (ss: staker_state_to_provider) @* {
-                    ss.staker_state.account.id == s.staker_state.account.id
-                and _staking_last_known_time() >= ss.timestamp
-                and ss.timestamp > s.timestamp
-                and s.staker_state.network == ss.staker_state.network
-            }
+    val last_time = _staking_last_known_time();
+    val null_provider = provider @ { .pubkey == get_null_account() };
+    
+    val d_state = delegation_state @? { 
+        .staker_state.account.id == account_id and (
+            (.current_provider != null_provider and (.next_change_at == 0 or .next_change_at > last_time)) or
+            (.next_provider != null_provider and .next_change_at <= last_time)
         )
-    } (
-        @omit @sort_desc .timestamp, @omit @sort_desc .rowid,
-        .provider.pubkey
-    ) limit 1;
-    return when {
-        empty(_provider_pubkey) -> null;
-        else -> _provider_pubkey;
-    };
+    } ( @omit @sort_desc .next_change_at, @omit @sort_desc .rowid, $) limit 1;
+    
+    return _get_current_provider_pubkey(d_state);
 }
 
 /**
@@ -86,13 +56,13 @@ query staking_get_current_delegate(account_id: byte_array) {
 */
 query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubkey?, time: integer)? {
     val staker = ft4.accounts.Account(account_id);
-    val upcoming_delegations = staker_state_to_provider @* {
-        .staker_state.account == staker and .timestamp > _staking_last_known_time()
+    val upcoming_delegations = delegation_state @* {
+        .staker_state.account == staker, .next_change_at > _staking_last_known_time()
     } (
-        @omit @sort_desc .timestamp,
+        @omit @sort_desc .next_change_at,
         @omit @sort_desc .rowid,
-        pubkey = .provider.pubkey,
-        time = .timestamp
+        pubkey = .next_provider.pubkey,
+        time = .next_change_at
     ) limit 1;
     return if (exists(
         upcoming_delegations
@@ -112,17 +82,10 @@ query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubk
  * @return Total CHR staked to the given provider in minor units
 */
 query staking_get_total_delegation_to(pubkey, network? = null) {
-    return ( s1: staker_state_to_provider) @ {
-        .provider.pubkey == pubkey and (s1.timestamp <= _staking_last_known_time()) and 
-            (not exists(network) or .staker_state.network == network) and 
-            not exists((s2:staker_state_to_provider) @* { 
-                s2.staker_state == s1.staker_state,
-                s2.timestamp <= _staking_last_known_time(),
-                (
-                    s2.timestamp > s1.timestamp or 
-                    (s2.timestamp == s1.timestamp and s2.rowid > s1.rowid)
-                )
-            })
+    return delegation_state @ {
+         (.current_provider.pubkey == pubkey and (.next_change_at > _staking_last_known_time() or .next_change_at == 0)) or 
+        (.next_provider.pubkey == pubkey and .next_change_at <= _staking_last_known_time())
+        and (empty(network) or .staker_state.network == network)
     } ( @sum .staker_state.balance );
 }
 
@@ -135,19 +98,12 @@ query staking_get_total_delegation_to(pubkey, network? = null) {
  * @return Count of users delegating to a provider
 */
 query staking_get_number_of_delegates_to(pubkey, network? = null): integer {
-    // Extra join to ft4.accounts.account to avoid limitations on nesting queries
-    return accounts.account @* { .id in ((s1: staker_state_to_provider) @* {
-        .provider.pubkey == pubkey and (s1.timestamp <= _staking_last_known_time()) and 
-            (not exists(network) or .staker_state.network == network) and 
-            not exists((s2:staker_state_to_provider) @* { 
-                s2.staker_state == s1.staker_state,
-                s2.timestamp <= _staking_last_known_time(),
-                (
-                    s2.timestamp > s1.timestamp or 
-                    (s2.timestamp == s1.timestamp and s2.rowid > s1.rowid)
-                )
-            })
-    } ( .staker_state.account.id ))} @ {} (@sum 1);
+    val ds = delegation_state @* {
+         (.current_provider.pubkey == pubkey and (.next_change_at > _staking_last_known_time() or .next_change_at == 0)) or 
+        (.next_provider.pubkey == pubkey and .next_change_at <= _staking_last_known_time())
+        and (empty(network) or .staker_state.network == network)
+    } ( @group .staker_state.account);
+    return ds.size();
 }
 
 /**
@@ -400,17 +356,17 @@ query staking_get_all_rewards_paid(
  * @return Total staked of CHR in minor units
 */
 query staking_total_delegated(network? = null) {
-    return ( s1: staker_state_to_provider) @ {
-        .provider.pubkey != get_null_account() and (s1.timestamp <= _staking_last_known_time()) and 
-        (empty(network) or .staker_state.network == network) and 
-            not exists((s2:staker_state_to_provider) @* { 
-                s2.staker_state == s1.staker_state,
-                s2.timestamp <= _staking_last_known_time(),
-                (
-                    s2.timestamp > s1.timestamp or 
-                    (s2.timestamp == s1.timestamp and s2.rowid > s1.rowid)
-                )
-            })
+    val null_provider = provider @ { .pubkey == get_null_account() };
+    val last_time = _staking_last_known_time();
+    return delegation_state @ {
+        (empty(network) or .staker_state.network == network) 
+        and (
+            // Current provider is active and either no change or future change
+            (.current_provider != null_provider and (.next_change_at == 0 or .next_change_at > last_time))
+            or 
+            // OR next provider is active and change time has passed
+            (.next_provider != null_provider and .next_change_at <= last_time)
+        )
     } ( @sum .staker_state.balance );
 }
 
@@ -421,18 +377,19 @@ query staking_total_delegated(network? = null) {
  * @return Total users
 */
 query staking_total_delegation_accounts(network? = null) {
-    return ( s1: staker_state_to_provider) @ {
-        .provider.pubkey != get_null_account() and (s1.timestamp <= _staking_last_known_time()) and 
-            (empty(network) or .staker_state.network == network) and 
-            not exists((s2:staker_state_to_provider) @* { 
-                s2.staker_state == s1.staker_state,
-                s2.timestamp <= _staking_last_known_time(),
-                (
-                    s2.timestamp > s1.timestamp or 
-                    (s2.timestamp == s1.timestamp and s2.rowid > s1.rowid)
-                )
-            })
-    } ( @sum 1 );
+    val null_provider = provider @ { .pubkey == get_null_account() };
+    val last_time = _staking_last_known_time();
+    val ds = delegation_state @* {
+         (empty(network) or .staker_state.network == network) 
+        and (
+            // Current provider is active and either no change or future change
+            (.current_provider != null_provider and (.next_change_at == 0 or .next_change_at > last_time))
+            or 
+            // OR next provider is active and change time has passed
+            (.next_provider != null_provider and .next_change_at <= last_time)
+        )
+    } ( @group .staker_state.account);
+    return ds.size();
 }
 
 /**

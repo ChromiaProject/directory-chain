@@ -40,6 +40,10 @@ function(pay_reward_result, has_delegation_share: boolean) {
     }
 }
 
+object delegation_migration_state {
+    batch_size: integer = 10;
+    mutable migration_active: boolean = true;
+}
 
 // Block Actions
 
@@ -58,6 +62,71 @@ function __staking_begin_block(height: integer) {
         (_staking_last_known_time() - _staking_state.last_withdrawal_distribution) > chain_context.args.staking_withdrawals_payout_interval_ms
     ) {
         if (not try_call(__staking_begin_block_withdrawals(*))) log("Failed staking withdrawals distribution.");
+    }
+    if (delegation_migration_state.migration_active) {
+        if (not try_call(__staking_begin_block_delegation_migration(*))) log("Failed staking delegation migration.");
+    }
+}
+
+function __staking_begin_block_delegation_migration() {
+    val completed_states = delegation_state @* {} ( .staker_state );
+    val selected_states = staker_state_to_provider @* { .staker_state not in completed_states } (@group .staker_state) limit delegation_migration_state.batch_size;
+
+    // Find the current active delegation for each staker_state
+    val current_delegations = (
+        s1: staker_state_to_provider
+    ) @* {
+        s1.staker_state in selected_states
+        and s1.timestamp <= _staking_last_known_time()
+        // Ensure there's no more recent valid delegation for this staker_state
+        and empty(
+            (s2: staker_state_to_provider) @* {
+                s2.staker_state == s1.staker_state
+                and s2.timestamp <= _staking_last_known_time()
+                and (
+                    s2.timestamp > s1.timestamp
+                    or (s2.rowid > s1.rowid and s2.timestamp == s1.timestamp)
+                )
+            }
+        )
+    } ( staker_state = s1.staker_state, provider = s1.provider );
+
+    // Find the next pending delegation for each staker_state
+    val next_delegations = (
+        s1: staker_state_to_provider
+    ) @* {
+        s1.staker_state in selected_states
+        // Only consider future delegations
+        and s1.timestamp > _staking_last_known_time()
+        // Get the latest future delegation for each staker_state
+        and empty(
+            (s2: staker_state_to_provider) @* {
+                s2.staker_state == s1.staker_state
+                and s2.timestamp > _staking_last_known_time()
+                and (
+                    s2.timestamp > s1.timestamp
+                    or (s2.rowid > s1.rowid and s2.timestamp == s1.timestamp)
+                )
+            }
+        )
+    } (staker_state = s1.staker_state, next_provider = s1.provider, next_change_at = s1.timestamp);
+
+    val delegation_structs = (cd: current_delegations) @* {} (
+        struct<delegation_state> (
+            staker_state = cd.staker_state,
+            current_provider = cd.provider,
+            next_provider = next_delegations @? { cd.staker_state } ( .next_provider ) ?: provider @ { get_null_account() },
+            next_change_at = next_delegations @? { cd.staker_state } ( .next_change_at ) ?: 0
+        )
+    );
+
+    create delegation_state (delegation_structs);
+
+    log("Created %s new delegation states, total %s".format(delegation_structs.size(), (completed_states.size() + delegation_structs.size())));
+
+    if (delegation_structs.size() == 0) {
+        log("Delegation migration done.");
+        delegation_migration_state.migration_active = false;
     }
 }
 
