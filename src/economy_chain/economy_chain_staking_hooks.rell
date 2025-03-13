@@ -45,6 +45,10 @@ object delegation_migration_state {
     mutable migration_active: boolean = true;
 }
 
+object delegation_reset {
+    mutable active: boolean = true;
+}
+
 // Block Actions
 
 function __staking_begin_block(height: integer) {
@@ -63,9 +67,20 @@ function __staking_begin_block(height: integer) {
     ) {
         if (not try_call(__staking_begin_block_withdrawals(*))) log("Failed staking withdrawals distribution.");
     }
+    if (delegation_reset.active) {
+        if (not try_call(__staking_begin_block_delegation_reset(*))) log("Failed staking delegation reset.");
+    }
     if (delegation_migration_state.migration_active) {
         if (not try_call(__staking_begin_block_delegation_migration(*))) log("Failed staking delegation migration.");
     }
+
+}
+
+function __staking_begin_block_delegation_reset() {
+    delete delegation_state @* {};
+    delegation_reset.active = false;
+    delegation_migration_state.migration_active = true;
+    log("Delegation reset done.");
 }
 
 function __staking_begin_block_delegation_migration() {
@@ -89,7 +104,7 @@ function __staking_begin_block_delegation_migration() {
                 )
             }
         )
-    } ( staker_state = s1.staker_state, provider = s1.provider );
+    } ( staker_state = s1.staker_state, provider = s1.provider, previous_provider = s1.previous_provider, active_from = s1.timestamp );
 
     // Find the next pending delegation for each staker_state
     val next_delegations = (
@@ -114,7 +129,9 @@ function __staking_begin_block_delegation_migration() {
     val delegation_structs = (cd: current_delegations) @* {} (
         struct<delegation_state> (
             staker_state = cd.staker_state,
+            previous_provider = cd.previous_provider,
             current_provider = cd.provider,
+            current_active_from = cd.active_from,
             next_provider = next_delegations @? { cd.staker_state } ( .next_provider ) ?: provider @ { get_null_account() },
             next_change_at = next_delegations @? { cd.staker_state } ( .next_change_at ) ?: 0
         )
