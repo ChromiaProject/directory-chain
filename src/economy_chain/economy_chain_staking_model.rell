@@ -1,4 +1,3 @@
-
 // It might be better for this to live in a table
 enum network {
     BSC, ETH, CHR
@@ -35,7 +34,9 @@ entity staker_state_to_provider {
 
 entity delegation_state {
     key staker_state;
+    mutable previous_provider: provider = provider @ { get_null_account() };
     index mutable current_provider: provider;
+    mutable current_active_from: timestamp = 0;
     index mutable next_provider: provider = provider @ { get_null_account() };
     index mutable next_change_at: timestamp = 0;
 }
@@ -55,103 +56,180 @@ entity pending_shared_payment {
 }
 
 // @dev If this is changed so should `_update_pending_token_time_all` and the query `staking_rewards_claimable_for`.
-// @dev Please pay attention to the bits marked with ***.
 function _update_pending_token_time(staker_state) {
-    update (
-        // Take all the states
-        s: staker_state,
-        // And attach to them the provider record
-        p: staker_state_to_provider
-    ) @* {
-            s == staker_state // *** For this staker state. Only want to do one. ***
-        and s == p.staker_state
-            // Is old enough to be active
-        and p.timestamp <= _staking_last_known_time()
-        and empty(
-            // And for which there is not also a state that meets that criteria...
-            (pp: staker_state_to_provider) @* {
-                pp.staker_state == s
-                and pp.timestamp <= _staking_last_known_time()
-                // ... and is is newer
-                and (
-                        pp.timestamp > p.timestamp
-                    or  (pp.rowid > p.rowid and pp.timestamp == p.timestamp)
-                )
+    val last_known_time = _staking_last_known_time();
+    val null_provider = provider @ { .pubkey == get_null_account() };
+    
+    var current_provider = null_provider;
+    var current_active_from = 0;
+    var previous_provider = null_provider;
+
+    // Find the delegation state for this staker state
+    val ds = delegation_state @? { .staker_state == staker_state };
+    if (exists(ds)) {
+      if (ds.next_change_at > 0 and ds.next_change_at <= last_known_time) {
+        current_provider = ds.next_provider;
+        current_active_from = ds.next_change_at;
+        previous_provider = ds.current_provider;
+      } else {
+        current_provider = ds.current_provider;
+        current_active_from = ds.current_active_from;
+        previous_provider = ds.previous_provider;
+      }
+    
+    } else {
+        // Fallback to old method during migration
+        val p = (s1: staker_state_to_provider) @? {
+            s1.staker_state == staker_state
+            and s1.timestamp <= last_known_time
+            and empty(
+                (s2: staker_state_to_provider) @* {
+                    s2.staker_state == staker_state,
+                    s2.timestamp <= last_known_time,
+                    (
+                        s2.timestamp > s1.timestamp
+                        or (s2.rowid > s1.rowid and s2.timestamp == s1.timestamp)
+                    )
+                }
+            )
+        };
+
+       if (exists(p)) {
+            current_provider = p.provider;
+            current_active_from = p.timestamp;
+            previous_provider = p.previous_provider;
+       }
+    }
+
+    // Calculate elapsed time based on delegation status
+    val elapsed_time = max(0,
+        // End time depends on whether we're delegated or not
+        when(current_provider.pubkey) {
+            get_null_account() -> min(last_known_time, current_active_from);
+            else -> last_known_time;
+        }
+        // Start time is the max of rewards start time or last update
+        - max(
+            staking_get_rewards_start(),
+            when(previous_provider.pubkey) {
+                get_null_account() -> max(current_active_from, staker_state.last_update);
+                else -> staker_state.last_update;
             }
         )
-    } (
-        pending_token_time += (s.balance / units_per_asset) *
-        max(0, // No less than zero time
-            // We would like to start at ... 
-            when(p.provider.pubkey) {
-                // ... if we are transitioning to undelegated, the later of the undelegation time and now
-                get_null_account() -> min(_staking_last_known_time(), p.timestamp);
-                // ... or just the current time
-                else -> _staking_last_known_time();
-            }
-            // Start at the greatest of whole system start time or that for this stake
-            - max(
-                staking_get_rewards_start(),
-                when(p.previous_provider.pubkey) {
-                    // If we undelegating here, the more recent of the last updated or the undelegation time
-                    get_null_account() -> max(p.timestamp, s.last_update);
-                    // ... if we don't unstake then just the last update time
-                    else -> s.last_update;
-                },
-            )
-        ),
-        last_update = _staking_last_known_time()
+    );
+    
+    val balance_in_units = staker_state.balance / units_per_asset;
+    
+    // Update the staker state
+    update staker_state (
+        pending_token_time += balance_in_units * elapsed_time,
+        last_update = last_known_time
     );
 }
 
 // @dev If this is changed so should `_update_pending_token_time` and the query `staking_rewards_claimable_for`.
-// @dev Please pay attention to the bits marked with ***.
 function _update_pending_token_time_all() {
+    val last_known_time = _staking_last_known_time();
+    val rewards_start = staking_get_rewards_start();
+    val null_provider = provider @ { .pubkey == get_null_account() };
+    
+    // Step 1: Update all staker states that have a delegation state
     update (
-        // Take all the states
-        s: staker_state,
+        ss: staker_state,
+        ds: delegation_state
+    ) @* {
+        ss == ds.staker_state
+    } (
+        pending_token_time += (ss.balance / units_per_asset) * 
+            max(0,
+                // End time calculation
+                when(
+                    // Determine the current active provider
+                    if (ds.next_change_at > 0 and ds.next_change_at <= last_known_time) 
+                        ds.next_provider.pubkey 
+                    else 
+                        ds.current_provider.pubkey
+                ) {
+                    get_null_account() -> min(
+                        last_known_time, 
+                        if (ds.next_change_at > 0 and ds.next_change_at <= last_known_time)
+                            ds.next_change_at
+                        else
+                            ds.current_active_from
+                    );
+                    else -> last_known_time;
+                }
+                // Start time calculation
+                - max(
+                    rewards_start,
+                    when(
+                        // Determine the previous provider
+                        if (ds.next_change_at > 0 and ds.next_change_at <= last_known_time)
+                            ds.current_provider.pubkey
+                        else
+                            ds.previous_provider.pubkey
+                    ) {
+                        get_null_account() -> max(
+                            if (ds.next_change_at > 0 and ds.next_change_at <= last_known_time)
+                                ds.next_change_at
+                            else
+                                ds.current_active_from,
+                            ss.last_update
+                        );
+                        else -> ss.last_update;
+                    }
+                )
+            ),
+        last_update = last_known_time
+    );
+    
+    // Step 2: Update all staker states that don't have a delegation state during migration
+    update (
+        // Take all the states without delegation states
+        ss: staker_state,
         // And attach to them the provider record
         p: staker_state_to_provider
-    // For this staker state
     ) @* {
-            // There no staker_state restriction here. We want them all.
-            s == p.staker_state
-            // Is old enough to be active
-        and p.timestamp <= _staking_last_known_time()
+        // Only staker states without delegation states
+        empty(delegation_state @* { .staker_state == ss }),
+        // There no staker_state restriction here. We want them all.
+        ss == p.staker_state,
+        // Is old enough to be active
+        p.timestamp <= last_known_time,
         // *** Note we're taking all of them ***
-        and empty(
+        empty(
             // And for which there is not also a state that meets that criteria...
             (pp: staker_state_to_provider) @* {
-                pp.staker_state == s
-                and pp.timestamp <= _staking_last_known_time()
+                pp.staker_state == ss,
+                pp.timestamp <= last_known_time,
                 // ... and is is newer
-                and (
-                        pp.timestamp > p.timestamp
-                    or  (pp.rowid > p.rowid and pp.timestamp == p.timestamp)
+                (
+                    pp.timestamp > p.timestamp
+                    or (pp.rowid > p.rowid and pp.timestamp == p.timestamp)
                 )
             }
         )
     } (
-        pending_token_time += (s.balance / units_per_asset) *
+        pending_token_time += (ss.balance / units_per_asset) *
         max(0, // No less than zero time
             // We would like to start at ... 
             when(p.provider.pubkey) {
                 // ... if we are transitioning to undelegated, the later of the undelegation time and now
-                get_null_account() -> min(_staking_last_known_time(), p.timestamp);
+                get_null_account() -> min(last_known_time, p.timestamp);
                 // ... or just the current time
-                else -> _staking_last_known_time();
+                else -> last_known_time;
             }
             // Start at the greatest of whole system start time or that for this stake
             - max(
-                staking_get_rewards_start(),
+                rewards_start,
                 when(p.previous_provider.pubkey) {
                     // If we undelegating here, the more recent of the last updated or the undelegation time
-                    get_null_account() -> max(p.timestamp, s.last_update);
+                    get_null_account() -> max(p.timestamp, ss.last_update);
                     // ... if we don't unstake then just the last update time
-                    else -> s.last_update;
-                },
+                    else -> ss.last_update;
+                }
             )
         ),
-        last_update = _staking_last_known_time()
+        last_update = last_known_time
     );
 }
