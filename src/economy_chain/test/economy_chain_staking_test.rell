@@ -1904,3 +1904,52 @@ function test_delegation_no_staking_states() {
 
     assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.bob.pub);
 }
+
+function test_delegation_migration_process() {
+    rell.test.tx().op(init()).run();
+    
+    // Create multiple accounts with stakes but no delegation_state entries
+    val accounts = list<ft4.accounts.account>();
+    val providers = [rell.test.keypairs.bob.pub, rell.test.keypairs.charlie.pub, rell.test.keypairs.dave.pub];
+    
+    // Add providers
+    for (provider_key in providers) {
+        add_provider(provider_key);
+    }
+    
+    // Create accounts and set up delegations
+    for (i in range(37)) {
+        val priv_key = i.to_text().hash();
+        val kp = rell.test.keypair(priv = priv_key, pub = crypto.privkey_to_pubkey(priv_key));
+        val account = require(do_create_account(kp, auth_privkey));
+        rell.test.tx().op(mint_to(account, 1000 * units_per_asset)).sign(admin_privkey).run();
+        do_staking_deposit_native(kp, 1000 * units_per_asset);
+        
+        // Delegate to different providers
+        val provider_idx = i % providers.size();
+        do_staking_delegate(kp, providers[provider_idx]);
+        
+        accounts.add(account);
+    }
+
+    // Remove existing delegation states, staker_state_to_provider entries will still exist
+    rell.test.tx().op(remove_delegation_states()).run();
+    
+    // Force migration to be active
+    rell.test.tx().op(enable_delegation_migration()).run();
+    
+    while (delegation_migration_state.migration_active) {
+        rell.test.block().run();
+    }
+    
+    // Verify all accounts were migrated
+    assert_equals(delegation_state @* {} (.staker_state).size(), accounts.size());
+    
+    // Verify delegation states are correct
+    for (i in range(accounts.size())) {
+        val account = accounts[i];
+        val provider_idx = i % providers.size();
+        val expected_provider = providers[provider_idx];
+        assert_equals(staking_get_current_delegate(account.id), expected_provider);
+    }
+}

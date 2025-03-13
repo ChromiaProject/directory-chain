@@ -252,6 +252,7 @@ operation add_staking(provider_staking_account, amount: integer, network: networ
     create delegation_state(
         staker_state = ss,
         current_provider = provider_staking_account.provider,
+        current_active_from = _staking_last_known_time(),
         next_provider = provider @ { get_null_account() },
         next_change_at = 0
     );
@@ -383,4 +384,12 @@ operation wipe_upgrade_container_tickets(container_name: text) {
 
 operation staking_request_withdrawal_on_network(account: ft4.accounts.account, network: network) {
     _staking_request_withdrawal(account, network);
+}
+
+operation enable_delegation_migration() {
+    delegation_migration_state.migration_active = true;
+}
+
+operation remove_delegation_states() {
+    delete delegation_state @* {};
 }
