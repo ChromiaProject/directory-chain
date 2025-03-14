@@ -1,0 +1,42 @@
+module;
+
+import ^.constants.*;
+import ^.dynamic_topics.*;
+
+val ANCHORED_HEADER_OP = "__anchored_icmf_header";
+val NON_ANCHORED_HEADER_OP = "__non_anchored_icmf_header";
+
+val BLOCK_HEADER_TIMESTAMP_INDEX = 3;
+val BLOCK_HEADER_HEIGHT_INDEX = 4;
+
+operation __icmf_message(sender: byte_array, topic: text, body: gtv) {
+    var current_height = op_context.block_height;
+    var current_block_operations = op_context.get_all_operations();
+    var current_op = op_context.op_index;
+    while (true) {
+        while (current_op > 0) {
+            current_op--;
+            val op = current_block_operations[current_op];
+            if (op.name == ANCHORED_HEADER_OP or op.name == NON_ANCHORED_HEADER_OP) {
+                val raw_header = byte_array.from_gtv(op.args[0]);
+                val header_gtv = list<gtv>.from_gtv(gtv.from_bytes(raw_header));
+                val height = integer.from_gtv(header_gtv[BLOCK_HEADER_HEIGHT_INDEX]);
+                val timestamp = integer.from_gtv(header_gtv[BLOCK_HEADER_TIMESTAMP_INDEX]);
+                receive_icmf_message(sender, height, timestamp, topic, body);
+                return;
+            }
+        }
+
+        // If we end up in here we have spill (should be rare), so we need to dig into the previous block
+        current_height--;
+        // This will be first tx in block since Rell default sorts on tx_iid ascending
+        val previous_block_special_begin_tx = transaction @ {
+            .block == block @ { .block_height == current_height }
+        } (.tx_data) limit 1;
+        val gtx = gtx_transaction.from_gtv(gtv.from_bytes(previous_block_special_begin_tx));
+        current_block_operations = gtx.body.operations;
+        current_op = current_block_operations.size();
+    }
+}
+
+@extendable function receive_icmf_message(sender: byte_array, sender_height: integer, sender_timestamp: integer, topic: text, body: gtv) {}
