@@ -55,11 +55,49 @@ To include the ICMF module in your rell project, specify in your config file:
 libs:
   icmf:
     registry: https://gitlab.com/chromaway/core/directory-chain
-    path: src/messaging/icmf
-    tagOrBranch: 1.35.0
-    rid: x"19D6BC28D527E6D2239843608486A84F44EDCD244E253616F13D1C65893F35F6"
+    path: src/lib/icmf
+    tagOrBranch: 1.82.6
+    rid: x"B56524EE85B679371EAB1A069B03BE6A3E94F36993DEA900747BA5BAE8B99122"
 ```
 Then use `chr install` to install the icmf-library.
+
+### Sender chains
+
+Sender chains can use the following import:
+
+```yaml
+import lib.icmf.*;
+```
+
+And use function `send_message(topic: text, body: gtv)` to send messages.
+
+### Receiver chains
+
+Receiver chains can use the following import:
+
+```yaml
+import lib.icmf.receiver.*;
+```
+
+And then extend the following function:
+
+```
+@extendable function receive_icmf_message(sender: byte_array, topic: text, body: gtv) {}
+```
+
+If you need height and timestamp of the sent message you can use the metadata receiver module:
+
+```yaml
+import lib.icmf.metadata_receiver.*;
+```
+
+And then extend the following function:
+
+```
+@extendable function receive_icmf_message(sender: byte_array, sender_height: integer, sender_timestamp: integer, topic: text, body: gtv) {}
+```
+
+**Note:** Extracting the height and timestamp can incur a small performance penalty
 
 ## Inter-Chain Confirmation Facility (ICCF)
 
