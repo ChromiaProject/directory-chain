@@ -124,3 +124,47 @@ function test_get_remove_forced_configuration_proposal() {
     assert_equals(proposal.blockchain_rid, bc.rid);
     assert_equals(proposal.height, 2);
 }
+
+function test_remove_compressed_forced_configuration() {
+    setup_module();
+
+    val alice = provider @ { rell.test.pubkeys.alice };
+
+    val conf = apply_required_configuration_properties();
+    val initial_configuration = conf.to_gtv().to_bytes();
+    rell.test.tx().op(
+        create_container(alice.pubkey, container, clusters.system, 0, [alice.pubkey]),
+        propose_blockchain(alice.pubkey, initial_configuration, chain_name, container),
+    ).sign(rell.test.keypairs.alice).run();
+    val bc = blockchain @ { chain_name };
+
+    val compressed_conf = apply_required_configuration_properties([
+        "compressed_roots": [compressed_root(
+            path = ["compression_content"],
+            compressed_keys = []
+        )].to_gtv_pretty(),
+        "compression_content": [
+            "some_content": "Compress me!"
+        ].to_gtv_pretty()
+    ]);
+    rell.test.tx().op(
+        propose_blockchain_action(rell.test.pubkeys.alice, bc.rid, blockchain_action.pause),
+        propose_forced_configuration(initial_provider.pub, bc.rid, compressed_conf.to_gtv().to_bytes(), 2, "", true)
+    ).sign(rell.test.keypairs.alice).run();
+
+    rell.test.block().run();
+    rell.test.block().run();
+    rell.test.block().run();
+
+    assert_true(exists(blockchain_configuration @* { bc, 2 }));
+    assert_true(exists(blockchain_configuration_signers @* { bc, 2 }));
+    assert_true(exists(forced_configuration @* { bc, 2 }));
+
+    rell.test.tx().op(
+        propose_remove_forced_configuration(bc.rid, 2, "")
+    ).sign(rell.test.keypairs.alice).run();
+
+    assert_true(empty(blockchain_configuration @* { bc, 2 }));
+    assert_true(empty(blockchain_configuration_signers @* { bc, 2 }));
+    assert_true(empty(forced_configuration @* { bc, 2 }));
+}
