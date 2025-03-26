@@ -49,6 +49,20 @@ chr query --blockchain-rid ${TOKEN_CHAIN_RID} ft4.get_assets_by_name name=${YOUR
 
 ## Propose a bridge for the token
 
+Follow the official documentation for how to deploy a bridge but skip deploying a validator contract. There is already
+a validator contract deployed specifically for token chain. You can find it by querying:
+
+```
+chr query --blockchain-rid ${EVM_TRANSACTION_SUBMITTER_CHAIN_RID} get_all_bridges
+```
+
+> **Note**: If you don't have the EVM_TRANSACTION_SUBMITTER_CHAIN_RID you can retrieve it using
+> ```
+> chr query --blockchain-rid ${DIRECTORY_CHAIN_RID} get_evm_transaction_submitter_chain_rid
+> ```
+
+Look for token chain in the response list and it's corresponding "validator_contract".
+
 Use Chromia CLI to propose the token bridge:
 
 ```
