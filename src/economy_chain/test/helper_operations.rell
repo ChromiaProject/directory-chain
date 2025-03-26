@@ -393,3 +393,27 @@ operation enable_delegation_migration() {
 operation remove_delegation_states() {
     delete delegation_state @* {};
 }
+
+operation override_existing_bridge(network_id: integer, bridge_address: byte_array) {
+    // Let's fake that we have a change of bridge contracts with some manual interference with entities
+    val existing_bridge_asset = eif.hbridge.erc20_asset @ {
+        get_asset(),
+        .network_id == network_id
+    };
+    val existing_bridge = eif.hbridge.bridge_erc20_asset @ {
+        existing_bridge_asset
+    };
+    val existing_bridge_contract = existing_bridge.bridge_contract;
+    delete existing_bridge;
+    delete existing_bridge_contract;
+
+    eif.hbridge.register_bridge_with_erc20_assets(
+        network_id,
+        bridge_address, //BOGUS
+        [existing_bridge_asset]
+    );
+}
+
+operation try_to_update_assets() {
+    _try_to_update_assets();
+}
