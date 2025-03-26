@@ -11,7 +11,8 @@ struct evm_bridge {
 function register_and_link_bridge_and_erc20_asset(ft4.assets.asset) {
 	val bridges = list<evm_bridge>.from_gtv_pretty(chain_context.args.evm_bridges);
 	for (bridge in bridges) {
-		val existing_bridge_asset = eif.hbridge.get_erc20_for_asset(asset.id) @? {
+		val existing_bridge_asset = eif.hbridge.erc20_asset @? {
+			asset,
 			.network_id == bridge.network_id,
 			.token_address == bridge.asset_address
 		};
@@ -24,6 +25,23 @@ function register_and_link_bridge_and_erc20_asset(ft4.assets.asset) {
 					eif.hbridge.bridge_mode.foreign,
 					bridge_address = bridge.bridge_address
 				);
+		} else {
+			val existing_bridge = eif.hbridge.bridge_erc20_asset @? {
+				existing_bridge_asset
+			};
+			if (exists(existing_bridge) and existing_bridge.bridge_contract.contract_address != bridge.bridge_address) {
+				log("New bridge contract detected for network id %s. Replacing existing contract.".format(bridge.network_id));
+				eif.hbridge.register_bridge_with_erc20_assets(
+					bridge.network_id,
+					bridge.bridge_address,
+					[existing_bridge_asset]
+				);
+
+				// Clean up old bridge
+				val existing_bridge_contract = existing_bridge.bridge_contract;
+				delete existing_bridge;
+				delete existing_bridge_contract;
+			}
 		}
 	}
 }

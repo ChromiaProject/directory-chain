@@ -1,13 +1,31 @@
 @test module;
 
 import ^^.*;
+import ^.helper_operations.*;
 
 function test_add_bridge_and_erc20_link_on_init() {
 
 	rell.test.tx().op(
-			init()
-		).run();
+		init()
+	).run();
 
+	assert_bridge_contracts();
+}
+
+function test_updating_bridge_contract() {
+	rell.test.tx().op(
+		init()
+	).run();
+
+	// Simulate config update
+	rell.test.tx().op(
+			override_existing_bridge(97, x"1010"), // BOGUS address
+			try_to_update_assets()
+		).run();
+	assert_bridge_contracts();
+}
+
+function assert_bridge_contracts() {
 	val bsc_asset = eif.hbridge.erc20_asset @ { get_asset(), .network_id == 97 } (eif.hbridge.map_erc20_asset_to_erc20_asset_info($));
 	val eth_asset = eif.hbridge.erc20_asset @ { get_asset(), .network_id == 1 } (eif.hbridge.map_erc20_asset_to_erc20_asset_info($));
 
