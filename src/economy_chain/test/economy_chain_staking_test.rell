@@ -1486,6 +1486,57 @@ function test_set_provider_staking_account_and_transfer_staking_states() {
         .staking_account.id == new_provider_account_id}));
 }
 
+function test_set_provider_staking_account_and_transfer_staking_states_ft4() {
+    rell.test.tx().op(init()).run();
+
+    val provider_keypair = rell.test.keypairs.alice;
+    val new_provider_account_keypair = rell.test.keypairs.bob;
+    val new_provider_account_id = ft4.accounts.get_account_id_from_signers([new_provider_account_keypair.pub]);
+
+    add_provider(provider_keypair.pub);
+    val initial_provider_account = provider_staking_account @ { .provider.pubkey == provider_keypair.pub } ( .staking_account );
+
+    rell.test.tx()
+        .op(mint_to(initial_provider_account, 9999999))
+        .sign(admin_privkey).run();
+
+    // Have A deposit and delegate to itself
+    rell.test.tx().op(
+        ft4.test_utils.ft_auth_operation_for(provider_keypair.pub)
+    ).op(
+        staking_deposit_native(9999999, provider_keypair.pub)
+    ).sign(provider_keypair).run();
+    assert_equals(staking_get_current_delegate(initial_provider_account.id), provider_keypair.pub);
+
+    // Wait for delegation to take effect
+    rell.test.set_next_block_time_delta(millis_per_month);
+    rell.test.block().run();
+    rell.test.block().run();
+    assert_equals(staking_get_balance(initial_provider_account.id), 9999999);
+    assert_true(staking_rewards_claimable_for(initial_provider_account.id) > 0);
+    assert_true(exists(provider_staking_account @* {
+        .provider.pubkey == provider_keypair.pub,
+        .staking_account.id == initial_provider_account.id}));
+
+    rell.test.tx()
+        .op(register_test_account(new_provider_account_keypair.pub))
+        .run();
+
+    // Change provider staking account
+    rell.test.tx()
+        .op(ft4.test_utils.ft_auth_operation_for(new_provider_account_keypair.pub))
+        .op(set_provider_staking_account_ft4(provider_keypair.pub))
+        .sign(provider_keypair, new_provider_account_keypair)
+        .run();
+    assert_equals(staking_get_balance(initial_provider_account.id), 0);
+    assert_equals(staking_get_balance(new_provider_account_id), 9999999);
+    assert_null(staking_get_current_delegate(initial_provider_account.id));
+    assert_equals(staking_get_current_delegate(new_provider_account_id), provider_keypair.pub);
+    assert_true(exists(provider_staking_account @* {
+        .provider.pubkey == provider_keypair.pub,
+        .staking_account.id == new_provider_account_id}));
+}
+
 function test_evm_withdrawal_with_small_native_balance() {
     rell.test.tx().op(init()).run();
 

@@ -135,3 +135,43 @@ operation set_provider_staking_account(provider_pubkey: pubkey, new_account_pubk
     _change_staking_account(provider_staking_account.staking_account, new_account);
     provider_staking_account.staking_account = new_account;
 }
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(set_provider_staking_account_ft4).mount_name,
+    flags = [],
+    message = set_provider_staking_account_ft4_auth_message(*)
+);
+
+function set_provider_staking_account_ft4_auth_message(gtv): text {
+    val args = struct<set_provider_staking_account_ft4>.from_gtv(gtv);
+    return "Please sign the message to set the staking account for provider <%s> to {account_id}."
+        .format(args.provider_pubkey);
+}
+
+/**
+ * Set an alternative (optional account) for a staking provider.
+ *
+ * The alternative account will be used for the provider's stake and reward pay-outs.
+ *
+ * This transaction must be signed with the provider's main key,
+ * be FT4 authenticated with the account the provider wishes to use
+ *
+ * @param provider_pubkey The provider's main public key with which this transaction has been signed
+ */
+operation set_provider_staking_account_ft4(provider_pubkey: pubkey) {
+    // Require signed by provider
+    val provider = require_provider_is_signer(provider_pubkey);
+
+    // Require signed by current staking account
+    val provider_staking_account = provider_staking_account @ { provider };
+    require_signed_by_account_id(provider_staking_account.staking_account.id);
+
+    // Require signed by new staking account (native or EVM)
+    val new_account = ft4.auth.authenticate();
+    require(not(exists(provider_staking_account @? { .staking_account == new_account })),
+        "Account is already in use by a provider");
+
+    _change_staking_account(provider_staking_account.staking_account, new_account);
+    provider_staking_account.staking_account = new_account;
+}
