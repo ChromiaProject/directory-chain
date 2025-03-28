@@ -10,15 +10,13 @@ namespace ft4 {
     import lib.ft4.auth;
     import test_utils: lib.ft4.test.core;
 }
-import lib.auth;
 
 struct module_args {
-    auth_privkey: byte_array;
-    admin_privkey: byte_array;
+    account_creator_privkey: byte_array;
     container_removal_timeout: integer;
 }
 
-val auth_privkey = chain_context.args.auth_privkey;
+val auth_privkey = chain_context.args.account_creator_privkey;
 val cluster_name = "test_cluster";
 val brid = x"00".repeat(32);
 
@@ -160,7 +158,7 @@ function test_bridge_leases_are_transferred_on_container_upgrade() {
 
     assert_not_null(bridge_lease @? { .lease == container_lease });
 
-    val upgraded_container_name = do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 5, ticket_id = ticket_id_after_init + 7, current_lease = container_lease, container_units = 3, cluster_name = cluster_name, upgraded_container_name = "upgraded_container");
+    val upgraded_container_name = do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 4, ticket_id = ticket_id_after_init + 7, current_lease = container_lease, container_units = 3, cluster_name = cluster_name, upgraded_container_name = "upgraded_container");
 
     val upgraded_container_lease = lease @ { upgraded_container_name };
     assert_null(bridge_lease @? { .lease == container_lease });

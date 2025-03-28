@@ -10,6 +10,10 @@ val provider_pubkey = provider_key.pub;
 val node_pubkey = rell.test.pubkeys.charlie;
 val cluster_name = "Bob's cluster";
 
+struct module_args {
+	account_creator_privkey: byte_array;
+}
+
 function test_reward_start_time_is_set() {
     assert_equals(START_OF_2050, staking_get_rewards_start());
 }
@@ -25,7 +29,7 @@ function test_rewards_are_disabled_before_2050() {
     val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
     do_evm_stake_update_bsc(alice_evm_address, 10 * units_per_asset);
     val test_account_alice = require(do_create_account_using_ras_staking(rell.test.keypairs.alice));
-    val test_account_bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
+    val test_account_bob = require(do_create_account(rell.test.keypairs.bob, chain_context.args.account_creator_privkey));
 
     val an_amount = 20 * units_per_asset;
 
@@ -115,9 +119,9 @@ function test_rewards_are_disabled_before_2050() {
 function test_fee_share_are_disabled_before_2050() {
     rell.test.tx().op(init()).run();
 
-    val test_account_dave = require(do_create_account(rell.test.keypairs.dave, auth_privkey));
-    val test_account_bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
-    val test_account_charlie = require(do_create_account(rell.test.keypairs.charlie, auth_privkey));
+    val test_account_dave = require(do_create_account(rell.test.keypairs.dave, chain_context.args.account_creator_privkey));
+    val test_account_bob = require(do_create_account(rell.test.keypairs.bob, chain_context.args.account_creator_privkey));
+    val test_account_charlie = require(do_create_account(rell.test.keypairs.charlie, chain_context.args.account_creator_privkey));
 
     rell.test.tx()
         .op(mint_to_pool(8888888888))

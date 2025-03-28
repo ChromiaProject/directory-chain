@@ -38,7 +38,6 @@ Module args for FT4 configuration:
 | `max_points`                 | FT4 rate limit configuration. Configured under `lib.ft4.core.accounts.rate_limit` parameter. | int  | :white_check_mark: |         |
 | `recovery_time`              | FT4 rate limit configuration. Configured under `lib.ft4.core.accounts.rate_limit` parameter. | int  | :white_check_mark: |         |
 | `points_at_account_creation` | FT4 rate limit configuration. Configured under `lib.ft4.core.accounts.rate_limit` parameter. | int  | :white_check_mark: |         |
-| `auth_pubkey`                | FT4 authorization server private key. Configured under `lib.auth` parameter.                 | int  | :white_check_mark: |         |
 
 ### ICMF configuration
 

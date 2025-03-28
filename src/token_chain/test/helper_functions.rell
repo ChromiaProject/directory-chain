@@ -6,9 +6,9 @@ namespace ft4 {
     import lib.ft4.auth;
     import lib.ft4.accounts.strategies;
     import test_utils: lib.ft4.test.core;
+    import test_operations: lib.ft4.test.operations;
 }
 
-import lib.auth;
 import ^.helper_operations.*;
 import common_proposal.test.helper_functions.*;
 
@@ -42,10 +42,9 @@ function do_create_account(keypair: rell.test.keypair, auth_privkey: byte_array,
 
     val eth_address = crypto.eth_privkey_to_address(keypair.priv);
     val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(eth_address, set(["A", "T"]));
-    val signature = ft4.test_utils.evm_sign(auth.get_message_to_sign(), keypair.priv);
 
     val tx = rell.test.tx().op(
-        auth.register_account(auth_descriptor, signature)
+        ft4.test_operations.register_account(auth_descriptor)
     ).nop().sign(auth_privkey);
 
     tx.run();
