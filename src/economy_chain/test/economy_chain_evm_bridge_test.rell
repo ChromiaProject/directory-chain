@@ -25,9 +25,22 @@ function test_updating_bridge_contract() {
 	assert_bridge_contracts();
 }
 
+function test_obsolete_asset_bridge_contract_removed() {
+	rell.test.tx().op(
+		init()
+	).run();
+
+	// Simulate obsolete asset and assert that it is immediately removed
+	rell.test.tx().op(
+			add_bridge(97, x"1010", x"2020"),
+			try_to_update_assets()
+		).run();
+	assert_bridge_contracts();
+}
+
 function assert_bridge_contracts() {
-	val bsc_asset = eif.hbridge.erc20_asset @ { get_asset(), .network_id == 97 } (eif.hbridge.map_erc20_asset_to_erc20_asset_info($));
-	val eth_asset = eif.hbridge.erc20_asset @ { get_asset(), .network_id == 1 } (eif.hbridge.map_erc20_asset_to_erc20_asset_info($));
+	val bsc_asset = eif.hbridge.erc20_asset @ { get_asset(), .network_id == 97 } (eif.hbridge.map_erc20_asset_to_erc20_asset_info($)) limit 1;
+	val eth_asset = eif.hbridge.erc20_asset @ { get_asset(), .network_id == 1 } (eif.hbridge.map_erc20_asset_to_erc20_asset_info($)) limit 1;
 
 	assert_equals(
 		eif.hbridge.get_bridge_contracts(network_id = 97),

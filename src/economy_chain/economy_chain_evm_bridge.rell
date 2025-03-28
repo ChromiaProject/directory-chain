@@ -43,6 +43,26 @@ function register_and_link_bridge_and_erc20_asset(ft4.assets.asset) {
 				delete existing_bridge_contract;
 			}
 		}
+
+		val obsolete_bridge_assets = eif.hbridge.erc20_asset @* {
+			asset,
+			.network_id == bridge.network_id,
+			.token_address != bridge.asset_address
+		};
+		// It's not safe to delete obsolete assets but we can remove any bridges that are connected to it
+		for (obsolete_asset in obsolete_bridge_assets) {
+			val existing_bridge = eif.hbridge.bridge_erc20_asset @? {
+				obsolete_asset
+			};
+
+			if (exists(existing_bridge)) {
+				// Clean up old bridge
+				log("Removing obsolete bridge for asset with address %s".format(obsolete_asset.token_address));
+				val existing_bridge_contract = existing_bridge.bridge_contract;
+				delete existing_bridge;
+				delete existing_bridge_contract;
+			}
+		}
 	}
 }
 
