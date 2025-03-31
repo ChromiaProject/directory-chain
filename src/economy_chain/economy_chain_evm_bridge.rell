@@ -1,5 +1,5 @@
-object pending_evm_links {
-	mutable add: boolean = true;
+object bridge_mode_conversion {
+	mutable active: boolean = true;
 }
 
 struct evm_bridge {
@@ -66,23 +66,75 @@ function register_and_link_bridge_and_erc20_asset(ft4.assets.asset) {
 	}
 }
 
-function __evm_links_begin_block() {
-	if (pending_evm_links.add == false) return;
-	add_missing_evm_links();
-	pending_evm_links.add = false;
+struct evm_supply {
+	network_id: integer;
+	total_supply: big_integer;
+	timestamp: timestamp;
 }
 
-function add_missing_evm_links() {
-	val new_links = ( ads: ft4.accounts.auth_descriptor_signer, mad: ft4.accounts.main_auth_descriptor) @* {
-		ads.id.size() == 20 //ensure signer is an EVM address
-		and ads.account_auth_descriptor == mad.auth_descriptor //ensure signer is for a main AD
-		and empty ( // filter out accounts that already has a link
-			(e: eif.hbridge.evm_eoa_account_link) @* {
-				e.account == mad.account
-			}
-		)
-	} ( struct<eif.hbridge.evm_eoa_account_link> (address = ads.id, account = mad.account) );
+function convert_bridge_mode() {
+	val supplies = list<evm_supply>.from_gtv_pretty(chain_context.args.evm_supplies);
+	val erc20_assets = eif.hbridge.erc20_asset @* { get_asset() };
+	for (erc20_asset in erc20_assets) {
+		log("Converting bridge mode for chain id %s".format(erc20_asset.network_id));
+		erc20_asset.bridge_mode = eif.hbridge.bridge_mode.native;
+		val supply = supplies @? { .network_id == erc20_asset.network_id };
+		if (empty(supply)) {
+			log("No supply found for network id ", erc20_asset.network_id);
+			continue;
+		}
+		val bridge_account = eif.hbridge.ensure_bridge_account(erc20_asset.virtual_blockchain_rid);
 
-	create eif.hbridge.evm_eoa_account_link ( new_links );
-	log("Added %s missing evm links.".format(new_links.size()));
+		val pending_withdrawals = eif.hbridge.erc20_withdrawal_status @ {
+			.erc20_withdrawal.network_id == supply!!.network_id,
+			.erc20_withdrawal.transaction.block.timestamp <= supply!!.timestamp,
+			.withdrawal_status not in [eif.hbridge.withdrawal_status.withdrawn, eif.hbridge.withdrawal_status.withdrawn_to_chromia]
+		} (
+			@sum .erc20_withdrawal.amount
+		);
+
+		val new_withdrawals = eif.hbridge.erc20_withdrawal @ {
+			.network_id == supply.network_id,
+			.transaction.block.timestamp > supply.timestamp,
+		} (
+			@sum .amount
+		);
+
+		val new_deposits = eif.hbridge.erc20_deposit @ {
+			.network_id == supply.network_id,
+			.last_updated > supply.timestamp,
+		} (
+			@sum .amount
+		);
+
+		val mint_amount = supply.total_supply + pending_withdrawals + new_withdrawals - new_deposits;
+		ft4.assets.Unsafe.mint(bridge_account, erc20_asset.asset, mint_amount);
+		log("Minted %s EVM balance for chain id %s".format(mint_amount, erc20_asset.network_id));
+	}
+}
+
+function __bridge_mode_begin_block() {
+	if (bridge_mode_conversion.active == false) return;
+	convert_bridge_mode();
+	bridge_mode_conversion.active = false;
+}
+
+/**
+ * Update the EVM supply for a given network id and token address. Must be called by the supply admin.
+ * 
+ * @param network_id The network id of the EVM chain.
+ * @param token_address The address of the ERC20 token.
+ * @param delta The amount to update the supply by.
+ * @param mint Whether to mint or burn the supply.
+ */
+operation update_evm_supply(network_id: integer, token_address: byte_array, delta: big_integer, mint: boolean) {
+	require(op_context.is_signer(chain_context.args.evm_supply_admin), "Only the supply admin can update the supply");
+	val id = eif.hbridge.erc20_asset @? { .network_id == network_id, .token_address == token_address } (.virtual_blockchain_rid);
+	val account = require(ft4.accounts.account @? { .id == id }, "Bridge account not found");
+
+	if (mint) {
+		ft4.assets.Unsafe.mint(account, get_asset(), delta);
+	} else {
+		ft4.assets.Unsafe.burn(account, get_asset(), delta);
+	}
 }
