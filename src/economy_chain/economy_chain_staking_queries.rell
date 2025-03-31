@@ -177,29 +177,6 @@ query staking_rewards_claimable_for(account_id: byte_array) {
             current_active_from = ds.current_active_from;
             previous_provider = ds.previous_provider;
           }
-        
-        } else {
-            // Fallback to old method during migration
-            val p = (s1: staker_state_to_provider) @? {
-                s1.staker_state == ss
-                and s1.timestamp <= last_known_time
-                and empty(
-                    (s2: staker_state_to_provider) @* {
-                        s2.staker_state == ss,
-                        s2.timestamp <= last_known_time,
-                        (
-                            s2.timestamp > s1.timestamp
-                            or (s2.rowid > s1.rowid and s2.timestamp == s1.timestamp)
-                        )
-                    }
-                )
-            };
-
-           if (exists(p)) {
-                current_provider = p.provider;
-                current_active_from = p.timestamp;
-                previous_provider = p.previous_provider;
-           }
         }
 
         // Calculate elapsed time based on delegation status
