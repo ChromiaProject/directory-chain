@@ -1,6 +1,13 @@
 entity proposed_forced_configuration {
     key proposal;
-    blockchain;
+    key blockchain;
+    height: integer;
+    config_data: byte_array;
+    resume_chain: boolean = false;
+}
+
+entity proposed_forced_configuration_stage2 {
+    key blockchain;
     height: integer;
     config_data: byte_array;
     resume_chain: boolean = false;
@@ -58,9 +65,14 @@ operation propose_forced_configuration_iccf(tx_to_prove: gtx_transaction, op_ind
 
 function create_forced_configuration_proposal(provider, blockchain_rid: byte_array, config_data: byte_array,
         height: integer, resume_chain: boolean, description: text): proposal {
-    val blockchain = require_active_blockchain(blockchain_rid);
-    require(blockchain.state == blockchain_state.PAUSED, "Forcing configuration only allowed on PAUSED blockchains. Blockchain rid: %s, state: %s".format(blockchain.rid, blockchain.state));
-    require(not is_blockchain_config_delayed(blockchain.rid), "Forced configuration only allowed on chain with configuration delay disabled");
+    val blockchain = validate_proposed_forced_configuration(blockchain_rid);
+
+    require(not exists(proposed_forced_configuration @? { blockchain }),
+        "Forced configuration proposal already exists for this blockchain");
+
+    require(not exists(proposed_forced_configuration_stage2 @? { blockchain }),
+        "Forced configuration proposal already pending for this blockchain");
+
     val container = container_blockchain @ { blockchain }.container;
     require_container_deployer(container, provider);
 
@@ -78,12 +90,43 @@ function apply_proposed_forced_configuration(proposal) {
     val pfc = proposed_forced_configuration @? { proposal };
     if (pfc == null) return;
 
-    val blockchain = require_active_blockchain(pfc.blockchain.rid);
-    require(blockchain.state == blockchain_state.PAUSED, "Forcing configuration only allowed on PAUSED blockchains. Blockchain rid: %s, state: %s".format(blockchain.rid, blockchain.state));
-    require(not is_blockchain_config_delayed(blockchain.rid), "Forced configuration only allowed on chain with configuration delay disabled");
+    val blockchain = validate_proposed_forced_configuration(pfc.blockchain.rid);
 
-    val cluster = container_blockchain @ { blockchain }  ( .container ) .cluster;
-    val cluster_signers = cluster_node @* { cluster } (@sort .node.pubkey);
+    log("Force_configuration proposal %d for blockchain %s approved, waiting to get additional approval from a node provider"
+        .format(proposal.rowid, blockchain.rid));
+    create proposed_forced_configuration_stage2(blockchain, pfc.height, pfc.config_data, pfc.resume_chain);
+}
+
+/**
+ * Approves a pending forced configuration update.
+ *
+ * Permission: node provider
+ *
+ * Rate limit: actions
+ *
+ * @param blockchain_rid Blockchain RID
+ */
+operation approve_proposed_forced_configuration(blockchain_rid: byte_array) {
+    val provider = require_provider_signer_with_rate_limit();
+    require(provider.tier == provider_tier.NODE_PROVIDER,
+        "Transaction must be signed by node provider");
+
+    val blockchain = require_active_blockchain(blockchain_rid);
+
+    val pfc = require(proposed_forced_configuration_stage2 @? { blockchain },
+        "No pending forced configuration update proposal for blockchain %s".format(blockchain_rid));
+
+    validate_proposed_forced_configuration(pfc.blockchain.rid);
+
+    log("Applying forced configuration for blockchain %s".format(blockchain_rid));
+
+    val cluster = container_blockchain @ { blockchain } ( .container ) .cluster;
+    val cluster_nodes = cluster_node @* { cluster } (.node);
+
+    require(exists(cluster_nodes @* { provider }),
+        "Transaction must be signed by node provider running this blockchain");
+
+    val cluster_signers = cluster_nodes @* {} (@sort .pubkey);
     val signers = cluster_signers.to_gtv().to_bytes();
 
     val config_data = make_config_unique(pfc.config_data);
@@ -104,6 +147,17 @@ function apply_proposed_forced_configuration(proposal) {
     if (pfc.resume_chain) {
         blockchain.state = blockchain_state.RUNNING;
     }
+
+    delete pfc;
+}
+
+function validate_proposed_forced_configuration(blockchain_rid: byte_array): blockchain {
+    val blockchain = require_active_blockchain(blockchain_rid);
+    require(blockchain.state == blockchain_state.PAUSED,
+        "Forcing configuration only allowed on PAUSED blockchains. Blockchain rid: %s, state: %s".format(blockchain.rid, blockchain.state));
+    require(not is_blockchain_config_delayed(blockchain.rid),
+        "Forced configuration only allowed on chain with configuration delay disabled");
+    return blockchain;
 }
 
 function delete_proposed_forced_configuration(proposal) {
@@ -173,6 +227,26 @@ query get_forced_configuration_proposal_v64(rowid?): forced_configuration_propos
         current_configuration = current.config,
         proposed_height = proposal_details.height,
         proposed_configuration = proposal_details.config,
+    );
+}
+
+/**
+ * Returns forced blockchain configuration proposal stage 2.
+ */
+query get_forced_configuration_stage2_proposal(blockchain_rid: byte_array): forced_configuration_proposal_data? {
+    val blockchain = require_active_blockchain(blockchain_rid);
+
+    val pfc = proposed_forced_configuration_stage2 @? { blockchain };
+    if (pfc == null) return null;
+
+    val current = get_latest_blockchain_configuration_data(pfc.blockchain);
+
+    return forced_configuration_proposal_data(
+        blockchain_rid = pfc.blockchain.rid,
+        current_height = current.height,
+        current_configuration = current.config,
+        proposed_height = pfc.height,
+        proposed_configuration = decompress_configuration(pfc.config_data),
     );
 }
 
