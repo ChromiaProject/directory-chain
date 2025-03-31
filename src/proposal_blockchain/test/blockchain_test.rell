@@ -15,6 +15,8 @@ import delay.test.helper_operations.*;
 function setup() {
     setup_module();
     rell.test.tx().op(create_test_provider("bob", rell.test.pubkeys.bob)).run();
+    rell.test.tx().op(create_test_provider("charlie", rell.test.pubkeys.charlie)).run();
+    rell.test.tx().op(create_test_provider("dave", rell.test.pubkeys.dave, provider_tier = provider_tier.DAPP_PROVIDER)).run();
 }
 
 function test_propose_blockchain() {
@@ -429,7 +431,55 @@ function forced_configuration(resume_chain: boolean = false) {
     assert_equals(fcp.proposed_height, 10);
     assert_equals(fcp.current_configuration, initial_configuration);
     assert_equals(fcp.proposed_configuration, conf.to_gtv().to_bytes());
+    val p = get_proposal(null)!!;
+    assert_equals(p.state, proposal_state.PENDING);
+    assert_null(get_forced_configuration_stage2_proposal(bc.rid));
+    rell.test.tx()
+        .op(approve_proposed_forced_configuration(bc.rid))
+        .nop()
+        .sign(rell.test.keypairs.alice)
+        .run_must_fail("No pending forced configuration update proposal for blockchain %s".format(bc.rid));
+
+    force_config(bc.rid, conf, 11, resume_chain).run_must_fail("Forced configuration proposal already exists for this blockchain");
+
     bob_votes();
+    assert_equals(get_proposal(p.id)!!.state, proposal_state.APPROVED);
+
+    val fcp2 = get_forced_configuration_stage2_proposal(bc.rid)!!;
+    assert_equals(fcp2.blockchain_rid, bc.rid);
+    assert_equals(fcp2.current_height, 0);
+    assert_equals(fcp2.proposed_height, 10);
+    assert_equals(fcp2.current_configuration, initial_configuration);
+    assert_equals(fcp2.proposed_configuration, conf.to_gtv().to_bytes());
+
+    force_config(bc.rid, conf, 12, resume_chain).run_must_fail("Forced configuration proposal already pending for this blockchain");
+
+    rell.test.tx()
+        .op(approve_proposed_forced_configuration(bc.rid))
+        .nop()
+        .sign(rell.test.keypairs.eve)
+        .run_must_fail("Transaction must be signed by provider");
+    rell.test.tx()
+        .op(approve_proposed_forced_configuration(bc.rid))
+        .nop()
+        .sign(rell.test.keypairs.dave)
+        .run_must_fail("Transaction must be signed by node provider");
+    rell.test.tx()
+        .op(approve_proposed_forced_configuration(bc.rid))
+        .nop()
+        .sign(rell.test.keypairs.charlie)
+        .run_must_fail("Transaction must be signed by node provider running this blockchain");
+    rell.test.tx()
+        .op(approve_proposed_forced_configuration(bc.rid))
+        .nop()
+        .sign(rell.test.keypairs.alice)
+        .run();
+    assert_null(get_forced_configuration_stage2_proposal(bc.rid));
+    rell.test.tx()
+        .op(approve_proposed_forced_configuration(bc.rid))
+        .nop()
+        .sign(rell.test.keypairs.alice)
+        .run_must_fail("No pending forced configuration update proposal for blockchain %s".format(bc.rid));
 
     val actual_config_bytes = blockchain_configuration @ { bc, 10 } (.data);
     val actual_config = map<text, gtv>.from_gtv(gtv.from_bytes(actual_config_bytes));
@@ -444,6 +494,11 @@ function forced_configuration(resume_chain: boolean = false) {
         forced_configuration_data(blockchain_rid = bc.rid, 10, config_hash = calculate_configuration_hash(actual_config_bytes, [initial_signer.pub]))
     );
     assert_equals(bc.state, if (resume_chain) blockchain_state.RUNNING else blockchain_state.PAUSED);
+    if (not resume_chain) {
+        // Verify that it is possible to do this again on the same blockchain
+        force_config(bc.rid, conf, 13, resume_chain).run();
+        assert_equals(get_forced_configuration_proposal_v64(null)!!.blockchain_rid, bc.rid);
+    }
 }
 
 function test_forced_configuration_delay() {
@@ -525,7 +580,7 @@ function test_propose_scheduled_configuration() {
 function force_config(brid: byte_array, conf: map<text, gtv>, height: integer, resume_chain: boolean) {
     return rell.test.tx().op(
         propose_forced_configuration(initial_provider.pub, brid, conf.to_gtv().to_bytes(), height, "", resume_chain)
-    ).sign(initial_provider);
+    ).nop().sign(initial_provider);
 }
 
 function alice_proposes_action(bc: blockchain, action: blockchain_action) {
