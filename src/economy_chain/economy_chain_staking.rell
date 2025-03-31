@@ -4,17 +4,6 @@ function _staking_offboard_provider(pubkey) {
     val null_provider = provider @ { get_null_account() };
     val current_time = _staking_last_known_time();
 
-    // Create new staker_state_to_provider records for legacy support
-    val updated_relationships = staker_state_to_provider @* { .provider.pubkey == pubkey } (
-        struct<staker_state_to_provider> (
-            timestamp = current_time,
-            staker_state = .staker_state,
-            previous_provider = .provider,
-            provider = null_provider
-        )
-    );
-    create staker_state_to_provider ( updated_relationships );
-    
     // Handle delegation states where next_change_at has passed and next_provider is this provider
     update delegation_state @* { 
         .next_provider.pubkey == pubkey,
@@ -88,15 +77,6 @@ function _staking_deposit_native_impl(amount: integer, delegate_to: pubkey? = nu
         val current_delegation = staking_get_current_delegate(staker.id);
         val next_delegation = staking_get_next_delegation_change(staker.id);
 
-        // Create a new provider mapping to the current delegation
-        // As we updating from a zero balance the previous delegation must be undelegated
-        create staker_state_to_provider (
-            timestamp = _staking_last_known_time(), // Immediate effect
-            staker_state = ss,
-            previous_provider = provider @ { get_null_account() },
-            provider = provider @ { current_delegation ?: get_null_account() }
-        );
-
         update ds (
             .current_provider = provider @ { current_delegation ?: get_null_account() },
             .next_provider = provider @ { next_delegation?.pubkey ?: get_null_account() },
@@ -142,10 +122,6 @@ function _staking_update_evm_state(staker: ft4.accounts.account, network, new_ba
     if (exists(ss)) {
         _update_pending_token_time(ss);
     } else {
-        // Find the latest staking state to provider for this user
-        // NOTE: This could be a delegation that is not yet active
-        val latest_staker_state_to_provider = get_latest_staker_state_to_provider(staker);
-
         // Create a fresh staker state
         ss = create staker_state (
             staker,
@@ -161,14 +137,6 @@ function _staking_update_evm_state(staker: ft4.accounts.account, network, new_ba
         val current_delegation = staking_get_current_delegate(staker.id);
         val next_delegation = staking_get_next_delegation_change(staker.id);
 
-        // Create a new provider mapping to the current delegation
-        // As we updating from a zero balance the previous delegation must be undelegated
-        create staker_state_to_provider (
-            timestamp = _staking_last_known_time(), // Immediate effect
-            staker_state = ss,
-            previous_provider = null_provider,
-            provider = provider @ { current_delegation  ?: get_null_account() }
-        );
         update ds (
             .current_provider = provider @ { current_delegation ?: get_null_account() },
             .next_provider = provider @ { next_delegation?.pubkey ?: get_null_account() },
@@ -181,21 +149,11 @@ function _staking_update_evm_state(staker: ft4.accounts.account, network, new_ba
     if (0 == new_balance) {
         log("Detected an EVM withdrawal for %s on network %s".format(staker.id, network));
 
-        // Immediately delegate to null
-        val current_delegate = staking_get_current_delegate_on_network(ss.account.id, network);
-        create staker_state_to_provider (
-            timestamp = _staking_last_known_time(),
-            staker_state = ss,
-            provider = null_provider,
-            previous_provider = provider @ { current_delegate ?: get_null_account() },
-        );
-
         update ds (
             .current_provider = null_provider,
             .current_active_from = _staking_last_known_time()
         );
 
-        _staking_clear_upcoming_delegations(staker);
         update delegation_state @* { .staker_state.account == staker and .next_provider != null_provider } (
             .next_provider = null_provider,
             .next_change_at = 0
@@ -232,20 +190,10 @@ function _staking_request_withdrawal(user: ft4.accounts.account, _network: netwo
     }
     require(ss.balance > 0, "Balance must be over 0");
 
-    // Clear future delegation states (not the current one)
-    delete staker_state_to_provider @* { .staker_state == ss and .timestamp > last_known_time };
-
     // Update appropriate staker states with null provider
     val null_provider = require(provider @? { get_null_account() }, "No provider for this public key.");
     val current_delegate = staking_get_current_delegate_on_network(user.id, _network);
     val next_change_at = last_known_time + chain_context.args.staking_delegation_delay_ms;
-
-    create staker_state_to_provider (
-        timestamp = next_change_at,
-        staker_state = ss,
-        provider = null_provider,
-        previous_provider = provider @ { current_delegate ?: get_null_account() },
-    );
 
     val ds = _ensure_delegation_state(ss);
     update ds (
@@ -280,14 +228,13 @@ function _staking_distribute_withdrawals() {
     log("Preparing to pay out %s withdrawals.".format(open_withdrawals.size()));
 
     // Find all the staker states concerned
-    var staker_states = staker_withdrawal_request @* {
+    val staker_states = staker_withdrawal_request @* {
         .active and .staker_state.network == network.CHR and .finish_at <= _staking_last_known_time( )
     } ( .staker_state );
 
     val null_provider = provider @ { get_null_account() };
 
     // Clear future delegation states (not the current one)
-    delete staker_state_to_provider @* { .staker_state in staker_states and .timestamp > _staking_last_known_time() };
     update delegation_state @* { .staker_state in staker_states } ( .current_provider = null_provider, .current_active_from = _staking_last_known_time(), .next_provider = null_provider, .next_change_at = 0 );
 
 
@@ -351,17 +298,7 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
     val new_time_offset = if (empty(old_provider_pubkey)) 0 else chain_context.args.staking_delegation_delay_ms;
     val new_active_time = last_known_time + new_time_offset;
 
-    // Update appropriate staker states with new provider
-    val fresh_staker_state_to_provider = active_states @* { .s in included_states } (
-        struct<staker_state_to_provider> (
-            timestamp = new_active_time,
-            staker_state = .s,
-            previous_provider = .p,
-            provider = new_provider
-        )
-    );
-    require(fresh_staker_state_to_provider.size() > 0, "No available staker states to delegate");
-    create staker_state_to_provider ( fresh_staker_state_to_provider );
+    require(active_states @ { .s in included_states } ( @sum 1 ) > 0, "No available staker states to delegate");
 
     if (old_provider_pubkey == get_null_account()) {
         update delegation_state @* {
@@ -382,10 +319,6 @@ function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey
             .next_change_at = new_active_time
         );
     }
-}
-
-function _staking_clear_upcoming_delegations(ft4.accounts.account) {
-    delete staker_state_to_provider @* { .staker_state.account == account and .timestamp > _staking_last_known_time()};  
 }
 
 function _get_current_provider_pubkey(ds: delegation_state?) {
@@ -513,25 +446,6 @@ function _staking_shared_rewards(pay_reward_result) {
         @group account = .staker_state.account,
         @sum balance = .staker_state.balance
     );
-
-    if (delegation_migration_state.migration_active) {
-        val old_states = staker_state @* { $ not in delegation_state @* {} ( .staker_state )};
-        val old_delegations = (s1: staker_state_to_provider) @* {
-            .staker_state in old_states and .provider == provider_data.provider and (s1.timestamp <= _staking_last_known_time()) and 
-            not exists((s2:staker_state_to_provider) @* { 
-                s2.staker_state == s1.staker_state,
-                s2.timestamp <= _staking_last_known_time(),
-                (
-                    s2.timestamp > s1.timestamp or 
-                    (s2.timestamp == s1.timestamp and s2.rowid > s1.rowid)
-                )
-            })
-        } (
-            @group account = .staker_state.account,
-            @sum balance = .staker_state.balance
-        );
-        staker_delegations.add_all(old_delegations);
-    }
 
     // Get total and divide through
     val total_delegation = staker_delegations @ { } ( @sum .balance );
