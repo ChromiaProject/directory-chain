@@ -42,10 +42,6 @@ Common logic for anchoring chains
 
 System Anchoring Chain
 
-# Module auth_service
-
-Authenticates providers using an auth-server
-
 # Module common
 
 Common logic for directory chain

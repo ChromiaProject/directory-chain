@@ -10,7 +10,6 @@ The Directory Chain has the following module args:
 | `genesis_node`        | The genesis node info.                        | node_info  | :white_check_mark: |         |
 | `common`              | Module args for `common` module.              | map        | :white_check_mark: |         |
 | `proposal_blockchain` | Module args for `proposal_blockchain` module. | map        | :white_check_mark: |         |
-| `auth_service`        | Module args for `auth_service` module.        | map        | :white_check_mark: |         |
 | `housekeeping`        | Module args for `housekeeping` module.        | map        | :white_check_mark: |         |
 
 
@@ -32,13 +31,6 @@ Module args for `proposal_blockchain` module:
 | `min_fast_revolt_status_timeout` | Minimum fast revolt status timeout in milliseconds. | integer   | :white_check_mark: |         |
 | `allowed_dapp_chain_gtx_modules` | Allowed dapp chain gtx modules.                     | set<text> | :white_check_mark: |         |
 | `allowed_dapp_chain_sync_exts`   | Allowed dapp chain sync extensions.                 | set<text> | :white_check_mark: |         |
-
-Module args for `auth_service` module:
-
-| Name                     | Description                                           | Type    | Required           | Default |
-|--------------------------|-------------------------------------------------------|---------|--------------------|---------|
-| `pubkey`                 | Pubkey used to sign `auth_service` module operations. | pubkey  | :white_check_mark: |         |
-| `include_system_cluster` | Include system cluster.                               | boolean | :white_check_mark: |         |
 
 Module args for `housekeeping` module:
 
@@ -117,9 +109,6 @@ From economy-chain:
       common:
         allow_blockchain_dependencies: false
         provider_quota_max_actions_per_day: 100
-      auth_service:
-        pubkey: x"02B6F2967CF9AFC4D289EF475A2C2DDEC9EAB79AC60C1C99683E3134074619E635"
-        include_system_cluster: true
       proposal_blockchain_move:
         provider_quota_move_cost: 35
       proposal_blockchain.util: 
