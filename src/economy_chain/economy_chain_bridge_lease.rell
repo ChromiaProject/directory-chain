@@ -191,7 +191,7 @@ function after_transfer_bridge_lease_funds_check(
     amount: big_integer
 ) {
     if (asset == get_asset()) {
-        for (bridge_lease in bridge_lease @* { .tx_cost_debt > 0, .lease.account in [from, to] }) {
+        for (bridge_lease in bridge_lease @* { not .enabled, .lease.account in [from, to] }) {
             bridge_lease_funds_check(bridge_lease);
         }
     }
@@ -201,16 +201,7 @@ function bridge_lease_funds_check(bridge_lease) {
 
     val account = bridge_lease.lease.account;
     val balance = get_account_balance(account);
-    if (balance == 0) {
-
-        log("Warning: No funds on account %s. This will stop bridge for chain %s and network %s".format(
-            account.id, bridge_lease.blockchain_rid, bridge_lease.evm_network_id
-        ));
-
-        send_bridge_lease_deleted_message(bridge_lease);
-        bridge_lease.enabled = false;
-    } else if (balance > bridge_lease.tx_cost_debt) {
-
+    if (balance > bridge_lease.tx_cost_debt) {
         log("Enough funds on account %s to cover bridge transaction debt for chain %s and network %s. Bridge is started again.".format(
             account.id, bridge_lease.blockchain_rid, bridge_lease.evm_network_id
         ));
@@ -220,6 +211,13 @@ function bridge_lease_funds_check(bridge_lease) {
 
         bridge_lease.enabled = true;
         send_bridge_lease_message(bridge_lease, false);
+    }
+}
+
+function disable_bridge_lease(bridge_lease) {
+    if (bridge_lease.enabled) {
+        send_bridge_lease_deleted_message(bridge_lease);
+        bridge_lease.enabled = false;
     }
 }
 
@@ -278,8 +276,11 @@ query get_all_bridge_leases_for_container(container_name: text) = (bridge_lease,
 /**
  * Return all blockchains with bridge and anomaly detector info.
  */
-query get_blockchains_with_bridge_and_anomaly_detection() = bridge_lease @* { .anomaly_detection } (
-    bridge_anomaly_detector_data(
+query get_blockchains_with_bridge_and_anomaly_detection(include_expired: boolean = true) = (bridge_lease, lease) @* {
+        .anomaly_detection,
+        bridge_lease.lease == lease,
+        include_expired or not .lease.expired
+    } (bridge_anomaly_detector_data(
         blockchain_rid = .blockchain_rid,
         evm_network_id = .evm_network_id,
         bridge_contract = .bridge_contract
