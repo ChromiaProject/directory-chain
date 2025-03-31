@@ -4,7 +4,12 @@ object migration_completed {
     mutable provider_multi_key: boolean = false;
     mutable publish_staking_state: boolean = false;
     mutable register_evm_bridge: boolean = false;
+    mutable bridge_lease_enable: boolean = false;
 }
 
 function do_migrations() {
+    if (not migration_completed.bridge_lease_enable) {
+        migration_completed.bridge_lease_enable = true;
+        update bridge_lease @* { not .enabled and .tx_cost_debt == 0 } (.enabled = true);
+    }
 }
