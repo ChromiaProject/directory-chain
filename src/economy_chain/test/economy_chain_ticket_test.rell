@@ -5,6 +5,10 @@ import ^.helper_functions.*;
 import ^.helper_operations.*;
 import ^.helper_constants.*;
 
+struct module_args {
+    account_creator_privkey: byte_array;
+}
+
 // Refund due to failed container upgrade
 function test_receive_ticket_container_result_message__upgrade_failure__revert_charge() {
 
@@ -12,15 +16,18 @@ function test_receive_ticket_container_result_message__upgrade_failure__revert_c
         cluster_name,
         scu_price = 12 * units_per_usd,
         extra_storage_price = 4142)).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey, amount_to_mint = 100000000000));
-    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 3);
+    val alice = require(do_create_account(rell.test.keypairs.alice, chain_context.args.account_creator_privkey));
+    rell.test.tx().op(
+        mint_to(alice, 99000000000)
+    ).run();
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 1, container_units = 3);
 
     val alice_balance_before_upgrade = get_account_balance(alice);
     val created_lease = lease @ { container_name };
-    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 4, ticket_id = ticket_id_after_init + 6, current_lease = created_lease, container_units = 4);
+    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 4, ticket_id = ticket_id_after_init + 7, current_lease = created_lease, container_units = 4);
     assert_lt(get_account_balance(alice), alice_balance_before_upgrade);
 
-    do_receive_ticket_container_result_message(ticket_container_result_message(ticket_id_after_init + 6,
+    do_receive_ticket_container_result_message(ticket_container_result_message(ticket_id_after_init + 7,
         error_message = "Failed to upgrade container",
         container_name = container_name, cluster_name).to_gtv());
     assert_equals(get_account_balance(alice), alice_balance_before_upgrade);
@@ -33,17 +40,20 @@ function test_receive_ticket_container_result_message__downgrade_failure__revert
         cluster_name,
         scu_price = 12 * units_per_usd,
         extra_storage_price = 4142)).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey, amount_to_mint = 100000000000));
+    val alice = require(do_create_account(rell.test.keypairs.alice, chain_context.args.account_creator_privkey));
+    rell.test.tx().op(
+        mint_to(alice, 99000000000)
+    ).run();
     val alice_initial_balance = get_account_balance(alice);
-    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 3);
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 1, container_units = 3);
     assert_not_equals(alice_initial_balance, get_account_balance(alice));
 
     val alice_balance_before_upgrade = get_account_balance(alice);
     val created_lease = lease @ { container_name };
-    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 4, ticket_id = ticket_id_after_init + 6, current_lease = created_lease, container_units = 1, upgraded_extra_storage_gib = 40);
+    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 4, ticket_id = ticket_id_after_init + 7, current_lease = created_lease, container_units = 1, upgraded_extra_storage_gib = 40);
     assert_gt(get_account_balance(alice), alice_balance_before_upgrade);
 
-    do_receive_ticket_container_result_message(ticket_container_result_message(ticket_id_after_init + 6,
+    do_receive_ticket_container_result_message(ticket_container_result_message(ticket_id_after_init + 7,
         error_message = "Failed to upgrade container",
         container_name = container_name, cluster_name).to_gtv());
     assert_equals(get_account_balance(alice), alice_balance_before_upgrade);

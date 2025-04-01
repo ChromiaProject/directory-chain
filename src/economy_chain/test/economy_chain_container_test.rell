@@ -11,15 +11,13 @@ namespace ft4 {
     import lib.ft4.auth;
     import test_utils: lib.ft4.test.core;
 }
-import lib.auth;
 
 struct module_args {
-    auth_privkey: byte_array;
-    admin_privkey: byte_array;
+    account_creator_privkey: byte_array;
     container_removal_timeout: integer;
 }
 
-val auth_privkey = chain_context.args.auth_privkey;
+val auth_privkey = chain_context.args.account_creator_privkey;
 val cluster_name = "Bob's cluster";
 
 
@@ -39,7 +37,7 @@ function test_create_container_and_assign_subnode_image_later_success() {
         cluster_name = cluster_name,
         container_units = 2,
         extra_storage_gib = 0,
-        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*5 + millis_per_week,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*4 + millis_per_week,
         expired = false,
         auto_renew = false,
         subnode_image_name = "",
@@ -61,7 +59,7 @@ function test_create_container_and_assign_subnode_image_later_success() {
         cluster_name = cluster_name,
         container_units = 2,
         extra_storage_gib = 0,
-        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*5 + millis_per_week,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*4 + millis_per_week,
         expired = false,
         auto_renew = false,
         subnode_image_name = "subnode_image1",
@@ -161,7 +159,7 @@ function test_create_container_with_subnode_image() {
         cluster_name = cluster_name,
         container_units = 2,
         extra_storage_gib = 0,
-        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*6 + millis_per_week,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*5 + millis_per_week,
         expired = false,
         auto_renew = false,
         subnode_image_name = "subnode_image1",
@@ -181,7 +179,7 @@ function test_create_container_with_subnode_image() {
         cluster_name = cluster_name,
         container_units = 2,
         extra_storage_gib = 0,
-        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*8 + millis_per_week,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*7 + millis_per_week,
         expired = false,
         auto_renew = false,
         subnode_image_name = "subnode_image2",
@@ -247,7 +245,7 @@ function test_create_container_with_auto_renew() {
         cluster_name = cluster_name,
         container_units = 2,
         extra_storage_gib = 0,
-        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*3 + millis_per_week,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*2 + millis_per_week,
         expired = false,
         auto_renew = true,
         subnode_image_name = "",
@@ -534,14 +532,14 @@ function test_upgrade_container_success() {
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 2);
 
     val created_lease = lease @ { container_name };
-    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 4, ticket_id = ticket_id_after_init + 6, current_lease = created_lease, container_units = 3, upgraded_duration_weeks = 2);
+    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 3, ticket_id = ticket_id_after_init + 6, current_lease = created_lease, container_units = 3, upgraded_duration_weeks = 2);
 
     val expected_lease = lease_data(
         container_name = container_name,
         cluster_name = cluster_name,
         container_units = 3, // Should be 3 now
         extra_storage_gib = 0,
-        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*5 + 2 * millis_per_week,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*4 + 2 * millis_per_week,
         expired = false,
         auto_renew = false,
         subnode_image_name = "",
@@ -585,14 +583,14 @@ function test_upgrade_container_with_subnode_image() {
         alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 13, container_units = 2, subnode_image_name = "subnode_image1");
 
     val created_lease = lease @ { container_name };
-    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 6, ticket_id = ticket_id_after_init + 20, current_lease = created_lease, container_units = 3);
+    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 5, ticket_id = ticket_id_after_init + 20, current_lease = created_lease, container_units = 3);
 
     val expected_lease = lease_data(
         container_name = container_name,
         cluster_name = cluster_name,
         container_units = 3, // Should be 3 now
         extra_storage_gib = 0,
-        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*7 + millis_per_week,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*6 + millis_per_week,
         expired = false,
         auto_renew = false,
         subnode_image_name = "subnode_image1",
@@ -613,14 +611,14 @@ function test_upgrade_container_failure() {
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 2);
 
     val created_lease = lease @ { container_name };
-    do_upgrade_container(alice, rell.test.keypairs.alice, success = false, block_height = 4, ticket_id = ticket_id_after_init + 6, current_lease = created_lease, container_units = 3);
+    do_upgrade_container(alice, rell.test.keypairs.alice, success = false, block_height = 3, ticket_id = ticket_id_after_init + 6, current_lease = created_lease, container_units = 3);
 
     val expected_lease = lease_data(
         container_name = container_name,
         cluster_name = cluster_name,
         container_units = 2, // Should still be 2
         extra_storage_gib = 0,
-        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*3 + millis_per_week,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*2 + millis_per_week,
         expired = false,
         auto_renew = false,
         subnode_image_name = "",
@@ -726,7 +724,7 @@ function test_upgrade_container_lower_total_storage_too_old_space_data() {
 
 function test_upgrade_container_lower_total_storage_success() {
     rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey, amount_to_mint = integer.MAX_VALUE));
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 2);
     val lease = lease @ {};
 
@@ -911,12 +909,15 @@ function test_downgrade_container_and_reduce_cost() {
         cluster_name,
         scu_price = 12 * units_per_usd,
         extra_storage_price = 4142)).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey, amount_to_mint = 100000000000));
-    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 3);
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    rell.test.tx().op(
+        mint_to(alice, 99000000000)
+    ).run();
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 1, container_units = 3);
     val alice_balance_after_container = get_account_balance(alice);
 
     val created_lease = lease @ { container_name };
-    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 4, ticket_id = ticket_id_after_init + 6, current_lease = created_lease, container_units = 1, upgraded_extra_storage_gib = 40);
+    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 4, ticket_id = ticket_id_after_init + 7, current_lease = created_lease, container_units = 1, upgraded_extra_storage_gib = 40);
 
     // Got money back
     val alice_balance_after_upgrade = get_account_balance(alice);
@@ -948,7 +949,7 @@ function test_container_lease_ownership_transfer() {
     val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
 
-    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 7);
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 9);
 
     assert_equals(
         offer_container_lease_ownership_transfer_auth_message([container_name.to_gtv(), bob.id.to_gtv()].to_gtv()),
@@ -981,7 +982,7 @@ function test_container_lease_ownership_transfer() {
         cluster_name = cluster_name,
         container_units = 2,
         extra_storage_gib = 0,
-        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL * 5 + millis_per_week,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL * 3 + millis_per_week,
         expired = false,
         auto_renew = false,
         subnode_image_name = "",
@@ -1002,7 +1003,7 @@ function test_wrong_call_offer_container_lease_ownership_transfer_operation() {
         .op(offer_container_lease_ownership_transfer("container_name", bob.id))
         .run_must_fail("No current lease for container container_name");
 
-    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 7);
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 9);
 
     rell.test.tx()
         .op(offer_container_lease_ownership_transfer(container_name, rell.test.keypairs.charlie.pub))
@@ -1039,7 +1040,7 @@ function test_remove_container_lease_ownership_transfer_offer() {
     val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
 
-    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 7);
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 9);
 
     rell.test.tx()
         .op(test.evm_auth_operation_for(rell.test.keypairs.alice.priv, offer_container_lease_ownership_transfer(container_name, bob.id)))
@@ -1072,7 +1073,7 @@ function test_wrong_remove_container_lease_ownership_transfer_offer() {
     val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
 
-    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 7);
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 9);
 
     rell.test.tx()
         .op(remove_container_lease_ownership_transfer_offer(container_name))
@@ -1094,7 +1095,7 @@ function test_wrong_accept_container_lease_ownership_transfer() {
     val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val bob = require(do_create_account(rell.test.keypairs.bob, auth_privkey));
 
-    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 7);
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 9);
 
     rell.test.tx()
         .op(accept_container_lease_ownership_transfer_offer(container_name))

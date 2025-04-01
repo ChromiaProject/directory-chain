@@ -15,10 +15,8 @@ namespace ft4 {
 
 import lib.hbridge;
 
-import lib.auth;
-
 struct module_args {
-    auth_privkey: byte_array;
+    account_creator_privkey: byte_array;
     admin_privkey: byte_array;
     staking_delegation_delay_ms: integer;
     staking_withdrawal_delay_ms: integer;
@@ -28,7 +26,7 @@ struct module_args {
     staking_rewards_payout_batch_size: integer = 10;
 }
 
-val auth_privkey = chain_context.args.auth_privkey;
+val auth_privkey = chain_context.args.account_creator_privkey;
 val admin_privkey = chain_context.args.admin_privkey;
 val staking_delegation_delay_ms = chain_context.args.staking_delegation_delay_ms;
 
@@ -1042,6 +1040,7 @@ function test_potential_entity_join_issues_on_delegation() {
     // Run forward a long time
     rell.test.set_next_block_time_delta(millis_per_year);
     rell.test.block().run();
+    rell.test.block().run();
 
     // Both accounts should go up as EVM still staked on Alice
     // We need to include what was paid out
@@ -1099,7 +1098,7 @@ function test_withdrawal() {
             withdrawals = [
                 economy_chain_staking_state_withdrawal(
                     amount = 1,
-                    finish_at = 1577836990000
+                    finish_at = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*5 + chain_context.args.staking_withdrawal_delay_ms
                     )
             ],
         ).to_gtv()).to_gtv_pretty()),

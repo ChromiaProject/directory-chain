@@ -24,18 +24,22 @@ operation faucet() {
 }
 
 function mint_test_chr(ft4.accounts.account) {
-    val user = faucet_user @? { account } ?: 
+    val current_user = faucet_user @? { account };
+
+    if (exists(current_user)) {
+        val earliest_refill_time = current_user.last_refill_millis + chain_context.args.test_chr_refill_limit_millis;
+
+        require(
+            earliest_refill_time < op_context.last_block_time,
+            "You must wait %s seconds before claiming more %s".format(
+                (earliest_refill_time - op_context.last_block_time) / 1000,
+                chain_context.args.asset_name
+            )
+        );
+    }
+
+    val user = current_user ?:
         create faucet_user(account = account, last_refill_millis = 0);
-
-    val earliest_refill_time = user.last_refill_millis + chain_context.args.test_chr_refill_limit_millis;
-
-    require(
-        earliest_refill_time < op_context.last_block_time,
-        "You must wait %s seconds before claiming more %s".format(
-            (earliest_refill_time - op_context.last_block_time) / 1000,
-            chain_context.args.asset_name
-        )
-    );
 
     ft4.assets.Unsafe.mint(account, get_asset(), chain_context.args.amount_to_mint);
     user.last_refill_millis = op_context.last_block_time;

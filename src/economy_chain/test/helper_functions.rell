@@ -3,6 +3,7 @@
 import ^^.*;
 import ^.helper_operations.*;
 import common_proposal.test.helper_functions.*;
+import economy_chain_test_claim_tchr.*;
 
 namespace ft4 {
     import lib.ft4.accounts;
@@ -11,27 +12,22 @@ namespace ft4 {
     import lib.ft4.accounts.strategies;
     import test_utils: lib.ft4.test.core;
 }
-import lib.auth;
 
-val ticket_id_after_init = 33;
+val ticket_id_after_init = 35;
 
 struct module_args {
-    amount_to_mint: big_integer = 1000000000;
     oracle_privkey: byte_array;
 }
 
 function do_create_account(
     keypair: rell.test.keypair,
-        auth_privkey: byte_array,
-        failure: text? = null,
-        amount_to_mint: big_integer = chain_context.args.amount_to_mint
+    auth_privkey: byte_array,
+    failure: text? = null
 ): ft4.accounts.account? {
     val eth_address = crypto.eth_privkey_to_address(keypair.priv);
-    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(eth_address, set(["A", "T"]));
-    val signature = ft4.test_utils.evm_sign(auth.get_message_to_sign(), keypair.priv);
 
     val tx = rell.test.tx().op(
-        auth.register_account(auth_descriptor, signature)
+        create_account(eth_address)
     ).nop().sign(auth_privkey);
 
     if (failure != null) {
@@ -41,9 +37,6 @@ function do_create_account(
         tx.run();
         val account_id = eth_address.hash();
         val account = ft4.accounts.account_by_id(account_id);
-        rell.test.tx().op(
-            mint_to(account, amount_to_mint)
-        ).run();
         return account;
     }
 }
