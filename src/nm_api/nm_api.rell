@@ -2,7 +2,7 @@
  * Returns NM API Version
  * NM API Version: 1
  */
-query nm_api_version() = 21;
+query nm_api_version() = 22;
 
 /**
  * Returns peer info list
@@ -382,4 +382,20 @@ query nm_get_container_image(name): container_image_info? {
     val subnode_image = container_subnode_image @? { container } (.subnode_image);
     if (subnode_image == null) return null;
     return container_image_info(name = subnode_image.name, url = subnode_image.url, digest = subnode_image.digest);
+}
+
+/**
+ * Returns the Docker image required to run subnode for container,
+ * or the default subnode image if the container does not specify any image,
+ * or `null` if default image is not specified in directory chain.
+ *
+ * NM API Version: 22
+ */
+query nm_get_container_image_or_default(name): container_image_info? {
+    val container = require_container(name);
+    val subnode_image = container_subnode_image @? { container } (.subnode_image);
+    return if (subnode_image == null)
+        container_image_info(name = "", url = default_subnode_image().url, digest = default_subnode_image().digest)
+    else
+        container_image_info(name = subnode_image.name, url = subnode_image.url, digest = subnode_image.digest);
 }
