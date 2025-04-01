@@ -4,12 +4,9 @@
  * Permission: node provider (owner)
  * 
  * Rate limit: actions
- * 
- * @param my_pubkey pubkey of provider
  */
-operation add_blockchain_replica(my_pubkey: pubkey, blockchain_rid: byte_array, node_pubkey: byte_array) {
-    val provider = require_provider(my_pubkey);
-    require_provider_auth_with_rate_limit(provider);
+operation add_blockchain_replica(blockchain_rid: byte_array, node_pubkey: byte_array) {
+    val provider = require_provider_signer_with_rate_limit();
     val node = require_node(node_pubkey, false);
     val blockchain = require_active_blockchain(blockchain_rid);
     require(empty(blockchain_replica_node @? { blockchain, node }), "Node is already a replica of blockchain %s".format(node.pubkey, blockchain.rid));
@@ -23,12 +20,9 @@ operation add_blockchain_replica(my_pubkey: pubkey, blockchain_rid: byte_array, 
  * Permission: node provider (owner)
  * 
  * Rate limit: actions
- * 
- * @param my_pubkey pubkey of provider
  */
-operation remove_blockchain_replica(my_pubkey: pubkey, blockchain_rid: byte_array, node_pubkey: byte_array) {
-    val provider = require_provider(my_pubkey);
-    require_provider_auth_with_rate_limit(provider);
+operation remove_blockchain_replica(blockchain_rid: byte_array, node_pubkey: byte_array) {
+    val provider = require_provider_signer_with_rate_limit();
     val blockchain = require_active_blockchain(blockchain_rid);
     val node = require_node(node_pubkey);
     require(node.provider == provider, "It is only allowed to remove own blockchain replica node; provider:%s, node: %s".format(provider.pubkey, node.pubkey));

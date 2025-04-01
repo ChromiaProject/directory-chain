@@ -5,10 +5,16 @@ function require_is_signer(pubkey) {
 }
 
 function require_provider(pubkey) = require(provider @? { pubkey }, "Unknown provider " + pubkey);
+
+/**
+ * Require 1 active provider to sign the transaction. Aborted if multiple providers are found or if the provider has
+ * blockchain auth enabled.
+ */
 function require_provider_signer(provider_key_roles: list<provider_key_role> = [provider_key_role.main]) {
     val provider_pubkey = require(get_provider_signer(provider_key_roles), "Transaction must be signed by provider");
     val provider = require_provider(provider_pubkey);
     require(empty(provider_auth_blockchain @* { provider }), "Blockchain authentication is enabled for provider %s".format(provider.pubkey));
+    require(provider.active, "Provider is not enabled");
     return provider;
 }
 function require_cluster(name) = require(cluster @? { name }, "Cluster %s not found".format(name));
@@ -174,17 +180,13 @@ function require_provider_auth(pubkey, provider_key_role: list<provider_key_role
     return provider;
 }
 
-
 /**
  * Derives provider from signatures and rejects if multiple providers are found.
  *
  * @param provider_key_roles Only keys within list of roles is approved.
  */
 function require_provider_signer_with_rate_limit(provider_key_roles: list<provider_key_role> = [provider_key_role.main]) {
-    val provider_pubkey = require(get_provider_signer(provider_key_roles), "Transaction must be signed by provider");
-    val provider = require_provider(provider_pubkey);
-    require(empty(provider_auth_blockchain @* { provider }), "Blockchain authentication is enabled for provider %s".format(provider.pubkey));
-    require(provider.active, "Provider is not enabled");
+    val provider = require_provider_signer();
     provider_rate_limit(provider);
     return provider;
 }

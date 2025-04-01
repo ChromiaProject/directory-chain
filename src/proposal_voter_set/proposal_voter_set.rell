@@ -61,11 +61,9 @@ function delete_pending_voter_set_update(proposal) {
  * Permission: voter set governor
  * 
  * Rate limit: actions
- * 
- * @param my_pubkey pubkey of provider
  */
-operation propose_update_voter_set(my_pubkey: pubkey, voter_set_name: text, new_threshold: integer?, new_governor: name?, new_member: list<pubkey>, remove_member: list<pubkey>, description: text = "") {
-    val provider = require_is_provider_with_rate_limit(my_pubkey);
+operation propose_update_voter_set(voter_set_name: text, new_threshold: integer?, new_governor: name?, new_member: list<pubkey>, remove_member: list<pubkey>, description: text = "") {
+    val provider = require_provider_signer_with_rate_limit();
     val voter_set = require_voter_set(voter_set_name);
     require(voter_set.name != voter_sets.system_p, "Cannot update system voter set. Update this by proposing system provider role");
     require_voter_set_governor(voter_set, provider);

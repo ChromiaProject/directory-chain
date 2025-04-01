@@ -22,8 +22,7 @@ function _after_provider_registered_add_key(provider, cluster: cluster?) {
  */
 operation add_provider_key(role: provider_key_role, pubkey) {
 
-    val provider = require_provider_signer();
-    require_provider_auth_with_rate_limit(provider);
+    val provider = require_provider_signer_with_rate_limit();
     require_is_signer(pubkey);
 
     val key_owner = get_provider_by_auth_key(pubkey);
@@ -47,8 +46,7 @@ operation remove_provider_key(role: provider_key_role, pubkey) {
  * @param pubkey The key to remove.
  */
 operation revoke_provider_key(role: provider_key_role, pubkey) {
-    val provider = require_provider_signer();
-    require_provider_auth_with_rate_limit(provider);
+    val provider = require_provider_signer_with_rate_limit();
     require(get_provider_by_auth_key(pubkey) == provider.pubkey,
         "Operation not signed by key owner");
 
@@ -64,9 +62,7 @@ operation revoke_provider_key(role: provider_key_role, pubkey) {
  */
 operation set_provider_key_threshold(role: provider_key_role, threshold: integer) {
 
-    val provider = require_provider_signer();
-    require_provider_auth_with_rate_limit(provider);
-
+    val provider = require_provider_signer_with_rate_limit();
     _set_provider_key_threshold(provider.pubkey, role, threshold);
 }
 

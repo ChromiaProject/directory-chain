@@ -25,13 +25,9 @@ function delete_pending_remove_cluster_subnode_image(proposal) {
  * Permission: cluster governor
  * 
  * Rate limit: actions
- * 
- * @param my_pubkey pubkey of provider
  */
-operation propose_remove_cluster_subnode_image(my_pubkey: pubkey, cluster_name: text, subnode_image_name: text, description: text = "") {
-    val me = require_provider(my_pubkey);
-    // check that provider authority and that it is a cluster governor
-    require_provider_auth_with_rate_limit(me);
+operation propose_remove_cluster_subnode_image(cluster_name: text, subnode_image_name: text, description: text = "") {
+    val me = require_provider_signer_with_rate_limit();
     val cluster = require_cluster(cluster_name);
     require_cluster_governor(cluster, me);
     val subnode_image = require_subnode_image(subnode_image_name);

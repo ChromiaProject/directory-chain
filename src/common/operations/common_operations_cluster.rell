@@ -6,12 +6,9 @@
  * Permission: cluster provider
  * 
  * Rate limit: actions
- * 
- * @param my_pubkey pubkey of provider
  */
-operation add_node_to_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cluster_name: text) {
-    val provider = require_provider(my_pubkey);
-    require_provider_auth_with_rate_limit(provider);
+operation add_node_to_cluster(node_pubkey: pubkey, cluster_name: text) {
+    val provider = require_provider_signer_with_rate_limit();
     val cluster = require_cluster(cluster_name);
     val node = require_node(node_pubkey, false);
     require(node.provider == provider, "It is only allowed to add own node to a cluster");
@@ -24,12 +21,9 @@ operation add_node_to_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cluster_na
  * Permission: cluster provider
  * 
  * Rate limit: actions
- * 
- * @param my_pubkey pubkey of provider
  */
-operation add_replica_node_to_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cluster_name: text) {
-    val provider = require_provider(my_pubkey);
-    require_provider_auth_with_rate_limit(provider);
+operation add_replica_node_to_cluster(node_pubkey: pubkey, cluster_name: text) {
+    val provider = require_provider_signer_with_rate_limit();
     val cluster = require_cluster(cluster_name);
     val node = require_node(node_pubkey, false);
     require(empty(cluster_replica_node @* { cluster, node }), "Node %s is already a replica of the cluster %s".format(node_pubkey, cluster_name));
@@ -44,12 +38,9 @@ operation add_replica_node_to_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cl
  * Permission: cluster provider
  * 
  * Rate limit: actions
- * 
- * @param my_pubkey pubkey of provider
  */
-operation remove_replica_node_from_cluster(my_pubkey: pubkey, node_pubkey: pubkey, cluster_name: text) {
-    val provider = require_provider(my_pubkey);
-    require_provider_auth_with_rate_limit(provider);
+operation remove_replica_node_from_cluster(node_pubkey: pubkey, cluster_name: text) {
+    val provider = require_provider_signer_with_rate_limit();
     val cluster = require_cluster(cluster_name);
     val node = require_node(node_pubkey);
     require(exists(cluster_replica_node @* { cluster, node }), "Node %s is not a replica of the cluster %s".format(node_pubkey, cluster_name));

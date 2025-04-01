@@ -14,12 +14,11 @@ object evm_event_receiver_token_chain {
 /**
  * Initializes the token chain
  *
- * @param my_pubkey Must be a system provider and signer of transaction
  * @param token_chain_config Blockchain configuration for the token chain
  */
-operation init_token_chain(my_pubkey: pubkey, token_chain_config: byte_array) {
-    require_is_provider_with_rate_limit(my_pubkey);
-    require_is_system_provider(my_pubkey);
+operation init_token_chain(token_chain_config: byte_array) {
+    val provider = require_provider_signer_with_rate_limit();
+    require_system_access(provider);
 
     require(token_chain.rid == x"", "Token chain is already started");
 
@@ -33,9 +32,9 @@ operation init_token_chain(my_pubkey: pubkey, token_chain_config: byte_array) {
     send_message(blockchain_rid_topic, blockchain_rid(rid = token_chain.rid, name = blockchains.token_chain_name).to_gtv());
 }
 
-operation init_evm_event_receiver_token_chain(my_pubkey: pubkey, event_receiver_token_chain_config: byte_array) {
-    require_is_provider_with_rate_limit(my_pubkey);
-    require_is_system_provider(my_pubkey);
+operation init_evm_event_receiver_token_chain(event_receiver_token_chain_config: byte_array) {
+    val provider = require_provider_signer_with_rate_limit();
+    require_system_access(provider);
 
     require(evm_event_receiver_token_chain.rid == x"", "EVM event receiver token chain is already started");
 

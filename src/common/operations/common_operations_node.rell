@@ -1,30 +1,30 @@
 /**
  * @deprecated use register_node_with_node_data instead
  */
-operation register_node(my_pubkey: pubkey, node_pubkey: pubkey, host: text, port: integer, api_url: text, clusters:list<text> = list<text>()) {
-    register_node_impl_dep(my_pubkey, node_pubkey, host, port, api_url, clusters, "", 1);
+operation register_node(node_pubkey: pubkey, host: text, port: integer, api_url: text, clusters:list<text> = list<text>()) {
+    register_node_impl_dep(node_pubkey, host, port, api_url, clusters, "", 1);
 }
 
 /**
  * @deprecated use register_node_with_node_data instead
  */
-operation register_node_with_units(my_pubkey: pubkey, node_pubkey: pubkey, host: text, port: integer, api_url: text, clusters:list<text> = list<text>(), cluster_units: integer) {
-    register_node_impl_dep(my_pubkey, node_pubkey, host, port, api_url, clusters, "", cluster_units);
+operation register_node_with_units(node_pubkey: pubkey, host: text, port: integer, api_url: text, clusters:list<text> = list<text>(), cluster_units: integer) {
+    register_node_impl_dep(node_pubkey, host, port, api_url, clusters, "", cluster_units);
 }
 
 /**
  * @deprecated use register_node_with_node_data instead
  */
-operation register_node_with_territory_and_units(my_pubkey: pubkey, node_pubkey: pubkey, host: text, port: integer, api_url: text, territory: text, cluster_units: integer, clusters:list<text> = list<text>()) {
-    register_node_impl_dep(my_pubkey, node_pubkey, host, port, api_url, clusters, territory, cluster_units);
+operation register_node_with_territory_and_units(node_pubkey: pubkey, host: text, port: integer, api_url: text, territory: text, cluster_units: integer, clusters:list<text> = list<text>()) {
+    register_node_impl_dep(node_pubkey, host, port, api_url, clusters, territory, cluster_units);
 }
 
 /**
  * @deprecated use register_node_with_node_data instead
  */
-function register_node_impl_dep(my_pubkey: pubkey, node_pubkey: pubkey, host: text, port: integer, api_url: text, clusters:list<text> = list<text>(), territory: text, cluster_units: integer) {
+function register_node_impl_dep(node_pubkey: pubkey, host: text, port: integer, api_url: text, clusters:list<text> = list<text>(), territory: text, cluster_units: integer) {
     val node_data = register_node_data(node_pubkey, host = host, port, api_url = api_url,clusters=clusters, cluster_units = cluster_units, territory = territory, extra_storage = 0);
-    register_node_impl(my_pubkey, node_data);
+    register_node_impl(node_data);
 }
 
 /**
@@ -33,17 +33,14 @@ function register_node_impl_dep(my_pubkey: pubkey, node_pubkey: pubkey, host: te
  * Permission: self
  * 
  * Rate limit: actions
- * 
- * @param my_pubkey pubkey of provider
  */
-operation register_node_with_node_data(my_pubkey: pubkey, node_data: register_node_data) {
-    register_node_impl(my_pubkey, node_data);
+operation register_node_with_node_data(node_data: register_node_data) {
+    register_node_impl(node_data);
 }
 
-function register_node_impl(my_pubkey: pubkey, node_data: register_node_data) {
+function register_node_impl(node_data: register_node_data) {
     log("------------- Register-Node: %s --------------".format(node_data.pubkey));
-    val provider = require_provider(my_pubkey);
-    require_provider_auth_with_rate_limit(provider);
+    val provider = require_provider_signer_with_rate_limit();
     require_pubkey(node_data.pubkey);
     add_node_internal(provider, node_data);
     log("Added node information for node: " + node_data.pubkey);
@@ -53,30 +50,30 @@ function register_node_impl(my_pubkey: pubkey, node_data: register_node_data) {
 /**
  * @deprecated use replace_node_with_node_data instead
  */
-operation replace_node(my_pubkey: pubkey, old_node_key: pubkey, new_node_key: pubkey, new_host: text?, new_port: integer?, new_api_url: text?) {
-    replace_node_with_units_impl(my_pubkey, old_node_key, new_node_key, new_host, new_port, new_api_url, new_cluster_units = 1, new_territory = null);
+operation replace_node(old_node_key: pubkey, new_node_key: pubkey, new_host: text?, new_port: integer?, new_api_url: text?) {
+    replace_node_with_units_impl(old_node_key, new_node_key, new_host, new_port, new_api_url, new_cluster_units = 1, new_territory = null);
 }
 
 /**
  * @deprecated use replace_node_with_node_data instead
  */
-operation replace_node_with_units(my_pubkey: pubkey, old_node_key: pubkey, new_node_key: pubkey, new_host: text?, new_port: integer?, new_api_url: text?, cluster_units: integer) {
-    replace_node_with_units_impl(my_pubkey, old_node_key, new_node_key, new_host, new_port, new_api_url, new_cluster_units = cluster_units, new_territory = null);
+operation replace_node_with_units(old_node_key: pubkey, new_node_key: pubkey, new_host: text?, new_port: integer?, new_api_url: text?, cluster_units: integer) {
+    replace_node_with_units_impl(old_node_key, new_node_key, new_host, new_port, new_api_url, new_cluster_units = cluster_units, new_territory = null);
 }
 
 /**
  * @deprecated use replace_node_with_node_data instead
  */
-operation replace_node_with_units_and_territory(my_pubkey: pubkey, old_node_key: pubkey, new_node_key: pubkey, new_host: text?, new_port: integer?, new_api_url: text?, new_territory: text?, cluster_units: integer) {
-    replace_node_with_units_impl(my_pubkey, old_node_key, new_node_key, new_host, new_port, new_api_url, new_cluster_units = cluster_units, new_territory = new_territory);
+operation replace_node_with_units_and_territory(old_node_key: pubkey, new_node_key: pubkey, new_host: text?, new_port: integer?, new_api_url: text?, new_territory: text?, cluster_units: integer) {
+    replace_node_with_units_impl(old_node_key, new_node_key, new_host, new_port, new_api_url, new_cluster_units = cluster_units, new_territory = new_territory);
 }
 
 /**
  * @deprecated use replace_node_with_node_data instead
  */
-function replace_node_with_units_impl(my_pubkey: pubkey, old_node_key: pubkey, new_node_key: pubkey, new_host: text?, new_port: integer?, new_api_url: text?, new_territory: text?, new_cluster_units: integer) {
+function replace_node_with_units_impl(old_node_key: pubkey, new_node_key: pubkey, new_host: text?, new_port: integer?, new_api_url: text?, new_territory: text?, new_cluster_units: integer) {
     val node_data = replace_node_data(old_node_key, new_node_key, new_host, new_port, new_api_url, new_cluster_units, new_territory, new_extra_storage = 0);
-    replace_node_with_node_data_impl(my_pubkey, node_data);
+    replace_node_with_node_data_impl(node_data);
 }
 
 /**
@@ -85,11 +82,9 @@ function replace_node_with_units_impl(my_pubkey: pubkey, old_node_key: pubkey, n
  * Permission: node provider (owner)
  * 
  * Rate limit: actions
- * 
- * @param my_pubkey pubkey of provider
  */
-operation replace_node_with_node_data(my_pubkey: pubkey, node_data: replace_node_data) {
-    replace_node_with_node_data_impl(my_pubkey, node_data);
+operation replace_node_with_node_data(node_data: replace_node_data) {
+    replace_node_with_node_data_impl(node_data);
 }
 
 /**
@@ -98,16 +93,14 @@ operation replace_node_with_node_data(my_pubkey: pubkey, node_data: replace_node
  * Permission: node provider (owner)
  *
  * Rate limit: actions
- *
- * @param my_pubkey pubkey of provider
  */
-operation replace_node_with_node_data_and_keep_old_node_as_replica(my_pubkey: pubkey, node_data: replace_node_data) {
-    replace_node_with_node_data_impl(my_pubkey, node_data, true);
+operation replace_node_with_node_data_and_keep_old_node_as_replica(node_data: replace_node_data) {
+    replace_node_with_node_data_impl(node_data, true);
 }
 
-function replace_node_with_node_data_impl(my_pubkey: pubkey, node_data: replace_node_data, keep_old_node_as_replica: boolean = false) {
+function replace_node_with_node_data_impl(node_data: replace_node_data, keep_old_node_as_replica: boolean = false) {
     log("------------- Replace-Node: %s --------------".format(node_data.old_node_key));
-    val me = require_is_provider_with_rate_limit(my_pubkey);
+    val me = require_provider_signer_with_rate_limit();
     require_is_signer(node_data.old_node_key);
     require_is_signer(node_data.new_node_key);
     val old_node = node @ { node_data.old_node_key };
@@ -194,12 +187,10 @@ function _require_replace_extra_storage(old_node: node, node_data: replace_node_
  * Permission: node provider (owner)
  * 
  * Rate limit: actions
- * 
- * @param my_pubkey pubkey of provider
  */
-operation enable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
+operation enable_node(node_pubkey: pubkey) {
     log("------------- Enable-Node: %s --------------".format(node_pubkey));
-    val provider = require_is_provider_with_rate_limit(my_pubkey);
+    val provider = require_provider_signer_with_rate_limit();
     val node = require_node(node_pubkey);
     require(node.provider == provider, "Node must be owned by provider: " + node_pubkey);
     require(not(node.active), "Node is already active: " + node_pubkey);
@@ -214,12 +205,9 @@ operation enable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
  * Permission: node provider: (SP, NP, SP > NP)
  * 
  * Rate limit: actions
- * 
- * @param my_pubkey pubkey of provider
  */
-operation disable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
-    val provider = require_provider(my_pubkey);
-    require_provider_auth_with_rate_limit(provider);
+operation disable_node(node_pubkey: pubkey) {
+    val provider = require_provider_signer_with_rate_limit();
     val node_to_disable = require_node(node_pubkey);
 
     if (provider != node_to_disable.provider) {
@@ -253,13 +241,10 @@ operation disable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
  * Permission: node provider (owner)
  * 
  * Rate limit: actions
- * 
- * @param my_pubkey pubkey of provider
  */
-operation remove_node(my_pubkey: pubkey, node_pubkey: pubkey) {
+operation remove_node(node_pubkey: pubkey) {
     log("------------- Remove-Node: %s --------------".format(node_pubkey));
-    val provider = require_provider(my_pubkey);
-    require_provider_auth_with_rate_limit(provider);
+    val provider = require_provider_signer_with_rate_limit();
     val node_to_remove = require_node(node_pubkey);
     require(provider == node_to_remove.provider, "It is only allowed to remove own nodes: " + node_pubkey);
     require(not(node_to_remove.active), "Can't remove active nodes: " + node_pubkey);
@@ -271,38 +256,38 @@ operation remove_node(my_pubkey: pubkey, node_pubkey: pubkey) {
 /**
  * @deprecated use update_node_with_node_data instead
  */
-operation update_node(my_pubkey: pubkey, node_pubkey: pubkey, host: text? = null, port: integer? = null, api_url: text? = null) {
-    update_node_impl(my_pubkey, node_pubkey, host, port, api_url, null, null);
+operation update_node(node_pubkey: pubkey, host: text? = null, port: integer? = null, api_url: text? = null) {
+    update_node_impl(node_pubkey, host, port, api_url, null, null);
 }
 
 /**
  * @deprecated use update_node_with_node_data instead
  */
-operation update_node_with_units(my_pubkey: pubkey, node_pubkey: pubkey, host: text? = null, port: integer? = null, api_url: text? = null, cluster_units: integer? = null) {
-    update_node_impl(my_pubkey, node_pubkey, host, port, api_url, null, cluster_units);
+operation update_node_with_units(node_pubkey: pubkey, host: text? = null, port: integer? = null, api_url: text? = null, cluster_units: integer? = null) {
+    update_node_impl(node_pubkey, host, port, api_url, null, cluster_units);
 }
 
 /**
  * @deprecated use update_node_with_node_data instead
  */
-operation update_node_with_territory_and_units(my_pubkey: pubkey, node_pubkey: pubkey, host: text? = null, port: integer? = null, api_url: text? = null, territory: text? = null, cluster_units: integer? = null) {
-    update_node_impl(my_pubkey, node_pubkey, host, port, api_url, territory, cluster_units);
+operation update_node_with_territory_and_units(node_pubkey: pubkey, host: text? = null, port: integer? = null, api_url: text? = null, territory: text? = null, cluster_units: integer? = null) {
+    update_node_impl(node_pubkey, host, port, api_url, territory, cluster_units);
 }
 
 /**
  * @deprecated use update_node_with_node_data instead
  */
-function update_node_impl(my_pubkey: pubkey, node_pubkey: pubkey, host: text?, port: integer?, api_url: text?, territory: text?, cluster_units: integer?) {
+function update_node_impl(node_pubkey: pubkey, host: text?, port: integer?, api_url: text?, territory: text?, cluster_units: integer?) {
     val node_data = update_node_data(node_pubkey, host, port, api_url, cluster_units, territory, extra_storage = null);
-    update_node_with_node_data_impl(my_pubkey, node_data);
+    update_node_with_node_data_impl(node_data);
 }
 
-operation update_node_with_node_data(my_pubkey: pubkey, node_data: update_node_data) {
-    update_node_with_node_data_impl(my_pubkey, node_data);
+operation update_node_with_node_data(node_data: update_node_data) {
+    update_node_with_node_data_impl(node_data);
 }
 
-function update_node_with_node_data_impl(my_pubkey: pubkey, node_data: update_node_data) {
-    val node = require_node_provider(node_data.pubkey, my_pubkey);
+function update_node_with_node_data_impl(node_data: update_node_data) {
+    val node = require_node_provider_signer_with_rate_limit(node_data.pubkey);
     if (node_data.host != null) {
         validate_host(node_data.host);
         node.host = node_data.host;

@@ -16,8 +16,7 @@ operation add_provider_blockchain_auth(blockchain_rid: byte_array) {
     allowed_states.remove(blockchain_state.REMOVED);
     val bc = require_blockchain(blockchain_rid, allowed_states);
 
-    val provider = require_provider_signer();
-    require_provider_auth_with_rate_limit(provider);
+    val provider = require_provider_signer_with_rate_limit();
 
     create provider_auth_blockchain(provider, bc);
 }
@@ -28,10 +27,9 @@ operation add_provider_blockchain_auth(blockchain_rid: byte_array) {
  *
  * @param tx_to_prove      the transaction from other chain to use for authentication
  * @param op_index         index of the relevant operation in tx_to_prove
- * @param my_pubkey        pubkey of provider
  */
-operation remove_provider_blockchain_auth(tx_to_prove: gtx_transaction, op_index: integer, my_pubkey: pubkey) {
-    val provider = require_provider(my_pubkey);
+operation remove_provider_blockchain_auth(tx_to_prove: gtx_transaction, op_index: integer) {
+    val provider = require_provider_signer_with_rate_limit(); // not with _rate_limit
     require_provider_with_iccf_proof_and_rate_limit(tx_to_prove, op_index,
         rell.meta(remove_provider_blockchain_auth).mount_name, 0,
         provider);
