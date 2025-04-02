@@ -435,7 +435,7 @@ function forced_configuration(resume_chain: boolean = false) {
     assert_equals(p.state, proposal_state.PENDING);
     assert_null(get_forced_configuration_stage2_proposal(bc.rid));
     rell.test.tx()
-        .op(approve_proposed_forced_configuration(bc.rid))
+        .op(approve_proposed_forced_configuration(rell.test.pubkeys.alice, bc.rid))
         .nop()
         .sign(rell.test.keypairs.alice)
         .run_must_fail("No pending forced configuration update proposal for blockchain %s".format(bc.rid));
@@ -455,28 +455,28 @@ function forced_configuration(resume_chain: boolean = false) {
     force_config(bc.rid, conf, 12, resume_chain).run_must_fail("Forced configuration proposal already pending for this blockchain");
 
     rell.test.tx()
-        .op(approve_proposed_forced_configuration(bc.rid))
+        .op(approve_proposed_forced_configuration(rell.test.pubkeys.eve, bc.rid))
         .nop()
         .sign(rell.test.keypairs.eve)
-        .run_must_fail("Transaction must be signed by provider");
+        .run_must_fail("Unknown provider");
     rell.test.tx()
-        .op(approve_proposed_forced_configuration(bc.rid))
+        .op(approve_proposed_forced_configuration(rell.test.pubkeys.dave, bc.rid))
         .nop()
         .sign(rell.test.keypairs.dave)
         .run_must_fail("Transaction must be signed by node provider");
     rell.test.tx()
-        .op(approve_proposed_forced_configuration(bc.rid))
+        .op(approve_proposed_forced_configuration(rell.test.pubkeys.charlie, bc.rid))
         .nop()
         .sign(rell.test.keypairs.charlie)
         .run_must_fail("Transaction must be signed by node provider running this blockchain");
     rell.test.tx()
-        .op(approve_proposed_forced_configuration(bc.rid))
+        .op(approve_proposed_forced_configuration(rell.test.pubkeys.alice, bc.rid))
         .nop()
         .sign(rell.test.keypairs.alice)
         .run();
     assert_null(get_forced_configuration_stage2_proposal(bc.rid));
     rell.test.tx()
-        .op(approve_proposed_forced_configuration(bc.rid))
+        .op(approve_proposed_forced_configuration(rell.test.pubkeys.alice, bc.rid))
         .nop()
         .sign(rell.test.keypairs.alice)
         .run_must_fail("No pending forced configuration update proposal for blockchain %s".format(bc.rid));
