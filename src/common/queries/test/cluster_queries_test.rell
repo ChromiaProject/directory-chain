@@ -108,3 +108,35 @@ function test_get_operational_dapp_clusters() {
     assert_equals(get_cluster_data("cluster1"), expected_cluster1);
     assert_equals(get_cluster_data("cluster2"), expected_cluster2);
 }
+
+function test_get_cluster_container_unit_limits() {
+
+    setup_module();
+
+    rell.test.tx().op(
+        create_cluster_with_cluster_data(rell.test.pubkeys.alice, "cluster1", voter_sets.system_p, [rell.test.pubkeys.alice],
+            cluster_creation_data()),
+        create_cluster_with_cluster_data(rell.test.pubkeys.alice, "cluster2", voter_sets.system_p, [rell.test.pubkeys.alice],
+            cluster_creation_data(
+                container_unit_cpu = 1,
+                container_unit_ram = 2,
+                container_unit_io_read = 3,
+                container_unit_io_write = 4,
+                container_unit_storage = 5,
+            )),
+    ).sign(rell.test.keypairs.alice).run();
+
+    val cluster1_cu_limits = get_cluster_container_unit_limits("cluster1");
+    assert_equals(cluster1_cu_limits.cpu, standard_container_unit.cpu);
+    assert_equals(cluster1_cu_limits.ram, standard_container_unit.ram);
+    assert_equals(cluster1_cu_limits.io_read, standard_container_unit.io_read);
+    assert_equals(cluster1_cu_limits.io_write, standard_container_unit.io_write);
+    assert_equals(cluster1_cu_limits.storage, standard_container_unit.storage);
+
+    val cluster2_cu_limits = get_cluster_container_unit_limits("cluster2");
+    assert_equals(cluster2_cu_limits.cpu, 1);
+    assert_equals(cluster2_cu_limits.ram, 2);
+    assert_equals(cluster2_cu_limits.io_read, 3);
+    assert_equals(cluster2_cu_limits.io_write, 4);
+    assert_equals(cluster2_cu_limits.storage, 5);
+}

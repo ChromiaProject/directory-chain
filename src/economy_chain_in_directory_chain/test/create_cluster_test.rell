@@ -1,0 +1,114 @@
+@test module;
+
+import ^^^.common.test.setup.*;
+import ^^^.common.test.util.*;
+import ^^.*;
+import ^.helpers.*;
+
+function test_ec_sync_create_cluster_v1() {
+    setup_module();
+
+    val conf = apply_required_configuration_properties();
+    rell.test.tx().op(
+        init_economy_chain(initial_provider.pub, conf.to_gtv().to_bytes())
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        receive_create_cluster_op(create_cluster_topic, create_cluster_message(
+            name = "test1",
+            governor_voter_set_name = "SYSTEM_P",
+            voter_set_name = "SYSTEM_P",
+            cluster_units = 1,
+            extra_storage = 0,
+            proposer_pubkey = initial_provider.pub
+        ).to_gtv())
+    ).run();
+
+    val new_cluster = cluster @? { .name == "test1" };
+    assert_not_null(new_cluster);
+    assert_equals(new_cluster.container_unit_cpu, standard_container_unit.cpu);
+    assert_equals(new_cluster.container_unit_ram, standard_container_unit.ram);
+    assert_equals(new_cluster.container_unit_io_read, standard_container_unit.io_read);
+    assert_equals(new_cluster.container_unit_io_write, standard_container_unit.io_write);
+    assert_equals(new_cluster.container_unit_storage, standard_container_unit.storage);
+    assert_equals(new_cluster.system_container_units, system_container_defaults.container_units);
+
+    // Verify error message is sent if cluster creation is requested with existing name
+    rell.test.tx().op(
+        receive_create_cluster_op(create_cluster_topic, create_cluster_message(
+            name = "test1",
+            governor_voter_set_name = "SYSTEM_P",
+            voter_set_name = "SYSTEM_P",
+            cluster_units = 1,
+            extra_storage = 0,
+            proposer_pubkey = initial_provider.pub
+        ).to_gtv())
+    ).nop().run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = create_cluster_error_topic,
+            body = create_cluster_error_message(name = "test1", error_message = "Unexpected error").to_gtv()
+        ).to_gtv_pretty())
+    );
+}
+
+function test_ec_sync_create_cluster_v2() {
+    setup_module();
+
+    val conf = apply_required_configuration_properties();
+    rell.test.tx().op(
+        init_economy_chain(initial_provider.pub, conf.to_gtv().to_bytes())
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        receive_create_cluster_op(create_cluster_v2_topic, create_cluster_v2_message(
+            name = "test1",
+            governor_voter_set_name = "SYSTEM_P",
+            voter_set_name = "SYSTEM_P",
+            cluster_units = 1,
+            extra_storage = 0,
+            container_unit_cpu = 150,
+            container_unit_ram = 500,
+            container_unit_io_read = 10,
+            container_unit_io_write = 5,
+            container_unit_storage = 2000,
+            system_container_units = 2,
+            proposer_pubkey = initial_provider.pub
+        ).to_gtv())
+    ).run();
+
+    val new_cluster = cluster @? { .name == "test1" };
+    assert_not_null(new_cluster);
+    assert_equals(new_cluster.container_unit_cpu, 150);
+    assert_equals(new_cluster.container_unit_ram, 500);
+    assert_equals(new_cluster.container_unit_io_read, 10);
+    assert_equals(new_cluster.container_unit_io_write, 5);
+    assert_equals(new_cluster.container_unit_storage, 2000);
+    assert_equals(new_cluster.system_container_units, 2);
+
+    // Verify error message is sent if cluster creation is requested with existing name
+    rell.test.tx().op(
+        receive_create_cluster_op(create_cluster_v2_topic, create_cluster_v2_message(
+            name = "test1",
+            governor_voter_set_name = "SYSTEM_P",
+            voter_set_name = "SYSTEM_P",
+            cluster_units = 1,
+            extra_storage = 0,
+            container_unit_cpu = standard_container_unit.cpu,
+            container_unit_ram = standard_container_unit.ram,
+            container_unit_io_read = standard_container_unit.io_read,
+            container_unit_io_write = standard_container_unit.io_write,
+            container_unit_storage = standard_container_unit.storage,
+            system_container_units = system_container_defaults.container_units,
+            proposer_pubkey = initial_provider.pub
+        ).to_gtv())
+    ).nop().run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = create_cluster_error_topic,
+            body = create_cluster_error_message(name = "test1", error_message = "Unexpected error").to_gtv()
+        ).to_gtv_pretty())
+    );
+}
