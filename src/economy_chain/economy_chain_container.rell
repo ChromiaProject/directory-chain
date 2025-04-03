@@ -618,6 +618,15 @@ query get_ticket_by_id(ticket_id: integer): ticket_data? =
             (ticket_data(.rowid.to_integer(), .type, .state, .error_message));
 
 /**
+ * Returns all pending tickets (of any kind) for an account.
+ *
+ * @param account_id  account ID
+ */
+query get_pending_tickets(account_id: byte_array): list<ticket_data> =
+        ticket @* { .account.id == account_id, .state == ticket_state.PENDING }
+            (ticket_data(.rowid.to_integer(), .type, .state, .error_message));
+
+/**
  * Returns ticket information for the create container ticket by transaction RID.
  *
  * @param tx_rid  transaction RID
