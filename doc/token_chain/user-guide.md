@@ -78,6 +78,7 @@ struct bridge_configuration {
     token_contract: byte_array;
     eif.hbridge.bridge_mode;
     use_snapshots: boolean;
+    skip_to_height: boolean;
 }
 ```
 
