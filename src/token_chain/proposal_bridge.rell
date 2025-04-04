@@ -5,6 +5,7 @@ struct bridge_configuration {
     token_contract: byte_array;
     eif.hbridge.bridge_mode;
     use_snapshots: boolean;
+    skip_to_height: integer;
 }
 
 entity pending_bridge_proposal {
@@ -20,6 +21,7 @@ entity pending_bridge_proposal_configuration {
     token_contract: byte_array;
     eif.hbridge.bridge_mode;
     use_snapshots: boolean;
+    skip_to_height: integer;
 }
 
 @extend(apply_common_voting_result_handlers) function() = [common_proposal_type.tc_propose_token_bridge.name: apply_token_bridge_create(*)];
@@ -28,7 +30,7 @@ entity pending_bridge_proposal_configuration {
 function apply_token_bridge_create(proposal: common_proposal) {
     val bridge_proposal = pending_bridge_proposal @ { proposal };
     val bridge_proposal_configurations = pending_bridge_proposal_configuration @* { bridge_proposal };
-    val dynamic_config_messages = map<integer, eif.dynamic_config.eif_event_receiver_dynamic_config_message>();
+    val dynamic_config_messages = map<integer, eif.dynamic_config.eif_event_receiver_dynamic_config_message_v2>();
     for (bridge_proposal_configuration in bridge_proposal_configurations) {
         eif.hbridge.register_bridge_and_erc20_asset(
             bridge_proposal_configuration.network_id,
@@ -39,15 +41,18 @@ function apply_token_bridge_create(proposal: common_proposal) {
             bridge_proposal_configuration.bridge_contract
         );
 
-        dynamic_config_messages[bridge_proposal_configuration.network_id] = eif.dynamic_config.eif_event_receiver_dynamic_config_message(
-            contracts = [bridge_proposal_configuration.bridge_contract],
+        dynamic_config_messages[bridge_proposal_configuration.network_id] = eif.dynamic_config.eif_event_receiver_dynamic_config_message_v2(
+            contracts = [eif.dynamic_config.contract_to_fetch(
+                bridge_proposal_configuration.bridge_contract,
+                bridge_proposal_configuration.skip_to_height
+            )],
             events = list<eif.dynamic_config.event_def>()
         );
     }
 
     ft4.assets.Unsafe.transfer(get_pool_account(), get_token_chain_governance_account(), get_asset(), bridge_proposal.fee);
 
-    send_message(eif.dynamic_config.eif_event_receiver_dynamic_config_topic, dynamic_config_messages.to_gtv());
+    send_message(eif.dynamic_config.eif_event_receiver_dynamic_config_topic_v2, dynamic_config_messages.to_gtv());
 }
 
 function cleanup_pending_token_bridge_create(proposal: common_proposal) {
@@ -100,12 +105,13 @@ operation propose_token_bridge(asset_id: byte_array, bridge_configurations: list
         require(bridge_configuration.bridge_contract.size() == 20, "Incorrect bridge contract length, expected 20, was %s".format(bridge_configuration.bridge_contract.size()));
         require(bridge_configuration.token_contract.size() == 20, "Incorrect token contract length, expected 20, was %s".format(bridge_configuration.bridge_contract.size()));
         create pending_bridge_proposal_configuration(
-            bridge_proposal,
-            bridge_configuration.network_id,
+            pending_bridge_proposal = bridge_proposal,
+            network_id = bridge_configuration.network_id,
             bridge_contract = bridge_configuration.bridge_contract,
             token_contract = bridge_configuration.token_contract,
-            bridge_configuration.bridge_mode,
-            bridge_configuration.use_snapshots
+            bridge_mode = bridge_configuration.bridge_mode,
+            use_snapshots = bridge_configuration.use_snapshots,
+            skip_to_height = bridge_configuration.skip_to_height,
         );
     }
 }
@@ -150,8 +156,8 @@ query get_token_bridge_proposal(id: rowid) {
             bridge_contract = .bridge_contract,
             token_contract = .token_contract,
             bridge_mode = .bridge_mode,
-            use_snapshots = .use_snapshots
+            use_snapshots = .use_snapshots,
+            skip_to_height = .skip_to_height
         )),
     );
 }
-

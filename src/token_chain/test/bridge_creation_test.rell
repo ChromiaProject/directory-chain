@@ -41,11 +41,12 @@ function test_bridge_creation_success() {
     val propose_bridge_op = propose_token_bridge(
         test_token.asset.id,
         [bridge_configuration(
-            97,
+            network_id = 97,
             bridge_contract = bridge_contract,
             token_contract = token_contract,
             eif.hbridge.bridge_mode.foreign,
-            true
+            true,
+            skip_to_height = 0
         )]
     );
 
@@ -90,9 +91,12 @@ function test_bridge_creation_success() {
     assert_equals(bridge_asset.token_address, token_contract);
 
     assert_events(("icmf_message", (
-        topic = eif.dynamic_config.eif_event_receiver_dynamic_config_topic,
-        body = [97: eif.dynamic_config.eif_event_receiver_dynamic_config_message(
-            contracts = [bridge_contract],
+        topic = eif.dynamic_config.eif_event_receiver_dynamic_config_topic_v2,
+        body = [97: eif.dynamic_config.eif_event_receiver_dynamic_config_message_v2(
+            contracts = [eif.dynamic_config.contract_to_fetch(
+                bridge_contract,
+                0
+            )],
             events = list<eif.dynamic_config.event_def>()
         )
     ].to_gtv()
@@ -107,11 +111,12 @@ function test_bridge_can_only_be_added_by_token_owner() {
     val propose_bridge_op = propose_token_bridge(
         test_token.asset.id,
         [bridge_configuration(
-            97,
+            network_id = 97,
             bridge_contract = bridge_contract,
             token_contract = token_contract,
             eif.hbridge.bridge_mode.foreign,
-            true
+            true,
+            skip_to_height = 0
         )]
     );
 
@@ -130,18 +135,20 @@ function test_bridge_can_only_be_added_with_enough_funds() {
     val test_token = token @ { };
 
     val bridge1 = bridge_configuration(
-        97,
+        network_id = 97,
         bridge_contract = bridge_contract,
         token_contract = token_contract,
         eif.hbridge.bridge_mode.foreign,
-        true
+        true,
+        skip_to_height = 0
     );
     val bridge2 = bridge_configuration(
-        56,
+        network_id = 56,
         bridge_contract = bridge_contract,
         token_contract = token_contract,
         eif.hbridge.bridge_mode.foreign,
-        true
+        true,
+        skip_to_height = 0
     );
 
     val propose_bridge_fail_op = propose_token_bridge(
@@ -180,11 +187,12 @@ function test_bridge_refunded_on_reject() {
     val propose_bridge_fail_op = propose_token_bridge(
         test_token.asset.id,
         [bridge_configuration(
-            97,
+            network_id = 97,
             bridge_contract = bridge_contract,
             token_contract = token_contract,
             eif.hbridge.bridge_mode.foreign,
-            true
+            true,
+            skip_to_height = 0
         )]
     );
 
@@ -218,11 +226,12 @@ function test_bridge_proposal_revoke() {
     val propose_bridge_op = propose_token_bridge(
         test_token.asset.id,
         [bridge_configuration(
-            97,
+            network_id = 97,
             bridge_contract = bridge_contract,
             token_contract = token_contract,
             eif.hbridge.bridge_mode.foreign,
-            true
+            true,
+            skip_to_height = 0
         )]
     );
 
