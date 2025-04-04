@@ -36,11 +36,13 @@ function apply_iccf_proposal(proposal) {
 function apply_or_delay_proposal(prop: proposal) {
     val (blockchain, proposal_delay) = get_proposal_delay(prop);
 
-    if (blockchain != null and proposal_delay > 0) {
+    if (proposal_delay > 0) {
         log("Proposal %s is delayed and will be applied in %s ms".format(prop.rowid, proposal_delay));
         prop.state = proposal_state.DELAYED;
         add_delayed_event(delay_type.PROPOSAL, proposal_delay, prop.rowid.to_integer());
-        set_delayed_event_state(delay_type.PROPOSAL, prop.rowid.to_integer(), blockchain.state == blockchain_state.RUNNING);
+        if (blockchain != null) {
+            set_delayed_event_state(delay_type.PROPOSAL, prop.rowid.to_integer(), blockchain.state == blockchain_state.RUNNING);
+        }
     } else {
         try_call_apply_voting_result_handlers(prop);
     }

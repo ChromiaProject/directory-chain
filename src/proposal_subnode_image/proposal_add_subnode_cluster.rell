@@ -4,7 +4,6 @@ entity pending_add_cluster_subnode_image {
 }
 
 @extend(apply_voting_result_handlers) function() = [proposal_type.add_cluster_subnode_image.name: apply_add_cluster_subnode_image(*)];
-
 function apply_add_cluster_subnode_image(proposal) {
     val pacsi = pending_add_cluster_subnode_image @? { proposal };
     if (pacsi == null) return;
@@ -14,9 +13,17 @@ function apply_add_cluster_subnode_image(proposal) {
 }
 
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.add_cluster_subnode_image.name: delete_pending_add_cluster_subnode_image(*)];
-
 function delete_pending_add_cluster_subnode_image(proposal) {
     delete pending_add_cluster_subnode_image @? { proposal };
+}
+
+@extend(scheduled_proposal_delay_time_handlers) function() = [proposal_type.add_cluster_subnode_image.name: scheduled_add_cluster_subnode_image_proposal_delay_time_handler(*)];
+function scheduled_add_cluster_subnode_image_proposal_delay_time_handler(proposal): (blockchain: blockchain?, delay: integer) {
+    val scheduled_at_delay = get_scheduled_event_delay(delay_type.PROPOSAL, proposal.rowid.to_integer());
+    if (scheduled_at_delay != null) {
+        return (blockchain = null, delay = scheduled_at_delay);
+    }
+    return (blockchain = null, delay = 0);
 }
 
 /**
@@ -27,8 +34,9 @@ function delete_pending_add_cluster_subnode_image(proposal) {
  * Rate limit: actions
  * 
  * @param my_pubkey pubkey of provider
+ * @param scheduled_at The time to apply this proposal when approved. If the proposal is approved after the time has passed the proposal is applied right away.
  */
-operation propose_add_cluster_subnode_image(my_pubkey: pubkey, cluster_name: text, subnode_image_name: text, description: text = "") {
+operation propose_add_cluster_subnode_image(my_pubkey: pubkey, cluster_name: text, subnode_image_name: text, description: text = "", scheduled_at: timestamp? = null) {
     val me = require_provider(my_pubkey);
     // check that provider authority and that it is a cluster governor
     require_provider_auth_with_rate_limit(me);
@@ -36,6 +44,9 @@ operation propose_add_cluster_subnode_image(my_pubkey: pubkey, cluster_name: tex
     require_cluster_governor(cluster, me);
     val subnode_image = require_subnode_image(subnode_image_name);
     val prop = create_proposal(proposal_type.add_cluster_subnode_image, me, cluster.governance, description);
+    if (scheduled_at != null) {
+        add_scheduled_event(delay_type.PROPOSAL, prop.rowid.to_integer(), scheduled_at);
+    }
     val pacsi = create pending_add_cluster_subnode_image(
         prop,
         cluster,
