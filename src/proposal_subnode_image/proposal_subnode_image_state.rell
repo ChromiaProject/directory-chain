@@ -4,9 +4,7 @@ entity pending_subnode_image_state {
     active: boolean;
 }
 
-@extend(apply_voting_result_handlers)
-function() = [proposal_type.subnode_image_state.name: apply_subnode_image_state(*)];
-
+@extend(apply_voting_result_handlers) function() = [proposal_type.subnode_image_state.name: apply_subnode_image_state(*)];
 function apply_subnode_image_state(proposal) {
     val psis = pending_subnode_image_state @? { proposal };
     if (psis == null) return;
@@ -15,11 +13,18 @@ function apply_subnode_image_state(proposal) {
     after_subnode_image_updated(subnode_image);
 }
 
-@extend(delete_proposal_handlers)
-function(): map<text, (proposal) -> unit> = [proposal_type.subnode_image_state.name: delete_pending_subnode_image_state(*)];
-
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.subnode_image_state.name: delete_pending_subnode_image_state(*)];
 function delete_pending_subnode_image_state(proposal) {
     delete pending_subnode_image_state @? { proposal };
+}
+
+@extend(scheduled_proposal_delay_time_handlers) function() = [proposal_type.subnode_image_state.name: scheduled_subnode_image_state_delay_time_handler(*)];
+function scheduled_subnode_image_state_delay_time_handler(proposal): (blockchain: blockchain?, delay: integer) {
+    val scheduled_at_delay = get_scheduled_event_delay(delay_type.PROPOSAL, proposal.rowid.to_integer());
+    if (scheduled_at_delay != null) {
+        return (blockchain = null, delay = scheduled_at_delay);
+    }
+    return (blockchain = null, delay = 0);
 }
 
 /**
@@ -30,13 +35,17 @@ function delete_pending_subnode_image_state(proposal) {
  * Rate limit: actions
  * 
  * @param my_pubkey pubkey of provider
+ * @param scheduled_at The time to apply this proposal when approved. If the proposal is approved after the time has passed the proposal is applied right away.
  */
-operation propose_subnode_image_state(my_pubkey: pubkey, name, active: boolean, description: text = "") {
+operation propose_subnode_image_state(my_pubkey: pubkey, name, active: boolean, description: text = "", scheduled_at: timestamp? = null) {
     val me = require_provider(my_pubkey);
     require_provider_auth_with_rate_limit(me);
     require_system_access(me);
 
     val prop = create_proposal(proposal_type.subnode_image_state, me, system_p_voter_set(), description);
+    if (scheduled_at != null) {
+        add_scheduled_event(delay_type.PROPOSAL, prop.rowid.to_integer(), scheduled_at);
+    }
     val pending_subnode_image_state = create pending_subnode_image_state (
         prop,
         name,

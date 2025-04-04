@@ -11,9 +11,7 @@ entity pending_subnode_image {
     sync_exts: text;
 }
 
-@extend(apply_voting_result_handlers)
-function() = [proposal_type.subnode_image.name: apply_subnode_image(*)];
-
+@extend(apply_voting_result_handlers) function() = [proposal_type.subnode_image.name: apply_subnode_image(*)];
 function apply_subnode_image(proposal) {
     val psi = pending_subnode_image @? { proposal };
     if (psi == null) return;
@@ -31,11 +29,18 @@ function apply_subnode_image(proposal) {
     after_subnode_image_creation(subnode_image);
 }
 
-@extend(delete_proposal_handlers)
-function(): map<text, (proposal) -> unit> = [proposal_type.subnode_image.name: delete_pending_subnode_image(*)];
-
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.subnode_image.name: delete_pending_subnode_image(*)];
 function delete_pending_subnode_image(proposal) {
     delete pending_subnode_image @? { proposal };
+}
+
+@extend(scheduled_proposal_delay_time_handlers) function() = [proposal_type.subnode_image.name: scheduled_subnode_image_proposal_delay_time_handler(*)];
+function scheduled_subnode_image_proposal_delay_time_handler(proposal): (blockchain: blockchain?, delay: integer) {
+    val scheduled_at_delay = get_scheduled_event_delay(delay_type.PROPOSAL, proposal.rowid.to_integer());
+    if (scheduled_at_delay != null) {
+        return (blockchain = null, delay = scheduled_at_delay);
+    }
+    return (blockchain = null, delay = 0);
 }
 
 /**
@@ -48,9 +53,11 @@ function delete_pending_subnode_image(proposal) {
  * @param my_pubkey  pubkey of provider
  * @param gtx_modules  GTX modules exposed by this subnode image (comma separated list of FQCNs)
  * @param sync_exts  Synchronization infrastructure extensions exposed by this subnode image (comma separated list of FQCNs)
+ * @param scheduled_at The time to apply this proposal when approved. If the proposal is approved after the time has passed the proposal is applied right away.
  */
 operation propose_subnode_image(my_pubkey: pubkey, name, url: text, digest: text, subnode_image_type,
-        image_description: text, gtx_modules: text, sync_exts: text, proposal_description: text = "") {
+        image_description: text, gtx_modules: text, sync_exts: text, proposal_description: text = "",
+        scheduled_at: timestamp? = null) {
     val me = require_provider(my_pubkey);
     require_provider_auth_with_rate_limit(me);
     require_system_access(me);
@@ -63,6 +70,9 @@ operation propose_subnode_image(my_pubkey: pubkey, name, url: text, digest: text
     validate_list_of_classes("sync_exts", sync_exts);
 
     val prop = create_proposal(proposal_type.subnode_image, me, system_p_voter_set(), proposal_description);
+    if (scheduled_at != null) {
+        add_scheduled_event(delay_type.PROPOSAL, prop.rowid.to_integer(), scheduled_at);
+    }
     val pending_subnode_image = create pending_subnode_image (
         prop,
         name,
