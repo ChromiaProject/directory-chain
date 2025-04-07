@@ -25,7 +25,11 @@ function begin_block_migration(height: integer) {
     }
 
     if (not migration_completed.remove_system_voter_set) {
-        delete voter_set @? { "SYSTEM" };
+        val system_vs = voter_set @? { "SYSTEM" };
+        if (exists(system_vs)) {
+            delete voter_set_governance @* { .voter_set == system_vs or .governor == system_vs };
+            delete system_vs;
+        }
         migration_completed.remove_system_voter_set = true;
     }
 }
