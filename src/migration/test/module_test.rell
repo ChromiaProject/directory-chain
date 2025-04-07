@@ -64,3 +64,22 @@ function test_send_container_blockchain_messages() {
     assert_events();
 
 }
+
+function test_begin_block_migration_remove_system_voter_set() {
+
+    rell.test.tx().op(
+        set_remove_system_voter_set_false(),
+        create_voter_set_internal_op("SYSTEM", 1),
+        create_voter_set_internal_op("SYSTEM_P", 1)
+    ).nop().run();
+
+    assert_true(exists(voter_set @? { "SYSTEM" }));
+    assert_true(exists(voter_set_governance @? { .voter_set.name == "SYSTEM" }));
+    assert_false(migration_completed.remove_system_voter_set);
+
+    rell.test.block().run();
+
+    assert_true(empty(voter_set @? { "SYSTEM" }));
+    assert_true(empty(voter_set_governance @? { .voter_set.name == "SYSTEM" }));
+    assert_true(migration_completed.remove_system_voter_set);
+}
