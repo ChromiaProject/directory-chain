@@ -51,11 +51,14 @@ function register_and_link_bridge_and_erc20_asset(ft4.assets.asset) {
 			};
 
 			if (exists(obsolete_bridge)) {
-				// Clean up obsolete bridge
-				log("Removing obsolete bridge for asset with address %s".format(obsolete_asset.token_address));
-				val obsolete_bridge_contract = obsolete_bridge.bridge_contract;
-				delete obsolete_bridge;
-				delete obsolete_bridge_contract;
+			    send_message(eif.dynamic_config.eif_event_receiver_dynamic_remove_topic,
+                    eif.dynamic_config.eif_event_receiver_dynamic_remove_message([
+                        eif.dynamic_config.network_contract_address(bridge.network_id,
+                        obsolete_bridge.bridge_contract.contract_address)]).to_gtv());
+				eif.hbridge.unregister_bridge(
+                            obsolete_bridge.bridge_contract.network_id,
+                            obsolete_bridge.bridge_contract.contract_address,
+                        );
 			}
 		}
 	}
