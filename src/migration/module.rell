@@ -25,12 +25,9 @@ function begin_block_migration(height: integer) {
     }
 
     if (not migration_completed.remove_system_voter_set) {
-        val system_vs = voter_set @? { "SYSTEM" };
-        if (exists(system_vs)) {
-            delete voter_set_governance @* { .voter_set == system_vs or .governor == system_vs };
-            delete system_vs;
+        if (not try_call(remove_system_voter_set(*))) {
+            log("Failed to remove system voter set");
         }
-        migration_completed.remove_system_voter_set = true;
     }
 }
 
@@ -47,4 +44,14 @@ function send_container_blockchain_messages() {
 
         send_container_blockchain_message(container_blockchain_entity.container, container_blockchain_entity.blockchain, false);
     }
+}
+
+function remove_system_voter_set() {
+    val system_vs = voter_set @? { "SYSTEM" };
+    if (exists(system_vs)) {
+        update voter_set_governance @* { .governor == system_vs } ( .governor = system_p_voter_set() );
+        delete voter_set_governance @* { .voter_set == system_vs };
+        delete system_vs;
+    }
+    migration_completed.remove_system_voter_set = true;
 }
