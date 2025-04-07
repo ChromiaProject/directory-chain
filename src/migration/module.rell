@@ -13,6 +13,7 @@ import publish_directory_chain.*;
 object migration_completed {
     mutable provider_multi_key: boolean = false;
     mutable send_container_blockchain_messages: boolean = false;
+    mutable remove_system_voter_set: boolean = false;
 }
 
 @extend(before_begin_block)
@@ -21,6 +22,11 @@ function begin_block_migration(height: integer) {
     if (not migration_completed.send_container_blockchain_messages) {
         migration_completed.send_container_blockchain_messages = true;
         send_container_blockchain_messages();
+    }
+
+    if (not migration_completed.remove_system_voter_set) {
+        delete voter_set @? { "SYSTEM" };
+        migration_completed.remove_system_voter_set = true;
     }
 }
 
