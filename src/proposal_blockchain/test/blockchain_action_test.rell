@@ -126,7 +126,7 @@ function test_config_proposals_delay_is_not_counted_while_paused() {
     bob_votes();
 
     // Delayed event still paused
-    assert_true(exists(delayed_event @? { .active == false, .time == 100 }));
+    assert_true(exists(scheduled_callback @? { .active == false, .time == 100 }));
 
     // Unpause chain (and config proposal delay)
     alice_proposes_action(chain, blockchain_action.resume);
@@ -134,11 +134,11 @@ function test_config_proposals_delay_is_not_counted_while_paused() {
     bob_votes();
 
     // Delayed event active again
-    assert_true(exists(delayed_event @? { .active == true, .time != 100 }));
+    assert_true(exists(scheduled_callback @? { .active == true, .time != 100 }));
 
     // Delayed event executed after 100 ms
     rell.test.block().run();
-    assert_false(exists(delayed_event @? { }));
+    assert_false(exists(scheduled_callback @? { }));
 }
 
 function test_config_proposals_scheduled_at_delay_is_not_counted_while_paused() {
@@ -171,7 +171,7 @@ function test_config_proposals_scheduled_at_delay_is_not_counted_while_paused() 
     bob_votes();
 
     // Delayed event still paused
-    assert_true(exists(delayed_event @? { .active == false, .time == 99 }));
+    assert_true(exists(scheduled_callback @? { .active == false, .time == 99 }));
 
     // Unpause chain (and config proposal delay)
     alice_proposes_action(chain, blockchain_action.resume);
@@ -179,11 +179,11 @@ function test_config_proposals_scheduled_at_delay_is_not_counted_while_paused() 
     bob_votes();
 
     // Delayed event active again
-    assert_true(exists(delayed_event @? { .active == true, .time != 100 }));
+    assert_true(exists(scheduled_callback @? { .active == true, .time != 100 }));
 
     // Delayed event executed after 100 ms
     rell.test.block().run();
-    assert_false(exists(delayed_event @? { }));
+    assert_false(exists(scheduled_callback @? { }));
 }
 
 function test_delayed_actions() {
@@ -204,14 +204,14 @@ function test_delayed_actions() {
     alice_proposes_action(chain, blockchain_action.pause);
 
     assert_equals(chain.state, blockchain_state.RUNNING);
-    assert_true(exists(delayed_event @? { .active }));
+    assert_true(exists(scheduled_callback @? { .active }));
 
     rell.test.set_next_block_time_delta(86400000);
     rell.test.block().run();
     rell.test.block().run();
 
     assert_equals(chain.state, blockchain_state.PAUSED);
-    assert_false(exists(delayed_event @? { .active }));
+    assert_false(exists(scheduled_callback @? { .active }));
 
     alice_proposes_action(chain, blockchain_action.resume);
 
@@ -219,14 +219,14 @@ function test_delayed_actions() {
     alice_proposes_action(chain, blockchain_action.remove);
 
     assert_equals(chain.state, blockchain_state.RUNNING);
-    assert_true(exists(delayed_event @? { .active }));
+    assert_true(exists(scheduled_callback @? { .active }));
 
     rell.test.set_next_block_time_delta(86400000);
     rell.test.block().run();
     rell.test.block().run();
 
     assert_equals(chain.state, blockchain_state.REMOVED);
-    assert_false(exists(delayed_event @? { .active }));
+    assert_false(exists(scheduled_callback @? { .active }));
 }
 
 function test_future_delayed_actions_are_applied_immediately_if_delay_is_removed() {
@@ -245,17 +245,17 @@ function test_future_delayed_actions_are_applied_immediately_if_delay_is_removed
 
     // Propose a pause
     alice_proposes_action(chain, blockchain_action.pause);
-    assert_true(exists(delayed_event @? { .active, .time == rell.test.last_block_time - rell.test.block_interval + 86400000 }));
+    assert_true(exists(scheduled_callback @? { .active, .time == rell.test.last_block_time - rell.test.block_interval + 86400000 }));
 
     // No delay config
     rell.test.tx().op(
         set_blockchain_config_delay_op(chain, 0)
     ).run();
     // Pause is no longer delayed and will be applied next block
-    assert_true(exists(delayed_event @? { .active, .time == rell.test.last_block_time - rell.test.block_interval }));
+    assert_true(exists(scheduled_callback @? { .active, .time == rell.test.last_block_time - rell.test.block_interval }));
     rell.test.block().run();
     assert_equals(chain.state, blockchain_state.PAUSED);
-    assert_false(exists(delayed_event @? {  }));
+    assert_false(exists(scheduled_callback @? {  }));
 }
 
 function test_that_invalid_delayed_proposal_does_break_chain() {
@@ -274,7 +274,7 @@ function test_that_invalid_delayed_proposal_does_break_chain() {
 
     // Propose a removal
     alice_proposes_action(chain, blockchain_action.remove);
-    assert_true(exists(delayed_event @? { .active, .time == rell.test.last_block_time - rell.test.block_interval + 86400000 }));
+    assert_true(exists(scheduled_callback @? { .active, .time == rell.test.last_block_time - rell.test.block_interval + 86400000 }));
 
     // Add a dependent chain that will prevent removal
     val dependent_conf = apply_required_configuration_properties(["dependencies": [["dep".to_gtv(), chain.rid.to_gtv()]].to_gtv()]);
@@ -285,7 +285,7 @@ function test_that_invalid_delayed_proposal_does_break_chain() {
 
     // Trigger removal action and see that it's not applied but chain is not broken either and delayed action is gone
     rell.test.block().run();
-    assert_false(exists(delayed_event @? {}));
+    assert_false(exists(scheduled_callback @? {}));
     assert_equals(chain.state, blockchain_state.RUNNING);
 
     val blockchain_remove_proposal = get_blockchain_action_proposal();
@@ -308,13 +308,13 @@ function test_delayed_proposal_gets_approved() {
 
     // Propose a removal
     alice_proposes_action(chain, blockchain_action.remove);
-    assert_true(exists(delayed_event @? { .active, .time == rell.test.last_block_time - rell.test.block_interval + 10000 }));
+    assert_true(exists(scheduled_callback @? { .active, .time == rell.test.last_block_time - rell.test.block_interval + 10000 }));
 
     val blockchain_remove_proposal_delayed = get_blockchain_action_proposal();
     assert_equals(blockchain_remove_proposal_delayed.state, proposal_state.DELAYED);
 
     rell.test.block().run();
-    assert_false(exists(delayed_event @? {}));
+    assert_false(exists(scheduled_callback @? {}));
     assert_equals(chain.state, blockchain_state.REMOVED);
 
     val blockchain_remove_proposal_approved = get_blockchain_action_proposal();
