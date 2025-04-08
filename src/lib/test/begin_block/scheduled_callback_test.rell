@@ -5,13 +5,13 @@ import ^.helper_operations.*;
 
 function test_scheduled_callback_validation() {
     rell.test.tx().op(
-        create_scheduled_callback_op(1, 1, -1)
+        create_scheduled_callback_after_op(1, 1, -1)
     ).run_must_fail("Relative time must not be negative");
 
     rell.test.block().run();
 
     rell.test.tx().op(
-        create_scheduled_callback_exact_time_op(1, 1, 0)
+        create_scheduled_callback_at_op(1, 1, 0)
     ).run_must_fail("ime must be more recent than last block time");
 }
 
@@ -21,7 +21,7 @@ function test_scheduled_callback_run_once() {
     rell.test.block().run();
 
     rell.test.tx().op(
-        create_scheduled_callback_op(1, 1, 1000)
+        create_scheduled_callback_after_op(1, 1, 1000)
     ).run();
 
     assert_true(exists(scheduled_callback @? { .context == 1, .ref_id == 1 }));
@@ -38,7 +38,7 @@ function test_scheduled_callback_run_repeated_and_cancel() {
 
     rell.test.set_next_block_time(1);
     rell.test.tx().op(
-        create_scheduled_callback_op(1, 1, 1000, 1000)
+        create_scheduled_callback_after_op(1, 1, 1000, 1000)
     ).run();
 
     assert_true(exists(scheduled_callback @? { .context == 1, .ref_id == 1 }));
@@ -83,7 +83,7 @@ function test_pause_and_unpause_scheduled_callback() {
     // Add delayed event
     rell.test.set_next_block_time_delta(5);
     rell.test.tx().op(
-        create_scheduled_callback_op(1, 2, 100)
+        create_scheduled_callback_after_op(1, 2, 100)
     ).run();
 
     // Trigger time will be 99 due to first "last block time" is -1

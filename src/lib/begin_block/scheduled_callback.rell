@@ -11,12 +11,12 @@ entity scheduled_callback {
     repeatable_delay: integer;
 }
 
-function create_scheduled_callback_internal(context: integer, ref_id: integer, relative_time: integer, repeatable_delay: integer? = null) {
-    require(relative_time >= 0, "Relative time must not be negative");
-    return create_scheduled_callback_exact_time_internal(context, ref_id, op_context.last_block_time + relative_time, repeatable_delay);
+function create_scheduled_callback_after_internal(context: integer, ref_id: integer, delay_time: integer, repeatable_delay: integer? = null) {
+    require(delay_time >= 0, "Relative time must not be negative");
+    return create_scheduled_callback_at_internal(context, ref_id, op_context.last_block_time + delay_time, repeatable_delay);
 }
 
-function create_scheduled_callback_exact_time_internal(context: integer, ref_id: integer, time: timestamp, repeatable_delay: integer? = null) {
+function create_scheduled_callback_at_internal(context: integer, ref_id: integer, time: timestamp, repeatable_delay: integer? = null) {
     require(time > op_context.last_block_time, "Time must be more recent than last block time");
     return create scheduled_callback(context, ref_id, time, repeatable_delay = repeatable_delay ?: -1).rowid;
 }
@@ -46,15 +46,11 @@ function begin_block_scheduled_callback() {
 
         log("Executing scheduled callback for context %s with ref id %s".format(context, ref_id));
 
-        if (not try_call(on_scheduled_callback(context, ref_id, *))) {
-            log("Failed to execute scheduled callback for context %s with ref id %s".format(context, ref_id));
-        }
+        on_scheduled_callback(context, ref_id);
 
         val callbacks = on_scheduled_callback_map();
         if (callbacks.contains(scheduled_callback.context)) {
-            if (not try_call(on_scheduled_callback_map()[context](ref_id, *))) {
-                log("Failed to execute scheduled callback (map function) for context %s with ref id %s".format(context, ref_id));
-            }
+            on_scheduled_callback_map()[context](ref_id);
         }
 
         if (scheduled_callback.repeatable_delay >= 0) {

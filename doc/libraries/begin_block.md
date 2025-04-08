@@ -20,17 +20,23 @@ import lib.begin_block.*;
 
 ## Detect configuration updates
 
-Monitor configuration updates in your dapp by enabling this feature and extending the triggered function:
+Monitor configuration updates in your dapp by enabling this feature and extending the triggered function.
+
+Enable with module args:
+
+```yaml
+blockchains:
+  my_chain:
+    moduleArgs:
+      lib.begin_block:
+        detect_configuration_updates: true
+```
 
 ```rell
 import lib.begin_block.*;
 
 @extend(on_configuration_update) function chain_config_is_updated() {
     // code
-}
-
-function init_my_dapp() {
-    set_check_for_configuration_updates(true);
 }
 ```
 
@@ -51,7 +57,7 @@ entity my_entity {
 
 function add_future_event() {
     val ref_id = create my_entity().rowid.to_integer();
-    create_scheduled_callback(
+    create_scheduled_callback_after(
         my_entity_context,
         ref_id,
         1000 * 60 * 60 * 3, // Execution in 3 hours
