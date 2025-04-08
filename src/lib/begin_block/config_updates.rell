@@ -1,0 +1,27 @@
+
+function being_block_detect_config_update() {
+    if (begin_block.detect_configuration_updates and is_blockchain_configuration_changed()) {
+        if (not try_call(on_configuration_update(*))) {
+            log("Error occurred in a function extending on_configuration_update");
+        }
+    }
+}
+
+function is_blockchain_configuration_changed() {
+
+    val new_config_hash = chain_context.raw_config.hash();
+    if (begin_block.current_configuration_hash != new_config_hash) {
+        log("New chain configuration detected at height %d to %s".format(op_context.block_height, new_config_hash));
+        begin_block.current_configuration_hash = new_config_hash;
+        return true;
+    }
+
+    return false;
+}
+
+function set_check_for_configuration_updates_internal(active: boolean) {
+    begin_block.detect_configuration_updates = active;
+    if (active) {
+        begin_block.current_configuration_hash = chain_context.raw_config.hash();
+    }
+}

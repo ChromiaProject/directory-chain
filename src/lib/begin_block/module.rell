@@ -1,0 +1,21 @@
+module;
+
+object begin_block {
+    mutable detect_configuration_updates: boolean = false;
+    mutable current_configuration_hash: byte_array = x"";
+}
+
+operation __begin_block(height: integer) {
+
+    if (not try_call(being_block_detect_config_update(*))) {
+        log("Failed to detect new configuration");
+    }
+
+    if (not try_call(on_begin_block(height, *))) {
+        log("Failed to run on_begin_block extendable function - check all extend functions for errors");
+    }
+
+    if (not try_call(begin_block_scheduled_callback(*))) {
+        log("Failed to run scheduled callback function");
+    }
+}

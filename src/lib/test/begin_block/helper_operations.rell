@@ -1,0 +1,46 @@
+module;
+
+import lib.begin_block.*;
+
+entity captured_scheduled_callbacks {
+    context: integer;
+    ref_id: integer;
+}
+
+entity captured_configuration_updates {
+    height: integer;
+}
+
+@extend(on_scheduled_callback) function scheduled_callback_captor(context: integer, ref_id: integer) {
+    log("Captured callback for context %s and ref_id %s".format(context, ref_id));
+    create captured_scheduled_callbacks(context, ref_id);
+}
+
+@extend(on_configuration_update) function on_configuration_update_captor() {
+    log("Captured on_configuration_update on height %s".format(op_context.block_height));
+    create captured_configuration_updates(op_context.block_height);
+}
+
+operation remove_scheduled_callback_op(context: integer, ref_id: integer) {
+    remove_scheduled_callback(context, ref_id);
+}
+
+operation create_scheduled_callback_op(context: integer, ref_id: integer, relative_time: integer, repeatable_delay: integer? = null) {
+    create_scheduled_callback_internal(context, ref_id, relative_time, repeatable_delay);
+}
+
+operation create_scheduled_callback_exact_time_op(context: integer, ref_id: integer, time: timestamp, repeatable_delay: integer? = null) {
+    create_scheduled_callback_exact_time(context, ref_id, time, repeatable_delay);
+}
+
+operation set_scheduled_callback_active_op(context: integer, ref_id: integer, pause: boolean) {
+    set_scheduled_callback_active(context, ref_id, pause);
+}
+
+operation set_check_for_configuration_updates_op(active: boolean) {
+    set_check_for_configuration_updates(active);
+}
+
+operation set_config_hash(config_hash: byte_array) {
+    begin_block.current_configuration_hash = config_hash;
+}

@@ -1,0 +1,34 @@
+@test module;
+
+import lib.begin_block.*;
+import ^.helper_operations.*;
+
+function test_is_blockchain_configuration_changed() {
+
+    rell.test.block().run();
+
+    assert_true(empty(captured_configuration_updates @* {}));
+
+    // Activate and fake another previous config hash
+    rell.test.tx().op(
+        set_check_for_configuration_updates_op(true),
+        set_config_hash(x"AABBCC")
+    ).run();
+    rell.test.block().run();
+    assert_equals(captured_configuration_updates @? {} ( .height ), 2);
+
+    // Update config hash
+    rell.test.tx().op(
+        set_config_hash(x"AABBCC")
+    ).run();
+    rell.test.block().run();
+    assert_equals(captured_configuration_updates @* {} ( .height ), [2, 4]);
+
+    // Disable and update hash - no update triggered
+    rell.test.tx().op(
+        set_check_for_configuration_updates_op(false),
+        set_config_hash(x"AABBCC")
+    ).run();
+    rell.test.block().run();
+    assert_equals(captured_configuration_updates @* {} ( .height ), [2, 4]);
+}
