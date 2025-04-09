@@ -9,6 +9,7 @@ import messaging.resource_usage_statistics.*;
 import lib.transaction_submitter_messaging.*;
 import lib.icmf.*;
 import lib.icmf.receiver.*;
+import lib.begin_block.*;
 import lib.price_oracle_messages.*;
 import common_proposal.*;
 import common_proposal.voter_set_proposal.*;
@@ -87,23 +88,21 @@ operation init() {
 
     __staking_init();
     set_initial_token_rates();
-    set_initial_config_hash(chain_context.raw_config.hash());
 
     log("Economy chain was initialized");
 }
 
-operation __begin_block(height: integer) {
+@extend(on_begin_block)
+function begin_block(height: integer) {
 
     do_migrations();
 
     if (state.initialized) {
-        if (not try_call(handle_configuration_update(*))) log("Handling configuration update failed");
         if (not try_call(expire_leases(op_context.last_block_time, *))) log("Failed lease expiry.");
         if (not try_call(delete_expired_leases(op_context.last_block_time, *))) log("Failed to delete expired leases.");
         if (not try_call(__staking_begin_block(height, *))) log("Failed staking begin block hook.");
         if (not try_call(__bridge_mode_begin_block(*))) log("Failed bridge mode begin block hook.");
         if (not try_call(price_oracle_updates_begin_block(op_context.last_block_time, *))) log("Failed price oracle begin block hook.");
-        if (not try_call(begin_block_delay(height, *))) log("Failed to run delayed jobs");
     }
 }
 

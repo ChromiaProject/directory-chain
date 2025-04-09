@@ -4,6 +4,7 @@
 
 module;
 
+import lib.begin_block.*;
 import common_helpers.block.*;
 
 enum delay_type {
@@ -11,103 +12,36 @@ enum delay_type {
 }
 
 /**
- * Each entity represents a delayed event to be triggered at a specific time.
+ * Deprecated entity, replaced by scheduled_callback. Remove once migrated.
  */
 entity delayed_event {
     key type, ref_id;
     type: delay_type;
-
-    /** Reference id to distinguish callbacks of the same type */
     ref_id: integer;
-
-    /** When event is active this is the time to be triggered, otherwise the time left until it should be triggered */
     index mutable time: timestamp;
-
-    /** Is this event active or paused? */
     index mutable active: boolean = true;
 }
 
-/**
- * Extendable callback function. Is called at the time of the event.
- */
-@extendable function delayed_event_callback(): map<delay_type, (integer) -> unit>;
+@extend(on_begin_block)
+function being_block_delay_migration_wrapper(height: integer) {
+    if (not try_call(migrate_delays_to_scheduled_callbacks(*))) log("Failed to run delayed jobs");
+}
 
-/**
- * Must be called by each chains __begin_block.
- */
-function begin_block_delay(height: integer) {
-    val events = delayed_event @* { .active, .time <= op_context.last_block_time };
+function migrate_delays_to_scheduled_callbacks() {
 
-    for (event in events) {
+    for (delay in delayed_event @* { }) {
 
-        val callbacks = delayed_event_callback();
-        if (callbacks.contains(event.type)) {
-            val type = event.type;
-            val ref_id = event.ref_id;
-            if (try_call(execute_delayed_event(type, ref_id, *))) {
-                log("Delayed event executed for %s with ref id %s".format(type, ref_id));
-            } else {
-                log("Failed to execute delayed event for %s with ref id %s".format(type, ref_id));
-            }
-        }
-        // We probably can't afford accumulating and retrying failed executions (that could be an attack vector)
-        // Callback handlers should ensure that they handle failures gracefully
-        delete event;
+        log("Migrating delay of type %s and ref_id %s to scheduled callbacks".format(
+            delay.type.value, delay.ref_id));
+
+        create scheduled_callback(
+            context = delay.type.value,
+            ref_id = delay.ref_id,
+            time = delay.time,
+            delay.active,
+            repeatable_delay = -1
+        );
+        delete delay;
     }
 }
 
-function execute_delayed_event(type: delay_type, ref_id: integer) {
-    delayed_event_callback()[type](ref_id);
-}
-
-function get_delayed_event_time(type: delay_type, ref_id: integer) {
-    return delayed_event @? { type, .ref_id == ref_id } ( .time );
-}
-
-function delete_delayed_event(type: delay_type, ref_id: integer) {
-
-    val event = delayed_event @? { .type == type, .ref_id == ref_id };
-
-    if (exists(event)) {
-
-        log("Deleted delayed events for %s and ref id %s".format(type, ref_id));
-        delete event;
-    }
-}
-
-/**
- * Create a new delayed event.
- * @param delay Time to delay event in milliseconds.
- * @param ref_id Reference id to keep track of the delayed event in callback.
- */
-function add_delayed_event(type: delay_type, delay: integer, ref_id: integer) {
-
-    val event = create delayed_event(type, time = op_context.last_block_time + delay, ref_id = ref_id);
-
-    log("Delay event created for %s in %sms and ref id %s. Will be run at %s".format(type, delay, ref_id, event.time));
-}
-
-/**
- * Pause/unpause scheduled event.
- */
-function set_delayed_event_state(type: delay_type, ref_id: integer, active: boolean) {
-
-    val event = delayed_event @? { .type == type, .ref_id == ref_id };
-
-    if (event != null and event.active != active) {
-
-        event.active = active;
-
-        if (active) {
-            val time_left = event.time;
-            event.time = op_context.last_block_time + event.time;
-
-            log("Delayed event %s with ref id %s is unpaused. Time left: %s".format(type, ref_id, time_left));
-        } else {
-            event.time -= op_context.last_block_time;
-
-            log("Delayed event %s with ref id %s is paused. Time left: %s"
-                .format(type, ref_id, event.time));
-        }
-    }
-}

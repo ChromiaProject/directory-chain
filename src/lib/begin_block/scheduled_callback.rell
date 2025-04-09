@@ -53,14 +53,17 @@ function begin_block_scheduled_callback() {
             on_scheduled_callback_map()[context](ref_id);
         }
 
-        if (scheduled_callback.repeatable_delay >= 0) {
-            scheduled_callback.time = op_context.last_block_time + scheduled_callback.repeatable_delay;
-            log("Rescheduled callback (%s, %s) to run again in %s ms (at %s)".format(scheduled_callback.context,
-                scheduled_callback.ref_id, scheduled_callback.repeatable_delay, scheduled_callback.time));
-        } else {
-            log("Removes completed scheduled callback (%s, %s)".format(
-                scheduled_callback.context, scheduled_callback.ref_id));
-            delete scheduled_callback;
+        if (get_scheduled_callback_at_time_internal(context, ref_id) != null) {
+            // Callback still exists and has not been removed
+            if (scheduled_callback.repeatable_delay >= 0) {
+                scheduled_callback.time = op_context.last_block_time + scheduled_callback.repeatable_delay;
+                log("Rescheduled callback (%s, %s) to run again in %s ms (at %s)".format(scheduled_callback.context,
+                    scheduled_callback.ref_id, scheduled_callback.repeatable_delay, scheduled_callback.time));
+            } else {
+                log("Removes completed scheduled callback (%s, %s)".format(
+                    scheduled_callback.context, scheduled_callback.ref_id));
+                delete scheduled_callback;
+            }
         }
     }
 }
@@ -85,4 +88,8 @@ function set_scheduled_callback_active_internal(context: integer, ref_id: intege
                 .format(context, ref_id, sc.time));
         }
     }
+}
+
+function get_scheduled_callback_at_time_internal(context: integer, ref_id: integer) {
+    return scheduled_callback @? { .context == context, .ref_id == ref_id } ( .time );
 }

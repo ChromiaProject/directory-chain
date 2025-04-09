@@ -312,13 +312,12 @@ function set_latest_blockchain_configuration_values(blockchain, config_map: map<
     val new_config_delay = extract_config_delay(config_map) ?: 0;
     if (current_delay != new_config_delay) {
         val delayed_proposal_ids = get_blockchain_proposal_delay_ids(blockchain) @* { } ($.to_integer());
-        val delayed_bc_proposals = delayed_event @* { .ref_id in delayed_proposal_ids };
+        val delayed_bc_proposals = scheduled_callback @* { .context == delay_type.PROPOSAL.value, .ref_id in delayed_proposal_ids };
 
         for (delayed_proposal in delayed_bc_proposals) {
             val max_delay = if (delayed_proposal.active) op_context.last_block_time + new_config_delay else new_config_delay;
             delayed_proposal.time = min(delayed_proposal.time, max_delay);
         }
-
     }
 
     latest_values.config_delay = new_config_delay;

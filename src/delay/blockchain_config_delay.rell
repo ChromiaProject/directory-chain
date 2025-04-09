@@ -82,14 +82,15 @@ query list_delayed_blockchain_configs(blockchain_rid: byte_array): list<delayed_
     for (proposal_id in delayed_proposals) {
 
         val proposal = proposal @ { proposal_id };
-        val delayed_event = delayed_event @? { delay_type.PROPOSAL, .ref_id == proposal_id.to_integer() } ( .active, .time );
+        val delay = scheduled_callback @?
+            { .context == delay_type.PROPOSAL.value, .ref_id == proposal_id.to_integer() } ( .active, .time );
 
         result.add(delayed_blockchain_proposal_data(
             proposal_id,
             proposal.proposal_type,
             proposal.state,
-            delay = if (delayed_event == null) bc_delay else if (delayed_event.active == false) delayed_event.time else null,
-            apply_at = if (delayed_event != null and delayed_event.active) delayed_event.time else null,
+            delay = if (delay == null) bc_delay else if (delay.active == false) delay.time else null,
+            apply_at = if (delay != null and delay.active) delay.time else null,
         ));
     }
 

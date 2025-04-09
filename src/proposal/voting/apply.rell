@@ -39,9 +39,9 @@ function apply_or_delay_proposal(prop: proposal) {
     if (proposal_delay > 0) {
         log("Proposal %s is delayed and will be applied in %s ms".format(prop.rowid, proposal_delay));
         prop.state = proposal_state.DELAYED;
-        add_delayed_event(delay_type.PROPOSAL, proposal_delay, prop.rowid.to_integer());
+        create_scheduled_callback_after(delay_type.PROPOSAL.value, prop.rowid.to_integer(), proposal_delay);
         if (blockchain != null) {
-            set_delayed_event_state(delay_type.PROPOSAL, prop.rowid.to_integer(), blockchain.state == blockchain_state.RUNNING);
+            set_scheduled_callback_active(delay_type.PROPOSAL.value, prop.rowid.to_integer(), blockchain.state == blockchain_state.RUNNING);
         }
     } else {
         try_call_apply_voting_result_handlers(prop);
