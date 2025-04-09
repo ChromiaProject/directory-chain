@@ -1,0 +1,88 @@
+entity scheduled_callback {
+    key context: integer, ref_id: integer;
+
+    /** Is this event active or paused? */
+    index mutable active: boolean = true;
+
+    /** When event is active this is the time to be triggered, otherwise the time left until it should be triggered */
+    index mutable time: timestamp;
+
+    /** If > 0 this will make the callback run again after the set delay in milliseconds */
+    repeatable_delay: integer;
+}
+
+function create_scheduled_callback_after_internal(context: integer, ref_id: integer, delay_time: integer, repeatable_delay: integer? = null) {
+    require(delay_time >= 0, "Relative time must not be negative");
+    return create_scheduled_callback_at_internal(context, ref_id, op_context.last_block_time + delay_time, repeatable_delay);
+}
+
+function create_scheduled_callback_at_internal(context: integer, ref_id: integer, time: timestamp, repeatable_delay: integer? = null) {
+    require(time > op_context.last_block_time, "Time must be more recent than last block time");
+    return create scheduled_callback(context, ref_id, time, repeatable_delay = repeatable_delay ?: -1).rowid;
+}
+
+function remove_scheduled_callback_internal(context: integer, ref_id: integer) {
+    val sc = scheduled_callback @? { context, ref_id };
+    if (exists(sc)) {
+        remove_scheduled_callback_by_rowid_internal(sc.rowid);
+    }
+}
+
+function remove_scheduled_callback_by_rowid_internal(rowid) {
+    val sc = scheduled_callback @? { .rowid == rowid };
+    if (exists(sc)) {
+        log("Deleted scheduled callback for context %s and ref_id %s".format(sc.context, sc.ref_id));
+        delete sc;
+    }
+}
+
+function begin_block_scheduled_callback() {
+    val scheduled_callbacks = scheduled_callback @* { .active, .time <= op_context.last_block_time };
+
+    for (scheduled_callback in scheduled_callbacks) {
+
+        val context = scheduled_callback.context;
+        val ref_id = scheduled_callback.ref_id;
+
+        log("Executing scheduled callback for context %s with ref id %s".format(context, ref_id));
+
+        on_scheduled_callback(context, ref_id);
+
+        val callbacks = on_scheduled_callback_map();
+        if (callbacks.contains(scheduled_callback.context)) {
+            on_scheduled_callback_map()[context](ref_id);
+        }
+
+        if (scheduled_callback.repeatable_delay >= 0) {
+            scheduled_callback.time = op_context.last_block_time + scheduled_callback.repeatable_delay;
+            log("Rescheduled callback (%s, %s) to run again in %s ms (at %s)".format(scheduled_callback.context,
+                scheduled_callback.ref_id, scheduled_callback.repeatable_delay, scheduled_callback.time));
+        } else {
+            log("Removes completed scheduled callback (%s, %s)".format(
+                scheduled_callback.context, scheduled_callback.ref_id));
+            delete scheduled_callback;
+        }
+    }
+}
+
+function set_scheduled_callback_active_internal(context: integer, ref_id: integer, active: boolean) {
+
+    val sc = scheduled_callback @? { .context == context, .ref_id == ref_id, .active != active };
+
+    if (exists(sc)) {
+
+        sc.active = active;
+
+        if (active) {
+            val time_left = sc.time;
+            sc.time = op_context.last_block_time + sc.time;
+
+            log("Scheduled callback with context %s and ref id %s is set to active. Time left: %s".format(context, ref_id, time_left));
+        } else {
+            sc.time -= op_context.last_block_time;
+
+            log("Scheduled callback with context %s and ref id %s is set to inactive. Time left: %s"
+                .format(context, ref_id, sc.time));
+        }
+    }
+}

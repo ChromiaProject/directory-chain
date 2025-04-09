@@ -1,0 +1,18 @@
+@test module;
+
+import lib.begin_block.*;
+import ^.helper_operations.*;
+
+function test_is_blockchain_configuration_changed() {
+
+    rell.test.block().run();
+
+    assert_equals(captured_configuration_updates @* {} ( .height ), [0]);
+
+    // Activate and fake another previous config hash
+    rell.test.tx().op(
+        set_config_hash(x"AABBCC")
+    ).run();
+    rell.test.block().run();
+    assert_equals(captured_configuration_updates @* {} ( .height ), [0, 2]);
+}

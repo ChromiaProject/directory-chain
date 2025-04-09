@@ -1,0 +1,127 @@
+@test module;
+
+import lib.begin_block.*;
+import ^.helper_operations.*;
+
+function test_scheduled_callback_validation() {
+    rell.test.tx().op(
+        create_scheduled_callback_after_op(1, 1, -1)
+    ).run_must_fail("Relative time must not be negative");
+
+    rell.test.block().run();
+
+    rell.test.tx().op(
+        create_scheduled_callback_at_op(1, 1, 0)
+    ).run_must_fail("ime must be more recent than last block time");
+}
+
+function test_scheduled_callback_run_once() {
+
+    rell.test.set_next_block_time_delta(1000);
+    rell.test.block().run();
+
+    rell.test.tx().op(
+        create_scheduled_callback_after_op(1, 1, 1000)
+    ).run();
+
+    assert_true(exists(scheduled_callback @? { .context == 1, .ref_id == 1 }));
+    assert_false(exists(captured_scheduled_callbacks @? { .context == 1, .ref_id == 1 }));
+
+    rell.test.block().run();
+    rell.test.block().run();
+
+    assert_false(exists(scheduled_callback @? { .context == 1, .ref_id == 1 }));
+    assert_true(exists(captured_scheduled_callbacks @? { .context == 1, .ref_id == 1 }));
+}
+
+function test_scheduled_callback_run_repeated_and_cancel() {
+
+    rell.test.set_next_block_time(1);
+    rell.test.tx().op(
+        create_scheduled_callback_after_op(1, 1, 1000, 1000)
+    ).run();
+
+    assert_true(exists(scheduled_callback @? { .context == 1, .ref_id == 1 }));
+    assert_equals(captured_scheduled_callbacks @ { .context == 1, .ref_id == 1 } ( @sum 1 ), 0);
+
+    rell.test.set_next_block_time(1001);
+    rell.test.block().run();
+
+    // Run first time
+    rell.test.block().run();
+    assert_true(exists(scheduled_callback @? { .context == 1, .ref_id == 1 }));
+    assert_equals(captured_scheduled_callbacks @ { .context == 1, .ref_id == 1 } ( @sum 1 ), 1);
+
+    // Run second time
+    rell.test.block().run();
+    assert_equals(captured_scheduled_callbacks @ { .context == 1, .ref_id == 1 } ( @sum 1 ), 2);
+
+    // Third time - and remove
+    rell.test.set_next_block_time_delta(1);
+    rell.test.block().run();
+    rell.test.tx().op(
+        remove_scheduled_callback_op(1, 1)
+    ).run();
+    assert_equals(captured_scheduled_callbacks @ { .context == 1, .ref_id == 1 } ( @sum 1 ), 3);
+
+    // No fourth time - still 3
+    rell.test.set_next_block_time_delta(1000);
+    rell.test.block().run();
+    rell.test.block().run();
+    rell.test.block().run();
+    assert_equals(captured_scheduled_callbacks @ { .context == 1, .ref_id == 1 } ( @sum 1 ), 3);
+}
+
+function test_pause_and_unpause_scheduled_callback() {
+
+    val init_time = 5000000;
+
+    // Set time and delta for each block built
+    rell.test.set_next_block_time(init_time);
+    rell.test.block().run();
+
+    // Add delayed event
+    rell.test.set_next_block_time_delta(5);
+    rell.test.tx().op(
+        create_scheduled_callback_after_op(1, 2, 100)
+    ).run();
+
+    // Trigger time will be 99 due to first "last block time" is -1
+    assert_equals(scheduled_callback @ { .context == 1, .ref_id == 2 } ( .time ), init_time + 100);
+
+    // Lets pause by inactivate it
+    rell.test.set_next_block_time_delta(5);
+    rell.test.tx().op(
+        set_scheduled_callback_active_op(1, 2, false)
+    ).run();
+
+    // Trigger time should not be set to the time left, not the actual execution time. Time left should be 95ms
+    assert_equals(scheduled_callback @ { .context == 1, .ref_id == 2 } ( .time ), 95);
+
+    // Pausing for some time now
+    rell.test.set_next_block_time_delta(4000000);
+    rell.test.block().run();
+
+    // Since event is still inactive/paused, nothing has changed
+    assert_equals(scheduled_callback @ { .context == 1, .ref_id == 2 } ( .time ), 95);
+
+    // Lets unpause it by activate it
+    rell.test.set_next_block_time_delta(5);
+    rell.test.tx().op(
+        set_scheduled_callback_active_op(1, 2, true)
+    ).run();
+
+    // Now the delayed event should have the actual time set for when to be triggered
+    assert_equals(scheduled_callback @ { .context == 1, .ref_id == 2 } ( .time ), init_time + 4000000 + 100 + 5);
+
+    // Wait 90ms - no trigger - should be 5ms left
+    rell.test.set_next_block_time_delta(90);
+    rell.test.block().run();
+    assert_true(empty(captured_scheduled_callbacks @* {}));
+
+    // Wait 5ms - the delayed event should have been waiting a total of 100ms now and be triggered
+    rell.test.set_next_block_time_delta(5);
+    rell.test.block().run();
+    assert_false(exists(scheduled_callback @? { .context == 1, .ref_id == 2 }));
+    assert_true(exists(captured_scheduled_callbacks @* { .context == 1, .ref_id == 2 }));
+}

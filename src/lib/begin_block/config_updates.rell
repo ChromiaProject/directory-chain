@@ -1,0 +1,18 @@
+
+function being_block_detect_config_update() {
+    if (chain_context.args.detect_configuration_updates and is_blockchain_configuration_changed()) {
+        on_configuration_update();
+    }
+}
+
+function is_blockchain_configuration_changed() {
+
+    val new_config_hash = chain_context.raw_config.hash();
+    if (begin_block.current_configuration_hash != new_config_hash) {
+        log("New chain configuration detected at height %d to %s".format(op_context.block_height, new_config_hash));
+        begin_block.current_configuration_hash = new_config_hash;
+        return true;
+    }
+
+    return false;
+}

@@ -1,0 +1,86 @@
+/**
+ * This file contains the public API for this library and will be the safest functions to depend on in your dapp.
+ */
+
+/** Same as __begin_block but enables you to add multiple functions in a safer way. */
+@extendable function on_begin_block(height: integer) {}
+
+/** If enabled to monitor for new configurations, this is called when a new configuration is detected. */
+@extendable function on_configuration_update() {}
+
+/**
+ * Function is called when a scheduled callback is triggered at a specific time.
+ * @param context The context set for the scheduled callback when added
+ * @param ref_id The reference id set for the scheduled callback when added
+ */
+@extendable function on_scheduled_callback(context: integer, ref_id: integer) {}
+
+/**
+ * An alternative to on_scheduled_callback but with a context based map to only receive callbacks for specific contexts.
+ *
+ * The map provided function takes ref_id as parameter.
+ */
+@extendable function on_scheduled_callback_map(): map<integer, (integer) -> unit>;
+
+/**
+ * Create a scheduled callback to be triggered at the specified time. When triggered the extendable functions
+ * are called with the provided context and ref_id.
+ *
+ * @param context Any number to group callbacks together if needed.
+ * @param ref_id A reference ID to trace what callback this is for.
+ * @param delay_time Time from "now" until the callback is to be triggered. In milliseconds.
+ * @param repeatable_delay Optional. Set if this callback is going to be called repeatedly, with the time in milliseconds between each call.
+ * @return The rowid of the created callback.
+ */
+function create_scheduled_callback_after(
+    context: integer,
+    ref_id: integer,
+    delay_time: integer,
+    repeatable_delay: integer? = null
+) = create_scheduled_callback_after_internal(context, ref_id, delay_time, repeatable_delay);
+
+/**
+ * Create a scheduled callback to be triggered at the specified time. When triggered the extendable functions
+ * are called with the provided context and ref_id.
+ *
+ * @param context Any number to group callbacks together if needed.
+ * @param ref_id A reference ID to trace what callback this is for.
+ * @param time The "exact" time the callback is to be triggered.
+ * @param repeatable_delay Optional. Set if this callback is going to be called repeatedly, with the time in milliseconds between each call.
+ * @return The rowid of the created callback.
+ */
+function create_scheduled_callback_at(
+    context: integer,
+    ref_id: integer,
+    time: timestamp,
+    repeatable_delay: integer? = null
+) = create_scheduled_callback_at_internal(context, ref_id, time, repeatable_delay);
+
+/**
+ * Cancel and remove a scheduled callback.
+ *
+ * @param context The context of the callback.
+ * @param ref_id The reference ID of the callback.
+ */
+function remove_scheduled_callback(context: integer, ref_id: integer) =
+    remove_scheduled_callback_internal(context, ref_id);
+
+/**
+ * Cancel and remove a scheduled callback.
+ *
+ * @param rowid The rowid returned when creating the callback.
+ */
+function remove_scheduled_callback_by_rowid(rowid) =
+    remove_scheduled_callback_by_rowid_internal(rowid);
+
+/**
+ * Activate or inactivate a scheduled callback. If inactivated (or paused) the callback will no longer be executed
+ * at the planned original time. Instead it will be paused until it is activated (or unpaused) and it will then be
+ * rescheduled to execute at the time it had left when paused, i.e. the total elapsed time of the callback is the same.
+ *
+ * @param context Context of the callback.
+ * @param ref_id Reference ID of the callback.
+ * @param active Set to `true` to make the callback execute at the given time, or `false` to pause this callback.
+ */
+function set_scheduled_callback_active(context: integer, ref_id: integer, active: boolean) =
+    set_scheduled_callback_active_internal(context, ref_id, active);
