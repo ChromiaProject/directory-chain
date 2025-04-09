@@ -6,9 +6,7 @@ See [api.rell](../../src/lib/begin_block/api.rell) for the complete API referenc
 
 ## Begin block
 
-Extend `on_begin_block(height: integer)` to execute code on every block. This works similarly to the built-in `__begin_block` function, but offers two advantages:
-1. You can register multiple functions to be executed on each block
-2. Functions are executed within a `try_call` to prevent errors from interrupting block building
+Extend `on_begin_block(height: integer)` to execute code on every block. This works similarly to the built-in `__begin_block` function, but can be extended by multiple functions if needed.
 
 ```rell
 import lib.begin_block.*;
