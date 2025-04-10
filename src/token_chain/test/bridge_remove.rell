@@ -1,0 +1,96 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import ^.helper_operations.*;
+
+namespace eif {
+    import dynamic_config: lib.eif.dynamic_config_common;
+    import lib.hbridge;
+}
+
+namespace ft4 {
+    import test_utils: lib.ft4.test.core;
+}
+
+struct module_args {
+    auth_privkey: byte_array = x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6";
+}
+
+function test_remove_token_bridge() {
+
+    val proposer = setup(chain_context.args.auth_privkey,
+            token_chain_constants.listing_fee + // For token
+            token_chain_constants.bridge_fee // for bridge
+    );
+    val bridge_contract = x"AA".repeat(20);
+    val token_contract = x"BB".repeat(20);
+
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+    val test_token = token @ { };
+
+    val propose_bridge_op = propose_token_bridge(
+        test_token.asset.id,
+        [bridge_configuration(
+            network_id = 97,
+            bridge_contract = bridge_contract,
+            token_contract = token_contract,
+            eif.hbridge.bridge_mode.foreign,
+            true,
+            skip_to_height = 0,
+        )]
+    );
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_bridge_op)
+    ).op(
+        propose_bridge_op
+    ).run();
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val registered_bridges = eif.hbridge.get_bridge_contracts(97);
+    assert_equals(registered_bridges.size(), 1);
+    val registered_bridge = registered_bridges[0];
+    assert_equals(registered_bridge.contract_address, bridge_contract);
+
+    val registered_bridge_assets = registered_bridge.erc20_assets;
+    assert_equals(registered_bridge_assets.size(), 1);
+    val bridge_asset = registered_bridge_assets[0];
+    assert_equals(bridge_asset.token_address, token_contract);
+
+    assert_events(("icmf_message", (
+        topic = eif.dynamic_config.eif_event_receiver_dynamic_config_topic_v2,
+        body = [97: eif.dynamic_config.eif_event_receiver_dynamic_config_message_v2(
+            contracts = [eif.dynamic_config.contract_to_fetch(
+                bridge_contract,
+                0
+            )],
+            events = list<eif.dynamic_config.event_def>()
+        )
+    ].to_gtv()
+    ).to_gtv_pretty()));
+
+    // Remove
+    val remove_token_bridge_op = remove_token_bridge(
+            test_token.asset.id,
+            [network_bridge(
+                97,
+                bridge_contract,
+            )]
+        );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, remove_token_bridge_op)
+    ).op(
+        remove_token_bridge_op
+    ).run();
+
+    // Assert removed
+    assert_equals(eif.hbridge.get_bridge_contracts(97).size(), 0);
+    assert_events(("icmf_message", (
+        topic = eif.dynamic_config.eif_event_receiver_dynamic_remove_topic,
+        body = eif.dynamic_config.eif_event_receiver_dynamic_remove_message(
+            bridges = [eif.dynamic_config.network_contract_address(97, bridge_contract)],
+        )
+    .to_gtv()
+    ).to_gtv_pretty()));
+}
