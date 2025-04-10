@@ -13,7 +13,7 @@ namespace ft4 {
     import test_utils: lib.ft4.test.core;
 }
 
-val ticket_id_after_init = 35;
+val ticket_id_after_init = 29;
 
 struct module_args {
     oracle_privkey: byte_array;
@@ -635,33 +635,5 @@ function create_cluster_nodes(provider, system: boolean = true, dapp_nodes: inte
 function do_receive_ticket_container_result_message(body: gtv) {
     rell.test.tx().op(
         receive_ticket_container_result_message_op(body)
-    ).run();
-}
-
-function do_create_erc20_deposit_event(network_id: integer, evm_address: byte_array, amount: integer) {
-    rell.test.tx().op(
-        create_erc20_deposit_event_op(network_id, eif.hbridge.deposited_erc20_event(
-            bridge_address = if (network_id == 97) x"2Cf48D2891CC286d18596Df1261D011d1B78E03E" else x"2Cf48D2891CC286d18596Df1261D011d1B78E04E",
-            sender = evm_address,
-            amount = amount * units_per_asset,
-            token_address = if (network_id == 97) x"AaE0437b279696464f5d49C54f9E8Fe5488F9323" else x"Aa1ae68ABcd32804132370B9f73c3160dbbfC593",
-            beneficiary = x"0000000000000000000000000000000000000000000000000000000000000000",
-            evm_tx_hash = "NULL".hash()
-        ))
-    ).run();
-}
-
-function do_create_erc20_withdrawal(network_id: integer, amount: integer, keypair: rell.test.keypair, evm_address: byte_array) {
-    rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(keypair.priv, eif.hbridge.bridge_ft4_token_to_evm(network_id, get_asset().id, amount * units_per_asset, evm_address))
-    ).op(
-        eif.hbridge.bridge_ft4_token_to_evm(network_id, get_asset().id, amount * units_per_asset, evm_address)
-    ).run();
-    return eif.hbridge.erc20_withdrawal @ { .amount == amount * units_per_asset } ( .event_hash );
-}
-
-function do_update_withdrawal_status(hash: byte_array, status: eif.hbridge.withdrawal_status) {
-    rell.test.tx().op(
-        update_withdrawal_status_op(hash, status)
     ).run();
 }
