@@ -645,3 +645,17 @@ function do_receive_ticket_container_result_message(body: gtv) {
         receive_ticket_container_result_message_op(body)
     ).run();
 }
+
+function register_test_account_op(pubkey, mint_amount: integer = 1000 * 1000000) {
+    rell.test.tx().op(
+        register_test_account(pubkey)
+    ).run();
+
+    val account = ft4.accounts.account_by_id(ft4.accounts.get_account_id_from_signers([pubkey]));
+
+    rell.test.tx().op(
+        mint_to(account, mint_amount)
+    ).run();
+
+    return account;
+}

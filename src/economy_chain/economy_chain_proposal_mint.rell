@@ -9,6 +9,12 @@ struct pending_minting_data {
     account_id: byte_array;
 }
 
+/** Keep tracks of the amount minted for the configured period of time. */
+object minting_period_amount {
+    mutable first_mint: timestamp = 0;
+    mutable total_amount: integer = 0;
+}
+
 @extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_mint.name: apply_ec_pending_minting(*)];
 @extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_mint.name: cleanup_ec_pending_minting(*)];
 
@@ -61,5 +67,22 @@ function cleanup_ec_pending_minting(proposal: common_proposal) {
 function validate_ec_minting_proposal(proposal_details: pending_minting) {
 
     require(proposal_details.amount > 0, "Amount must be greater than 0");
+
+    if (op_context.last_block_time - minting_period_amount.first_mint < chain_context.args.chromia_foundation_mint_time_limit_ms) {
+        minting_period_amount.total_amount += proposal_details.amount;
+    } else {
+        minting_period_amount.first_mint = op_context.last_block_time;
+        minting_period_amount.total_amount = proposal_details.amount;
+    }
+
+    require(minting_period_amount.total_amount <= chain_context.args.chromia_foundation_mint_amount_limit,
+            "Limit (%s) is reached with %s minted within %s ms".format(
+                chain_context.args.chromia_foundation_mint_amount_limit,
+                minting_period_amount.total_amount,
+                chain_context.args.chromia_foundation_mint_time_limit_ms));
+
     return ft4.accounts.Account(proposal_details.account_id);
 }
+
+function get_ec_mint_proposal_time_limit_ms() = chain_context.args.chromia_foundation_mint_time_limit_ms;
+function get_ec_mint_proposal_amount_limit() = chain_context.args.chromia_foundation_mint_amount_limit;
