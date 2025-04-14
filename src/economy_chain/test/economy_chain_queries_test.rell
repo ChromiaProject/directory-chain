@@ -190,7 +190,13 @@ function test_get_cluster_creation_status_with_failure() {
             "voter_set_name",
             1,
             1,
-            "tag1"),
+            container_unit_cpu = 50,
+            container_unit_ram = 2048,
+            container_unit_io_read = 25,
+            container_unit_io_write = 20,
+            container_unit_storage = 16384,
+            system_container_units = 4,
+            tag_name = "tag1"),
         receive_create_cluster_error_message_op(cluster_name, "error_message"))
         .sign(provider_key)
         .run();
@@ -724,7 +730,10 @@ function test_get_tag_proposal() {
 function test_get_cluster_create_proposal() {
 
     rell.test.tx().op(
-        create_pending_cluster(cluster_name, "t1", pending_cluster_status.PENDING_APPROVAL))
+        create_pending_cluster(cluster_name, "t1", pending_cluster_status.PENDING_APPROVAL,
+        container_unit_cpu = 100,
+        container_unit_io_read = 30,
+        ))
         .sign(provider_key)
         .run();
 
@@ -737,6 +746,15 @@ function test_get_cluster_create_proposal() {
     assert_equals(cluster_create_proposal.voter_set_name, "voter_set_name");
     assert_equals(cluster_create_proposal.cluster_units, 1);
     assert_equals(cluster_create_proposal.extra_storage, 1);
+
+    assert_equals(cluster_create_proposal.container_unit_cpu, 100);
+    assert_equals(cluster_create_proposal.container_unit_ram, 2048);
+    assert_equals(cluster_create_proposal.container_unit_io_read, 30);
+    assert_equals(cluster_create_proposal.container_unit_io_write, 20);
+    assert_equals(cluster_create_proposal.container_unit_storage, 16384);
+    assert_equals(cluster_create_proposal.system_container_units, 4);
+
+
     assert_equals(cluster_create_proposal.status, pending_cluster_status.PENDING_APPROVAL);
 }
 

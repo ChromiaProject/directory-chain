@@ -39,13 +39,20 @@ operation create_pending_cluster(
     tag_name: text,
     status: pending_cluster_status = pending_cluster_status.PENDING_APPROVAL,
     scu_price: integer = 1 * units_per_usd,
-    extra_storage_price: integer = 1 * units_per_usd
+    extra_storage_price: integer = 1 * units_per_usd,
+    container_unit_cpu: integer = 50,
+    container_unit_ram: integer = 2048,
+    container_unit_io_read: integer = 25,
+    container_unit_io_write: integer = 20,
+    container_unit_storage: integer = 16384,
+    system_container_units: integer = 4,
 ) {
 
     val tag = create_or_return_tag(tag_name, scu_price = scu_price, extra_storage_price = extra_storage_price);
     val proposal = create_proposal(common_proposal_type.ec_cluster_create);
 
     create pending_cluster(
+        proposal,
         name = cluster_name,
         tag,
         proposer_pubkey = x"",
@@ -53,7 +60,12 @@ operation create_pending_cluster(
         voter_set_name = "voter_set_name",
         cluster_units = 1,
         extra_storage = 1,
-        proposal,
+        container_unit_cpu,
+        container_unit_ram,
+        container_unit_io_read,
+        container_unit_io_write,
+        container_unit_storage,
+        system_container_units,
         status
     );
 }

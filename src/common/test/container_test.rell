@@ -1,0 +1,110 @@
+@test module;
+
+import ^.helper_operations.*;
+import ^^.*;
+import ^^.test.setup.*;
+import ^^.test.util.constants.*;
+import direct_cluster.*;
+
+function test_create_cluster_impl_default_container_units() {
+
+    setup_module();
+    val provider = provider @ {};
+
+    rell.test.tx().op(
+        create_cluster_impl_op(provider, "c1", system_p_voter_set(), [initial_provider.pub], cluster_creation_data())
+    ).run();
+
+    val cluster = require_cluster("c1");
+    assert_equals(cluster.cluster_units, standard_cluster_defaults.cluster_units);
+    assert_equals(cluster.extra_storage, standard_cluster_defaults.extra_storage);
+    assert_equals(cluster.system_container_units, system_container_defaults.container_units);
+    assert_equals(cluster.container_unit_cpu, standard_container_unit.cpu);
+    assert_equals(cluster.container_unit_ram, standard_container_unit.ram);
+    assert_equals(cluster.container_unit_io_read, standard_container_unit.io_read);
+    assert_equals(cluster.container_unit_io_write, standard_container_unit.io_write);
+    assert_equals(cluster.container_unit_storage, standard_container_unit.storage);
+}
+
+function test_create_cluster_impl_custom_container_units() {
+
+    setup_module();
+    val provider = provider @ {};
+
+    rell.test.tx().op(
+        create_cluster_impl_op(provider, "c1", system_p_voter_set(), [initial_provider.pub], cluster_creation_data(
+            cluster_units = 0,
+        ))
+    ).run_must_fail("Cluster must have at least 1 cluster unit");
+
+    rell.test.tx().op(
+        create_cluster_impl_op(provider, "c1", system_p_voter_set(), [initial_provider.pub], cluster_creation_data(
+            extra_storage = -1,
+        ))
+    ).run_must_fail("Extra storage must not be negative");
+
+    rell.test.tx().op(
+        create_cluster_impl_op(provider, "c1", system_p_voter_set(), [initial_provider.pub], cluster_creation_data(
+            system_container_units = -1,
+        ))
+    ).run_must_fail("System container units must not be negative");
+
+    rell.test.tx().op(
+        create_cluster_impl_op(provider, "c1", system_p_voter_set(), [initial_provider.pub], cluster_creation_data(
+            system_container_units = standard_cluster_defaults.cluster_units * standard_cluster_unit.container_units + 1,
+        ))
+    ).run_must_fail("System container requires more container units than cluster supports");
+
+    rell.test.tx().op(
+        create_cluster_impl_op(provider, "c1", system_p_voter_set(), [initial_provider.pub], cluster_creation_data(
+            container_unit_cpu = 0,
+        ))
+    ).run_must_fail("Container unit CPU must be at least 1");
+
+    rell.test.tx().op(
+        create_cluster_impl_op(provider, "c1", system_p_voter_set(), [initial_provider.pub], cluster_creation_data(
+            container_unit_ram = 0,
+        ))
+    ).run_must_fail("Container unit RAM must be at least 1");
+
+    rell.test.tx().op(
+        create_cluster_impl_op(provider, "c1", system_p_voter_set(), [initial_provider.pub], cluster_creation_data(
+            container_unit_io_read = 0,
+        ))
+    ).run_must_fail("Container unit I/O read must be at least 1");
+
+    rell.test.tx().op(
+        create_cluster_impl_op(provider, "c1", system_p_voter_set(), [initial_provider.pub], cluster_creation_data(
+            container_unit_io_write = 0,
+        ))
+    ).run_must_fail("Container unit I/O write must be at least 1");
+
+    rell.test.tx().op(
+        create_cluster_impl_op(provider, "c1", system_p_voter_set(), [initial_provider.pub], cluster_creation_data(
+            container_unit_storage = 0,
+        ))
+    ).run_must_fail("Container unit storage must be at least 1");
+
+    rell.test.tx().op(
+        create_cluster_impl_op(provider, "c1", system_p_voter_set(), [initial_provider.pub], cluster_creation_data(
+            cluster_units = 10,
+            extra_storage = 99000,
+            system_container_units = 2,
+            container_unit_cpu = 1,
+            container_unit_ram = 2,
+            container_unit_io_read = 3,
+            container_unit_io_write = 4,
+            container_unit_storage = 5,
+        ))
+    ).run();
+
+    val cluster = require_cluster("c1");
+    assert_equals(cluster.cluster_units, 10);
+    assert_equals(cluster.extra_storage, 99000);
+    assert_equals(cluster.system_container_units, 2);
+    assert_equals(cluster.container_unit_cpu, 1);
+    assert_equals(cluster.container_unit_ram, 2);
+    assert_equals(cluster.container_unit_io_read, 3);
+    assert_equals(cluster.container_unit_io_write, 4);
+    assert_equals(cluster.container_unit_storage, 5);
+}

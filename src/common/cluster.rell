@@ -8,8 +8,21 @@ function create_cluster_impl(me: provider, name, governor: voter_set, providers:
         governor,
         false,
         cluster_units = cluster_creation_data.cluster_units,
-        extra_storage = cluster_creation_data.extra_storage
+        extra_storage = cluster_creation_data.extra_storage,
+        container_unit_cpu = cluster_creation_data.container_unit_cpu ?: standard_container_unit.cpu,
+        container_unit_ram = cluster_creation_data.container_unit_ram ?: standard_container_unit.ram,
+        container_unit_io_read = cluster_creation_data.container_unit_io_read ?: standard_container_unit.io_read,
+        container_unit_io_write = cluster_creation_data.container_unit_io_write ?: standard_container_unit.io_write,
+        container_unit_storage = cluster_creation_data.container_unit_storage ?: standard_container_unit.storage,
+        system_container_units = cluster_creation_data.system_container_units ?: system_container_defaults.container_units,
     );
+
+    require(c.system_container_units >= 0, "System container units must not be negative");
+    require(c.container_unit_cpu > 0, "Container unit CPU must be at least 1");
+    require(c.container_unit_ram > 0, "Container unit RAM must be at least 1");
+    require(c.container_unit_io_read > 0, "Container unit I/O read must be at least 1");
+    require(c.container_unit_io_write > 0, "Container unit I/O write must be at least 1");
+    require(c.container_unit_storage > 0, "Container unit storage must be at least 1");
 
     for (p_key in providers) {
         val provider = require_provider(p_key);
@@ -23,6 +36,7 @@ function create_cluster_impl(me: provider, name, governor: voter_set, providers:
         cluster = c,
         voter_set = governor
     );
+    require(get_available_container_units(c) >= 0, "System container requires more container units than cluster supports");
 
     after_cluster_creation(me, c);
     return c;

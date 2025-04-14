@@ -1,6 +1,6 @@
 function create_system_container(me: provider, name, cluster, voter_set): container {
     val c = create container(name, cluster, voter_set, me, system = true);
-    create container_resource_limit(c, container_resource_limit_type.container_units, system_container_defaults.container_units);
+    create container_resource_limit(c, container_resource_limit_type.container_units, cluster.system_container_units);
     create container_resource_limit(c, container_resource_limit_type.max_blockchains, system_container_defaults.max_blockchains);
     create container_resource_limit(c, container_resource_limit_type.extra_storage, system_container_defaults.extra_storage);
     return c;
@@ -70,7 +70,6 @@ function create_container_impl(me: provider, name, cluster, consensus_threshold:
 
 function remove_container_and_voter_set(container) {
     if (empty(is_container_available_for_removal(container))) {
-        val vs = container.deployer;
         remove_container_impl(container);
     }
 }

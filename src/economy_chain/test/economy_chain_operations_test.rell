@@ -12,7 +12,7 @@ val tag_1_name = "bob_tag";
 val tag_2_name = "bob_second_tag";
 
 function test_create_cluster() {
-    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_tag(
             my_pubkey = provider_pubkey,
@@ -26,23 +26,36 @@ function test_create_cluster() {
             voter_set_name = "voter_set",
             cluster_units = 1,
             extra_storage = 2,
+            container_unit_cpu = 50,
+            container_unit_ram = 2048,
+            container_unit_io_read = 25,
+            container_unit_io_write = 20,
+            container_unit_storage = 16384,
+            system_container_units = 4,
             tag_name = tag_1_name))
         .sign(provider_key)
         .run();
 
-    val expected = create_cluster_message(name = cluster_name,
+    val expected = create_cluster_v2_message(name = cluster_name,
         governor_voter_set_name = "governor_voter_set",
         voter_set_name = "voter_set",
         cluster_units = 1,
         extra_storage = 2,
-        proposer_pubkey= rell.test.pubkeys.bob);
+        proposer_pubkey= rell.test.pubkeys.bob,
+        container_unit_cpu = 50,
+        container_unit_ram = 2048,
+        container_unit_io_read = 25,
+        container_unit_io_write = 20,
+        container_unit_storage = 16384,
+        system_container_units = 4,
+    );
 
     val pending_cluster = pending_cluster @? { .name == cluster_name };
 
     assert_not_null(pending_cluster);
 
     assert_equals(pending_cluster.status, pending_cluster_status.PENDING_CREATION);
-    assert_events(("icmf_message",(topic = create_cluster_topic, body = expected.to_gtv()).to_gtv_pretty()));
+    assert_events(("icmf_message",(topic = create_cluster_v2_topic, body = expected.to_gtv()).to_gtv_pretty()));
 }
 
 function test_create_cluster_with_voting() {
@@ -53,11 +66,17 @@ function test_create_cluster_with_voting() {
 
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
 
-    val expected = create_cluster_message(name = cluster_name,
+    val expected = create_cluster_v2_message(name = cluster_name,
         governor_voter_set_name = "governor_voter_set",
         voter_set_name = "voter_set",
         cluster_units = 1,
         extra_storage = 2,
+        container_unit_cpu = 50,
+        container_unit_ram = 2048,
+        container_unit_io_read = 25,
+        container_unit_io_write = 20,
+        container_unit_storage = 16384,
+        system_container_units = 4,
         proposer_pubkey= rell.test.pubkeys.bob);
 
     val pending_cluster = pending_cluster @? { .name == cluster_name };
@@ -65,7 +84,7 @@ function test_create_cluster_with_voting() {
     assert_not_null(pending_cluster);
 
     assert_equals(pending_cluster.status, pending_cluster_status.PENDING_CREATION);
-    assert_events(("icmf_message",(topic = create_cluster_topic, body = expected.to_gtv()).to_gtv_pretty()));
+    assert_events(("icmf_message",(topic = create_cluster_v2_topic, body = expected.to_gtv()).to_gtv_pretty()));
 }
 
 function test_create_cluster_revoke() {
@@ -106,7 +125,7 @@ function test_create_cluster_revoke_after_creation_failed() {
 }
 
 function test_create_cluster_fail_existing() {
-    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_test_cluster(cluster_name, tag_1_name))
         .sign(provider_key)
@@ -119,13 +138,19 @@ function test_create_cluster_fail_existing() {
             voter_set_name = "voter_set",
             cluster_units = 1,
             extra_storage = 2,
+            container_unit_cpu = 50,
+            container_unit_ram = 2048,
+            container_unit_io_read = 25,
+            container_unit_io_write = 20,
+            container_unit_storage = 16384,
+            system_container_units = 4,
             tag_name = tag_1_name))
         .sign(provider_key)
         .run_must_fail("Cluster %s already exists".format(cluster_name));
 }
 
 function test_create_cluster_fail_due_to_already_pending() {
-    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
 
     rell.test.tx().op(
         create_pending_cluster(cluster_name,
@@ -138,13 +163,19 @@ function test_create_cluster_fail_due_to_already_pending() {
             voter_set_name = "voter_set",
             cluster_units = 1,
             extra_storage = 2,
+            container_unit_cpu = 50,
+            container_unit_ram = 2048,
+            container_unit_io_read = 25,
+            container_unit_io_write = 20,
+            container_unit_storage = 16384,
+            system_container_units = 4,
             tag_name = tag_1_name))
         .sign(provider_key)
         .run_must_fail("There is already a pending request to create cluster with name %s".format(cluster_name));
 }
 
 function test_create_cluster_with_failed_pending_cluster() {
-    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
 
     rell.test.tx().op(
         create_pending_cluster(cluster_name,
@@ -160,13 +191,178 @@ function test_create_cluster_with_failed_pending_cluster() {
             voter_set_name = "voter_set",
             cluster_units = 1,
             extra_storage = 2,
+            container_unit_cpu = 50,
+            container_unit_ram = 2048,
+            container_unit_io_read = 25,
+            container_unit_io_write = 20,
+            container_unit_storage = 16384,
+            system_container_units = 4,
             tag_name = tag_1_name))
         .sign(provider_key)
         .run_must_fail("There is already a pending request to create cluster with name %s".format(cluster_name));
 }
 
+
+function test_create_cluster_container_unit_validations() {
+
+    add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op(
+        create_tag(
+            my_pubkey = provider_pubkey,
+            name = tag_1_name,
+            scu_price = 1,
+            extra_storage_price = 2))
+        .sign(provider_key)
+        .run();
+
+    rell.test.tx().op(
+        create_cluster(
+            my_pubkey = provider_pubkey,
+            name = cluster_name,
+            governor_voter_set_name = "governor_voter_set",
+            voter_set_name = "voter_set",
+            cluster_units = 0,
+            extra_storage = 2,
+            container_unit_cpu = 50,
+            container_unit_ram = 2048,
+            container_unit_io_read = 25,
+            container_unit_io_write = 20,
+            container_unit_storage = 16384,
+            system_container_units = 4,
+            tag_name = tag_1_name))
+        .sign(provider_key)
+        .run_must_fail("Cluster must have at least 1 cluster unit");
+
+    rell.test.tx().op(
+        create_cluster(
+            my_pubkey = provider_pubkey,
+            name = cluster_name,
+            governor_voter_set_name = "governor_voter_set",
+            voter_set_name = "voter_set",
+            cluster_units = 1,
+            extra_storage = -1,
+            container_unit_cpu = 50,
+            container_unit_ram = 2048,
+            container_unit_io_read = 25,
+            container_unit_io_write = 20,
+            container_unit_storage = 16384,
+            system_container_units = 4,
+            tag_name = tag_1_name))
+        .sign(provider_key)
+        .run_must_fail("Extra storage must not be negative");
+
+    rell.test.tx().op(
+        create_cluster(
+            my_pubkey = provider_pubkey,
+            name = cluster_name,
+            governor_voter_set_name = "governor_voter_set",
+            voter_set_name = "voter_set",
+            cluster_units = 1,
+            extra_storage = 0,
+            container_unit_cpu = 50,
+            container_unit_ram = 2048,
+            container_unit_io_read = 25,
+            container_unit_io_write = 20,
+            container_unit_storage = 16384,
+            system_container_units = -1,
+            tag_name = tag_1_name))
+        .sign(provider_key)
+        .run_must_fail("System container units must not be negative");
+
+    rell.test.tx().op(
+        create_cluster(
+            my_pubkey = provider_pubkey,
+            name = cluster_name,
+            governor_voter_set_name = "governor_voter_set",
+            voter_set_name = "voter_set",
+            cluster_units = 1,
+            extra_storage = 0,
+            container_unit_cpu = 0,
+            container_unit_ram = 2048,
+            container_unit_io_read = 25,
+            container_unit_io_write = 20,
+            container_unit_storage = 16384,
+            system_container_units = 4,
+            tag_name = tag_1_name))
+        .sign(provider_key)
+        .run_must_fail("Container unit CPU must be at least 1");
+
+    rell.test.tx().op(
+        create_cluster(
+            my_pubkey = provider_pubkey,
+            name = cluster_name,
+            governor_voter_set_name = "governor_voter_set",
+            voter_set_name = "voter_set",
+            cluster_units = 1,
+            extra_storage = 0,
+            container_unit_cpu = 50,
+            container_unit_ram = 0,
+            container_unit_io_read = 25,
+            container_unit_io_write = 20,
+            container_unit_storage = 16384,
+            system_container_units = 4,
+            tag_name = tag_1_name))
+        .sign(provider_key)
+    .run_must_fail("Container unit RAM must be at least 1");
+
+    rell.test.tx().op(
+        create_cluster(
+            my_pubkey = provider_pubkey,
+            name = cluster_name,
+            governor_voter_set_name = "governor_voter_set",
+            voter_set_name = "voter_set",
+            cluster_units = 1,
+            extra_storage = 0,
+            container_unit_cpu = 50,
+            container_unit_ram = 2048,
+            container_unit_io_read = 0,
+            container_unit_io_write = 20,
+            container_unit_storage = 16384,
+            system_container_units = 4,
+            tag_name = tag_1_name))
+        .sign(provider_key)
+    .run_must_fail("Container unit I/O read must be at least 1");
+
+    rell.test.tx().op(
+            create_cluster(
+                my_pubkey = provider_pubkey,
+                name = cluster_name,
+                governor_voter_set_name = "governor_voter_set",
+                voter_set_name = "voter_set",
+                cluster_units = 1,
+                extra_storage = 0,
+                container_unit_cpu = 50,
+                container_unit_ram = 2048,
+                container_unit_io_read = 25,
+                container_unit_io_write = 0,
+                container_unit_storage = 16384,
+                system_container_units = 4,
+                tag_name = tag_1_name))
+            .sign(provider_key)
+    .run_must_fail("Container unit I/O write must be at least 1");
+
+    rell.test.tx().op(
+        create_cluster(
+            my_pubkey = provider_pubkey,
+            name = cluster_name,
+            governor_voter_set_name = "governor_voter_set",
+            voter_set_name = "voter_set",
+            cluster_units = 1,
+            extra_storage = 0,
+            container_unit_cpu = 50,
+            container_unit_ram = 2048,
+            container_unit_io_read = 25,
+            container_unit_io_write = 20,
+            container_unit_storage = 0,
+            system_container_units = 4,
+            tag_name = tag_1_name))
+        .sign(provider_key)
+    .run_must_fail("Container unit storage must be at least 1");
+}
+
+
 function test_change_cluster_tag() {
-    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
 
     rell.test.tx().op(
         create_tag(
@@ -224,7 +420,7 @@ function test_change_cluster_tag_with_voting() {
 
 function test_update_tag() {
 
-    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_tag(
             my_pubkey = provider_pubkey,
@@ -249,7 +445,7 @@ function test_update_tag() {
 
 function test_update_tag_with_voting() {
 
-    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_tag(
             my_pubkey = provider_pubkey,
@@ -278,7 +474,7 @@ function test_update_tag_with_voting() {
 
 function test_update_tag_with_voting_revoked() {
 
-    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_tag(
             my_pubkey = provider_pubkey,
@@ -312,7 +508,7 @@ function test_update_tag_with_voting_revoked() {
 }
 
 function test_remove_tag_with_non_existing_tag() {
-    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         remove_tag(my_pubkey = provider_pubkey, name = tag_1_name))
         .sign(provider_key)
@@ -320,7 +516,7 @@ function test_remove_tag_with_non_existing_tag() {
 }
 
 function test_remove_tag() {
-    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_tag(
             my_pubkey = provider_pubkey,
@@ -337,7 +533,7 @@ function test_remove_tag() {
 }
 
 function test_remove_tag_with_voting() {
-    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_tag(
             my_pubkey = provider_pubkey,
@@ -361,7 +557,7 @@ function test_remove_tag_with_voting() {
 }
 
 function test_remove_tag_given_tag_is_used_by_cluster() {
-    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_test_cluster(cluster_name, tag_1_name),
         remove_tag(my_pubkey = provider_pubkey, name = tag_1_name))
@@ -370,7 +566,7 @@ function test_remove_tag_given_tag_is_used_by_cluster() {
 }
 
 function test_remove_tag_given_tag_is_used_by_pending_cluster() {
-    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_tag(
             my_pubkey = provider_pubkey,
@@ -384,6 +580,12 @@ function test_remove_tag_given_tag_is_used_by_pending_cluster() {
             voter_set_name = "voter_set",
             cluster_units = 1,
             extra_storage = 2,
+            container_unit_cpu = 50,
+            container_unit_ram = 2048,
+            container_unit_io_read = 25,
+            container_unit_io_write = 20,
+            container_unit_storage = 16384,
+            system_container_units = 4,
             tag_name = tag_1_name),
         remove_tag(my_pubkey = provider_pubkey, name = tag_1_name))
         .sign(provider_key)
@@ -391,7 +593,7 @@ function test_remove_tag_given_tag_is_used_by_pending_cluster() {
 }
 
 function test_remove_tag_given_tag_is_used_by_pending_cluster_tag_change() {
-    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_tag(
             my_pubkey = provider_pubkey,
@@ -410,6 +612,12 @@ function test_remove_tag_given_tag_is_used_by_pending_cluster_tag_change() {
             voter_set_name = "voter_set",
             cluster_units = 1,
             extra_storage = 2,
+            container_unit_cpu = 50,
+            container_unit_ram = 2048,
+            container_unit_io_read = 25,
+            container_unit_io_write = 20,
+            container_unit_storage = 16384,
+            system_container_units = 4,
             tag_name = tag_1_name),
         create_pending_cluster_change_tag(cluster_name, tag_1_name, tag_2_name),
         remove_tag(my_pubkey = provider_pubkey, name = tag_2_name))
@@ -418,7 +626,7 @@ function test_remove_tag_given_tag_is_used_by_pending_cluster_tag_change() {
 }
 
 function test_name_validation() {
-    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_tag(
             my_pubkey = provider_pubkey,
@@ -434,13 +642,19 @@ function test_name_validation() {
             voter_set_name = "voter_set",
             cluster_units = 1,
             extra_storage = 2,
+            container_unit_cpu = 50,
+            container_unit_ram = 2048,
+            container_unit_io_read = 25,
+            container_unit_io_write = 20,
+            container_unit_storage = 16384,
+            system_container_units = 4,
             tag_name = tag_1_name
         )
     ).sign(provider_key).run_must_fail(invalid_entity_message);
 }
 
 function test_price_validation() {
-    val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_tag(
             my_pubkey = provider_pubkey,

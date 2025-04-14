@@ -39,6 +39,8 @@ struct cluster_data {
     is_operational: boolean;
     /** Added for backwards compatibility, use `is_operational` instead */
     operational: boolean?;
+
+    /** Cluster units supported by cluster */
     cluster_units: integer?;
 
     /** extra storage in MiB */
@@ -161,3 +163,39 @@ query get_cluster_blockchains(name) = cm_get_cluster_blockchains(name);
 query get_cluster_api_urls(name) {
     return (cluster_node, cluster) @* { cluster.name == name and cluster == cluster_node.cluster } ( cluster_node.node.api_url );
 }
+
+
+/**
+ * Resource limits for 1 container unit.
+ */
+struct container_unit_resource_limits {
+    /** Container unit CPU limitation. Percent of cpus, i.e. 50 = 0.5 vCPU */
+    cpu: integer;
+
+    /** Container unit memory limitation (MiB) */
+    ram: integer;
+
+    /** Container unit I/O read limitation (MiB/s) */
+    io_read: integer;
+
+    /** Container unit I/O write limitation (MiB/s) */
+    io_write: integer;
+
+    /** Container unit storage limitation (MiB) */
+    storage: integer;
+}
+
+/**
+ * Return resource limit specification for 1 cluster unit.
+ */
+query get_cluster_container_unit_limits(cluster_name: text) {
+    val cluster = require_cluster(cluster_name);
+    return container_unit_resource_limits(
+        cpu = cluster.container_unit_cpu,
+        ram = cluster.container_unit_ram,
+        io_read = cluster.container_unit_io_read,
+        io_write = cluster.container_unit_io_write,
+        storage = cluster.container_unit_storage,
+    );
+}
+

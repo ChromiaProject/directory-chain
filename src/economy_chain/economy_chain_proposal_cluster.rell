@@ -1,4 +1,5 @@
 entity pending_cluster {
+    proposal: common_proposal;
     key name;
     tag: tag;
     proposer_pubkey: pubkey;
@@ -8,7 +9,15 @@ entity pending_cluster {
 
     /** extra storage in MiB */
     extra_storage: integer;
-    proposal: common_proposal;
+
+    // Default value can be removed once this is deployed on all networks
+    container_unit_cpu: integer = 50;
+    container_unit_ram: integer = 2048;
+    container_unit_io_read: integer = 25;
+    container_unit_io_write: integer = 20;
+    container_unit_storage: integer = 16384;
+    system_container_units: integer = 4;
+
     mutable status: pending_cluster_status;
 }
 
@@ -25,7 +34,13 @@ operation create_cluster(
     voter_set_name: text,
     cluster_units: integer,
     extra_storage: integer,
-    tag_name: text
+    tag_name: text,
+    container_unit_cpu: integer,
+    container_unit_ram: integer,
+    container_unit_io_read: integer,
+    container_unit_io_write: integer,
+    container_unit_storage: integer,
+    system_container_units: integer,
 ) {
     val provider = require_is_system_provider_and_signer(my_pubkey);
 
@@ -33,10 +48,19 @@ operation create_cluster(
     require(pending_cluster @? { name } == null, "There is already a pending request to create cluster with name %s".format(name));
     validate_entity_name(name);
     val tag = require_tag(tag_name);
+    require(cluster_units > 0, "Cluster must have at least 1 cluster unit");
+    require(extra_storage >= 0, "Extra storage must not be negative");
+    require(system_container_units >= 0, "System container units must not be negative");
+    require(container_unit_cpu > 0, "Container unit CPU must be at least 1");
+    require(container_unit_ram > 0, "Container unit RAM must be at least 1");
+    require(container_unit_io_read > 0, "Container unit I/O read must be at least 1");
+    require(container_unit_io_write > 0, "Container unit I/O write must be at least 1");
+    require(container_unit_storage > 0, "Container unit storage must be at least 1");
 
     val proposal = create_system_p_proposal(common_proposal_type.ec_cluster_create, provider, "Create economy chain cluster %s".format(name));
 
     create pending_cluster(
+        proposal,
         name = name,
         tag,
         proposer_pubkey = provider.pubkey,
@@ -44,7 +68,12 @@ operation create_cluster(
         voter_set_name = voter_set_name,
         cluster_units,
         extra_storage,
-        proposal,
+        container_unit_cpu,
+        container_unit_ram,
+        container_unit_io_read,
+        container_unit_io_write,
+        container_unit_storage,
+        system_container_units,
         pending_cluster_status.PENDING_APPROVAL
     );
 
@@ -64,6 +93,12 @@ query get_cluster_create_proposal(proposal_id: rowid): pending_cluster_data {
         voter_set_name = pending_cluster.voter_set_name,
         cluster_units = pending_cluster.cluster_units,
         extra_storage = pending_cluster.extra_storage,
+        container_unit_cpu = pending_cluster.container_unit_cpu,
+        container_unit_ram = pending_cluster.container_unit_ram,
+        container_unit_io_read = pending_cluster.container_unit_io_read,
+        container_unit_io_write = pending_cluster.container_unit_io_write,
+        container_unit_storage = pending_cluster.container_unit_storage,
+        system_container_units = pending_cluster.system_container_units,
         status = pending_cluster.status
     );
 }
@@ -76,15 +111,21 @@ function apply_cluster_create(proposal: common_proposal) {
         log("Received accepted cluster creation proposal with no pending_cluster. Proposal: %s".format(proposal));
     } else {
 
-        val create_cluster_message = create_cluster_message(
+        val create_cluster_message = create_cluster_v2_message(
             name = pending_cluster.name,
             governor_voter_set_name = pending_cluster.governor_voter_set_name,
             voter_set_name = pending_cluster.voter_set_name,
             cluster_units = pending_cluster.cluster_units,
             extra_storage = pending_cluster.extra_storage,
+            container_unit_cpu = pending_cluster.container_unit_cpu,
+            container_unit_ram = pending_cluster.container_unit_ram,
+            container_unit_io_read = pending_cluster.container_unit_io_read,
+            container_unit_io_write = pending_cluster.container_unit_io_write,
+            container_unit_storage = pending_cluster.container_unit_storage,
+            system_container_units = pending_cluster.system_container_units,
             proposer_pubkey = pending_cluster.proposer_pubkey);
 
-        send_message(create_cluster_topic, create_cluster_message.to_gtv());
+        send_message(create_cluster_v2_topic, create_cluster_message.to_gtv());
 
         pending_cluster.status = pending_cluster_status.PENDING_CREATION;
 
