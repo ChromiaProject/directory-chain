@@ -13,9 +13,8 @@ struct pending_price_oracle_rate_data {
 @extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_price_oracle_rate.name: apply_ec_pending_price_oracle_rate(*)];
 @extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_price_oracle_rate.name: cleanup_ec_pending_price_oracle_rate(*)];
 
-operation propose_price_oracle_rate(rates: list<pending_price_oracle_rate_data>) {
-
-    val provider = require_system_provider_signer_entity();
+operation propose_price_oracle_rate(my_pubkey: pubkey, rates: list<pending_price_oracle_rate_data>) {
+    val provider = require_is_system_provider_and_signer(my_pubkey);
     val proposal = create common_proposal(
         op_context.last_block_time,
         common_proposal_type.ec_price_oracle_rate,

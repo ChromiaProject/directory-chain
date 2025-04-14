@@ -14,35 +14,35 @@ val key3 = rell.test.keypairs.dave;
 val key4 = rell.test.keypairs.frank;
 val key5 = rell.test.keypairs.eve;
 
-function test_require_system_provider_signer_entity__basic() {
+function test_require_is_system_provider_and_signer__basic() {
 
     add_provider(provider_key1.pub, true);
 
     // Invalid - Not signed
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).run_must_fail("Expected system provider signature");
 
     // Invalid - Not signed by a provider
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(key3.pub)
+        require_is_system_provider_and_signer_op(key3.pub)
     ).run_must_fail("Expected system provider signature");
 
     // Valid - Signed by provider key
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).sign(provider_key1).run();
 }
 
-function test_require_system_provider_signer_entity__not_system() {
+function test_require_is_system_provider_and_signer__not_system() {
     add_provider(provider_key1.pub, false);
 
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
-    ).sign(provider_key1).run_must_fail("Expected system provider");
+        require_is_system_provider_and_signer_op(provider_key1.pub)
+    ).sign(provider_key1).run_must_fail("No active system provider found with pubkey %s".format(provider_key1.pub));
 }
 
-function test_require_system_provider_signer_entity__one_provider_and_multiple_keys() {
+function test_require_is_system_provider_and_signer__one_provider_and_multiple_keys() {
 
     add_provider(provider_key1.pub, true);
 
@@ -54,15 +54,15 @@ function test_require_system_provider_signer_entity__one_provider_and_multiple_k
 
     // Invalid - not signed by both keys and not in super-majority
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).sign(provider_key1).run_must_fail("Expected system provider signature");
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).sign(key2).run_must_fail("Expected system provider signature");
 
     // Valid - signed by both keys
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).sign(provider_key1, key2).run();
 
     // Add a third key
@@ -72,12 +72,12 @@ function test_require_system_provider_signer_entity__one_provider_and_multiple_k
 
     // Invalid - must be signed by all 3 keys, not only 2
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).nop().sign(provider_key1, key2).run_must_fail("Expected system provider signature");
 
     // Valid - signed by all keys
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).sign(provider_key1, key2, key3).run();
 
     // Change auth key threshold
@@ -87,13 +87,13 @@ function test_require_system_provider_signer_entity__one_provider_and_multiple_k
 
     // Valid - one key only required
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).nop().sign(provider_key1).run();
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).nop().sign(key2).run();
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).nop().sign(key3).run();
 
     // Remove first key
@@ -103,35 +103,35 @@ function test_require_system_provider_signer_entity__one_provider_and_multiple_k
 
     // Valid - one key only required
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).nop().sign(key2).run();
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).nop().sign(key3).run();
 
     // Invalid - first key no longer used for auth
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).nop().sign(provider_key1).run_must_fail("Expected system provider signature");
 }
 
-function test_require_system_provider_signer_entity__multiple_providers_and_multiple_keys() {
+function test_require_is_system_provider_and_signer__multiple_providers_and_multiple_keys() {
 
     add_provider(provider_key1.pub, true);
     add_provider(provider_key2.pub, true);
 
     // Valid - Both providers individually
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).sign(provider_key1).run();
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key2.pub)
+        require_is_system_provider_and_signer_op(provider_key2.pub)
     ).sign(provider_key2).run();
 
-    // Invalid - both are signers
+    // Valid - both are signers
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
-    ).sign(provider_key1, provider_key2).run_must_fail("Transaction must be signed by one provider only");
+        require_is_system_provider_and_signer_op(provider_key1.pub)
+    ).sign(provider_key1, provider_key2).run();
 
     // Add 3 keys to provider 1 - the provider will have a total of 4 keys and super-majority threshold
     rell.test.tx().op(
@@ -150,55 +150,55 @@ function test_require_system_provider_signer_entity__multiple_providers_and_mult
 
     // Invalid - provider 1 must sign with 3 keys
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).nop().sign(provider_key1).run_must_fail("Expected system provider signature");
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).nop().sign(key2, key3).run_must_fail("Expected system provider signature");
 
     // Valid - provider 1 signed with 3 out of 4 keys
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).nop().sign(key1, key2, key3).run();
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).nop().sign(key2, key3, provider_key1).run();
 
     // Invalid - provider 2 must sign with 2 keys
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key2.pub)
+        require_is_system_provider_and_signer_op(provider_key2.pub)
     ).nop().sign(provider_key2).run_must_fail("Expected system provider signature");
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key2.pub)
+        require_is_system_provider_and_signer_op(provider_key2.pub)
     ).nop().sign(key4).run_must_fail("Expected system provider signature");
 
     // Valid - provider 2 signed with 2 out of 3 keys
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key2.pub)
+        require_is_system_provider_and_signer_op(provider_key2.pub)
     ).nop().sign(key4, key5).run();
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key2.pub)
+        require_is_system_provider_and_signer_op(provider_key2.pub)
     ).nop().sign(key5, provider_key2).run();
 
     // Invalid - keys from both providers but not enough for any threshold
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).nop().sign(provider_key1, provider_key2).run_must_fail("Expected system provider signature");
 
     // Valid - enough keys for provider 1
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).nop().sign(provider_key1, provider_key2, key2, key3).run();
 
     // Valid - enough keys for provider 2
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key2.pub)
+        require_is_system_provider_and_signer_op(provider_key2.pub)
     ).nop().sign(provider_key1, provider_key2, key2, key4).run();
 
-    // Invalid - multiple providers signed tx
+    // Valid - multiple providers signed tx
     rell.test.tx().op(
-        require_system_provider_signer_entity_op(provider_key1.pub)
+        require_is_system_provider_and_signer_op(provider_key1.pub)
     ).nop()
         .sign(provider_key1, key1, key2, key3, provider_key2, key4, key5)
-        .run_must_fail("Transaction must be signed by one provider only");
+        .run();
 }

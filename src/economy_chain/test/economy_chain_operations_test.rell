@@ -15,10 +15,12 @@ function test_create_cluster() {
     val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_tag(
+            my_pubkey = provider_pubkey,
             name = tag_1_name,
             scu_price = 1,
             extra_storage_price = 2),
         create_cluster(
+            my_pubkey = provider_pubkey,
             name = cluster_name,
             governor_voter_set_name = "governor_voter_set",
             voter_set_name = "voter_set",
@@ -74,7 +76,7 @@ function test_create_cluster_revoke() {
 
     val proposal_id = get_latest_common_proposal_id();
     rell.test.tx().op(
-        revoke_common_proposal_v65(proposal_id))
+        revoke_common_proposal(provider_key.pub, proposal_id))
         .sign(provider_key)
         .run();
 
@@ -95,7 +97,7 @@ function test_create_cluster_revoke_after_creation_failed() {
 
     val proposal_id = get_latest_common_proposal_id();
     rell.test.tx().op(
-        revoke_common_proposal_v65(proposal_id))
+        revoke_common_proposal(provider_key.pub, proposal_id))
         .sign(provider_key)
         .run();
 
@@ -111,6 +113,7 @@ function test_create_cluster_fail_existing() {
         .run();
     rell.test.tx().op(
         create_cluster(
+            my_pubkey = provider_pubkey,
             name = cluster_name,
             governor_voter_set_name = "governor_voter_set",
             voter_set_name = "voter_set",
@@ -129,6 +132,7 @@ function test_create_cluster_fail_due_to_already_pending() {
             tag_1_name,
             pending_cluster_status.PENDING_APPROVAL),
         create_cluster(
+            my_pubkey = provider_pubkey,
             name = cluster_name,
             governor_voter_set_name = "governor_voter_set",
             voter_set_name = "voter_set",
@@ -150,6 +154,7 @@ function test_create_cluster_with_failed_pending_cluster() {
         .run();
     rell.test.tx().op(
         create_cluster(
+            my_pubkey = provider_pubkey,
             name = cluster_name,
             governor_voter_set_name = "governor_voter_set",
             voter_set_name = "voter_set",
@@ -165,15 +170,18 @@ function test_change_cluster_tag() {
 
     rell.test.tx().op(
         create_tag(
+            my_pubkey = provider_pubkey,
             name = tag_1_name,
             scu_price = 3,
             extra_storage_price = 4),
         create_tag(
+            my_pubkey = provider_pubkey,
             name = tag_2_name,
             scu_price = 3,
             extra_storage_price = 4),
         create_test_cluster(cluster_name),
         change_cluster_tag(
+            my_pubkey = provider_pubkey,
             cluster_name = cluster_name,
             tag_name = tag_2_name))
         .sign(provider_key)
@@ -190,6 +198,7 @@ function test_change_cluster_tag_with_voting() {
 
     rell.test.tx().op(
         create_tag(
+            my_pubkey = provider_pubkey,
             name = tag_2_name,
             scu_price = 3,
             extra_storage_price = 4),
@@ -203,6 +212,7 @@ function test_change_cluster_tag_with_voting() {
 
     rell.test.tx().op(
         change_cluster_tag(
+            my_pubkey = rell.test.keypairs.alice.pub,
             cluster_name = cluster_name,
             tag_name = tag_2_name))
         .sign(rell.test.keypairs.alice)
@@ -217,10 +227,11 @@ function test_update_tag() {
     val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_tag(
+            my_pubkey = provider_pubkey,
             name = tag_1_name,
             scu_price = 3,
             extra_storage_price = 4),
-        update_tag(tag_1_name, scu_price = 30, extra_storage_price = null))
+        update_tag(my_pubkey = provider_pubkey, name = tag_1_name, scu_price = 30, extra_storage_price = null))
         .sign(provider_key)
         .run();
 
@@ -228,7 +239,7 @@ function test_update_tag() {
     assert_equals(tag @ { tag_1_name } ( .extra_storage_price ), 4);
 
     rell.test.tx().op(
-        update_tag(tag_1_name, scu_price = null, extra_storage_price = 40))
+        update_tag(my_pubkey = provider_pubkey, name = tag_1_name, scu_price = null, extra_storage_price = 40))
         .sign(provider_key)
         .run();
 
@@ -241,6 +252,7 @@ function test_update_tag_with_voting() {
     val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_tag(
+            my_pubkey = provider_pubkey,
             name = tag_1_name,
             scu_price = 3,
             extra_storage_price = 4))
@@ -250,7 +262,7 @@ function test_update_tag_with_voting() {
     add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
 
     rell.test.tx().op(
-        update_tag(tag_1_name, scu_price = 30, extra_storage_price = 40))
+        update_tag(my_pubkey = provider_pubkey, name = tag_1_name, scu_price = 30, extra_storage_price = 40))
         .sign(provider_key)
         .run();
 
@@ -269,6 +281,7 @@ function test_update_tag_with_voting_revoked() {
     val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_tag(
+            my_pubkey = provider_pubkey,
             name = tag_1_name,
             scu_price = 3,
             extra_storage_price = 4))
@@ -278,7 +291,7 @@ function test_update_tag_with_voting_revoked() {
     add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
 
     rell.test.tx().op(
-        update_tag(tag_1_name, scu_price = 30, extra_storage_price = 40))
+        update_tag(my_pubkey = provider_pubkey, name = tag_1_name, scu_price = 30, extra_storage_price = 40))
         .sign(provider_key)
         .run();
 
@@ -287,7 +300,7 @@ function test_update_tag_with_voting_revoked() {
     assert_equals(tag @ { tag_1_name } ( .extra_storage_price ), 4);
 
     rell.test.tx().op(
-        revoke_common_proposal_v65(get_latest_common_proposal_id()))
+        revoke_common_proposal(provider_key.pub, get_latest_common_proposal_id()))
         .sign(provider_key)
         .run();
 
@@ -301,7 +314,7 @@ function test_update_tag_with_voting_revoked() {
 function test_remove_tag_with_non_existing_tag() {
     val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
-        remove_tag(tag_1_name))
+        remove_tag(my_pubkey = provider_pubkey, name = tag_1_name))
         .sign(provider_key)
         .run_must_fail("Tag with name %s does not exist".format(tag_1_name));
 }
@@ -310,10 +323,11 @@ function test_remove_tag() {
     val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_tag(
+            my_pubkey = provider_pubkey,
             name = tag_1_name,
             scu_price = 3,
             extra_storage_price = 4),
-        remove_tag(tag_1_name))
+        remove_tag(my_pubkey = provider_pubkey, name = tag_1_name))
         .sign(provider_key)
         .run();
 
@@ -326,6 +340,7 @@ function test_remove_tag_with_voting() {
     val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_tag(
+            my_pubkey = provider_pubkey,
             name = tag_1_name,
             scu_price = 3,
             extra_storage_price = 4))
@@ -334,7 +349,7 @@ function test_remove_tag_with_voting() {
 
     add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
-        remove_tag(tag_1_name))
+        remove_tag(my_pubkey = provider_pubkey, name = tag_1_name))
         .sign(provider_key)
         .run();
 
@@ -349,7 +364,7 @@ function test_remove_tag_given_tag_is_used_by_cluster() {
     val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_test_cluster(cluster_name, tag_1_name),
-        remove_tag(tag_1_name))
+        remove_tag(my_pubkey = provider_pubkey, name = tag_1_name))
         .sign(provider_key)
         .run_must_fail("Tag with name %s is in use.".format(tag_1_name));
 }
@@ -358,17 +373,19 @@ function test_remove_tag_given_tag_is_used_by_pending_cluster() {
     val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_tag(
+            my_pubkey = provider_pubkey,
             name = tag_1_name,
             scu_price = 1,
             extra_storage_price = 2),
         create_cluster(
+            my_pubkey = provider_pubkey,
             name = cluster_name,
             governor_voter_set_name = "governor_voter_set",
             voter_set_name = "voter_set",
             cluster_units = 1,
             extra_storage = 2,
             tag_name = tag_1_name),
-        remove_tag(tag_1_name))
+        remove_tag(my_pubkey = provider_pubkey, name = tag_1_name))
         .sign(provider_key)
         .run_must_fail("Pending cluster(s) depends on this tag.");
 }
@@ -377,14 +394,17 @@ function test_remove_tag_given_tag_is_used_by_pending_cluster_tag_change() {
     val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_tag(
+            my_pubkey = provider_pubkey,
             name = tag_1_name,
             scu_price = 1,
             extra_storage_price = 2),
         create_tag(
+            my_pubkey = provider_pubkey,
             name = tag_2_name,
             scu_price = 1,
             extra_storage_price = 2),
         create_cluster(
+            my_pubkey = provider_pubkey,
             name = cluster_name,
             governor_voter_set_name = "governor_voter_set",
             voter_set_name = "voter_set",
@@ -392,7 +412,7 @@ function test_remove_tag_given_tag_is_used_by_pending_cluster_tag_change() {
             extra_storage = 2,
             tag_name = tag_1_name),
         create_pending_cluster_change_tag(cluster_name, tag_1_name, tag_2_name),
-        remove_tag(tag_2_name))
+        remove_tag(my_pubkey = provider_pubkey, name = tag_2_name))
         .sign(provider_key)
         .run_must_fail("Pending cluster tag change depends on this tag.");
 }
@@ -401,12 +421,14 @@ function test_name_validation() {
     val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_tag(
+            my_pubkey = provider_pubkey,
             name = "invalid@name",
             scu_price = 1,
             extra_storage_price = 2)
     ).sign(provider_key).run_must_fail(invalid_entity_message);
     rell.test.tx().op(
         create_cluster(
+            my_pubkey = provider_pubkey,
             name = "invalid@name",
             governor_voter_set_name = "governor_voter_set",
             voter_set_name = "voter_set",
@@ -421,12 +443,14 @@ function test_price_validation() {
     val provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
         create_tag(
+            my_pubkey = provider_pubkey,
             name = "tag_name",
             scu_price = -1,
             extra_storage_price = 2)
     ).sign(provider_key).run_must_fail("Tag must have a positive SCU price");
     rell.test.tx().op(
         create_tag(
+            my_pubkey = provider_pubkey,
             name = "tag_name",
             scu_price = 1,
             extra_storage_price = -2)

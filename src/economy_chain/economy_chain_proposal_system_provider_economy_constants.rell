@@ -15,11 +15,12 @@ struct pending_system_provider_economy_constants_data {
 @extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_system_provider_constants_update.name: cleanup_pending_system_provider_economy_constants(*)];
 
 operation propose_system_provider_economy_constants(
+    my_pubkey: pubkey,
     total_cost_system_providers: integer? = null,
     system_provider_fee_share: decimal? = null,
     system_provider_risk_share: decimal? = null
 ) {
-    val provider = require_system_provider_signer_entity();
+    val provider = require_is_system_provider_and_signer(my_pubkey);
 
     val proposal = create_system_p_proposal(common_proposal_type.ec_system_provider_constants_update, provider, "Update system provider economy constants");
     val proposal_details = create pending_system_provider_economy_constants(

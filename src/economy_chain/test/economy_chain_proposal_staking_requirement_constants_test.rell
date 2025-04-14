@@ -6,7 +6,7 @@ import ^.helper_functions.*;
 function test_propose_staking_requirement_constants_require_system_provider_signer() {
 
     rell.test.tx().op(
-        propose_staking_requirement_constants(null, null, null, null, null, null)
+        propose_staking_requirement_constants(rell.test.keypairs.alice.pub, null, null, null, null, null, null)
     ).run_must_fail("Expected system provider signature");
 }
 
@@ -15,23 +15,23 @@ function test_propose_staking_requirement_constants_validate_input() {
     add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
 
     rell.test.tx().op(
-        propose_staking_requirement_constants(null, -2, null, null, null, null)
+        propose_staking_requirement_constants(rell.test.keypairs.alice.pub, null, -2, null, null, null, null)
     ).sign(rell.test.keypairs.alice).run_must_fail("Stop payout days must be greater or equal to 0");
 
     rell.test.tx().op(
-        propose_staking_requirement_constants(null, null, -2, null, null, null)
+        propose_staking_requirement_constants(rell.test.keypairs.alice.pub, null, null, -2, null, null, null)
     ).sign(rell.test.keypairs.alice).run_must_fail("System node own stake chr must be greater or equal to 0");
 
     rell.test.tx().op(
-        propose_staking_requirement_constants(null, null, null, -2, null, null)
+        propose_staking_requirement_constants(rell.test.keypairs.alice.pub, null, null, null, -2, null, null)
     ).sign(rell.test.keypairs.alice).run_must_fail("System node total stake chr must be greater or equal to 0");
 
     rell.test.tx().op(
-        propose_staking_requirement_constants(null, null, null, null, -2, null)
+        propose_staking_requirement_constants(rell.test.keypairs.alice.pub, null, null, null, null, -2, null)
     ).sign(rell.test.keypairs.alice).run_must_fail("Dapp node own stake chr must be greater or equal to 0");
 
     rell.test.tx().op(
-        propose_staking_requirement_constants(null, null, null, null, null, -2)
+        propose_staking_requirement_constants(rell.test.keypairs.alice.pub, null, null, null, null, null, -2)
     ).sign(rell.test.keypairs.alice).run_must_fail("Dapp node total stake chr must be greater or equal to 0");
 }
 
@@ -48,7 +48,7 @@ function test_propose_staking_requirement_constants_all() {
 
     add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
     rell.test.tx().op(
-        propose_staking_requirement_constants(true, 1, 2, 3, 4, 5)
+        propose_staking_requirement_constants(rell.test.keypairs.alice.pub, true, 1, 2, 3, 4, 5)
     ).sign(rell.test.keypairs.alice).run();
 
     val updated_constants: economy_constants_data = get_economy_constants();
@@ -75,7 +75,7 @@ function test_propose_staking_requirement_constants_partial() {
     add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
 
     rell.test.tx().op(
-        propose_staking_requirement_constants(true, 1, 2, null, null, null)
+        propose_staking_requirement_constants(rell.test.keypairs.alice.pub, true, 1, 2, null, null, null)
     ).sign(rell.test.keypairs.alice).run();
 
     constants = get_economy_constants();
@@ -87,7 +87,7 @@ function test_propose_staking_requirement_constants_partial() {
     assert_equals(constants.staking_requirement_dapp_node_total_stake_chr, 300000 * units_per_asset);
 
     rell.test.tx().op(
-        propose_staking_requirement_constants(null, null, null, 3, 4, 5)
+        propose_staking_requirement_constants(rell.test.keypairs.alice.pub, null, null, null, 3, 4, 5)
     ).sign(rell.test.keypairs.alice).run();
 
     constants = get_economy_constants();
@@ -108,7 +108,7 @@ function test_propose_staking_requirement_constants_scheduld_at() {
     rell.test.set_next_block_time_delta(1000);
     rell.test.tx().op(
         init(),
-        propose_staking_requirement_constants(true, original_staking_requirement_stop_payout_days + 1, null, null, null, null, get_last_blocktime() + 5000)
+        propose_staking_requirement_constants(rell.test.keypairs.alice.pub, true, original_staking_requirement_stop_payout_days + 1, null, null, null, null, get_last_blocktime() + 5000)
     ).sign(rell.test.keypairs.alice).run();
 
     // Pending
@@ -147,7 +147,7 @@ function test_get_staking_requirement_constants_proposal() {
     add_provider(rell.test.keypairs.bob.pub, true, provider_tier.NODE_PROVIDER);
 
     rell.test.tx().op(
-        propose_staking_requirement_constants(false, 1, 2, 3, 4, 5)
+        propose_staking_requirement_constants(rell.test.keypairs.alice.pub, false, 1, 2, 3, 4, 5)
     ).sign(rell.test.keypairs.alice).run();
 
     val proposal = get_staking_requirement_constants_proposal(get_latest_common_proposal_id());

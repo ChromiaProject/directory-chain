@@ -14,11 +14,12 @@ entity pending_tag_operation {
 @extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_tag_remove.name: cleanup_pending_tag_operation(*)];
 
 operation create_tag(
+    my_pubkey: pubkey,
     name: text,
     scu_price: integer,
     extra_storage_price: integer
 ) {
-    val provider = require_system_provider_signer_entity();
+    val provider = require_is_system_provider_and_signer(my_pubkey);
     require(scu_price > 0, "Tag must have a positive SCU price");
     require(extra_storage_price > 0, "Tag must have a positive extra storage price");
 
@@ -30,11 +31,12 @@ operation create_tag(
 }
 
 operation update_tag(
+    my_pubkey: pubkey,
     name: text,
     scu_price: integer?,
     extra_storage_price: integer?
 ) {
-    val provider = require_system_provider_signer_entity();
+    val provider = require_is_system_provider_and_signer(my_pubkey);
     require(empty(scu_price) or scu_price > 0, "Tag must have a positive SCU price");
     require(empty(extra_storage_price) or extra_storage_price > 0, "Tag must have a positive extra storage price");
 
@@ -46,9 +48,10 @@ operation update_tag(
 }
 
 operation remove_tag(
+    my_pubkey: pubkey,
     name: text
 ) {
-    val provider = require_system_provider_signer_entity();
+    val provider = require_is_system_provider_and_signer(my_pubkey);
     val tag = require_tag(name);
 
     val proposal = create_system_p_proposal(common_proposal_type.ec_tag_remove, provider, "Remove tag %s".format(name));

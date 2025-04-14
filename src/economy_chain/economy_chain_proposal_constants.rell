@@ -13,6 +13,7 @@ entity pending_economy_constants {
 @extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_constants_update.name: cleanup_pending_economy_constants(*)];
 
 operation update_economy_constants(
+    my_pubkey: pubkey,
     min_lease_time_weeks: integer?,
     max_lease_time_weeks: integer?,
     staking_reward_rate: decimal?,
@@ -22,7 +23,7 @@ operation update_economy_constants(
     dapp_provider_risk_share: decimal?,
     scheduled_at: timestamp? = null,
 ) {
-    val provider = require_system_provider_signer_entity();
+    val provider = require_is_system_provider_and_signer(my_pubkey);
 
     val proposal = create_system_p_proposal(common_proposal_type.ec_constants_update, provider, "Update economy constants");
     val proposal_details = create pending_economy_constants(

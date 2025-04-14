@@ -87,7 +87,7 @@ function test_force_remove_container_success() {
     add_provider(rell.test.pubkeys.bob, system = true);
 
     rell.test.tx().op(
-        force_remove_container(container_name)
+        force_remove_container(rell.test.keypairs.bob.pub, container_name)
     ).sign(rell.test.keypairs.bob).run();
 
     assert_events(("icmf_message", (
@@ -113,8 +113,8 @@ function test_force_remove_container_failure_not_system_provider() {
     add_provider(rell.test.pubkeys.bob, system = false);
 
     rell.test.tx().op(
-        force_remove_container(container_name)
-    ).sign(rell.test.keypairs.bob).run_must_fail("Expected system provider signature");
+        force_remove_container(rell.test.keypairs.bob.pub, container_name)
+    ).sign(rell.test.keypairs.bob).run_must_fail("No active system provider found with pubkey %s".format(rell.test.keypairs.bob.pub));
 }
 
 function do_remove_container(
