@@ -125,28 +125,6 @@ function is_provider_auth_threshold_set(provider_pubkey: pubkey, provider_key_ro
 }
 
 /**
- * Identifies the provider by looking at the list of signers and returns the provider pubkey if
- * one provider is found to be signing this transaction.
- *
- * @return The provider pubkey of the single provider signing this transaction.
- */
-function get_provider_signer(provider_key_roles: list<provider_key_role> = [provider_key_role.main]): pubkey? {
-
-    val maybe_providers = provider_auth_key @* {
-        provider_auth_key.pubkey in op_context.get_signers(), .active } ( @group .provider_pubkey );
-    var found_provider: pubkey? = null;
-
-    for (maybe_provider in maybe_providers) {
-        if (provider_is_signer(maybe_provider, provider_key_roles)) {
-            require(found_provider == null, "Transaction must be signed by one provider only");
-            found_provider = maybe_provider;
-        }
-    }
-
-    return found_provider;
-}
-
-/**
  * Find provider by auth key.
  *
  * @param pubkey Auth key to lookup provider by

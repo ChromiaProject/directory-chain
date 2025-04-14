@@ -7,7 +7,7 @@ import ^.helper_operations.*;
 function test_propose_price_oracle_rate_require_system_provider_signer() {
 
     rell.test.tx().op(
-        propose_price_oracle_rate([
+        propose_price_oracle_rate(rell.test.keypairs.alice.pub, [
             pending_price_oracle_rate_data(symbol = "CHR", name = "Chromia", price = 2)
         ])
     ).run_must_fail("Expected system provider signature");
@@ -18,17 +18,17 @@ function test_propose_price_oracle_rate_validate_input() {
     add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
 
     rell.test.tx().op(
-        propose_price_oracle_rate([])
+        propose_price_oracle_rate(rell.test.keypairs.alice.pub, [])
     ).sign(rell.test.keypairs.alice).run_must_fail("Proposal has no symbol rates");
 
     rell.test.tx().op(
-        propose_price_oracle_rate([
+        propose_price_oracle_rate(rell.test.keypairs.alice.pub, [
             pending_price_oracle_rate_data(symbol = "CHR", price = 2)
         ])
     ).sign(rell.test.keypairs.alice).run_must_fail("Name is required for new tokens");
 
     rell.test.tx().op(
-        propose_price_oracle_rate([
+        propose_price_oracle_rate(rell.test.keypairs.alice.pub, [
             pending_price_oracle_rate_data(symbol = "CHR", name = "Chromia", price = -1)
         ])
     ).sign(rell.test.keypairs.alice).run_must_fail("Price for CHR must be positive");
@@ -44,7 +44,7 @@ function test_propose_price_oracle_rate_update_and_add_saucessfully() {
 
     // Update existing one and add a new symbol
     rell.test.tx().op(
-        propose_price_oracle_rate([
+        propose_price_oracle_rate(rell.test.keypairs.alice.pub, [
             pending_price_oracle_rate_data(symbol = "CHR", 1.2),
             pending_price_oracle_rate_data(symbol = "ETH", name = "Ethereum", 123.456),
         ])
@@ -64,7 +64,7 @@ function test_get_price_oracle_rate_proposal() {
     rell.test.tx().op(create_price_oracle_rates_op(symbol = "CHR", name = "Chromia", price = 1.1)).run();
 
     rell.test.tx().op(
-        propose_price_oracle_rate([
+        propose_price_oracle_rate(rell.test.keypairs.alice.pub, [
             pending_price_oracle_rate_data(symbol = "CHR", 1.2),
             pending_price_oracle_rate_data(symbol = "ETH", name = "Ethereum", 123.456),
         ])

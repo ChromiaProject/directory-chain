@@ -13,11 +13,11 @@ val extra_key_2 = rell.test.keypairs.eve;
 val extra_key_3 = rell.test.keypairs.frank;
 
 
-function test_make_vote_v65() {
+function test_make_vote() {
 
     // Invalid - no such proposal
     rell.test.tx().op(
-        make_vote_v65(999999, true),
+        make_vote(provider_1.pub, 999999, true),
     ).run_must_fail("Proposal 999999 not found");
 
     rell.test.tx().op(
@@ -35,16 +35,16 @@ function test_make_vote_v65() {
 
     // Invalid - must be signed
     rell.test.tx().op(
-        make_vote_v65(get_latest_proposal_id().to_integer(), true),
-    ).run_must_fail("Transaction must be signed by provider");
+        make_vote(provider_1.pub, get_latest_proposal_id().to_integer(), true),
+    ).run_must_fail("Operation must be signed by provider key(s)");
 
     // Valid
     rell.test.tx().op(
-        make_vote_v65(get_latest_proposal_id().to_integer(), true),
+        make_vote(provider_1.pub, get_latest_proposal_id().to_integer(), true),
     ).sign(provider_1).run();
 }
 
-function test_make_vote_v65__voter_not_member() {
+function test_make_vote__voter_not_member() {
 
     rell.test.tx().op(
         create_test_provider("", provider_1.pub, provider_tier.NODE_PROVIDER),
@@ -61,15 +61,15 @@ function test_make_vote_v65__voter_not_member() {
 
     // Invalid - provider_2 not member of voter set
     rell.test.tx().op(
-        make_vote_v65(get_latest_proposal_id().to_integer(), true),
+        make_vote(provider_2.pub, get_latest_proposal_id().to_integer(), true),
     ).sign(provider_2).run_must_fail("Provider is not a member of voter set vs1");
 }
 
-function test_retract_vote_v65() {
+function test_retract_vote() {
 
     // Invalid - no such proposal
     rell.test.tx().op(
-        retract_vote_v65(999999),
+        retract_vote(provider_1.pub, 999999),
     ).run_must_fail("Proposal 999999 not found");
 
     rell.test.tx().op(
@@ -87,12 +87,12 @@ function test_retract_vote_v65() {
 
     // Invalid - must be signed
     rell.test.tx().op(
-        retract_vote_v65(get_latest_proposal_id().to_integer()),
-    ).run_must_fail("Transaction must be signed by provider");
+        retract_vote(provider_1.pub, get_latest_proposal_id().to_integer()),
+    ).run_must_fail("Operation must be signed by provider key(s)");
 
     // Valid
     rell.test.tx().op(
-        retract_vote_v65(get_latest_proposal_id().to_integer()),
+        retract_vote(provider_1.pub, get_latest_proposal_id().to_integer()),
     ).sign(provider_1).run();
 }
 
@@ -113,6 +113,6 @@ function test_retract_vote__voter_not_member() {
 
     // Invalid - provider_2 not member of voter set
     rell.test.tx().op(
-        retract_vote_v65(get_latest_proposal_id().to_integer()),
+        retract_vote(provider_2.pub, get_latest_proposal_id().to_integer()),
     ).sign(provider_2).run_must_fail("Provider is not a member of voter set vs1");
 }

@@ -71,18 +71,20 @@ struct common_voter_set_update_data {
 /**
  * Propose a voter sets change including threshold and/or member list.
  *
+ * @param my_pubkey Voter set member proposer
  * @param voter_set_name The name of the voter set
  * @param new_threshold The new threshold for this voter set to control number of votes required. Ignored if set to null.
  * @param new_member A list of new members.
  * @param remove_member A list of members to remove.
  */
 operation propose_update_voter_set(
+    my_pubkey: pubkey,
     voter_set_name: text,
     new_threshold: integer?,
     new_member: list<pubkey>,
     remove_member: list<pubkey>
 ) {
-    propose_update_voter_set_internal(voter_set_name, new_threshold, new_member, remove_member);
+    propose_update_voter_set_internal(my_pubkey, voter_set_name, new_threshold, new_member, remove_member);
 }
 
 function apply_common_voter_set_update(proposal: common_proposal) {
@@ -109,22 +111,22 @@ function delete_pending_common_voter_set_update(proposal: common_proposal) {
 }
 
 function propose_update_voter_set_internal(
+    my_pubkey: pubkey,
     voter_set_name: text,
     new_threshold: integer?,
     new_member: list<pubkey>,
     remove_member: list<pubkey>
 ) {
     val voter_set = require_common_voter_set(voter_set_name);
-    val voter_set_member = require_voter_set_member_pubkey(voter_set);
-    require_common_voter_set_member_and_signer(voter_set, voter_set_member);
-    require_common_voter_set_governor(voter_set, voter_set_member);
+    require_common_voter_set_member_and_signer(voter_set, my_pubkey);
+    require_common_voter_set_governor(voter_set, my_pubkey);
     require(empty(common_proposal @* { voter_set, (.state == common_proposal_state.PENDING or .state == common_proposal_state.DELAYED) }),
         "Cannot have more than one pending proposal involving this voter set.");
 
     val prop = create common_proposal(
         op_context.last_block_time,
         common_proposal_type.common_voter_set_update,
-        voter_set_member,
+        my_pubkey,
         voter_set,
         "Update %s voter set".format(voter_set_name)
     );
@@ -147,7 +149,7 @@ function propose_update_voter_set_internal(
         create voter_set_update.remove_member(update_prop, m);
     }
     validate_voter_set_proposal(update_prop);
-    internal_common_vote(voter_set_member, prop, true);
+    internal_common_vote(my_pubkey, prop, true);
 }
 
 query get_voter_set_update_proposal(id: rowid) {

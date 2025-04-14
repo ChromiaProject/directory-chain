@@ -13,6 +13,8 @@ be able to use sign transactions normally after this operation, be careful to no
 
 **Parameters:**
 
+- **`my_pubkey`(byte_array)**: The provider pubkey.
+
 - **`blockchain_rid` (byte_array)**: The identifier (RID) of the blockchain whose operation will be used for
   authentication.
 
@@ -28,13 +30,13 @@ authentication, and re-enabling normal signing.
 3. Subsequent operations for authentication rely on the external blockchain, without requiring the provider to sign each
    operation.
 4. If at any point the provider decides to stop using the external blockchain for authentication, they call
-   `remove_provider_blockchain_auth`.
+   `remove_provider_blockchain_auth_iccf`.
 
 ## Available operations
 
 These operations are available for blockchain authentication in directory chain:
 
-* remove_provider_blockchain_auth
+* remove_provider_blockchain_auth_iccf
 * propose_blockchain_iccf
 * propose_blockchain_action_iccf
 * propose_configuration_iccf
@@ -53,7 +55,7 @@ The transaction from the external blockchain needs to include an operation with 
 The operations in the external blockchain have parameters like the corresponding non-ICCF operation in directory chain 
 (excluding `my_pubkey` and `description`):
 
-* operation remove_provider_blockchain_auth()
+* operation remove_provider_blockchain_auth_iccf()
 * operation propose_blockchain_iccf(config_data: byte_array, bc_name: text, container_name: text)
 * operation propose_blockchain_action_iccf(blockchain_rid: byte_array, action: blockchain_action)
 * operation propose_configuration_iccf(blockchain_rid: byte_array, config_data: byte_array)

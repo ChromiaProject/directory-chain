@@ -21,7 +21,7 @@ function require_common_voter_set_member_and_signer(common_voter_set, pubkey) {
     }
 }
 
-function require_voter_set_with_signer_and_member(voter_set_name: text, pubkey) {
+function require_common_voter_set_with_signer_and_member(voter_set_name: text, pubkey) {
     require_is_signer(pubkey);
     val voter_set = require_common_voter_set(voter_set_name);
     require_common_voter_set_member_and_signer(voter_set, pubkey);
@@ -43,24 +43,4 @@ function require_only_pending_proposal_of_type(proposal: common_proposal) {
         .rowid != proposal.rowid,
         .state == common_proposal_state.PENDING
     }), "A pending proposal of type %s already exists".format(proposal.proposal_type));
-}
-
-/**
- * This makes sure a valid voter set member is signer of transaction. It can either be a single key, or a provider
- * key set.
- */
-function require_voter_set_member_pubkey(voter_set: common_voter_set): pubkey {
-    when (voter_set.member_key_type) {
-        common_proposal_vote_type.VOTER_SET_MEMBER_KEY -> {
-            val signer_key_members = common_voter_set_member @* { voter_set, .pubkey in op_context.get_signers() } ( .pubkey );
-            require(signer_key_members.size() != 0, "Operation must be signed by member of voter set");
-            require(signer_key_members.size() == 1, "Operation can't be signed by multiple keys in voter set");
-            return signer_key_members[0];
-        }
-        common_proposal_vote_type.PROVIDER_AUTH -> {
-            val provider_signer = require(get_provider_signer(), "Operation must be signed by provider key(s)");
-            require(common_voter_set_member @ { voter_set, provider_signer } ( @sum 1 ) == 1, "Signer is no member of voter set");
-            return provider_signer;
-        }
-    }
 }

@@ -12,14 +12,14 @@ struct pending_transfer_chromia_foundation_funds_data {
 @extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_transfer_chromia_foundation_funds.name: apply_ec_pending_transfer_chromia_foundation_funds(*)];
 @extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_transfer_chromia_foundation_funds.name: cleanup_ec_pending_transfer_chromia_foundation_funds(*)];
 
-operation propose_transfer_chromia_foundation_funds(proposal_by: byte_array, amount: integer, account_id: byte_array) {
+operation propose_transfer_chromia_foundation_funds(my_pubkey: byte_array, amount: integer, account_id: byte_array) {
 
-    val voter_set = require_voter_set_with_signer_and_member(voter_sets.chromia_foundation, proposal_by);
+    val voter_set = require_common_voter_set_with_signer_and_member(voter_sets.chromia_foundation, my_pubkey);
 
     val proposal = create common_proposal(
         op_context.last_block_time,
         common_proposal_type.ec_transfer_chromia_foundation_funds,
-        proposal_by,
+        my_pubkey,
         voter_set,
         "Transfer Chromia Foundation funds %d assets to account id %s".format(amount, account_id));
 

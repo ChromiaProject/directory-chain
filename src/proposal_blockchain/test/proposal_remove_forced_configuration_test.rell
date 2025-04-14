@@ -28,19 +28,19 @@ function test_propose_remove_forced_configuration() {
     val bc = blockchain @ { chain_name };
 
     rell.test.tx().op(
-        propose_remove_forced_configuration(bc.rid, 0, "")
-    ).sign(rell.test.keypairs.charlie).run_must_fail("Transaction must be signed by provider");
+        propose_remove_forced_configuration(rell.test.keypairs.charlie.pub, bc.rid, 0, "")
+    ).sign(rell.test.keypairs.charlie).run_must_fail("Unknown provider %s".format(rell.test.keypairs.charlie.pub));
 
     rell.test.tx().op(
-        propose_remove_forced_configuration(x"00", 0, "")
+        propose_remove_forced_configuration(deployer.pubkey, x"00", 0, "")
     ).sign(rell.test.keypairs.bob).run_must_fail("Unknown blockchain 0x00");
 
     rell.test.tx().op(
-        propose_remove_forced_configuration(bc.rid, 0, "")
+        propose_remove_forced_configuration(deployer.pubkey, bc.rid, 0, "")
     ).sign(rell.test.keypairs.bob).run_must_fail("Height must be greater than 0");
 
     rell.test.tx().op(
-        propose_remove_forced_configuration(bc.rid, 2, "")
+        propose_remove_forced_configuration(deployer.pubkey, bc.rid, 2, "")
     ).sign(rell.test.keypairs.bob).run_must_fail("No forced configuration exists on height 2");
 
     conf["nonce"] = (10).to_gtv();
@@ -69,7 +69,7 @@ function test_propose_remove_forced_configuration() {
     assert_true(exists(forced_configuration @* { bc, 2 }));
 
     rell.test.tx().op(
-        propose_remove_forced_configuration(bc.rid, 2, "")
+        propose_remove_forced_configuration(deployer.pubkey, bc.rid, 2, "")
     ).sign(rell.test.keypairs.bob).run();
 
     assert_true(empty(blockchain_configuration @* { bc, 2 }));
@@ -90,8 +90,8 @@ function test_propose_remove_forced_configuration__conflict_with_ordinary_update
     assert_true(exists(forced_configuration @* { directory_chain, 10, x"00" }));
 
     rell.test.tx().op(
-        propose_remove_forced_configuration(directory_chain.rid, 10, "")
-    ).sign(rell.test.keypairs.alice).run();
+        propose_remove_forced_configuration(initial_provider.pub, directory_chain.rid, 10, "")
+    ).sign(initial_provider).run();
 
     assert_true(exists(blockchain_configuration @* { directory_chain, 10 }));
     assert_true(exists(blockchain_configuration_signers @* { directory_chain, 10 }));
@@ -124,7 +124,7 @@ function test_get_remove_forced_configuration_proposal() {
 
     rell.test.tx().op(
         propose_forced_configuration(initial_provider.pub, bc.rid, conf.to_gtv().to_bytes(), 2, "", true),
-    ).sign(rell.test.keypairs.alice).run();
+    ).sign(initial_provider).run();
 
     vote_for_last_proposal(rell.test.keypairs.bob, type = proposal_type.force_configuration);
 
@@ -134,8 +134,8 @@ function test_get_remove_forced_configuration_proposal() {
         .run();
 
     rell.test.tx().op(
-        propose_remove_forced_configuration(bc.rid, 2, "")
-    ).sign(rell.test.keypairs.alice).run();
+        propose_remove_forced_configuration(initial_provider.pub, bc.rid, 2, "")
+    ).sign(initial_provider).run();
 
     val proposal = get_remove_forced_configuration_proposal(get_latest_proposal_id());
     assert_not_null(proposal);
@@ -184,8 +184,8 @@ function test_remove_compressed_forced_configuration() {
     assert_true(exists(forced_configuration @* { bc, 2 }));
 
     rell.test.tx().op(
-        propose_remove_forced_configuration(bc.rid, 2, "")
-    ).sign(rell.test.keypairs.alice).run();
+        propose_remove_forced_configuration(initial_provider.pub, bc.rid, 2, "")
+    ).sign(initial_provider).run();
 
     assert_true(empty(blockchain_configuration @* { bc, 2 }));
     assert_true(empty(blockchain_configuration_signers @* { bc, 2 }));

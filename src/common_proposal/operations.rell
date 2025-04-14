@@ -1,34 +1,16 @@
 /**
  * Make common vote.
  *
- * @deprecated use make_common_vote_v65()
- *
  * Permission: common voter set member
  *
  * Rate limit: no
  */
-operation make_common_vote(pubkey, proposal_id: rowid, vote: boolean) {
-    make_common_vote_internal(proposal_id, vote);
-}
-
-/**
- * Make common vote without providing voter set member key. This will be derived from the signer list.
- *
- * Permission: common voter set member
- *
- * Rate limit: no
- */
-operation make_common_vote_v65(proposal_id: rowid, vote: boolean) {
-    make_common_vote_internal(proposal_id, vote);
-}
-
-function make_common_vote_internal(proposal_id: rowid, vote: boolean) {
+operation make_common_vote(my_pubkey: pubkey, proposal_id: rowid, vote: boolean) {
     val prop = require_common_proposal(proposal_id);
     require(prop.state == common_proposal_state.PENDING, "The proposal is already %s".format(prop.state));
-    val voter_set_member = require_voter_set_member_pubkey(prop.voter_set);
-    require_common_voter_set_member_and_signer(prop.voter_set, voter_set_member);
-    require(empty(common_vote @? {prop, voter_set_member}), "Only one vote per pubkey is allowed");
-    internal_common_vote(voter_set_member, prop, vote);
+    require_common_voter_set_member_and_signer(prop.voter_set, my_pubkey);
+    require(empty(common_vote @? {prop, my_pubkey}), "Only one vote per pubkey is allowed");
+    internal_common_vote(my_pubkey, prop, vote);
 }
 
 
@@ -39,17 +21,12 @@ function make_common_vote_internal(proposal_id: rowid, vote: boolean) {
  *
  * Rate limit: no
  */
-operation retract_common_vote(proposal_id: rowid) {
-    retract_common_vote_internal(proposal_id);
-}
-
-function retract_common_vote_internal(proposal_id: rowid) {
+operation retract_common_vote(my_pubkey: pubkey, proposal_id: rowid) {
     val prop = require_common_proposal(proposal_id);
     require(prop.state == common_proposal_state.PENDING, "The proposal is already %s".format(prop.state));
-    val voter_set_member = require_voter_set_member_pubkey(prop.voter_set);
-    require_common_voter_set_member_and_signer(prop.voter_set, voter_set_member);
+    require_common_voter_set_member_and_signer(prop.voter_set, my_pubkey);
 
-    val vote = common_vote @? { prop, voter_set_member };
+    val vote = common_vote @? { prop, my_pubkey };
     if (exists(vote)) {
         delete common_vote_transaction @? { vote };
         delete vote;
@@ -63,32 +40,14 @@ function retract_common_vote_internal(proposal_id: rowid) {
 /**
  * Revoke common proposal.
  *
- * @deprecated use revoke_common_proposal_v65()
- *
  * Permission: proposal owner
  *
  * Rate limit: no
  */
-operation revoke_common_proposal(pubkey, proposal_id: rowid) {
-    revoke_common_proposal_internal(proposal_id);
-}
-
-/**
- * Revoke common proposal providing voter set member key. This will be derived from the signer list.
- *
- * Permission: proposal owner
- *
- * Rate limit: no
- */
-operation revoke_common_proposal_v65(proposal_id: rowid) {
-    revoke_common_proposal_internal(proposal_id);
-}
-
-function revoke_common_proposal_internal(proposal_id: rowid) {
+operation revoke_common_proposal(my_pubkey: pubkey, proposal_id: rowid) {
     val prop = require_common_proposal(proposal_id);
-    val voter_set_member = require_voter_set_member_pubkey(prop.voter_set);
-    require(prop.proposed_by == voter_set_member, "It is only allowed to revoke own proposals");
-    require_common_voter_set_member_and_signer(prop.voter_set, voter_set_member);
+    require(prop.proposed_by == my_pubkey, "It is only allowed to revoke own proposals");
+    require_common_voter_set_member_and_signer(prop.voter_set, my_pubkey);
     revoke_common_proposal_unsafe(prop);
 }
 

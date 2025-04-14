@@ -435,7 +435,7 @@ function test_provider_auth_update() {
 
     // Add a key
     rell.test.tx().op(
-        add_provider_key(provider_key_role.main, key2.pub),
+        add_provider_key(initial_provider.pub, provider_key_role.main, key2.pub),
     ).sign(initial_provider, key2, key3).run();
 
     val provider_and_key2_message = ("icmf_message", (
@@ -454,7 +454,7 @@ function test_provider_auth_update() {
 
     // Add a key of new role - will trigger 2 messages
     rell.test.tx().op(
-        add_provider_key(provider_key_role.configuration_proposal_vote, key3.pub),
+        add_provider_key(initial_provider.pub, provider_key_role.configuration_proposal_vote, key3.pub),
     ).sign(initial_provider, key2, key3).run();
 
     val all_keys_and_new_role_message = ("icmf_message", (
@@ -480,7 +480,7 @@ function test_provider_auth_update() {
     );
 
     rell.test.tx().op(
-        set_provider_key_threshold(provider_key_role.configuration_proposal_vote, consensus_threshold.super_majority),
+        set_provider_key_threshold(initial_provider.pub, provider_key_role.configuration_proposal_vote, consensus_threshold.super_majority),
     ).sign(initial_provider, key2, key3).run();
     assert_events(
         ("icmf_message", (
@@ -501,7 +501,7 @@ function test_provider_auth_update() {
     );
 
     rell.test.tx().op(
-        revoke_provider_key(provider_key_role.configuration_proposal_vote, key3.pub),
+        revoke_provider_key(initial_provider.pub, provider_key_role.configuration_proposal_vote, key3.pub),
     ).sign(initial_provider, key2).run();
     assert_events(
         ("icmf_message", (

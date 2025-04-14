@@ -8,10 +8,11 @@ entity pending_cluster_change_tag {
 @extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.ec_cluster_change_tag.name: cleanup_pending_cluster_change_tag(*)];
 
 operation change_cluster_tag(
+    my_pubkey: pubkey,
     cluster_name: text,
     tag_name: text
 ) {
-    val provider = require_system_provider_signer_entity();
+    val provider = require_is_system_provider_and_signer(my_pubkey);
     val tag = require_tag(tag_name);
     val cluster = require_cluster(cluster_name);
 

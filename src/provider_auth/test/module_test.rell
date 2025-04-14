@@ -29,9 +29,9 @@ function test_provider_is_signer__gtx_threshold_1() {
     val provider = provider @ { initial_provider.pub };
 
     rell.test.tx().op(
-        set_provider_key_threshold(provider_key_role.main, 1),
-        add_provider_key(provider_key_role.main, bob.pub),
-        add_provider_key(provider_key_role.main, charlie.pub),
+        set_provider_key_threshold(initial_provider.pub, provider_key_role.main, 1),
+        add_provider_key(initial_provider.pub, provider_key_role.main, bob.pub),
+        add_provider_key(initial_provider.pub, provider_key_role.main, charlie.pub),
     ).sign(initial_provider, bob, charlie).run();
 
     // Must be signed
@@ -57,8 +57,8 @@ function test_provider_is_signer__gtx_threshold_1() {
 
     // Revoke 2 keys
     rell.test.tx().op(
-        revoke_provider_key(provider_key_role.main, initial_provider.pub),
-        revoke_provider_key(provider_key_role.main, bob.pub),
+        revoke_provider_key(initial_provider.pub, provider_key_role.main, initial_provider.pub),
+        revoke_provider_key(initial_provider.pub, provider_key_role.main, bob.pub),
     ).sign(initial_provider, bob, charlie).run();
 
     // Signed by all 3, works since charlie is signing
@@ -78,10 +78,10 @@ function test_provider_is_signer__gtx_threshold_0_super_majority() {
     val provider = provider @ { initial_provider.pub };
 
     rell.test.tx().op(
-        set_provider_key_threshold(provider_key_role.main, consensus_threshold.super_majority),
-        add_provider_key(provider_key_role.main, bob.pub),
-        add_provider_key(provider_key_role.main, charlie.pub),
-        add_provider_key(provider_key_role.main, dave.pub),
+        set_provider_key_threshold(initial_provider.pub, provider_key_role.main, consensus_threshold.super_majority),
+        add_provider_key(initial_provider.pub, provider_key_role.main, bob.pub),
+        add_provider_key(initial_provider.pub, provider_key_role.main, charlie.pub),
+        add_provider_key(initial_provider.pub, provider_key_role.main, dave.pub),
     ).sign(initial_provider, bob, charlie, dave).run();
 
     // Must be signed
@@ -112,7 +112,7 @@ function test_provider_is_signer__gtx_threshold_0_super_majority() {
 
     // Revoke 1 key
     rell.test.tx().op(
-        revoke_provider_key(provider_key_role.main, initial_provider.pub),
+        revoke_provider_key(initial_provider.pub, provider_key_role.main, initial_provider.pub),
     ).sign(initial_provider, bob, charlie).run();
 
     // Must be signed by 3
@@ -133,22 +133,22 @@ function test_add_provider_key() {
 
     // Must be signed by provider
     rell.test.tx().op(
-        add_provider_key(provider_key_role.configuration_proposal_vote, bob.pub),
-    ).run_must_fail("Transaction must be signed by provider");
+        add_provider_key(initial_provider.pub, provider_key_role.configuration_proposal_vote, bob.pub),
+    ).run_must_fail("Operation must be signed by provider key(s)");
 
     // Must be a provider
     rell.test.tx().op(
-        add_provider_key(provider_key_role.configuration_proposal_vote, bob.pub),
-    ).sign(frank).run_must_fail("Transaction must be signed by provider");
+        add_provider_key(frank.pub, provider_key_role.configuration_proposal_vote, bob.pub),
+    ).sign(frank).run_must_fail("Unknown provider %s".format(frank.pub));
 
     // Must be signed by bob key
     rell.test.tx().op(
-        add_provider_key(provider_key_role.configuration_proposal_vote, bob.pub),
+        add_provider_key(initial_provider.pub, provider_key_role.configuration_proposal_vote, bob.pub),
     ).sign(initial_provider).run_must_fail("Operation must be signed by %s".format(bob.pub));
 
     // Valid
     rell.test.tx().op(
-        add_provider_key(provider_key_role.configuration_proposal_vote, bob.pub),
+        add_provider_key(initial_provider.pub, provider_key_role.configuration_proposal_vote, bob.pub),
     ).sign(initial_provider, bob).run();
 }
 
@@ -158,16 +158,14 @@ function test_add_provider_key__already_in_use_by_other_provider() {
     val provider = provider @ { initial_provider.pub };
 
     rell.test.tx().op(
-        add_provider_key(provider_key_role.main, rell.test.keypairs.frank.pub),
-        set_provider_key_threshold(provider_key_role.main, 2),
+        add_provider_key(initial_provider.pub, provider_key_role.main, rell.test.keypairs.frank.pub),
+        set_provider_key_threshold(initial_provider.pub, provider_key_role.main, 2),
         register_provider(initial_provider.pub, bob.pub, provider_tier.DAPP_PROVIDER),
     ).sign(initial_provider, bob, rell.test.keypairs.frank).run();
 
     // Invalid - key already added by initial_provider
-    // The op is signed by both initial_provider and bob, but since initial_provider requires both
-    // keys bob will be the identified provider
     rell.test.tx().op(
-        add_provider_key(provider_key_role.main, initial_provider.pub),
+        add_provider_key(bob.pub, provider_key_role.main, initial_provider.pub),
     ).sign(initial_provider, bob).run_must_fail("Key is already in use by provider %s".format(initial_provider.pub));
 }
 
@@ -178,24 +176,24 @@ function test_revoke_provider_key_validation() {
 
     // Must be signed by provider
     rell.test.tx().op(
-        revoke_provider_key(provider_key_role.main, initial_provider.pub),
-    ).run_must_fail("Transaction must be signed by provider");
+        revoke_provider_key(initial_provider.pub, provider_key_role.main, initial_provider.pub),
+    ).run_must_fail("Operation must be signed by provider key(s)");
 
     // Must be a provider
     rell.test.tx().op(
-        revoke_provider_key(provider_key_role.main, initial_provider.pub),
-    ).sign(frank).run_must_fail("Transaction must be signed by provider");
+        revoke_provider_key(frank.pub, provider_key_role.main, initial_provider.pub),
+    ).sign(frank).run_must_fail("Unknown provider %s".format(frank.pub));
 
     // Can't revoke last key
     rell.test.tx().op(
-        revoke_provider_key(provider_key_role.main, initial_provider.pub),
+        revoke_provider_key(initial_provider.pub, provider_key_role.main, initial_provider.pub),
     ).sign(initial_provider).run_must_fail("Can't revoke last main key");
 
     // Can't revoke a key if it gets under required threshold
     rell.test.tx().op(
-        add_provider_key(provider_key_role.main, bob.pub),
-        set_provider_key_threshold(provider_key_role.main, 2),
-        revoke_provider_key(provider_key_role.main, initial_provider.pub),
+        add_provider_key(initial_provider.pub, provider_key_role.main, bob.pub),
+        set_provider_key_threshold(initial_provider.pub, provider_key_role.main, 2),
+        revoke_provider_key(initial_provider.pub, provider_key_role.main, initial_provider.pub),
     ).sign(initial_provider, bob).run_must_fail("Can't revoke key from main due to key count (1) gets under threshold (2)");
 }
 
@@ -205,13 +203,13 @@ function test_revoke_provider_key__revoke_other_providers_key() {
     val provider = provider @ { initial_provider.pub };
 
     rell.test.tx().op(
-        add_provider_key(provider_key_role.main, rell.test.keypairs.frank.pub),
+        add_provider_key(initial_provider.pub, provider_key_role.main, rell.test.keypairs.frank.pub),
         register_provider(initial_provider.pub, bob.pub, provider_tier.DAPP_PROVIDER),
     ).sign(initial_provider, bob, rell.test.keypairs.frank).run();
 
     // Invalid - Must be signed by provider owning the key
     rell.test.tx().op(
-        revoke_provider_key(provider_key_role.main, initial_provider.pub),
+        revoke_provider_key(bob.pub, provider_key_role.main, initial_provider.pub),
     ).sign(bob).run_must_fail("Operation not signed by key owner");
 }
 
@@ -220,15 +218,15 @@ function test_cannot_readd_a_revoked_provider_key() {
     val provider = provider @ { initial_provider.pub };
 
     rell.test.tx().op(
-        add_provider_key(provider_key_role.main, rell.test.keypairs.frank.pub),
+        add_provider_key(initial_provider.pub, provider_key_role.main, rell.test.keypairs.frank.pub),
     ).sign(initial_provider, rell.test.keypairs.frank).run();
 
     rell.test.tx().op(
-        revoke_provider_key(provider_key_role.main, rell.test.keypairs.frank.pub),
+        revoke_provider_key(initial_provider.pub, provider_key_role.main, rell.test.keypairs.frank.pub),
     ).sign(initial_provider).run();
 
     rell.test.tx().op(
-        add_provider_key(provider_key_role.main, rell.test.keypairs.frank.pub),
+        add_provider_key(initial_provider.pub, provider_key_role.main, rell.test.keypairs.frank.pub),
     ).nop().sign(initial_provider, rell.test.keypairs.frank).run_must_fail("Pubkey %s has been revoked".format(rell.test.keypairs.frank.pub));
 }
 
@@ -241,8 +239,8 @@ function test_cannot_auth_with_a_revoked_provider_key() {
     val eve = rell.test.keypairs.eve;
 
     rell.test.tx().op(
-        add_provider_key(provider_key_role.main, frank.pub),
-        set_provider_key_threshold(provider_key_role.main, 2),
+        add_provider_key(initial_provider.pub, provider_key_role.main, frank.pub),
+        set_provider_key_threshold(initial_provider.pub, provider_key_role.main, 2),
     ).sign(initial_provider, frank).run();
 
     rell.test.tx().op(
@@ -250,7 +248,7 @@ function test_cannot_auth_with_a_revoked_provider_key() {
     ).nop().sign(initial_provider, frank).run();
 
     rell.test.tx().op(
-        add_provider_key(provider_key_role.main, eve.pub),
+        add_provider_key(initial_provider.pub, provider_key_role.main, eve.pub),
     ).sign(initial_provider, frank, eve).run();
 
     rell.test.tx().op(
@@ -258,7 +256,7 @@ function test_cannot_auth_with_a_revoked_provider_key() {
     ).nop().sign(initial_provider, frank).run();
 
     rell.test.tx().op(
-        revoke_provider_key(provider_key_role.main, frank.pub),
+        revoke_provider_key(initial_provider.pub, provider_key_role.main, frank.pub),
     ).sign(initial_provider, eve).run();
 
     rell.test.tx().op(
@@ -277,31 +275,31 @@ function test_set_provider_key_threshold() {
 
     // Must be signed by provider
     rell.test.tx().op(
-        set_provider_key_threshold(provider_key_role.main, 1),
-    ).run_must_fail("Transaction must be signed by provider");
+        set_provider_key_threshold(initial_provider.pub, provider_key_role.main, 1),
+    ).run_must_fail("Operation must be signed by provider key(s)");
 
     // Must be a provider
     rell.test.tx().op(
-        set_provider_key_threshold(provider_key_role.main, 1),
-    ).sign(frank).run_must_fail("Transaction must be signed by provider");
+        set_provider_key_threshold(frank.pub, provider_key_role.main, 1),
+    ).sign(frank).run_must_fail("Unknown provider %s".format(frank.pub));
 
     // Add bob keys and test all valid thresholds
     rell.test.tx().op(
-        add_provider_key(provider_key_role.main, bob.pub),
-        set_provider_key_threshold(provider_key_role.main, consensus_threshold.majority),
-        set_provider_key_threshold(provider_key_role.main, consensus_threshold.super_majority),
-        set_provider_key_threshold(provider_key_role.main, 1),
-        set_provider_key_threshold(provider_key_role.main, 2),
+        add_provider_key(initial_provider.pub, provider_key_role.main, bob.pub),
+        set_provider_key_threshold(initial_provider.pub, provider_key_role.main, consensus_threshold.majority),
+        set_provider_key_threshold(initial_provider.pub, provider_key_role.main, consensus_threshold.super_majority),
+        set_provider_key_threshold(initial_provider.pub, provider_key_role.main, 1),
+        set_provider_key_threshold(initial_provider.pub, provider_key_role.main, 2),
     ).sign(initial_provider, bob).run();
 
     // Invalid threshold: -2
     rell.test.tx().op(
-        set_provider_key_threshold(provider_key_role.main, -2),
+        set_provider_key_threshold(initial_provider.pub, provider_key_role.main, -2),
     ).sign(initial_provider, bob).run_must_fail("Threshold must be -1 (majority), 0 (super-majority) or positive");
 
     // Invalid threshold: 3 (only 2 keys set)
     rell.test.tx().op(
-        set_provider_key_threshold(provider_key_role.main, 3),
+        set_provider_key_threshold(initial_provider.pub, provider_key_role.main, 3),
     ).sign(initial_provider, bob).run_must_fail("Threshold (3) can't be larger than number of keys (2)");
 }
 
@@ -312,118 +310,9 @@ function test_set_threshold_followed_by_adding_key() {
 
     // Add bob keys and test all valid thresholds
     rell.test.tx().op(
-        set_provider_key_threshold(provider_key_role.configuration_proposal_vote, consensus_threshold.majority),
-        add_provider_key(provider_key_role.configuration_proposal_vote, bob.pub),
+        set_provider_key_threshold(initial_provider.pub, provider_key_role.configuration_proposal_vote, consensus_threshold.majority),
+        add_provider_key(initial_provider.pub, provider_key_role.configuration_proposal_vote, bob.pub),
     ).sign(initial_provider, bob).run();
-}
-
-function test_get_provider_signer__roles() {
-
-    setup_module();
-    val provider = provider @ { initial_provider.pub };
-
-    // Add bob keys and test all valid thresholds
-    rell.test.tx().op(
-        add_provider_key(provider_key_role.configuration_proposal_vote, bob.pub),
-    ).sign(initial_provider, bob).run();
-
-    // Valid main key
-    rell.test.tx().op(
-        get_provider_signer_op(initial_provider.pub)
-    ).sign(initial_provider).run();
-
-    // Invalid - key is not in role
-    rell.test.tx().op(
-        get_provider_signer_op(null, [provider_key_role.configuration_proposal_vote])
-    ).sign(initial_provider).run();
-
-    // Valid key for role
-    rell.test.tx().op(
-        get_provider_signer_op(initial_provider.pub, [provider_key_role.configuration_proposal_vote])
-    ).sign(bob).run();
-
-    // Add provider key to role
-    rell.test.tx().op(
-        add_provider_key(provider_key_role.configuration_proposal_vote, initial_provider.pub),
-        set_provider_key_threshold(provider_key_role.configuration_proposal_vote, consensus_threshold.super_majority),
-    ).sign(initial_provider).run();
-
-    // Invalid - one key is not enough for super-majority
-    rell.test.tx().op(
-        get_provider_signer_op(null, [provider_key_role.configuration_proposal_vote])
-    ).sign(initial_provider).nop().run();
-
-    // Valid - signed by both keys
-    rell.test.tx().op(
-        get_provider_signer_op(initial_provider.pub, [provider_key_role.configuration_proposal_vote])
-    ).sign(initial_provider, bob).run();
-
-    // Threshold set to 1
-    rell.test.tx().op(
-        set_provider_key_threshold(provider_key_role.configuration_proposal_vote, 1),
-    ).sign(initial_provider, bob).run();
-
-    // Valid - signed only by one key
-    rell.test.tx().op(
-        get_provider_signer_op(initial_provider.pub, [provider_key_role.configuration_proposal_vote])
-    ).nop().sign(initial_provider).run();
-
-    // Valid - signed only by the other key
-    rell.test.tx().op(
-        get_provider_signer_op(initial_provider.pub, [provider_key_role.configuration_proposal_vote])
-    ).nop().sign(bob).run();
-}
-
-function test_get_provider_signer() {
-
-    setup_module();
-    val provider = provider @ { initial_provider.pub };
-
-    // No provider found
-    rell.test.tx().op(
-        get_provider_signer_op(null)
-    ).run();
-
-    // No provider found
-    rell.test.tx().op(
-        get_provider_signer_op(null)
-    ).sign(bob).run();
-
-    // Provider found
-    rell.test.tx().op(
-        get_provider_signer_op(initial_provider.pub)
-    ).sign(initial_provider).run();
-
-    // Add bob keys and set threshold to super-majority
-    rell.test.tx().op(
-        add_provider_key(provider_key_role.main, bob.pub),
-        set_provider_key_threshold(provider_key_role.main, consensus_threshold.super_majority),
-    ).sign(initial_provider, bob).run();
-
-    // No provider found - must be signed by both keys
-    rell.test.tx().op(
-        get_provider_signer_op(null)
-    ).sign(initial_provider).run();
-
-    // Provider found
-    rell.test.tx().op(
-        get_provider_signer_op(initial_provider.pub)
-    ).sign(initial_provider, bob).run();
-}
-
-function test_multi_provider_signing_transaction() {
-
-    setup_module();
-    val provider = provider @ { initial_provider.pub };
-
-    rell.test.tx().op(
-        register_provider(initial_provider.pub, bob.pub, provider_tier.NODE_PROVIDER),
-    ).sign(initial_provider, bob, charlie).run();
-
-    // Invalid - multiple providers can't sign the transaction
-    rell.test.tx().op(
-        set_provider_key_threshold(provider_key_role.main, 1),
-    ).sign(initial_provider, bob).run_must_fail();
 }
 
 function test_get_provider_keys() {
@@ -437,17 +326,17 @@ function test_get_provider_keys() {
 
     // Add keys for initial provider
     rell.test.tx().op(
-        add_provider_key(provider_key_role.main, charlie.pub),
-        add_provider_key(provider_key_role.configuration_proposal_vote, dave.pub),
-        add_provider_key(provider_key_role.configuration_proposal_vote, eve.pub),
+        add_provider_key(initial_provider.pub, provider_key_role.main, charlie.pub),
+        add_provider_key(initial_provider.pub, provider_key_role.configuration_proposal_vote, dave.pub),
+        add_provider_key(initial_provider.pub, provider_key_role.configuration_proposal_vote, eve.pub),
     ).sign(initial_provider, charlie, dave, eve).run();
 
     // Add keys for bob provider
     rell.test.tx().op(
-        add_provider_key(provider_key_role.main, frank.pub),
-        add_provider_key(provider_key_role.configuration_proposal_vote, trudy.pub),
-        set_provider_key_threshold(provider_key_role.main, -1),
-        set_provider_key_threshold(provider_key_role.configuration_proposal_vote, 0),
+        add_provider_key(bob.pub, provider_key_role.main, frank.pub),
+        add_provider_key(bob.pub, provider_key_role.configuration_proposal_vote, trudy.pub),
+        set_provider_key_threshold(bob.pub, provider_key_role.main, -1),
+        set_provider_key_threshold(bob.pub, provider_key_role.configuration_proposal_vote, 0),
     ).sign(bob, frank, trudy).run();
 
     // Verify initial provider
