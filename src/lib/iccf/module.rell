@@ -154,8 +154,42 @@ function require_and_return_valid_proof(
     min_timestamp: integer = 0,
     max_timestamp: integer = 0,
     valid_source_blockchain_rids: set<byte_array>? = null,
+): confirmation_proof =
+    require_and_return_valid_proof_from_operations_and_signers(
+        op_context.get_all_operations(),
+        op_context.get_signers(),
+        gtx_transaction,
+        verify_signers,
+        require_anchored_proof,
+        min_timestamp,
+        max_timestamp,
+        valid_source_blockchain_rids);
+
+/**
+ * Requires the presented transaction to be proved
+ *
+ * @param all_operations All operations in the current transaction
+ * @param signers Signers of the current transaction
+ * @param gtx_transaction The transaction to verify
+ * @param verify_signers Whether or not the signers must match current transaction signatures
+ * @param require_anchored_proof Whether or not we require inclusion of a proof that the block containing the transaction has been anchored in cluster anchoring chain
+ * @param min_timestamp Limit for how old the transaction is allowed to be, disabled if 0
+ * @param max_timestamp Limit for how new the transaction is allowed to be, disabled if 0
+ * @param valid_source_blockchain_rids Valid source blockchains for transaction
+ *
+ * @return the confirmation proof
+ */
+function require_and_return_valid_proof_from_operations_and_signers(
+    all_operations: list<gtx_operation>,
+    signers: list<pubkey>,
+    gtx_transaction,
+    verify_signers: boolean = true,
+    require_anchored_proof: boolean = false,
+    min_timestamp: integer = 0,
+    max_timestamp: integer = 0,
+    valid_source_blockchain_rids: set<byte_array>? = null,
 ): confirmation_proof {
-    val proof = _get_proof(gtx_transaction, require_anchored_proof);
+    val proof = _get_proof_from_operations(all_operations, gtx_transaction, require_anchored_proof);
     require(proof, "No proof operation present for TX");
 
     require(
@@ -173,7 +207,7 @@ function require_and_return_valid_proof(
 
     if (verify_signers) {
         require(
-            _has_signers(gtx_transaction),
+            _has_signers_from_signers(signers, gtx_transaction),
             "Proof TX has to be signed by all the signers that signed the source TX"
         );
     }
@@ -186,9 +220,16 @@ function require_and_return_valid_proof(
  *
  * @param gtx_transaction The transaction to verify signers against
  */
-function _has_signers(gtx_transaction): boolean {
+function _has_signers(gtx_transaction): boolean = _has_signers_from_signers(op_context.get_signers(), gtx_transaction);
+
+/**
+ * Checks whether or not the current transaction is signed by the same signers as the given transaction
+ *
+ * @param signers  Signers of the current transaction
+ * @param gtx_transaction The transaction to verify signers against
+ */
+function _has_signers_from_signers(signers: list<pubkey>, gtx_transaction): boolean {
     val proof_signers = gtx_transaction.body.signers @* { } ( byte_array.from_gtv($) );
-    val signers = op_context.get_signers();
     return signers.contains_all(proof_signers);
 }
 
@@ -202,9 +243,24 @@ function _has_signers(gtx_transaction): boolean {
 function _get_proof(
     gtx_transaction,
     require_anchored_proof: boolean = false
+): (tx_hash: byte_array, confirmation_proof: confirmation_proof, block_header: block_header)? =
+    _get_proof_from_operations(op_context.get_all_operations(), gtx_transaction, require_anchored_proof);
+
+/**
+ * Returns the `confirmation_proof` corresponding to the given transaction if there is any present in current transaction.
+ * It also returns transaction hash and a decoded version of the block header in the proof.
+ *
+ * @param all_operations All operations in the current transaction
+ * @param gtx_transaction The transaction to check
+ * @param require_anchored_proof Whether or not we require inclusion of a proof that the block containing the transaction has been anchored in cluster anchoring chain
+ */
+function _get_proof_from_operations(
+    all_operations: list<gtx_operation>,
+    gtx_transaction,
+    require_anchored_proof: boolean = false
 ): (tx_hash: byte_array, confirmation_proof: confirmation_proof, block_header: block_header)? {
     val blockchain_rid = gtx_transaction.body.blockchain_rid;
-    val confirmation_proofs = op_context.get_all_operations() @* {
+    val confirmation_proofs = all_operations @* {
         .name == iccf_op_name,
         byte_array.from_gtv(.args[0]) == blockchain_rid,
         not require_anchored_proof or .args.size() == iccf_anchored_proof_argument_count

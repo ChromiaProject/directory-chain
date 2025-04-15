@@ -8,6 +8,7 @@ import common.test.util.*;
 import proposal.voting.test.ops.*;
 import proposal_container.*;
 import direct_container.*;
+import prioritization.*;
 import lib.test.iccf.helper_operations.*;
 import lib.test.iccf.iccf_test_lib.*;
 
@@ -104,6 +105,24 @@ function test_blockchain_auth() {
         iccf_proof_for(controlling_blockchain.rid, configuration_tx1, height = 4),
         propose_configuration_iccf(alice.pubkey, configuration_tx1, 1)
     ).run_must_fail("op_index out of range");
+
+    val priority_state = priority_check_v1(
+        gtx_transaction_body(
+            blockchain_rid = chain_context.blockchain_rid,
+            operations = [
+                iccf_proof_for(controlling_blockchain.rid, configuration_tx1, height = 4).to_gtx_operation(),
+                gtx_operation("propose_configuration_iccf", [alice.pubkey.to_gtv(), configuration_tx1.to_gtv(), (0).to_gtv()]),
+            ],
+            signers = []
+        ),
+        tx_size = 0,
+        tx_enter_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME,
+        current_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME + 5001
+    );
+    assert_equals(priority_state.account_id, rell.test.pubkeys.alice);
+    assert_equals(priority_state.account_points, 95);
+    assert_equals(priority_state.tx_cost_points, 1);
+    assert_equals(priority_state.priority, 0.95);
 
     rell.test.tx().op(
         iccf_proof_for(controlling_blockchain.rid, configuration_tx1, height = 5),

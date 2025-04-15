@@ -88,12 +88,21 @@ function _set_provider_key_threshold(provider_pubkey: pubkey, provider_key_role,
  *
  * @return True if transaction is signed by the specific providers, false otherwise.
  */
-function provider_is_signer(provider_pubkey: pubkey, provider_key_roles: list<provider_key_role> = [provider_key_role.main]) {
+function provider_is_signer(provider_pubkey: pubkey, provider_key_roles: list<provider_key_role> = [provider_key_role.main]): boolean =
+    provider_is_signer_of_signers(provider_pubkey, op_context.get_signers(), provider_key_roles);
+
+/**
+ * Checks if transactions is signed by keys belonging to provider_pubkey. Will require the threshold of signer keys of
+ * the given key role to be valid.
+ *
+ * @return True if transaction is signed by the specific providers, false otherwise.
+ */
+function provider_is_signer_of_signers(provider_pubkey: pubkey, tx_signers: list<pubkey>, provider_key_roles: list<provider_key_role> = [provider_key_role.main]): boolean {
 
     val key_roles_signed = provider_auth_key @* {
         provider_pubkey,
         .provider_key_role in provider_key_roles,
-        .pubkey in op_context.get_signers(),
+        .pubkey in tx_signers,
         .active
     } ( @group .provider_key_role, @sum signed_keys = 1 );
 

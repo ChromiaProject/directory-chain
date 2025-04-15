@@ -1,0 +1,205 @@
+@test module;
+
+import ^^.*;
+import common.test.setup.*;
+import common.test.helper_operations.*;
+
+function test_init_operation_success() {
+    val priority_state = priority_check_v1(
+        gtx_transaction_body(
+            blockchain_rid = chain_context.blockchain_rid,
+            operations = [
+                gtx_operation("init", list<gtv>())
+            ],
+            signers = list<gtv>()
+        ),
+        tx_size = 0,
+        tx_enter_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME,
+        current_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME
+    );
+
+    assert_null(priority_state.account_id);
+    assert_equals(priority_state.account_points, 0);
+    assert_equals(priority_state.tx_cost_points, 0);
+    assert_equals(priority_state.priority, 1.0);
+}
+
+function test_init_operation_fail() {
+    setup_module();
+
+    assert_fails("Network has already been initialized", priority_check_v1(
+        gtx_transaction_body(
+            blockchain_rid = chain_context.blockchain_rid,
+            operations = [
+                gtx_operation("init", list<gtv>())
+            ],
+            signers = list<gtv>()
+        ),
+        tx_size = 0,
+        tx_enter_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME,
+        current_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME,
+        *
+    ));
+}
+
+function test_bogus_operation() {
+    assert_fails("Unrecognized no-args operation: bogus", priority_check_v1(
+        gtx_transaction_body(
+            blockchain_rid = chain_context.blockchain_rid,
+            operations = [
+                gtx_operation("bogus", list<gtv>())
+            ],
+            signers = list<gtv>()
+        ),
+        tx_size = 0,
+        tx_enter_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME,
+        current_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME,
+        *
+    ));
+}
+
+function test_no_authenticated_operations() {
+    assert_fails("Transaction contains no regular operation", priority_check_v1(
+        gtx_transaction_body(
+            blockchain_rid = chain_context.blockchain_rid,
+            operations = [
+                gtx_operation("nop", list<gtv>())
+            ],
+            signers = list<gtv>()
+        ),
+        tx_size = 0,
+        tx_enter_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME,
+        current_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME,
+        *
+    ));
+}
+
+function test_one_unauthenticated_operation() {
+    setup_module();
+    val provider = provider @ { rell.test.pubkeys.alice };
+    rell.test.tx().op(
+        provider_rate_limit_op(provider)
+    ).sign(rell.test.keypairs.alice).run();
+
+    assert_fails("Operation must be signed by provider key(s)", priority_check_v1(
+        gtx_transaction_body(
+            blockchain_rid = chain_context.blockchain_rid,
+            operations = [
+                gtx_operation("propose_blockchain", [rell.test.pubkeys.alice.to_gtv()])
+            ],
+            signers = []
+        ),
+        tx_size = 0,
+        tx_enter_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME,
+        current_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME + 5001,
+        *
+    ));
+}
+
+function test_one_authenticated_operation() {
+    setup_module();
+    val provider = provider @ { rell.test.pubkeys.alice };
+    rell.test.tx().op(
+        provider_rate_limit_op(provider)
+    ).sign(rell.test.keypairs.alice).run();
+
+    val priority_state = priority_check_v1(
+        gtx_transaction_body(
+            blockchain_rid = chain_context.blockchain_rid,
+            operations = [
+                gtx_operation("propose_blockchain", [rell.test.pubkeys.alice.to_gtv()])
+            ],
+            signers = [rell.test.pubkeys.alice.to_gtv()]
+        ),
+        tx_size = 0,
+        tx_enter_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME,
+        current_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME + 5001
+    );
+
+    assert_equals(priority_state.account_id, rell.test.pubkeys.alice);
+    assert_equals(priority_state.account_points, 99);
+    assert_equals(priority_state.tx_cost_points, 1);
+    assert_equals(priority_state.priority, 0.99);
+}
+
+function test_two_authenticated_operations() {
+    setup_module();
+    val provider = provider @ { rell.test.pubkeys.alice };
+    rell.test.tx().op(
+        provider_rate_limit_op(provider),
+        provider_rate_limit_op(provider),
+    ).sign(rell.test.keypairs.alice).run();
+
+    val priority_state = priority_check_v1(
+        gtx_transaction_body(
+            blockchain_rid = chain_context.blockchain_rid,
+            operations = [
+                gtx_operation("propose_blockchain", [rell.test.pubkeys.alice.to_gtv()]),
+                gtx_operation("propose_configuration", [rell.test.pubkeys.alice.to_gtv()]),
+            ],
+            signers = [rell.test.pubkeys.alice.to_gtv()]
+        ),
+        tx_size = 0,
+        tx_enter_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME,
+        current_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME + 5001
+    );
+
+    assert_equals(priority_state.account_id, rell.test.pubkeys.alice);
+    assert_equals(priority_state.account_points, 98);
+    assert_equals(priority_state.tx_cost_points, 2);
+    assert_equals(priority_state.priority, 0.98);
+}
+
+function test_increase_current_points_with_time() {
+    setup_module();
+    val provider = provider @ { rell.test.pubkeys.alice };
+    rell.test.tx().op(
+        provider_rate_limit_op(provider),
+        provider_rate_limit_op(provider),
+    ).sign(rell.test.keypairs.alice).run();
+
+    val priority_state = priority_check_v1(
+        gtx_transaction_body(
+            blockchain_rid = chain_context.blockchain_rid,
+            operations = [
+                gtx_operation("propose_blockchain", [rell.test.pubkeys.alice.to_gtv()])
+            ],
+            signers = [rell.test.pubkeys.alice.to_gtv()]
+        ),
+        tx_size = 0,
+        tx_enter_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME,
+        current_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME + 1000 * 60 * 20
+    );
+
+    assert_equals(priority_state.account_id, rell.test.pubkeys.alice);
+    assert_equals(priority_state.account_points, 99);
+    assert_equals(priority_state.tx_cost_points, 1);
+    assert_equals(priority_state.priority, 0.99);
+}
+
+function test_increase_current_points_with_time_up_to_max() {
+    setup_module();
+    val provider = provider @ { rell.test.pubkeys.alice };
+    rell.test.tx().op(
+        provider_rate_limit_op(provider),
+        provider_rate_limit_op(provider),
+    ).sign(rell.test.keypairs.alice).run();
+
+    val priority_state = priority_check_v1(
+        gtx_transaction_body(
+            blockchain_rid = chain_context.blockchain_rid,
+            operations = [
+                gtx_operation("propose_blockchain", [rell.test.pubkeys.alice.to_gtv()])
+            ],
+            signers = [rell.test.pubkeys.alice.to_gtv()]
+        ),
+        tx_size = 0,
+        tx_enter_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME,
+        current_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME + 1000 * 60 * 60
+    );
+
+    assert_equals(priority_state.account_id, rell.test.pubkeys.alice);
+    assert_equals(priority_state.account_points, 100);
+    assert_equals(priority_state.tx_cost_points, 1);
+    assert_equals(priority_state.priority, 1.0);
+}
