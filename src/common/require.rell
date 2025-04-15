@@ -83,9 +83,23 @@ function require_is_provider_with_rate_limit(
     cost: integer = 1
 ) {
     val provider = require_provider(pubkey);
-    require(empty(provider_auth_blockchain @* { provider }), "Blockchain authentication is enabled for provider %s".format(provider.pubkey));
-    require(provider_is_signer(provider.pubkey, provider_key_roles), "Operation must be signed by provider key(s)");
-    require(provider.active, "Provider is not enabled");
+    require_provider_auth_with_rate_limit(provider, provider_key_roles, cost);
+    return provider;
+}
+
+/**
+ * Requires given provider is signing transaction, is active and not exceeds limit.
+ *
+ * @param provider The provider that must sign this transaction.
+ * @param provider_key_roles The type of auth keys to use for this authentication. Main is default.
+ * @param cost The number of points this operation costs.
+ */
+function require_provider_auth_with_rate_limit(
+    provider,
+    provider_key_roles: list<provider_key_role> = [provider_key_role.main],
+    cost: integer = 1
+) {
+    require_provider_auth(provider, provider_key_roles);
     provider_rate_limit(provider, cost);
     return provider;
 }
@@ -117,10 +131,37 @@ function require_provider_with_iccf_proof_and_rate_limit(tx_to_prove: gtx_transa
  * @param provider     the provider that must sign this transaction.
  */
 function require_provider_iccf_auth(tx_to_prove: gtx_transaction, op_index: integer,
-        op_name: text, op_arg_count: integer, provider): list<gtv> {
+        op_name: text, op_arg_count: integer, provider): list<gtv> =
+    require_provider_iccf_auth_from_operations(
+        op_context.get_all_operations(),
+        tx_to_prove,
+        op_index,
+        op_name,
+        op_arg_count,
+        provider,
+        should_update_state = true);
+
+/**
+ * Requires given provider to authenticate using ICCF.
+ *
+ * @param all_operations all operations in the current transaction
+ * @param tx_to_prove  the transaction from other chain to use for authentication
+ * @param op_index     index of the relevant operation in tx_to_prove
+ * @param op_name      expected operation name
+ * @param op_arg_count expected operation argument count
+ * @param provider     the provider that must sign this transaction.
+ * @param should_update_state if state should be updated (set to false if this is done without op_context, e.g. in a query)
+ */
+function require_provider_iccf_auth_from_operations(
+        all_operations: list<gtx_operation>,
+        tx_to_prove: gtx_transaction, op_index: integer,
+        op_name: text, op_arg_count: integer, provider,
+        should_update_state: boolean): list<gtv> {
     val provider_auth_blockchain = require(provider_auth_blockchain @? { provider },
         "Blockchain authentication is not enabled for provider %s".format(provider.pubkey));
-    val proof = iccf.require_and_return_valid_proof(
+    val proof = iccf.require_and_return_valid_proof_from_operations_and_signers(
+        all_operations,
+        [],
         tx_to_prove,
         require_anchored_proof=true,
         verify_signers=false,
@@ -136,14 +177,30 @@ function require_provider_iccf_auth(tx_to_prove: gtx_transaction, op_index: inte
             or (height == provider_auth_blockchain.latest_height and tx_index > provider_auth_blockchain.latest_tx_index),
         "Transaction is older than previous, confirmed in block %d transaction %d".format(
             provider_auth_blockchain.latest_height, provider_auth_blockchain.latest_tx_index));
-    provider_auth_blockchain.latest_height = height;
-    provider_auth_blockchain.latest_tx_index = tx_index;
+    if (should_update_state) {
+        provider_auth_blockchain.latest_height = height;
+        provider_auth_blockchain.latest_tx_index = tx_index;
+    }
 
-    require(op_index in range(tx_to_prove.body.operations.size()), "op_index out of range");
+    require(op_index in range(tx_to_prove.body.operations.size()),
+        "op_index out of range: %d > %d".format(op_index, tx_to_prove.body.operations.size() - 1));
     val op = tx_to_prove.body.operations[op_index];
     require(op.name == op_name, "Wrong operation name <%s>, expected <%s>".format(op.name, op_name));
     require(op.args.size() >= op_arg_count, "Wrong number of operation arguments <%s>, expected <%s>".format(op.args.size(), op_arg_count));
     return op.args;
+}
+
+/**
+ * Requires given pubkey is an active provider which is signing the transaction.
+ *
+ * @param provider The provider key that must sign this transaction.
+ * @param provider_key_roles The type of auth keys to use for this authentication. Main is default.
+ */
+function require_provider_auth(provider, provider_key_roles: list<provider_key_role> = [provider_key_role.main]) {
+    require(empty(provider_auth_blockchain @* { provider }), "Blockchain authentication is enabled for provider %s".format(provider.pubkey));
+    require(provider_is_signer(provider.pubkey, provider_key_roles), "Operation must be signed by provider key(s)");
+    require(provider.active, "Provider is not enabled");
+    return provider;
 }
 
 function require_pubkey(pubkey) {

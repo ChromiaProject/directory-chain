@@ -29,6 +29,26 @@ function _is_node_provider(tier: provider_tier) = tier == provider_tier.NODE_PRO
  * @param cost Number of points to consume for this operation.
  */
 function provider_rate_limit(provider, cost: integer = 1) {
+    val current_points = recover_provider_rate_limit(provider, cost);
+
+    require(exists(provider_rl_state @? { provider, .points >= 0 }),
+        "Provider %s has not enough points to spend. Has %s but needs %s"
+            .format(provider.pubkey, current_points, cost));
+}
+
+function recover_provider_rate_limit(provider, cost: integer): integer {
+    val (current_points, _, update_time) = current_provider_rate_limit(provider, op_context.last_block_time);
+
+    update provider_rl_state @ { provider } (
+        .points = current_points - cost,
+        .last_update = update_time
+    );
+
+    return current_points;
+}
+
+function current_provider_rate_limit(provider, current_timestamp: timestamp)
+        : (current_points: integer, max_points: integer, update_time: timestamp) {
     val max_actions_per_day = provider_quota @ {
             .tier == provider.tier,
             provider_quota_type.max_actions_per_day
@@ -37,7 +57,7 @@ function provider_rate_limit(provider, cost: integer = 1) {
     // We recover max_actions_per_day in 24 hours, find time needed to recover 1 point
     val recovery_time = millis_per_day / max_actions_per_day;
     val state = provider_rl_state @ { provider } (.points, .last_update);
-    val time_delta = op_context.last_block_time - state.last_update;
+    val time_delta = current_timestamp - state.last_update;
     var recovered_points = 0;
     var update_time = state.last_update;
 
@@ -48,18 +68,13 @@ function provider_rate_limit(provider, cost: integer = 1) {
         if (recovered_points + state.points > max_actions_per_day) {
             recovered_points = max_actions_per_day - state.points;
             // if user is at the maximum reset his timer
-            update_time = op_context.last_block_time;
+            update_time = current_timestamp;
         }
     }
 
-    update provider_rl_state @ { provider } (
-        .points += recovered_points - cost,
-        .last_update = update_time
-    );
+    val current_points = state.points + recovered_points;
 
-    require(exists(provider_rl_state @? { provider, .points >= 0 }),
-        "Provider %s has not enough points to spend. Has %s but needs %s"
-            .format(provider.pubkey, state.points + recovered_points, cost));
+    return (current_points = current_points, max_points = max_actions_per_day, update_time = update_time);
 }
 
 function require_provider_quota(provider, quota_type: provider_quota_type) {
