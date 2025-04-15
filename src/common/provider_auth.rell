@@ -15,61 +15,6 @@ function _after_provider_registered_add_key(provider, cluster: cluster?) {
 }
 
 /**
- * Add a key with role for a provider.
- *
- * @param my_pubkey Provider pubkey for which the key is added.
- * @param role They role of this key.
- * @param pubkey The new key to add. Must sign the transaction.
- */
-operation add_provider_key(my_pubkey: pubkey, role: provider_key_role, pubkey) {
-    val provider = require_is_provider_with_rate_limit(my_pubkey);
-
-    require_is_signer(pubkey);
-
-    val key_owner = get_provider_by_auth_key(pubkey);
-    require(key_owner == null or key_owner == provider.pubkey,
-        "Key is already in use by provider %s".format(key_owner));
-
-    _add_provider_key(provider.pubkey, pubkey, role);
-}
-
-/**
- * No longer supported, use revoke_provider_key instead.
- */
-operation remove_provider_key(my_pubkey: pubkey, role: provider_key_role) {
-    require(false, "Removing provider keys is not supported, use revoke_provider_key instead");
-}
-
-/**
- * Revoke a key with role for a provider.
- *
- * @param my_pubkey Provider pubkey for which the key is revoked.
- * @param role They role of this key.
- * @param pubkey The key to remove.
- */
-operation revoke_provider_key(my_pubkey: pubkey, role: provider_key_role, pubkey) {
-    val provider = require_is_provider_with_rate_limit(my_pubkey);
-    require(get_provider_by_auth_key(pubkey) == provider.pubkey,
-        "Operation not signed by key owner");
-
-    _revoke_provider_key(provider.pubkey, pubkey, role);
-}
-
-/**
- * Set the key threshold a key role for a provider. The threshold
- * controls the number of keys required to authenticate the provider.
- *
- * @param my_pubkey Provider pubkey for which the key threshold is set.
- * @param role They role of this key.
- * @param threshold Can either be -1 for majority, 0 for super-majority or the number of keys required.
- */
-operation set_provider_key_threshold(my_pubkey: pubkey, role: provider_key_role, threshold: integer) {
-    val provider = require_is_provider_with_rate_limit(my_pubkey);
-
-    _set_provider_key_threshold(provider.pubkey, role, threshold);
-}
-
-/**
  * Get keys for provider, their roles and threshold.
  */
 query get_provider_keys(pubkey) {
