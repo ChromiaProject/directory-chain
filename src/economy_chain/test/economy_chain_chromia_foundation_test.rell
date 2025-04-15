@@ -1,0 +1,55 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.auth;
+}
+
+function test_create_chromia_foundation_voter_set() {
+
+    // Missing signer
+    rell.test.tx().op(
+        create_chromia_foundation_voter_set()
+    ).run_must_fail("Transaction must be signed to set first member of voter set");
+
+    // Successful
+    rell.test.tx().op(
+        create_chromia_foundation_voter_set()
+    )
+        .sign(rell.test.keypairs.alice)
+        .run();
+
+    // Can only create it once
+    rell.test.tx().op(
+        create_chromia_foundation_voter_set()
+    )
+        .sign(rell.test.keypairs.bob)
+        .run_must_fail("already exists");
+}
+
+function test_update_chromia_foundation_voter_set_member_removal() {
+
+    // Remove bob - successful
+    rell.test.tx()
+        .op(
+        create_test_voter_set_with_members(voter_sets.chromia_foundation, [rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub]),
+        update_chromia_foundation_voter_set(rell.test.keypairs.alice.pub, null, [], [rell.test.keypairs.bob.pub])
+    )
+        .sign(rell.test.keypairs.alice)
+        .run();
+
+    rell.test.tx().op(
+        make_common_vote(rell.test.pubkeys.bob, get_latest_common_proposal_id(), true)
+    ).sign(rell.test.keypairs.bob).run();
+
+    // Remove alice - fails due to last member
+    rell.test.tx()
+        .op(
+        update_chromia_foundation_voter_set(rell.test.keypairs.alice.pub, null, [], [rell.test.keypairs.alice.pub])
+    )
+        .sign(rell.test.keypairs.alice)
+        .run_must_fail("Can't remove last member in voter set");
+}

@@ -8,34 +8,6 @@ namespace ft4 {
     import lib.ft4.auth;
 }
 
-struct module_args {
-    account_creator_privkey: byte_array;
-}
-
-val auth_privkey = chain_context.args.account_creator_privkey;
-
-function test_create_chromia_foundation_voter_set() {
-
-    // Missing signer
-    rell.test.tx().op(
-        create_chromia_foundation_voter_set()
-    ).run_must_fail("Transaction must be signed to set first member of voter set");
-
-    // Successful
-    rell.test.tx().op(
-        create_chromia_foundation_voter_set()
-    )
-        .sign(rell.test.keypairs.alice)
-        .run();
-
-    // Can only create it once
-    rell.test.tx().op(
-        create_chromia_foundation_voter_set()
-    )
-        .sign(rell.test.keypairs.bob)
-        .run_must_fail("already exists");
-}
-
 function test_propose_minting_validation() {
 
     // Voter set must exist
@@ -83,10 +55,11 @@ function test_propose_minting_validation() {
 
 function test_propose_minting_success() {
 
-    rell.test.tx().op(init(), create_test_cluster("cluster_name")).run();
-    val alice_account = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
-    val init_amount = 1000000000;
+    val init_amount = 10000000000;
     val amount = 1000000;
+
+    rell.test.tx().op(init(), create_test_cluster("cluster_name")).run();
+    val alice_account = register_test_account_op(rell.test.pubkeys.alice, init_amount);
     assert_equals(get_account_balance(alice_account), init_amount);
 
     rell.test.tx().op(
@@ -100,10 +73,63 @@ function test_propose_minting_success() {
     assert_true(empty(pending_minting @* { }));
 }
 
+function test_propose_minting_limit__one_too_large() {
+
+    rell.test.tx().op(init(), create_test_cluster("cluster_name")).run();
+    val amount_to_mint = get_ec_mint_proposal_amount_limit() + 1;
+
+    rell.test.tx()
+        .op(
+            create_chromia_foundation_voter_set(),
+            propose_minting(rell.test.pubkeys.alice, amount_to_mint, get_chromia_foundation_account().id)
+        )
+        .sign(rell.test.keypairs.alice)
+        .run_must_fail("Limit (%s) is reached with %s minted within %s ms".format(
+            get_ec_mint_proposal_amount_limit(), amount_to_mint, get_ec_mint_proposal_time_limit_ms()
+        ));
+}
+
+function test_propose_minting_limit__2_accepted_1_rejected_wait_1_accepted() {
+
+    rell.test.tx().op(init(), create_test_cluster("cluster_name")).run();
+
+    rell.test.tx()
+        .op(
+            create_chromia_foundation_voter_set(),
+            propose_minting(rell.test.pubkeys.alice, 10000000, get_chromia_foundation_account().id)
+        )
+        .sign(rell.test.keypairs.alice)
+        .run();
+
+    rell.test.tx()
+        .op(
+            propose_minting(rell.test.pubkeys.alice, 10000000, get_chromia_foundation_account().id)
+        )
+        .sign(rell.test.keypairs.alice)
+        .run();
+
+    rell.test.tx()
+        .op(
+            propose_minting(rell.test.pubkeys.alice, get_ec_mint_proposal_amount_limit(), get_chromia_foundation_account().id)
+        )
+        .sign(rell.test.keypairs.alice)
+        .run_must_fail("is reached with");
+
+    rell.test.set_next_block_time_delta(get_ec_mint_proposal_time_limit_ms());
+    rell.test.block().run();
+
+    rell.test.tx()
+        .op(
+            propose_minting(rell.test.pubkeys.alice, get_ec_mint_proposal_amount_limit(), get_chromia_foundation_account().id)
+        )
+        .sign(rell.test.keypairs.alice)
+        .run();
+}
+
 function test_propose_minting_revoked() {
 
     rell.test.tx().op(init(), create_test_cluster("cluster_name")).run();
-    val alice_account = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val alice_account = register_test_account_op(rell.test.pubkeys.alice);
 
     // Create voter set with alice and bob as members
     rell.test.tx().op(
@@ -127,7 +153,7 @@ function test_propose_minting_revoked() {
 function test_get_minting_proposal() {
 
     rell.test.tx().op(init(), create_test_cluster("cluster_name")).run();
-    val alice_account = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val alice_account = register_test_account_op(rell.test.pubkeys.alice);
 
     // Create voter set with alice and bob as members
     rell.test.tx().op(
@@ -142,26 +168,3 @@ function test_get_minting_proposal() {
     assert_equals(minting_proposal.account_id, alice_account.id);
 }
 
-function test_update_chromia_foundation_voter_set_member_removal() {
-
-    // Remove bob - successful
-    rell.test.tx()
-        .op(
-        create_test_voter_set_with_members(voter_sets.chromia_foundation, [rell.test.keypairs.alice.pub, rell.test.keypairs.bob.pub]),
-        update_chromia_foundation_voter_set(rell.test.keypairs.alice.pub, null, [], [rell.test.keypairs.bob.pub])
-    )
-        .sign(rell.test.keypairs.alice)
-        .run();
-
-    rell.test.tx().op(
-        make_common_vote(rell.test.keypairs.bob.pub, get_latest_common_proposal_id(), true)
-    ).sign(rell.test.keypairs.bob).run();
-
-    // Remove alice - fails due to last member
-    rell.test.tx()
-        .op(
-        update_chromia_foundation_voter_set(rell.test.keypairs.alice.pub, null, [], [rell.test.keypairs.alice.pub])
-    )
-        .sign(rell.test.keypairs.alice)
-        .run_must_fail("Can't remove last member in voter set");
-}
