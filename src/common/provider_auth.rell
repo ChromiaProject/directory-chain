@@ -13,30 +13,3 @@ struct provider_role_keys_data {
 function _after_provider_registered_add_key(provider, cluster: cluster?) {
     _add_provider_key(provider.pubkey, provider.pubkey);
 }
-
-/**
- * Get keys for provider, their roles and threshold.
- */
-query get_provider_keys(pubkey) {
-
-    val provider = require_provider(pubkey);
-
-    val provider_keys = list<provider_role_keys_data>();
-    for (threshold in provider_auth_threshold @* { .provider_pubkey == provider.pubkey }) {
-
-        val keys = provider_auth_key @* { .provider_pubkey == provider.pubkey, .provider_key_role == threshold.provider_key_role, .active } ( .pubkey );
-        provider_keys.add(provider_role_keys_data(threshold.provider_key_role, threshold.threshold, keys));
-    }
-
-    return provider_keys_data(provider.pubkey, provider_keys);
-}
-
-/**
- * Find provider by auth key and return provider identifier pubkey.
- *
- * @param pubkey A provider key used for auth.
- * @return The provider identity pubkey.
- */
-query get_provider_by_key(pubkey): pubkey? {
-    return get_provider_by_auth_key(pubkey);
-}
