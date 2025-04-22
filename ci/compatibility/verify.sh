@@ -16,6 +16,7 @@ blockchains_to_verify=(
   "system_anchoring:system_anchoring"
   "cluster_anchoring:cluster_anchoring_system"
   "economy_chain_prod:economy_chain"
+  "token_chain_mainnet:token_chain"
 )
 
 directory_chain_brid=$(curl -s "$node_url/brid/iid_0")
