@@ -16,7 +16,10 @@ operation staking_oracle_withdrawal_request(from: byte_array, network_id: intege
 
     if (exists(ft4_account)) {
         val current_network = _staking_network_id_to_enum(network_id);
-        _staking_request_withdrawal(ft4_account, current_network);
+        val active_withdrawal_time = staking_get_withdrawal_time(ft4_account.id, current_network);
+        if (not exists(active_withdrawal_time)) {
+            _staking_request_withdrawal(ft4_account, current_network);
+        }
     }
 }
 

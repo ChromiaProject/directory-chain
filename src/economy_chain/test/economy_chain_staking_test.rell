@@ -24,6 +24,7 @@ struct module_args {
     staking_withdrawals_payout_interval_ms: integer;
     amount_to_mint: big_integer = 1000000000;
     staking_rewards_payout_batch_size: integer = 10;
+    oracle_privkey: byte_array;
 }
 
 val auth_privkey = chain_context.args.account_creator_privkey;
@@ -1730,6 +1731,7 @@ function test_provisional_stake_queries() {
     assert_equals(get_total_provisional_stake_accounts(network.BSC), 2);
     assert_equals(get_total_provisional_stake_accounts(network.CHR), 0);
 }
+
 function test_withdrawal_request_oracle_is_protected() {
     rell.test.tx().op(
         staking_oracle_withdrawal_request(x"", 97)
@@ -1737,6 +1739,22 @@ function test_withdrawal_request_oracle_is_protected() {
     .nop()
     .sign(admin_privkey)
     .run_must_fail("Expected staking oracle signature");
+}
+
+function test_withdrawal_request_oracle_idempotent() {
+    rell.test.tx().op(
+        staking_oracle_withdrawal_request(x"", 97)
+    )
+    .nop()
+    .sign(chain_context.args.oracle_privkey)
+    .run();
+
+    rell.test.tx().op(
+        staking_oracle_withdrawal_request(x"", 97)
+    )
+    .nop()
+    .sign(chain_context.args.oracle_privkey)
+    .run();
 }
 
 function test_staking_payouts_multiple_pending_shared_rewards() {
