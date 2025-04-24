@@ -2,7 +2,7 @@
  * Returns NM API Version
  * NM API Version: 1
  */
-query nm_api_version() = 22;
+query nm_api_version() = 23;
 
 /**
  * Returns peer info list
@@ -397,4 +397,15 @@ query nm_get_container_image_or_default(name): container_image_info? {
         container_image_info(name = "", url = default_subnode_image().url, digest = default_subnode_image().digest)
     else
         container_image_info(name = subnode_image.name, url = subnode_image.url, digest = subnode_image.digest);
+}
+
+/**
+ * Returns the time when the container was created,
+ * or `null` if that information is not available.
+ *
+ * NM API Version: 23
+ */
+query nm_get_container_creation_time(name): timestamp? {
+    val container = require_container(name);
+    return if (container.created_at < 0) null else container.created_at;
 }
