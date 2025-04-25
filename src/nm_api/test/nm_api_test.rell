@@ -514,3 +514,16 @@ function test_nm_get_container_creation_time_value() {
 
     assert_equals(nm_get_container_creation_time("container"), created_at);
 }
+
+function test_nm_get_container_rate_limits() {
+    setup_module();
+
+    val created_at = rell.test.last_block_time;
+    rell.test.tx().op(
+        create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
+    ).sign(initial_provider).run();
+
+    assert_equals(nm_get_container_rate_limits("container"), [
+        "ai_inference" : container_rate_limit(period_length_millis = millis_per_week, rate_limit = 1000),
+    ]);
+}
