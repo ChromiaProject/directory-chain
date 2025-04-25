@@ -409,3 +409,15 @@ query nm_get_container_creation_time(name): timestamp? {
     val container = require_container(name);
     return if (container.created_at < 0) null else container.created_at;
 }
+
+/**
+ * Returns rate limit configuration for container as a map of task type to rate limit configuration for that type of tasks.
+ * If there is no rate limit for a particular task type for a container, it will be absent in the map.
+ * If there are no rate limits for anything for a container, the returned map will be empty.
+ *
+ * NM API Version: 23
+ */
+query nm_get_container_rate_limits(name): map<text, container_rate_limit> {
+    val container = require_container(name);
+    return container_rate_limits(container);
+}
