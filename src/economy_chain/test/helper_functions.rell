@@ -187,6 +187,8 @@ function do_create_container(
 
     assert_equals(get_pending_tickets(account.id), list<ticket_data>());
 
+    assert_equals(create_container_cost(container_units, 1, 0, cluster_name, subnode_image_name), cost);
+
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(keypair.priv, create_container_with_subnode_image(keypair.pub, container_units, 1, 0, cluster_name, auto_renew, subnode_image_name))
     ).op(
@@ -274,6 +276,11 @@ function do_upgrade_container(
     val tag = cluster @ { .name == cluster_name }.tag;
 
     val cost = calculate_container_cost(upgraded_duration_weeks, container_units, upgraded_extra_storage_gib, tag) - calculate_remaining_lease_value(current_lease, rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL * block_height);
+
+    assert_equals(
+        upgrade_container_cost(container_name, container_units, upgraded_extra_storage_gib, cluster_name, upgraded_duration_weeks),
+        cost
+    );
 
     val initial_balance = get_account_balance(account);
     val initial_pool_balance = get_pool_balance();
