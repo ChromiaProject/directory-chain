@@ -349,9 +349,12 @@ function test_auto_renew_and_cancel_renew_lease() {
     rell.test.block().run();
     rell.test.block().run();
 
+    val renew_cost = renew_container_cost(container_name, 1);
+
     val purchases = get_lease_purchases_by_account(alice.id, null, null).data;
     val latest_purchase = lease_purchase_data.from_gtv_pretty(purchases[purchases.size() - 1]);
     assert_equals(latest_purchase.type, lease_purchase_type.RENEWAL);
+    assert_equals(latest_purchase.price, renew_cost);
 
     assert_false(lease @ { container_name } (.expired));
     assert_events(); // assert no ICMF messages sent
@@ -411,17 +414,18 @@ function test_renew_non_expired_container() {
     val pool_balance = get_pool_balance();
 
     assert_equals(lease @ { container_name } (.duration_millis), 1 * millis_per_week);
+    val renew_cost = renew_container_cost(container_name, 1);
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, renew_container(container_name, 1))
     ).op(
         renew_container(container_name, 1)
     ).run();
-    assert_lt(get_account_balance(alice), alice_balance);
-    assert_gt(get_pool_balance(), pool_balance);
     val purchases = get_lease_purchases_by_account(alice.id, null, null).data;
     val latest_purchase = lease_purchase_data.from_gtv_pretty(purchases[purchases.size() - 1]);
     assert_equals(latest_purchase.type, lease_purchase_type.RENEWAL);
+    assert_equals(latest_purchase.price, renew_cost);
     assert_equals(latest_purchase.price, alice_balance - get_account_balance(alice));
+    assert_equals(latest_purchase.price, get_pool_balance() - pool_balance);
 
     assert_equals(lease @ { container_name } (.duration_millis), 2 * millis_per_week);
     assert_false(lease @ { container_name } (.expired));
@@ -445,17 +449,18 @@ function test_renew_expired_container() {
     rell.test.block().run();
     assert_true(lease @ { container_name } (.expired));
 
+    val renew_cost = renew_container_cost(container_name, 1);
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, renew_container(container_name, 1))
     ).op(
         renew_container(container_name, 1)
     ).run();
-    assert_lt(get_account_balance(alice), alice_balance);
-    assert_gt(get_pool_balance(), pool_balance);
     val purchases = get_lease_purchases_by_account(alice.id, null, null).data;
     val latest_purchase = lease_purchase_data.from_gtv_pretty(purchases[purchases.size() - 1]);
     assert_equals(latest_purchase.type, lease_purchase_type.RENEWAL);
+    assert_equals(latest_purchase.price, renew_cost);
     assert_equals(latest_purchase.price, alice_balance - get_account_balance(alice));
+    assert_equals(latest_purchase.price, get_pool_balance() - pool_balance);
 
     assert_equals(lease @ { container_name } (.duration_millis), 2 * millis_per_week + expired_container_time);
     assert_false(lease @ { container_name } (.expired));
@@ -478,6 +483,8 @@ function test_auto_renew_expired_container() {
     rell.test.block().run();
     assert_true(lease @ { container_name } (.expired));
 
+    val renew_cost = renew_container_cost(container_name, 1);
+
     assert_false(lease @ { container_name } (.auto_renew));
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, auto_renew_container(container_name))
@@ -488,6 +495,7 @@ function test_auto_renew_expired_container() {
     val latest_purchase = lease_purchase_data.from_gtv_pretty(purchases[purchases.size() - 1]);
     assert_equals(latest_purchase.type, lease_purchase_type.RENEWAL);
     assert_equals(latest_purchase.price, alice_balance - get_account_balance(alice));
+    assert_equals(latest_purchase.price, renew_cost);
 
     assert_true(lease @ { container_name } (.auto_renew));
     assert_false(lease @ { container_name } (.expired));
