@@ -212,18 +212,6 @@ function test_create_container_with_subnode_image() {
     ).run_must_fail("Container %s already has a custom subnode image".format(container_name));
 }
 
-function test_create_container_with_subnode_image_with_extra_compute_fail_when_no_support_in_cluster() {
-    rell.test.tx().op(init(), create_test_cluster(cluster_name, extra_compute_request_price = 0)).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
-
-    rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice,
-            create_container_with_subnode_image(rell.test.pubkeys.alice, 2, 1, 0, cluster_name, false, "", extra_compute_requests = 5))
-    ).op(
-        create_container_with_subnode_image(rell.test.pubkeys.alice, 2, 1, 0, cluster_name, false, "", extra_compute_requests = 5)
-    ).run_must_fail("Cluster does not support extra compute requests");
-}
-
 function test_create_container_with_subnode_image_fail_when_not_exist() {
     rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
     val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
@@ -695,18 +683,6 @@ function test_upgrade_container_lower_total_storage_missing_space_data() {
     ).run_must_fail("Can't reduce space: No space data available for container container name");
 }
 
-function test_upgrade_container_with_extra_compute_fail_when_no_support_in_cluster() {
-    rell.test.tx().op(init(), create_test_cluster(cluster_name, extra_compute_request_price = 0)).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
-    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 2);
-
-    rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, upgrade_container(container_name, 2, 0, cluster_name, 1, 1))
-    ).op(
-        upgrade_container(container_name, 2, 0, cluster_name, 1, 1)
-    ).run_must_fail("Cluster does not support extra compute requests");
-}
-
 function test_receive_resource_usage_statistics_cleanup() {
     rell.test.set_next_block_time(1);
     rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
@@ -895,7 +871,7 @@ function test_auth_messages() {
     // Create with subnode image
     assert_equals(
         create_container_with_subnode_image_auth_message([rell.test.keypairs.alice.pub.to_gtv(), (1).to_gtv(), (1).to_gtv(), (0).to_gtv(), cluster_name.to_gtv(), false.to_gtv(), "vector".to_gtv(), (5).to_gtv()].to_gtv()),
-        "Please sign the message\nto lease container with 1 SCUs and 0 GiB extra storage and 5 extra compute requests and subnode image vector\nin cluster Bob's cluster\nfor 1 weeks\ncosting 210.000000 tCHR\non account {account_id}"
+        "Please sign the message\nto lease container with 1 SCUs and 0 GiB extra storage and 5 extra compute requests and subnode image vector\nin cluster Bob's cluster\nfor 1 weeks\ncosting 35.000000 tCHR\non account {account_id}"
     );
 
     // Upgrade
@@ -904,7 +880,7 @@ function test_auth_messages() {
 
     assert_equals(
         upgrade_container_auth_message([container_name.to_gtv(), (2).to_gtv(), (0).to_gtv(), cluster_name.to_gtv(), (1).to_gtv(), (5).to_gtv()].to_gtv()),
-        "Please sign the message\nto upgrade container container name\nto have 2 SCUs and 0 GiB extra storage and 5 extra compute requests\nin cluster Bob's cluster\nfor 1 weeks\ncosting (before applying refund of current lease) 245.000000 tCHR\non account {account_id}"
+        "Please sign the message\nto upgrade container container name\nto have 2 SCUs and 0 GiB extra storage and 5 extra compute requests\nin cluster Bob's cluster\nfor 1 weeks\ncosting (before applying refund of current lease) 70.000000 tCHR\non account {account_id}"
     );
 
     // Renew

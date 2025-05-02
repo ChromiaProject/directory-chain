@@ -149,8 +149,6 @@ function create_container_impl(
     require(total_storage >= 16, "total storage must be at least 16 GiB");
     require_dapp_cluster(cluster_name);
     require(extra_compute_requests >= 0, "extra_compute_requests cannot be negative");
-    require(extra_compute_requests == 0 or cluster.tag.extra_compute_request_price > 0,
-        "Cluster does not support extra compute requests");
 
     if (not subnode_image_name.empty()) {
         val subnode_image = require(subnode_image @? { .name == subnode_image_name }, "Subnode image %s not found".format(subnode_image_name));
@@ -410,9 +408,6 @@ operation upgrade_container(container_name: text, upgraded_container_units: inte
 
     val cluster = require_cluster(upgraded_cluster_name);
 
-    require(upgraded_extra_compute_requests == 0 or cluster.tag.extra_compute_request_price > 0,
-        "Cluster does not support extra compute requests");
-
     val cost = calculate_container_cost(upgraded_duration_weeks, upgraded_container_units, upgraded_extra_storage_gib, cluster.tag, upgraded_extra_compute_requests)
         - if (lease.expired) 0 else calculate_remaining_lease_value(lease, op_context.last_block_time);
     if (cost > 0) {
@@ -651,7 +646,7 @@ function calculate_container_cost(duration_weeks: integer, container_units: inte
         tag: tag, extra_compute_requests: integer): integer {
     val scu_cost = container_units * tag.scu_price;
     val extra_storage_cost = extra_storage_gib * tag.extra_storage_price;
-    val extra_compute_requests_cost = extra_compute_requests * tag.extra_compute_request_price;
+    val extra_compute_requests_cost = 0; // TODO extra_compute_requests_cost
 
     return (decimal(scu_cost + extra_storage_cost + extra_compute_requests_cost) / units_per_usd
         * 7 * duration_weeks * economy_constants.chr_per_usd * units_per_asset).to_integer();
