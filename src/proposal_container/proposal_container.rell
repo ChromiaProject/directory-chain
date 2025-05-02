@@ -8,6 +8,7 @@ entity pending_container {
     extra_storage: integer;
     proposed_by: provider;
     subnode_image_name: text = "";
+    extra_compute_requests: integer = 0;
 }
 
 @extend(apply_voting_result_handlers) function() = [proposal_type.container.name: apply_container(*)];
@@ -23,7 +24,8 @@ function apply_container(proposal) {
         pps.deployer,
         pps.container_units,
         pps.max_blockchains,
-        pps.extra_storage
+        pps.extra_storage,
+        pps.extra_compute_requests,
     );
     if (maybe_subnode_image != null) {
         create container_subnode_image(c, maybe_subnode_image);
@@ -75,10 +77,12 @@ function propose_container_impl(my_pubkey: pubkey, cluster_name: text, name, dep
     val container_units = standard_container_defaults.container_units;
     val max_blockchains = standard_container_defaults.max_blockchains;
     val extra_storage = standard_container_defaults.extra_storage;
+    val extra_compute_requests = standard_container_defaults.extra_compute_requests;
 
     val prop = create_proposal(proposal_type.container, me, cluster.governance, description);
     val pending_container = create pending_container(
-        prop, name, cluster, deployer, container_units, max_blockchains, extra_storage, me, subnode_image_name = subnode_image ?: ""
+        prop, name, cluster, deployer, container_units, max_blockchains, extra_storage, me, subnode_image_name = subnode_image ?: "",
+        extra_compute_requests = extra_compute_requests,
     );
     validate_container_proposal(pending_container);
     internal_vote(me, prop, true);

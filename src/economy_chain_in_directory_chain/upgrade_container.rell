@@ -9,13 +9,36 @@
     receive_upgrade_container_impl(body);
 }
 
+function decode_upgrade_container_message(gtv): upgrade_container_message {
+    when (list<gtv>.from_gtv(gtv).size()) {
+        5 -> {
+            val v1 = upgrade_container_message_v1.from_gtv(gtv);
+            return upgrade_container_message(
+                ticket_id = v1.ticket_id,
+                container_name = v1.container_name,
+                container_units = v1.container_units,
+                extra_storage = v1.extra_storage,
+                cluster_name = v1.cluster_name,
+                extra_compute_requests = 0,
+            );
+        }
+        6 -> {
+            return upgrade_container_message.from_gtv(gtv);
+        }
+        else -> {
+            require(false, "Unable to decode upgrade_container_message");
+            return upgrade_container_message.from_gtv(gtv); // will not happen
+        }
+    }
+}
+
 entity ec_pending_last_anchored_heights_request {
     request_id: integer;
     upgrade_container_message: byte_array;
 }
 
 function receive_upgrade_container_impl(body: gtv) {
-    val message = upgrade_container_message.from_gtv(body);
+    val message = decode_upgrade_container_message(body);
 
     val container = container @? { message.container_name };
     if (container == null) {
@@ -52,7 +75,8 @@ function send_upgrade_container_result(
 }
 
 function check_and_upgrade_container(container, message: upgrade_container_message) {
-    upgrade_container(container, message.container_units, message.extra_storage, standard_container_defaults.max_blockchains);
+    upgrade_container(container, message.container_units, message.extra_storage,
+        standard_container_defaults.max_blockchains, message.extra_compute_requests);
     // In case container was stopped
     restart_container(message.container_name);
 }
@@ -86,7 +110,7 @@ function start_creating_container_and_moving_blockchains_async(message: upgrade_
         return;
     }
 
-    val message = upgrade_container_message.from_bytes(pending_request.upgrade_container_message);
+    val message = decode_upgrade_container_message(gtv.from_bytes(pending_request.upgrade_container_message));
 
     // TODO: Retrieve error messages from `require()`:s
     val dst_container_cluster_names = try_call(
@@ -96,6 +120,7 @@ function start_creating_container_and_moving_blockchains_async(message: upgrade_
             anchored_blockchains,
             message.container_units,
             message.extra_storage,
+            message.extra_compute_requests,
             *
     ));
 

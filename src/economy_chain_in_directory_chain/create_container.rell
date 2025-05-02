@@ -9,8 +9,32 @@
     receive_create_container_impl(body);
 }
 
+function decode_create_container_message(gtv): create_container_message {
+    when (list<gtv>.from_gtv(gtv).size()) {
+        6 -> {
+            val v1 = create_container_message_v1.from_gtv(gtv);
+            return create_container_message(
+                ticket_id = v1.ticket_id,
+                provider_pubkey = v1.provider_pubkey,
+                container_units = v1.container_units,
+                extra_storage = v1.extra_storage,
+                cluster_name = v1.cluster_name,
+                subnode_image_name = v1.subnode_image_name,
+                extra_compute_requests = 0,
+            );
+        }
+        7 -> {
+            return create_container_message.from_gtv(gtv);
+        }
+        else -> {
+            require(false, "Unable to decode create_container_message");
+            return create_container_message.from_gtv(gtv); // will not happen
+        }
+    }
+}
+
 function receive_create_container_impl(body: gtv) {
-    val message = create_container_message.from_gtv(body);
+    val message = decode_create_container_message(body);
 
     val container_cluster_names = try_call(create_container_from_ticket(
         provider_pubkey = message.provider_pubkey,
@@ -18,6 +42,7 @@ function receive_create_container_impl(body: gtv) {
         extra_storage = message.extra_storage,
         cluster_name = message.cluster_name,
         subnode_image_name = message.subnode_image_name,
+        extra_compute_requests = message.extra_compute_requests,
         *));
 
     val error_message = if (container_cluster_names == null)
@@ -39,6 +64,7 @@ function create_container_from_ticket(
     extra_storage: integer,
     cluster_name: text,
     subnode_image_name: text,
+    extra_compute_requests: integer,
 ): (container_name: text, cluster_name: text) {
 
     require_pubkey(provider_pubkey);
@@ -60,7 +86,7 @@ function create_container_from_ticket(
                 "Subnode image %s is not compatible with cluster %s".format(maybe_subnode_image.name, cluster.name));
         }
 
-        val container = create_container_in_cluster(provider, cluster, container_units, extra_storage);
+        val container = create_container_in_cluster(provider, cluster, container_units, extra_storage, extra_compute_requests);
 
         if (maybe_subnode_image != null) {
             create container_subnode_image(container, maybe_subnode_image);
@@ -72,12 +98,14 @@ function create_container_from_ticket(
     return (container_name = "", cluster_name = "");
 }
 
-function create_container_in_cluster(provider, cluster, container_units: integer, extra_storage: integer): container {
+function create_container_in_cluster(provider, cluster, container_units: integer, extra_storage: integer,
+        extra_compute_requests: integer): container {
     val name = [cluster.to_gtv(), provider.pubkey.to_gtv(), op_context.transaction.tx_rid.to_gtv(), op_context.op_index.to_gtv()].hash().to_hex();
     return create_container_impl(
         provider, name, cluster, 1, [provider.pubkey],
         container_units,
         standard_container_defaults.max_blockchains,
-        extra_storage
+        extra_storage,
+        extra_compute_requests,
     );
 }
