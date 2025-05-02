@@ -56,7 +56,7 @@ function () = ft4.auth.add_auth_handler(
 function create_container_auth_message(gtv): text {
     val args = struct<create_container>.from_gtv(gtv);
     val tag = require_cluster(args.cluster_name).tag;
-    val cost = calculate_container_cost(args.duration_weeks, args.container_units, args.extra_storage_gib, tag);
+    val cost = calculate_container_cost(args.duration_weeks, args.container_units, args.extra_storage_gib, tag, 0);
     return "Please sign the message\nto lease container with %s SCUs and %s GiB extra storage\nin cluster %s\nfor %s weeks\ncosting %s %s\n%son account {account_id}".format(
         args.container_units,
         args.extra_storage_gib,
@@ -78,10 +78,12 @@ function create_container_auth_message(gtv): text {
  * @param duration_weeks  lease duration in weeks
  * @param extra_storage_gib  extra storage in GiB
  * @param cluster_name  cluster name
+ *
+ * @deprecated use create_container_with_subnode_image instead
  */
 operation create_container(provider_pubkey: pubkey, container_units: integer,
         duration_weeks: integer, extra_storage_gib: integer, cluster_name: text, auto_renew: boolean) {
-    create_container_impl(provider_pubkey, container_units, duration_weeks, extra_storage_gib, cluster_name, auto_renew, "");
+    create_container_impl(provider_pubkey, container_units, duration_weeks, extra_storage_gib, cluster_name, auto_renew, "", 0);
 }
 
 @extend(ft4.auth.auth_handler)
@@ -94,10 +96,11 @@ function () = ft4.auth.add_auth_handler(
 function create_container_with_subnode_image_auth_message(gtv): text {
     val args = struct<create_container_with_subnode_image>.from_gtv(gtv);
     val tag = require_cluster(args.cluster_name).tag;
-    val cost = calculate_container_cost(args.duration_weeks, args.container_units, args.extra_storage_gib, tag);
-    return "Please sign the message\nto lease container with %s SCUs and %s GiB extra storage%s\nin cluster %s\nfor %s weeks\ncosting %s %s\n%son account {account_id}".format(
+    val cost = calculate_container_cost(args.duration_weeks, args.container_units, args.extra_storage_gib, tag, args.extra_compute_requests);
+    return "Please sign the message\nto lease container with %s SCUs and %s GiB extra storage and %s extra compute requests%s\nin cluster %s\nfor %s weeks\ncosting %s %s\n%son account {account_id}".format(
         args.container_units,
         args.extra_storage_gib,
+        args.extra_compute_requests,
         if (args.subnode_image_name.empty()) "" else " and subnode image " + args.subnode_image_name,
         args.cluster_name,
         args.duration_weeks,
@@ -118,20 +121,24 @@ function create_container_with_subnode_image_auth_message(gtv): text {
  * @param extra_storage_gib  extra storage in GiB
  * @param cluster_name  cluster name
  * @param subnode_image_name  subnode image to use, or "" to use default subnode image
+ * @param extra_compute_requests  number of extra compute requests per week
  */
 operation create_container_with_subnode_image(provider_pubkey: pubkey, container_units: integer,
-        duration_weeks: integer, extra_storage_gib: integer, cluster_name: text, auto_renew: boolean, subnode_image_name: text) {
-    create_container_impl(provider_pubkey, container_units, duration_weeks, extra_storage_gib, cluster_name, auto_renew, subnode_image_name);
+        duration_weeks: integer, extra_storage_gib: integer, cluster_name: text, auto_renew: boolean,
+        subnode_image_name: text, extra_compute_requests: integer = 0) {
+    create_container_impl(provider_pubkey, container_units, duration_weeks, extra_storage_gib, cluster_name, auto_renew,
+        subnode_image_name, extra_compute_requests);
 }
 
 function create_container_impl(
-    provider_pubkey: pubkey,
-    container_units: integer,
-    duration_weeks: integer,
-    extra_storage_gib: integer,
-    cluster_name: text,
-    auto_renew: boolean,
-    subnode_image_name: text) {
+        provider_pubkey: pubkey,
+        container_units: integer,
+        duration_weeks: integer,
+        extra_storage_gib: integer,
+        cluster_name: text,
+        auto_renew: boolean,
+        subnode_image_name: text,
+        extra_compute_requests: integer) {
 
     require_initialized();
     require_pubkey(provider_pubkey);
@@ -141,6 +148,9 @@ function create_container_impl(
     val total_storage = cluster.container_unit_storage / 1024 * container_units + extra_storage_gib;
     require(total_storage >= 16, "total storage must be at least 16 GiB");
     require_dapp_cluster(cluster_name);
+    require(extra_compute_requests >= 0, "extra_compute_requests cannot be negative");
+    require(extra_compute_requests == 0 or cluster.tag.extra_compute_request_price > 0,
+        "Cluster does not support extra compute requests");
 
     if (not subnode_image_name.empty()) {
         val subnode_image = require(subnode_image @? { .name == subnode_image_name }, "Subnode image %s not found".format(subnode_image_name));
@@ -152,7 +162,7 @@ function create_container_impl(
     val account = ft4.auth.authenticate();
     require_non_memo_account(account);
 
-    val cost = calculate_container_cost(duration_weeks, container_units, extra_storage_gib, cluster.tag);
+    val cost = calculate_container_cost(duration_weeks, container_units, extra_storage_gib, cluster.tag, extra_compute_requests);
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), cost);
 
     val ticket = create ticket(type = ticket_type.CREATE_CONTAINER, account);
@@ -164,6 +174,7 @@ function create_container_impl(
         auto_renew = auto_renew,
         cluster_name = cluster.name,
         subnode_image_name = subnode_image_name,
+        extra_compute_requests = extra_compute_requests,
     );
     send_message(create_container_topic, create_container_message(
         ticket_id = ticket.rowid.to_integer(),
@@ -172,9 +183,11 @@ function create_container_impl(
         extra_storage = 1024 * extra_storage_gib,
         cluster_name = cluster_name,
         subnode_image_name = subnode_image_name,
+        extra_compute_requests = extra_compute_requests,
     ).to_gtv());
 
-    create lease_purchase(account, duration_millis = duration_weeks * millis_per_week, container_units, extra_storage_gib, price = cost);
+    create lease_purchase(account, duration_millis = duration_weeks * millis_per_week, container_units, extra_storage_gib,
+        price = cost, extra_compute_requests = extra_compute_requests);
 }
 
 /**
@@ -185,11 +198,12 @@ function create_container_impl(
  * @param extra_storage_gib  extra storage in GiB
  * @param cluster_name  cluster name
  * @param subnode_image_name  subnode image to use, or "" to use default subnode image
+ * @param extra_compute_requests  number of extra compute requests per week
  */
 query create_container_cost(container_units: integer, duration_weeks: integer, extra_storage_gib: integer,
-        cluster_name: text, subnode_image_name: text): integer {
+        cluster_name: text, subnode_image_name: text, extra_compute_requests: integer = 0): integer {
     val tag = require_cluster(cluster_name).tag;
-    return calculate_container_cost(duration_weeks, container_units, extra_storage_gib, tag);
+    return calculate_container_cost(duration_weeks, container_units, extra_storage_gib, tag, extra_compute_requests);
 }
 
 @extend(ft4.auth.auth_handler)
@@ -346,11 +360,12 @@ function upgrade_container_auth_message(gtv): text {
     val args = struct<upgrade_container>.from_gtv(gtv);
     require_lease(args.container_name);
     val tag = require_cluster(args.upgraded_cluster_name).tag;
-    val cost = calculate_container_cost(args.upgraded_duration_weeks, args.upgraded_container_units, args.upgraded_extra_storage_gib, tag);
-    return "Please sign the message\nto upgrade container %s\nto have %s SCUs and %s GiB extra storage\nin cluster %s\nfor %s weeks\ncosting (before applying refund of current lease) %s %s\non account {account_id}".format(
+    val cost = calculate_container_cost(args.upgraded_duration_weeks, args.upgraded_container_units, args.upgraded_extra_storage_gib, tag, args.upgraded_extra_compute_requests);
+    return "Please sign the message\nto upgrade container %s\nto have %s SCUs and %s GiB extra storage and %s extra compute requests\nin cluster %s\nfor %s weeks\ncosting (before applying refund of current lease) %s %s\non account {account_id}".format(
         args.container_name,
         args.upgraded_container_units,
         args.upgraded_extra_storage_gib,
+        args.upgraded_extra_compute_requests,
         args.upgraded_cluster_name,
         args.upgraded_duration_weeks,
         ft4.assets.format_amount_with_decimals(cost, chain_context.args.asset_decimals),
@@ -368,14 +383,18 @@ function upgrade_container_auth_message(gtv): text {
  * @param upgraded_extra_storage_gib The new size of extra storage.
  * @param upgraded_cluster_name Move this container to a new cluster.
  * @param upgraded_duration_weeks Duration for the new upgraded lease
+ * @param upgraded_extra_compute_requests  number of extra compute requests per week
  */
 operation upgrade_container(container_name: text, upgraded_container_units: integer,
-    upgraded_extra_storage_gib: integer, upgraded_cluster_name: text, upgraded_duration_weeks: integer) {
+        upgraded_extra_storage_gib: integer, upgraded_cluster_name: text, upgraded_duration_weeks: integer,
+        upgraded_extra_compute_requests: integer = 0) {
     require_initialized();
     val lease = require_lease(container_name);
     require(not has_pending_upgrade(container_name), "Container %s already has a pending upgrade".format(container_name));
     require(
-        upgraded_container_units != lease.container_units or upgraded_extra_storage_gib != lease.extra_storage_gib,
+        upgraded_container_units != lease.container_units
+            or upgraded_extra_storage_gib != lease.extra_storage_gib
+            or upgraded_extra_compute_requests != lease.extra_compute_requests,
         "New container specifications are identical to current lease"
     );
     require_lease_duration(upgraded_duration_weeks);
@@ -391,7 +410,10 @@ operation upgrade_container(container_name: text, upgraded_container_units: inte
 
     val cluster = require_cluster(upgraded_cluster_name);
 
-    val cost = calculate_container_cost(upgraded_duration_weeks, upgraded_container_units, upgraded_extra_storage_gib, cluster.tag)
+    require(upgraded_extra_compute_requests == 0 or cluster.tag.extra_compute_request_price > 0,
+        "Cluster does not support extra compute requests");
+
+    val cost = calculate_container_cost(upgraded_duration_weeks, upgraded_container_units, upgraded_extra_storage_gib, cluster.tag, upgraded_extra_compute_requests)
         - if (lease.expired) 0 else calculate_remaining_lease_value(lease, op_context.last_block_time);
     if (cost > 0) {
         ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), cost);
@@ -406,20 +428,22 @@ operation upgrade_container(container_name: text, upgraded_container_units: inte
         extra_storage_gib = upgraded_extra_storage_gib,
         cost = cost,
         cluster_name = cluster.name,
-        duration_weeks = upgraded_duration_weeks
+        duration_weeks = upgraded_duration_weeks,
+        extra_compute_requests = upgraded_extra_compute_requests,
     );
     send_message(upgrade_container_topic, upgrade_container_message(
         ticket_id = ticket.rowid.to_integer(),
         container_name = container_name,
         container_units = upgraded_container_units,
         extra_storage = 1024 * upgraded_extra_storage_gib,
-        cluster_name = upgraded_cluster_name
+        cluster_name = upgraded_cluster_name,
+        extra_compute_requests = upgraded_extra_compute_requests,
     ).to_gtv());
 
     create lease_purchase(
         account, duration_millis = lease.duration_millis,
         container_units = upgraded_container_units, extra_storage_gib = upgraded_extra_storage_gib,
-        price = cost, lease_purchase_type.UPGRADE
+        price = cost, lease_purchase_type.UPGRADE, extra_compute_requests = upgraded_extra_compute_requests
     );
 }
 
@@ -431,12 +455,14 @@ operation upgrade_container(container_name: text, upgraded_container_units: inte
  * @param upgraded_extra_storage_gib The new size of extra storage.
  * @param upgraded_cluster_name Move this container to a new cluster.
  * @param upgraded_duration_weeks Duration for the new upgraded lease
+ * @param upgraded_extra_compute_requests  number of extra compute requests per week
  */
 query upgrade_container_cost(container_name: text, upgraded_container_units: integer,
-        upgraded_extra_storage_gib: integer, upgraded_cluster_name: text, upgraded_duration_weeks: integer): integer {
+        upgraded_extra_storage_gib: integer, upgraded_cluster_name: text,
+        upgraded_duration_weeks: integer, upgraded_extra_compute_requests: integer = 0): integer {
     val lease = require_lease(container_name);
     val tag = require_cluster(upgraded_cluster_name).tag;
-    return calculate_container_cost(upgraded_duration_weeks, upgraded_container_units, upgraded_extra_storage_gib, tag)
+    return calculate_container_cost(upgraded_duration_weeks, upgraded_container_units, upgraded_extra_storage_gib, tag, upgraded_extra_compute_requests)
         - if (lease.expired) 0 else calculate_remaining_lease_value(lease, get_last_blocktime());
 }
 
@@ -477,7 +503,7 @@ function renew_container_auth_message(gtv): text {
 
     val lease = require_lease(args.container_name);
     val tag = lease.cluster.tag;
-    val cost = calculate_container_cost(args.duration_weeks, lease.container_units, lease.extra_storage_gib, tag);
+    val cost = calculate_container_cost(args.duration_weeks, lease.container_units, lease.extra_storage_gib, tag, lease.extra_compute_requests);
 
     return "Please sign the message\nto renew lease of container %s\nfor %s weeks\ncosting %s %s\non account {account_id}".format(
         args.container_name,
@@ -515,7 +541,7 @@ function auto_renew_container_auth_message(gtv): text {
 
     val lease = require_lease(args.container_name);
     val tag = lease.cluster.tag;
-    val weekly_cost = calculate_container_cost(1, lease.container_units, lease.extra_storage_gib, tag);
+    val weekly_cost = calculate_container_cost(1, lease.container_units, lease.extra_storage_gib, tag, lease.extra_compute_requests);
 
     return "Please sign the message\nto enable auto-renewal of container %s\ncosting %s %s per week\non account {account_id}".format(
         args.container_name,
@@ -587,19 +613,19 @@ query renew_container_cost(container_name: text, duration_weeks: integer): integ
     require_lease_duration(duration_weeks);
     val lease = require_lease(container_name);
     val tag = lease.cluster.tag;
-    return calculate_container_cost(duration_weeks, lease.container_units, lease.extra_storage_gib, tag);
+    return calculate_container_cost(duration_weeks, lease.container_units, lease.extra_storage_gib, tag, lease.extra_compute_requests);
 }
 
 function renew_container_lease(ft4.accounts.account, lease, duration_weeks: integer) {
     require(not has_pending_upgrade(lease.container_name), "Can't renew lease of container with a pending upgrade");
 
     val tag = lease.cluster.tag;
-    val cost = calculate_container_cost(duration_weeks, lease.container_units, lease.extra_storage_gib, tag);
+    val cost = calculate_container_cost(duration_weeks, lease.container_units, lease.extra_storage_gib, tag, lease.extra_compute_requests);
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), cost);
     create lease_purchase(
         account, duration_millis = duration_weeks * millis_per_week,
         container_units = lease.container_units, extra_storage_gib = lease.extra_storage_gib,
-        price = cost, lease_purchase_type.RENEWAL
+        price = cost, lease_purchase_type.RENEWAL, extra_compute_requests = lease.extra_compute_requests
     );
 
     if (lease.expired) {
@@ -621,16 +647,19 @@ function restart_container(container_name: text) {
 
 @extendable function on_lease_resurrected(lease) {}
 
-function calculate_container_cost(duration_weeks: integer, container_units: integer, extra_storage_gib: integer, tag: tag): integer {
+function calculate_container_cost(duration_weeks: integer, container_units: integer, extra_storage_gib: integer,
+        tag: tag, extra_compute_requests: integer): integer {
     val scu_cost = container_units * tag.scu_price;
     val extra_storage_cost = extra_storage_gib * tag.extra_storage_price;
+    val extra_compute_requests_cost = extra_compute_requests * tag.extra_compute_request_price;
 
-    return (decimal(scu_cost + extra_storage_cost) / units_per_usd * 7 * duration_weeks * economy_constants.chr_per_usd * units_per_asset).to_integer();
+    return (decimal(scu_cost + extra_storage_cost + extra_compute_requests_cost) / units_per_usd
+        * 7 * duration_weeks * economy_constants.chr_per_usd * units_per_asset).to_integer();
 }
 
 function calculate_remaining_lease_value(lease, current_time: integer): integer {
     val tag = lease.cluster.tag;
-    val lease_weekly_cost = calculate_container_cost(1, lease.container_units, lease.extra_storage_gib, tag);
+    val lease_weekly_cost = calculate_container_cost(1, lease.container_units, lease.extra_storage_gib, tag, lease.extra_compute_requests);
     val remaining_lease_time = lease.start_time + lease.duration_millis - current_time;
     val remaining_weeks = decimal(remaining_lease_time) / decimal(millis_per_week);
     val remaining_value = remaining_weeks * lease_weekly_cost;
@@ -747,6 +776,7 @@ query get_leases_by_account(account_id: byte_array): list<lease_data> =
                 subnode_image_name = .subnode_image?.name ?: "",
                 bridge_leases = get_bridge_leases_for_lease(lease),
                 lease_owner_account_id = .account.id,
+                extra_compute_requests = .extra_compute_requests,
         ));
 
 /**
@@ -767,6 +797,7 @@ query get_lease_by_container_name(container_name: text): lease_data? =
                  subnode_image_name = .subnode_image?.name ?: "",
                 bridge_leases = get_bridge_leases_for_lease(lease),
                 lease_owner_account_id = .account.id,
+                extra_compute_requests = .extra_compute_requests,
         ));
 
 /**
@@ -794,7 +825,8 @@ query get_lease_purchases(page_size: integer?, page_cursor: text?): ft4.utils.pa
                 price = .price,
                 type = .type,
                 timestamp = .transaction.block.timestamp,
-                tx_rid = .transaction.tx_rid
+                tx_rid = .transaction.tx_rid,
+                extra_compute_requests = .extra_compute_requests,
             ).to_gtv_pretty(),
             rowid = .rowid
         )
@@ -837,7 +869,8 @@ query get_lease_purchases_by_account(account_id: byte_array, page_size: integer?
                 price = .price,
                 type = .type,
                 timestamp = .transaction.block.timestamp,
-                tx_rid = .transaction.tx_rid
+                tx_rid = .transaction.tx_rid,
+                extra_compute_requests = .extra_compute_requests,
             ).to_gtv_pretty(),
             rowid = .rowid
         )

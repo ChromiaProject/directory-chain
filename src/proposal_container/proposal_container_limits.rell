@@ -9,6 +9,7 @@ entity pending_container_limits {
     container_units: integer;
     max_blockchains: integer;
     extra_storage: integer;
+    extra_compute_requests: integer = 0;
 }
 
 @extend(is_container_available_for_removal) function(container) = 
@@ -22,7 +23,8 @@ function apply_container_limits(proposal) {
     val pps = pending_container_limits @? { proposal };
     if (pps == null) return;
     validate_container_limits_proposal(pps);
-    upgrade_container(pps.container, pps.container_units, pps.extra_storage, pps.max_blockchains);
+    upgrade_container(pps.container, pps.container_units, pps.extra_storage, pps.max_blockchains,
+        extra_compute_requests = pps.extra_compute_requests);
 }
 
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.container_limits.name: delete_pending_container_limits(*)];
@@ -49,6 +51,10 @@ operation propose_container_limits(my_pubkey: pubkey, container_name: text, limi
         val proposed_extra_storage = limits[container_resource_limit_type.extra_storage];
         require(proposed_extra_storage >= 0, "Invalid value for extra_storage: %d, must be greater or equal to 0".format(proposed_extra_storage));
     }
+    if (limits.contains(container_resource_limit_type.extra_compute_requests)) {
+        val proposed_extra_compute_requests = limits[container_resource_limit_type.extra_compute_requests];
+        require(proposed_extra_compute_requests >= 0, "Invalid value for extra_compute_requests: %d, must be greater or equal to 0".format(proposed_extra_compute_requests));
+    }
 
     val limits_map = get_current_container_resource_limits(container_name);
     limits_map.put_all(limits);
@@ -64,7 +70,8 @@ operation propose_container_limits(my_pubkey: pubkey, container_name: text, limi
         container,
         container_units = limits_map[container_resource_limit_type.container_units],
         max_blockchains = limits_map[container_resource_limit_type.max_blockchains],
-        extra_storage = limits_map[container_resource_limit_type.extra_storage]
+        extra_storage = limits_map[container_resource_limit_type.extra_storage],
+        extra_compute_requests = limits_map[container_resource_limit_type.extra_compute_requests],
     );
     validate_container_limits_proposal(pcl);
     internal_vote(me, prop, true);

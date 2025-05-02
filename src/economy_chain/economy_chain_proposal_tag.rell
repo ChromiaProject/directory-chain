@@ -4,6 +4,7 @@ entity pending_tag_operation {
     key proposal: common_proposal;
     scu_price: integer = -1;
     extra_storage_price: integer = -1;
+    extra_compute_request_price: integer = -1;
 }
 
 @extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_tag_create.name: apply_tag_create(*)];
@@ -17,14 +18,17 @@ operation create_tag(
     my_pubkey: pubkey,
     name: text,
     scu_price: integer,
-    extra_storage_price: integer
+    extra_storage_price: integer,
+    extra_compute_request_price: integer = 0,
 ) {
     val provider = require_is_system_provider_and_signer(my_pubkey);
     require(scu_price > 0, "Tag must have a positive SCU price");
     require(extra_storage_price > 0, "Tag must have a positive extra storage price");
+    require(extra_compute_request_price >= 0, "Extra compute request price cannot be negative");
 
     val proposal = create_system_p_proposal(common_proposal_type.ec_tag_create, provider, "Create tag %s".format(name));
-    val proposal_details = create pending_tag_operation(name = name, scu_price = scu_price, extra_storage_price = extra_storage_price, proposal);
+    val proposal_details = create pending_tag_operation(name = name, scu_price = scu_price,
+        extra_storage_price = extra_storage_price, extra_compute_request_price = extra_compute_request_price, proposal);
     validate_tag_proposal(proposal_details);
 
     internal_common_vote(provider.pubkey, proposal, true);
@@ -34,14 +38,19 @@ operation update_tag(
     my_pubkey: pubkey,
     name: text,
     scu_price: integer?,
-    extra_storage_price: integer?
+    extra_storage_price: integer?,
+    extra_compute_request_price: integer? = null,
 ) {
     val provider = require_is_system_provider_and_signer(my_pubkey);
     require(empty(scu_price) or scu_price > 0, "Tag must have a positive SCU price");
     require(empty(extra_storage_price) or extra_storage_price > 0, "Tag must have a positive extra storage price");
+    require(empty(extra_compute_request_price) or extra_compute_request_price >= 0, "Extra compute request price cannot be negative");
 
     val proposal = create_system_p_proposal(common_proposal_type.ec_tag_update, provider, "Update tag %s".format(name));
-    val proposal_details = create pending_tag_operation(name = name, scu_price = scu_price ?: -1, extra_storage_price = extra_storage_price ?: -1, proposal);
+    val proposal_details = create pending_tag_operation(name = name, scu_price = scu_price ?: -1,
+        extra_storage_price = extra_storage_price ?: -1,
+        extra_compute_request_price = extra_compute_request_price ?: -1,
+        proposal);
     validate_tag_proposal(proposal_details);
 
     internal_common_vote(provider.pubkey, proposal, true);
@@ -66,7 +75,12 @@ query get_tag_proposal(proposal_id: rowid): tag_data {
     val proposal = require_common_proposal(proposal_id);
     val pending_tag_operation = require(pending_tag_operation @? { proposal }, "Proposal is of different type: %s".format(proposal.proposal_type));
 
-    return tag_data(name = pending_tag_operation.name, scu_price = pending_tag_operation.scu_price, extra_storage_price = pending_tag_operation.extra_storage_price);
+    return tag_data(
+        name = pending_tag_operation.name,
+        scu_price = pending_tag_operation.scu_price,
+        extra_storage_price = pending_tag_operation.extra_storage_price,
+        extra_compute_request_price = pending_tag_operation.extra_compute_request_price,
+    );
 }
 
 function apply_tag_remove(proposal: common_proposal) {
@@ -91,6 +105,7 @@ function apply_tag_update(proposal: common_proposal) {
 
     if (pending_tag.scu_price != -1) tag.scu_price = pending_tag.scu_price;
     if (pending_tag.extra_storage_price != -1) tag.extra_storage_price = pending_tag.extra_storage_price;
+    if (pending_tag.extra_compute_request_price != -1) tag.extra_compute_request_price = pending_tag.extra_compute_request_price;
 }
 
 function apply_tag_create(proposal: common_proposal) {
@@ -100,7 +115,10 @@ function apply_tag_create(proposal: common_proposal) {
 
     log("Create tag %s after approval".format(pending_tag.name));
 
-    create tag(name = pending_tag.name, scu_price = pending_tag.scu_price, extra_storage_price = pending_tag.extra_storage_price);
+    create tag(name = pending_tag.name, scu_price = pending_tag.scu_price,
+        extra_storage_price = pending_tag.extra_storage_price,
+        extra_compute_request_price = if (pending_tag.extra_compute_request_price != -1) pending_tag.extra_compute_request_price else 0,
+    );
 }
 
 function cleanup_pending_tag_operation(proposal: common_proposal) {
@@ -138,9 +156,9 @@ function validate_tag_proposal(proposal_details: pending_tag_operation) {
 /**
  * Get a list of all tags.
  */
-query get_tags(): list<tag_data> = tag @* {} (tag_data(.name, .scu_price, .extra_storage_price));
+query get_tags(): list<tag_data> = tag @* {} (tag_data(.name, .scu_price, .extra_storage_price, .extra_compute_request_price));
 
 /**
  * Get a tag by name.
  */
-query get_tag_by_name(name): tag_data? = tag @? { name } (tag_data(.name, .scu_price, .extra_storage_price));
+query get_tag_by_name(name): tag_data? = tag @? { name } (tag_data(.name, .scu_price, .extra_storage_price, .extra_compute_request_price));

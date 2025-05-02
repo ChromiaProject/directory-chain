@@ -419,5 +419,11 @@ query nm_get_container_creation_time(name): timestamp? {
  */
 query nm_get_container_rate_limits(name): map<text, container_rate_limit> {
     val container = require_container(name);
-    return container_rate_limits(container);
+    val base_compute_requests = container_subnode_image @? { container } (.subnode_image.base_compute_requests) ?: 0;
+    val extra_compute_requests = get_container_limit_or_default(container,
+        container_resource_limit_type.extra_compute_requests, 0);
+    return [ "ai_inference" : container_rate_limit(
+            period_length_millis = millis_per_week,
+            rate_limit = base_compute_requests + extra_compute_requests,
+    ) ];
 }
