@@ -28,7 +28,7 @@ function test_move_container_blockchains() {
         move_container_blockchains_op("c1", "s2", [bc_to_be_moved_rid: 1], 2, 0)
     ).sign(initial_provider).run();
 
-    val destination_container = container @ { .cluster.name == "s2" , .name == "c1_new" };
+    val destination_container = container @ { .cluster.name == "s2" , .name == "c1_m1" };
     assert_equals(container_resource_limit @ {
         .container == destination_container,
         .container_resource_limit_type == container_resource_limit_type.container_units
@@ -61,7 +61,7 @@ function test_source_container_removed_if_empty() {
     ).sign(initial_provider).run();
 
     assert_null(container @? { .cluster.name == "s1" , .name == "c1" });
-    assert_not_null(container @? { .cluster.name == "s2" , .name == "c1_new" });
+    assert_not_null(container @? { .cluster.name == "s2" , .name == "c1_m1" });
 }
 
 function setup_migratable_container() {
@@ -82,4 +82,20 @@ function setup_migratable_container() {
         create_cluster(initial_provider.pub, "s2", voter_sets.system_p, [initial_provider.pub]),
         register_node_with_node_data(initial_provider.pub, second_node_data)
     ).sign(initial_provider).run();
+}
+
+function test_increment_move_counter_in_name() {
+    val name1 = increment_move_counter_in_name("some_name");
+    val name2 = increment_move_counter_in_name(name1);
+    val name124 = increment_move_counter_in_name("some_name_m123");
+    val name_m = increment_move_counter_in_name("some_m_name");
+    val name_m2 = increment_move_counter_in_name(name_m);
+    val name_m1234_m1 = increment_move_counter_in_name("some_name_m1234");
+
+    assert_equals("some_name_m1", name1);
+    assert_equals("some_name_m2", name2);
+    assert_equals("some_name_m124", name124);
+    assert_equals("some_m_name_m1", name_m);
+    assert_equals("some_m_name_m2", name_m2);
+    assert_equals("some_name_m1234_m1", name_m1234_m1);
 }
