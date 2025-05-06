@@ -1,0 +1,58 @@
+module;
+
+/**
+ * Return value of `priority_check_v2` query.
+ * It is used to represent how to prioritize a transaction: if multiple transactions
+ * are in queue, the one with the highest priority value will be executed first.
+ */
+struct priority_state_v1 {
+    /**
+     * ID of account which wants to push the transaction forward.
+     * A transaction can be multi-party, it's up to the dapp to decide who's the
+     * "main actor" of the transaction.
+     */
+    account_id: byte_array?;
+
+    /**
+     * Number of points currently associated with the account.
+     * If this is lower than `tx_cost_point`, the transaction will be rejected.
+     */
+    account_points: integer;
+
+    /**
+     * Number of points which this transaction costs.
+     * If this is higher than `account_points`, the transaction will be rejected.
+     * 
+     * If many transactions from this account are in queue, the costs are summed up to see if
+     * the account would be able to complete them all.
+     */
+    tx_cost_points: integer;
+
+    /** priority, higher is better */
+    priority: decimal;
+}
+
+/**
+ * An "empty" priority state, which represents the lowest priority, with no account information.
+ */
+function no_op_priority_state() =
+    priority_state_v1(
+        account_id = null,
+        account_points = 0,
+        tx_cost_points = 0,
+        priority = 0.0
+    );
+
+/**
+ * An "empty" priority state, which does not point to an account, but has a priority value.
+ * `no_account_priority_state(0.0)` is equivalent to `no_op_priority_state()`
+ * 
+ * @param priority  the priority value, must be greater than 0
+ */
+function no_account_priority_state(priority: decimal) =
+    priority_state_v1(
+        account_id = null,
+        account_points = 0,
+        tx_cost_points = 0,
+        priority = priority
+    );

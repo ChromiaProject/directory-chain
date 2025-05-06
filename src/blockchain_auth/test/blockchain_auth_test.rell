@@ -106,7 +106,7 @@ function test_blockchain_auth() {
         propose_configuration_iccf(alice.pubkey, configuration_tx1, 1)
     ).run_must_fail("op_index out of range");
 
-    val priority_state = priority_check_v1(
+    val priority_state = priority_check_v2(
         gtx_transaction_body(
             blockchain_rid = chain_context.blockchain_rid,
             operations = [
@@ -117,7 +117,8 @@ function test_blockchain_auth() {
         ),
         tx_size = 0,
         tx_enter_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME,
-        current_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME + 5001
+        current_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME + 5001,
+        compound_ops = set(["iccf_proof"]),
     );
     assert_equals(priority_state.account_id, rell.test.pubkeys.alice);
     assert_equals(priority_state.account_points, 95);
