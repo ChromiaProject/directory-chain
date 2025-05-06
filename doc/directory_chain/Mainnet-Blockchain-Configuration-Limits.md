@@ -24,6 +24,7 @@ These are the default allowed GTX Modules but custom extensions may also define 
 - net.postchain.d1.iccf.IccfGTXModule
 - net.postchain.eif.EifGTXModule
 - net.postchain.web.WebStaticGTXModuleFactory
+- net.postchain.zkp.ZKPGTXModule
 
 ## Default allowed Synchronization Infrastructure Extensions
 
