@@ -5,7 +5,7 @@ import common.test.setup.*;
 import common.test.helper_operations.*;
 
 function test_init_operation_success() {
-    val priority_state = dc_priority_check_v2(
+    val priority_state = dc_priority_check(
         gtx_transaction_body(
             blockchain_rid = chain_context.blockchain_rid,
             operations = [
@@ -28,7 +28,7 @@ function test_init_operation_success() {
 function test_init_operation_fail() {
     setup_module();
 
-    assert_fails("Network has already been initialized", dc_priority_check_v2(
+    assert_fails("Network has already been initialized", dc_priority_check(
         gtx_transaction_body(
             blockchain_rid = chain_context.blockchain_rid,
             operations = [
@@ -45,7 +45,7 @@ function test_init_operation_fail() {
 }
 
 function test_bogus_operation() {
-    assert_fails("Unrecognized no-args operation: bogus", dc_priority_check_v2(
+    assert_fails("Unrecognized no-args operation: bogus", dc_priority_check(
         gtx_transaction_body(
             blockchain_rid = chain_context.blockchain_rid,
             operations = [
@@ -62,7 +62,7 @@ function test_bogus_operation() {
 }
 
 function test_no_authenticated_operations_v1() {
-    assert_fails("Transaction contains no regular operation", dc_priority_check_v1(
+    assert_fails("Transaction contains no regular operation", dc_priority_check(
         gtx_transaction_body(
             blockchain_rid = chain_context.blockchain_rid,
             operations = [
@@ -73,12 +73,13 @@ function test_no_authenticated_operations_v1() {
         tx_size = 0,
         tx_enter_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME,
         current_timestamp = rell.test.DEFAULT_FIRST_BLOCK_TIME,
+        compound_ops = null,
         *
     ));
 }
 
 function test_no_authenticated_operations() {
-    assert_fails("Transaction contains no regular operation", dc_priority_check_v2(
+    assert_fails("Transaction contains no regular operation", dc_priority_check(
         gtx_transaction_body(
             blockchain_rid = chain_context.blockchain_rid,
             operations = [
@@ -101,7 +102,7 @@ function test_one_unauthenticated_operation() {
         provider_rate_limit_op(provider)
     ).sign(rell.test.keypairs.alice).run();
 
-    assert_fails("Operation must be signed by provider key(s)", dc_priority_check_v2(
+    assert_fails("Operation must be signed by provider key(s)", dc_priority_check(
         gtx_transaction_body(
             blockchain_rid = chain_context.blockchain_rid,
             operations = [
@@ -124,7 +125,7 @@ function test_one_authenticated_operation() {
         provider_rate_limit_op(provider)
     ).sign(rell.test.keypairs.alice).run();
 
-    val priority_state = dc_priority_check_v2(
+    val priority_state = dc_priority_check(
         gtx_transaction_body(
             blockchain_rid = chain_context.blockchain_rid,
             operations = [
@@ -152,7 +153,7 @@ function test_two_authenticated_operations() {
         provider_rate_limit_op(provider),
     ).sign(rell.test.keypairs.alice).run();
 
-    val priority_state = dc_priority_check_v2(
+    val priority_state = dc_priority_check(
         gtx_transaction_body(
             blockchain_rid = chain_context.blockchain_rid,
             operations = [
@@ -181,7 +182,7 @@ function test_increase_current_points_with_time() {
         provider_rate_limit_op(provider),
     ).sign(rell.test.keypairs.alice).run();
 
-    val priority_state = dc_priority_check_v2(
+    val priority_state = dc_priority_check(
         gtx_transaction_body(
             blockchain_rid = chain_context.blockchain_rid,
             operations = [
@@ -209,7 +210,7 @@ function test_increase_current_points_with_time_up_to_max() {
         provider_rate_limit_op(provider),
     ).sign(rell.test.keypairs.alice).run();
 
-    val priority_state = dc_priority_check_v2(
+    val priority_state = dc_priority_check(
         gtx_transaction_body(
             blockchain_rid = chain_context.blockchain_rid,
             operations = [

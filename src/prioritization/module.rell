@@ -7,49 +7,33 @@ import common.*;
 import common.init;
 
 /**
- * Used for postchain backward compatibility. Can be removed when mainnet is on Postchain `3.34.0`.
- *
- * @param tx_body             the transaction
- * @param tx_size             size of the transaction in bytes
- * @param tx_enter_timestamp  when the transaction entered the queue
- * @param current_timestamp   the current timestamp
- */
-@extend(priority_check_v1_impl)
-function dc_priority_check_v1(
-    tx_body: gtx_transaction_body,
-    tx_size: integer,
-    tx_enter_timestamp: timestamp,
-    current_timestamp: timestamp
-): priority_state_v1? {
-    return dc_priority_check_v2(
-        tx_body,
-        tx_size,
-        tx_enter_timestamp,
-        current_timestamp,
-        set([
-            "nop",
-            "timeb", // StandardOpsGTXModule
-            "iccf_proof", // IccfGTXModule
-        ]));
-}
-
-/**
  * If this function throws, the transaction will be rejected.
  *
  * @param tx_body             the transaction
  * @param tx_size             size of the transaction in bytes
  * @param tx_enter_timestamp  when the transaction entered the queue
  * @param current_timestamp   the current timestamp
- * @param compound_ops        List of compound operations (subset of tx_body.operations)
+ * @param compound_ops        List of compound operations (subset of tx_body.operations), is null if postchain calls v1.
  */
-@extend(priority_check_v2_impl)
-function dc_priority_check_v2(tx_body: gtx_transaction_body, tx_size: integer, tx_enter_timestamp: timestamp, current_timestamp: timestamp, compound_ops: set<text>): priority_state_v1 {
+@extend(priority_check)
+function dc_priority_check(
+    tx_body: gtx_transaction_body,
+    tx_size: integer,
+    tx_enter_timestamp: timestamp,
+    current_timestamp: timestamp,
+    compound_ops: set<text>?
+): priority_state_v1 {
+    val ignored_ops = compound_ops ?: set([
+            "nop",
+            "timeb", // StandardOpsGTXModule
+            "iccf_proof", // IccfGTXModule
+        ]);
     val regular_operations = list<gtx_operation>();
     for (op in tx_body.operations) {
         if (op.name == rell.meta(init.init).mount_name) {
             require(not(is_initialized()), "Network has already been initialized");
             return no_account_priority_state(1.0);
-        } else if (op.name in compound_ops) {
+        } else if (op.name in ignored_ops) {
             // ignore
         } else if (op.args.size() > 0) {
             regular_operations.add(op);
