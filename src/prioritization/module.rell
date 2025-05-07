@@ -1,79 +1,70 @@
-@mount('gtx_api')
 module;
 
-/**
- * Return value of `priority_check_v1` query.
- * It is used to represent how to prioritize a transaction: if multiple transactions
- * are in queue, the one with the highest priority value will be executed first.
- */
-struct priority_state_v1 {
-    /**
-     * ID of account which wants to push the transaction forward.
-     * A transaction can be multi-party, it's up to the dapp to decide who's the
-     * "main actor" of the transaction.
-     */
-    account_id: byte_array?;
-
-    /**
-     * Number of points currently associated with the account.
-     * If this is lower than `tx_cost_point`, the transaction will be rejected.
-     */
-    account_points: integer;
-
-    /**
-     * Number of points which this transaction costs.
-     * If this is higher than `account_points`, the transaction will be rejected.
-     * 
-     * If many transactions from this account are in queue, the costs are summed up to see if
-     * the account would be able to complete them all.
-     */
-    tx_cost_points: integer;
-
-    /** priority, higher is better */
-    priority: decimal;
-}
+import lib.transaction_prioritization.*;
+import lib.transaction_prioritization.extendable.*;
+import model.*;
+import common.*;
+import common.init;
 
 /**
- * This query is used by Postchain.
- * It will be called for every transaction, and the result will be used to determine the 
- * transaction priority.
- * 
- * This is not an actual implementation, it simply calls `priority_check` to allow the
- * implementation of this query to be defined by the end user.
- * 
- * If the implementation defined in `priority_check` throws, the transaction will be rejected.
- * 
- * @see https://gitlab.com/chromaway/postchain/blob/dev/postchain-base/src/main/kotlin/net/postchain/base/BaseTransactionPrioritizer.kt
- * 
+ * If this function throws, the transaction will be rejected.
+ *
  * @param tx_body             the transaction
  * @param tx_size             size of the transaction in bytes
  * @param tx_enter_timestamp  when the transaction entered the queue
  * @param current_timestamp   the current timestamp
+ * @param compound_ops        List of compound operations (subset of tx_body.operations), is null if postchain calls v1.
  */
-query priority_check_v1(tx_body: gtx_transaction_body, tx_size: integer, tx_enter_timestamp: timestamp, current_timestamp: timestamp): priority_state_v1 =
-    priority_check(tx_body, tx_size, tx_enter_timestamp, current_timestamp);
+@extend(priority_check)
+function dc_priority_check(
+    tx_body: gtx_transaction_body,
+    tx_size: integer,
+    tx_enter_timestamp: timestamp,
+    current_timestamp: timestamp,
+    compound_ops: set<text>?
+): priority_state_v1 {
+    val ignored_ops = compound_ops ?: set([
+            "nop",
+            "timeb", // StandardOpsGTXModule
+            "iccf_proof", // IccfGTXModule
+        ]);
+    val regular_operations = list<gtx_operation>();
+    for (op in tx_body.operations) {
+        if (op.name == rell.meta(init.init).mount_name) {
+            require(not(is_initialized()), "Network has already been initialized");
+            return no_account_priority_state(1.0);
+        } else if (op.name in ignored_ops) {
+            // ignore
+        } else if (op.args.size() > 0) {
+            regular_operations.add(op);
+        } else {
+            require(false, "Unrecognized no-args operation: %s".format(op.name));
+        }
+    }
 
-/**
- * An "empty" priority state, which represents the lowest priority, with no account information.
- */
-function no_op_priority_state() =
-    priority_state_v1(
-        account_id = null,
-        account_points = 0,
-        tx_cost_points = 0,
-        priority = 0.0
-    );
+    require_not_empty(regular_operations, "Transaction contains no regular operation");
+    val op = regular_operations[0];
 
-/**
- * An "empty" priority state, which does not point to an account, but has a priority value.
- * `no_account_priority_state(0.0)` is equivalent to `no_op_priority_state()`
- * 
- * @param priority  the priority value, must be greater than 0
- */
-function no_account_priority_state(priority: decimal) =
-    priority_state_v1(
-        account_id = null,
-        account_points = 0,
-        tx_cost_points = 0,
+    val provider = require_provider(byte_array.from_gtv(op.args[0]));
+    if (op.name.ends_with("_iccf")) {
+        val tx_to_prove = gtx_transaction.from_gtv(op.args[1]);
+        val op_index = integer.from_gtv(op.args[2]);
+        require_provider_iccf_auth_from_operations(tx_body.operations, tx_to_prove, op_index, op.name, 0, provider, should_update_state = false);
+    } else {
+        require(empty(provider_auth_blockchain @* { provider }),
+            "Blockchain authentication is enabled for provider %s".format(provider.pubkey));
+        require(provider_is_signer_of_signers(provider.pubkey, tx_body.signers @* {} (byte_array.from_gtv($))),
+            "Operation must be signed by provider key(s)");
+    }
+    require(provider.active, "Provider is not enabled");
+    val (current_points, max_points, _) = current_provider_rate_limit(provider, current_timestamp);
+
+    val priority = current_points.to_decimal() / max_points;
+
+    return priority_state_v1(
+        account_id = provider.pubkey,
+        account_points = current_points,
+        tx_cost_points = regular_operations.size(),
         priority = priority
     );
+}
