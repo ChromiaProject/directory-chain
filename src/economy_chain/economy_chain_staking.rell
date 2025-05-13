@@ -266,6 +266,7 @@ function _staking_distribute_withdrawals() {
 function _staking_delegate(staker: ft4.accounts.account, provider_pubkey: pubkey, _network: network? = null) {
 
     val new_provider = require(provider @? { provider_pubkey }, "No provider for this public key.");
+    require(new_provider.tier == provider_tier.NODE_PROVIDER, "Provider is not node provider");
     val last_known_time = _staking_last_known_time();
 
     // Get all staker states to change of user, and all related withdraw requests
@@ -419,7 +420,7 @@ function _staking_pay_reward(last_known_time: timestamp, pool: accounts.account,
 
 // Shared rewards (triggered by a hook in the rewards logic)
 
-function _staking_shared_rewards(pay_reward_result) {
+function _staking_shared_rewards(pay_reward_result, delegation_share: decimal) {
     val last_known_time = _staking_last_known_time();
 
     // Do nothing if the start date has not passed
@@ -428,7 +429,7 @@ function _staking_shared_rewards(pay_reward_result) {
     }
 
     // We ignore reward debt here as it will flow through the reward term after the pool is refreshed
-    val total_shared_reward = chain_context.args.staking_rewards_share * pay_reward_result.payed_reward;
+    val total_shared_reward = delegation_share * pay_reward_result.payed_reward;
 
     // Find provider
     val provider_data = provider_account @? { pay_reward_result.payed_to } (provider = .provider, pubkey = .provider.pubkey);

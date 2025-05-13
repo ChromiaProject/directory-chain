@@ -1,0 +1,84 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import ^.helper_operations.*;
+
+function test_update_provider_staking_rewards_share() {
+    val provider_keypair = rell.test.keypairs.alice;
+    val provider_pubkey = provider_keypair.pub;
+
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    assert_equals(staking_provider_staking_rewards_share(provider_pubkey), 0.1);
+
+    rell.test.tx()
+        .op(update_provider_staking_rewards_share(provider_pubkey, 0.0))
+        .sign(provider_keypair)
+        .run_must_fail("Staking rewards share must be positive");
+
+    rell.test.tx()
+        .op(update_provider_staking_rewards_share(provider_pubkey, 1.0))
+        .sign(provider_keypair)
+        .run_must_fail("Staking rewards share must be less than 1.0");
+
+    rell.test.tx()
+        .op(update_provider_staking_rewards_share(provider_pubkey, 0.2))
+        .run_must_fail("Operation must be signed by provider");
+
+    rell.test.tx()
+        .op(update_provider_staking_rewards_share(rell.test.pubkeys.bob, 0.2))
+        .sign(rell.test.keypairs.bob)
+        .run_must_fail();
+    add_provider(rell.test.pubkeys.bob, false, provider_tier.DAPP_PROVIDER);
+    rell.test.tx()
+        .op(update_provider_staking_rewards_share(rell.test.pubkeys.bob, 0.2))
+        .sign(rell.test.keypairs.bob)
+        .run_must_fail("Only node providers can set staking rewards share");
+
+    assert_null(get_pending_provider_staking_rewards_share_data(provider_pubkey));
+
+    var before_time = rell.test.last_block_time;
+    rell.test.tx()
+        .op(update_provider_staking_rewards_share(provider_pubkey, 0.2))
+        .sign(provider_keypair)
+        .run();
+    assert_equals(staking_provider_staking_rewards_share(provider_pubkey), 0.1);
+    assert_equals(get_pending_provider_staking_rewards_share_data(provider_pubkey),
+        pending_provider_staking_rewards_share_data(
+                provider_pubkey,
+                0.2,
+                before_time + 60000,
+            )
+    );
+
+    rell.test.tx()
+        .op(update_provider_staking_rewards_share(provider_pubkey, 0.3))
+        .sign(provider_keypair)
+        .run_must_fail("Provider already has a pending staking rewards share update");
+
+    rell.test.set_next_block_time_delta(60000 + 1);
+    rell.test.block().run();
+    rell.test.block().run();
+    assert_equals(staking_provider_staking_rewards_share(provider_pubkey), 0.2);
+    assert_null(get_pending_provider_staking_rewards_share_data(provider_pubkey));
+
+    before_time = rell.test.last_block_time;
+    rell.test.tx()
+        .op(update_provider_staking_rewards_share(provider_pubkey, 0.3))
+        .sign(provider_keypair)
+        .run();
+    assert_equals(staking_provider_staking_rewards_share(provider_pubkey), 0.2);
+    assert_equals(get_pending_provider_staking_rewards_share_data(provider_pubkey),
+        pending_provider_staking_rewards_share_data(
+                provider_pubkey,
+                0.3,
+                before_time + 60000,
+            )
+    );
+
+    rell.test.set_next_block_time_delta(60000 + 1);
+    rell.test.block().run();
+    rell.test.block().run();
+    assert_equals(staking_provider_staking_rewards_share(provider_pubkey), 0.3);
+    assert_null(get_pending_provider_staking_rewards_share_data(provider_pubkey));
+}

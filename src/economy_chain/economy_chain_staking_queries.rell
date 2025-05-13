@@ -405,7 +405,7 @@ query get_total_provisional_stake(network? = null) = provisional_stake_balance @
 
 query get_total_provisional_stake_accounts(network? = null) = provisional_stake_balance @ { (empty(network) or .network == network) } ( @sum 1 );
 
-// Date utilites
+// Date utilities
 
 query staking_get_cannot_change_before(): timestamp = _staking_last_known_time() + chain_context
     .args
@@ -413,4 +413,15 @@ query staking_get_cannot_change_before(): timestamp = _staking_last_known_time()
 
 query get_provisional_stake_balance(address: byte_array, network): integer {
     return provisional_stake_balance @? { address, network }.staked_balance ?: 0;
+}
+
+/**
+ * Get the staking rewards share for a node provider.
+ *
+ * @param provider_pubkey The provider's main public key
+ */
+query staking_provider_staking_rewards_share(provider_pubkey: pubkey): decimal {
+    val provider = require_provider(provider_pubkey);
+    require(provider.tier == provider_tier.NODE_PROVIDER, "Only node providers have staking rewards share");
+    return provider.staking_rewards_share;
 }
