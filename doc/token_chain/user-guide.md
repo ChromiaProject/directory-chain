@@ -8,7 +8,7 @@ https://chromaway.gitlab.io/core/directory-chain/-directory%20chain/token_chain/
 
 To get the blockchain RID of token chain in a network:
 
-```
+```shell
 chr query --blockchain-rid ${DIRECTORY_CHAIN_RID} get_token_chain_rid
 ```
 
@@ -25,25 +25,39 @@ This can be all be done with the Vault UI.
 In order to propose a token on token chain you need to have enough funds to cover the listing fee.
 You can see the price for listing a token (or adding a bridge with query):
 
-```
+```shell
 chr query --blockchain-rid ${TOKEN_CHAIN_RID} get_token_chain_constants
 ```
 
 Use Chromia CLI to propose the token:
 
+```shell
+chr tx --evm-auth ${EVM_WALLET_ADDRESS} --blockchain-rid ${TOKEN_CHAIN_RID} propose_token ${NAME} ${SYMBOL} ${DECIMALS} ${ICON} ${[MINTING_POLICY]} ${[ACCOUNT_CREATION_BRIDS]}
 ```
-chr tx --evm-auth EVM_WALLET_ADDRESS --blockchain-rid ${TOKEN_CHAIN_RID} propose_token ${NAME} ${SYMBOL} ${DECIMALS} ${ICON} ${[MINTING_POLICY]} ${[ACCOUNT_CREATION_BRIDS]}
+
+You can define zero or more minting policies for your token. It has the following format:
+
+```kotlin
+struct minting_policy {
+    minters: set<byte_array>;
+    /** 0 to disable */
+    max_supply: big_integer;
+    minting_interval_ms: integer;
+    minting_amount: big_integer;
+    accumulating_amount: boolean;
+};
+
 ```
 
 To check the status of your token proposal:
 
-```
+```shell
 chr query --blockchain-rid ${TOKEN_CHAIN_RID} get_proposals_by_proposer proposer=${YOUR_ACCOUNT_ID}
 ```
 
 Once approved you can fetch the asset ID of your newly created asset:
 
-```
+```shell
 chr query --blockchain-rid ${TOKEN_CHAIN_RID} ft4.get_assets_by_name name=${YOUR_TOKEN_NAME} page_size=null page_cursor=null
 ```
 
@@ -52,12 +66,12 @@ chr query --blockchain-rid ${TOKEN_CHAIN_RID} ft4.get_assets_by_name name=${YOUR
 Follow the official documentation for how to deploy a bridge but skip deploying a validator contract. There is already
 a validator contract deployed specifically for token chain. You can find it by querying:
 
-```
+```shell
 chr query --blockchain-rid ${EVM_TRANSACTION_SUBMITTER_CHAIN_RID} get_all_bridges
 ```
 
 > **Note**: If you don't have the EVM_TRANSACTION_SUBMITTER_CHAIN_RID you can retrieve it using
-> ```
+> ```shell
 > chr query --blockchain-rid ${DIRECTORY_CHAIN_RID} get_evm_transaction_submitter_chain_rid
 > ```
 
@@ -65,13 +79,13 @@ Look for token chain in the response list and it's corresponding "validator_cont
 
 Use Chromia CLI to propose the token bridge:
 
-```
+```shell
 chr tx --evm-auth EVM_WALLET_ADDRESS --blockchain-rid ${TOKEN_CHAIN_RID} propose_token_bridge ${ASSET_ID} ${[BRIDGE_CONFIGURATION]}
 ```
 
 Where bridge configurations are defined by the following struct:
 
-```
+```kotlin
 struct bridge_configuration {
     network_id: integer;
     bridge_contract: byte_array;
@@ -86,22 +100,9 @@ You can use the same query as listed above to see the status of your proposal.
 
 ## Minting
 
-You can define zero or more minting policies for your token. It has the following format:
-
-```
-struct minting_policy {
-    minters: set<byte_array>;
-    /** 0 to disable */
-    max_supply: big_integer;
-    minting_interval_ms: integer;
-    minting_amount: big_integer;
-    accumulating_amount: boolean;
-}
-```
-
 If you are a minter and the policy allows it you can mint new tokens to your account by calling the operation below:
 
-```
+```shell
 chr tx --evm-auth EVM_WALLET_ADDRESS --blockchain-rid ${TOKEN_CHAIN_RID} mint_token ${ASSET_ID} ${AMOUNT}
 ```
 
