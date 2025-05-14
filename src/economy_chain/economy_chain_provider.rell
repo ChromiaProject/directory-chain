@@ -1,0 +1,26 @@
+struct provider_data {
+    pubkey;
+    system: boolean;
+    tier: provider_tier;
+    active: boolean;
+    name: text;
+    url: text;
+    staking_rewards_share: decimal;
+    pending_provider_staking_rewards_share: decimal?;
+    pending_provider_staking_rewards_share_scheduled_at: timestamp?;
+}
+
+query get_active_node_providers(): list<provider_data> =
+    (p: provider, @outer pp: pending_provider_staking_rewards_share @* { pp.provider == p })
+    @* { p.tier == provider_tier.NODE_PROVIDER, p.active }
+    (provider_data(
+        pubkey = p.pubkey,
+        system = p.system,
+        tier = p.tier,
+        active = p.active,
+        name = p.name,
+        url = p.url,
+        staking_rewards_share = p.staking_rewards_share,
+        pending_provider_staking_rewards_share = pp?.staking_rewards_share,
+        pending_provider_staking_rewards_share_scheduled_at = pp?.scheduled_at,
+    ));

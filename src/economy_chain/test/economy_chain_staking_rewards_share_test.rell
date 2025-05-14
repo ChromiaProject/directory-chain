@@ -8,7 +8,7 @@ function test_update_provider_staking_rewards_share() {
     val provider_keypair = rell.test.keypairs.alice;
     val provider_pubkey = provider_keypair.pub;
 
-    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER, "the name", "the_url");
     assert_equals(staking_provider_staking_rewards_share(provider_pubkey), 0.1);
 
     rell.test.tx()
@@ -36,6 +36,19 @@ function test_update_provider_staking_rewards_share() {
         .run_must_fail("Only node providers can set staking rewards share");
 
     assert_null(get_pending_provider_staking_rewards_share(provider_pubkey));
+    assert_equals(get_active_node_providers(), [
+        provider_data(
+            pubkey = provider_pubkey,
+            system = false,
+            tier = provider_tier.NODE_PROVIDER,
+            active = true,
+            name = "the name",
+            url = "the_url",
+            staking_rewards_share = 0.1,
+            pending_provider_staking_rewards_share = null,
+            pending_provider_staking_rewards_share_scheduled_at = null,
+        )
+    ]);
 
     var before_time = rell.test.last_block_time;
     rell.test.tx()
@@ -50,6 +63,19 @@ function test_update_provider_staking_rewards_share() {
                 before_time + 60000,
             )
     );
+    assert_equals(get_active_node_providers(), [
+        provider_data(
+            pubkey = provider_pubkey,
+            system = false,
+            tier = provider_tier.NODE_PROVIDER,
+            active = true,
+            name = "the name",
+            url = "the_url",
+            staking_rewards_share = 0.1,
+            pending_provider_staking_rewards_share = 0.2,
+            pending_provider_staking_rewards_share_scheduled_at = before_time + 60000,
+        )
+    ]);
 
     rell.test.tx()
         .op(update_provider_staking_rewards_share(provider_pubkey, 0.3))
@@ -61,6 +87,19 @@ function test_update_provider_staking_rewards_share() {
     rell.test.block().run();
     assert_equals(staking_provider_staking_rewards_share(provider_pubkey), 0.2);
     assert_null(get_pending_provider_staking_rewards_share(provider_pubkey));
+    assert_equals(get_active_node_providers(), [
+        provider_data(
+            pubkey = provider_pubkey,
+            system = false,
+            tier = provider_tier.NODE_PROVIDER,
+            active = true,
+            name = "the name",
+            url = "the_url",
+            staking_rewards_share = 0.2,
+            pending_provider_staking_rewards_share = null,
+            pending_provider_staking_rewards_share_scheduled_at = null,
+        )
+    ]);
 
     before_time = rell.test.last_block_time;
     rell.test.tx()
@@ -75,6 +114,19 @@ function test_update_provider_staking_rewards_share() {
                 before_time + 60000,
             )
     );
+    assert_equals(get_active_node_providers(), [
+        provider_data(
+            pubkey = provider_pubkey,
+            system = false,
+            tier = provider_tier.NODE_PROVIDER,
+            active = true,
+            name = "the name",
+            url = "the_url",
+            staking_rewards_share = 0.2,
+            pending_provider_staking_rewards_share = 0.3,
+            pending_provider_staking_rewards_share_scheduled_at = before_time + 60000,
+        )
+    ]);
 
     rell.test.set_next_block_time_delta(60000 + 1);
     rell.test.block().run();

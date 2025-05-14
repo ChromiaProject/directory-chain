@@ -41,12 +41,13 @@ function do_create_account(
     }
 }
 
-function add_provider(pubkey: pubkey, system: boolean = false, tier: provider_tier = provider_tier.NODE_PROVIDER): provider {
+function add_provider(pubkey: pubkey, system: boolean = false, tier: provider_tier = provider_tier.NODE_PROVIDER,
+        name: text = "", url: text = ""): provider {
     val existing = provider @? { pubkey };
     if (exists(existing)) { return existing; }
     rell.test.tx().op(
         icmf_message_op(pubkey, provider_update_topic, body = provider_update_message(
-            pubkey, system, tier = tier.name, active = true).to_gtv()
+            pubkey, system, tier = tier.name, active = true, name = name, url = url).to_gtv()
         )
     ).run();
     return require(provider @? { pubkey });
