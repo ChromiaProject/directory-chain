@@ -4,14 +4,12 @@
 
 The Directory Chain has the following module args:
 
-| Name                  | Description                                   | Type       | Required           | Default |
-|-----------------------|-----------------------------------------------|------------|--------------------|---------|
-| `initial_provider`    | The initial provider.                         | pubkey     | :white_check_mark: |         |
-| `genesis_node`        | The genesis node info.                        | node_info  | :white_check_mark: |         |
-| `common`              | Module args for `common` module.              | map        | :white_check_mark: |         |
-| `proposal_blockchain` | Module args for `proposal_blockchain` module. | map        | :white_check_mark: |         |
-| `housekeeping`        | Module args for `housekeeping` module.        | map        | :white_check_mark: |         |
+Module args for `common.init` module:
 
+| Name               | Description            | Type      | Required           | Default |
+|--------------------|------------------------|-----------|--------------------|---------|
+| `initial_provider` | The initial provider.  | pubkey    | :white_check_mark: |         |
+| `genesis_node`     | The genesis node info. | node_info | :white_check_mark: |         |
 
 Module args for `common` module:
 
@@ -19,6 +17,12 @@ Module args for `common` module:
 |--------------------------------------|-------------------------------------|---------|--------------------|---------|
 | `allow_blockchain_dependencies`      | Allow blockchain dependencies.      | boolean | :white_check_mark: |         |
 | `provider_quota_max_actions_per_day` | Provider max actions per day quota. | int     | :white_check_mark: |         |
+
+Module args for `common.queries` module:
+
+| Name         | Description                                       | Type       | Required           | Default |
+|--------------|---------------------------------------------------|------------|--------------------|---------|
+| `developers` | Developers authorized to sign Postchain releases. | list<text> | :white_check_mark: |         |
 
 Module args for `proposal_blockchain` module:
 
@@ -32,11 +36,28 @@ Module args for `proposal_blockchain` module:
 | `allowed_dapp_chain_gtx_modules` | Allowed dapp chain gtx modules.                     | set<text> | :white_check_mark: |         |
 | `allowed_dapp_chain_sync_exts`   | Allowed dapp chain sync extensions.                 | set<text> | :white_check_mark: |         |
 
+Module args for `proposal_blockchain_move` module:
+
+| Name                       | Description                                        | Type    | Required           | Default |
+|----------------------------|----------------------------------------------------|---------|--------------------|---------|
+| `provider_quota_move_cost` | How many points a blockchain move operation costs. | integer | :white_check_mark: |         |
+
 Module args for `housekeeping` module:
 
 | Name                       | Description                                                    | Type    | Required           | Default |
 |----------------------------|----------------------------------------------------------------|---------|--------------------|---------|
 | `max_empty_container_time` | Maximum time the container can live empty before housekeeping. | integer | :white_check_mark: |         |
+
+Module args for `node_software_version`
+
+| Name                    | Description                                                  | Type       | Required           | Default |
+|-------------------------|--------------------------------------------------------------|------------|--------------------|---------|
+| `node_image`            | Recommended Postchain master node image for the network.     | image_data | :white_check_mark: |         |
+| `default_subnode_image` | Recommended default Postchain subnode image for the network. | image_data | :white_check_mark: |         |
+
+
+See [Mainnet Blockchain Configuration Limits](Mainnet-Blockchain-Configuration-Limits.md) for module args for 
+`proposal_blockchain.util` module.
 
 Config type
 
@@ -68,13 +89,10 @@ From economy-chain:
   mainnet:
     module: management_chain_mainnet
     config:
-      config_consensus_strategy: HEADER_HASH
-      blockstrategy:
-        maxblocktime: 2000
-      revolt:
-        fast_revolt_status_timeout: 2000
+      features:
+        merkle_hash_version: 2
       signers:
-        - x"0350fe40766bc0ce8d08b3f5b810e49a8352fdd458606bd5fafe5acdcdc8ff3f57"
+        - x"037434C8D4F2B7B7DE44E80486A814676DC3D898FD4488E10E1940B1C4C5837200"
       sync_ext:
         - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
       gtx:
@@ -82,6 +100,7 @@ From economy-chain:
           - "net.postchain.d1.icmf.IcmfSenderGTXModule"
           - "net.postchain.d1.icmf.IcmfReceiverGTXModule"
           - "net.postchain.eif.transaction.signerupdate.directorychain.SignerUpdateGTXModule"
+          - "net.postchain.d1.iccf.IccfGTXModule"
       icmf:
         receiver:
           anchoring:
@@ -92,11 +111,15 @@ From economy-chain:
           global:
             topics:
               - G_create_cluster
+              - G_create_cluster_v2
               - G_create_container
               - G_upgrade_container
+              - G_assign_subnode_image_to_container
               - G_stop_container
               - G_restart_container
               - G_remove_container
+              - G_register_dapp_provider
+              - G_change_dapp_providers_state
     moduleArgs:
       common.init:
         initial_provider: ${INITIAL_PROVIDER:-03ECD350EEBC617CBBFBEF0A1B7AE553A748021FD65C7C50C5ABB4CA16D4EA5B05}
@@ -109,6 +132,13 @@ From economy-chain:
       common:
         allow_blockchain_dependencies: false
         provider_quota_max_actions_per_day: 100
+      common.queries:
+        developers:
+          - andrei.ursu@chromaway.com
+          - eugene.tykulov@chromaway.com
+          - johan.nilsson@chromaway.com
+          - mikael.staldal@chromaway.com
+          - robert.wideberg@chromaway.com
       proposal_blockchain_move:
         provider_quota_move_cost: 35
       proposal_blockchain.util: 
@@ -124,9 +154,24 @@ From economy-chain:
           - "net.postchain.d1.icmf.IcmfReceiverGTXModule"
           - "net.postchain.d1.iccf.IccfGTXModule"
           - "net.postchain.eif.EifGTXModule"
+          - "net.postchain.web.WebStaticGTXModuleFactory"
+          - "net.postchain.zkp.ZKPGTXModule"
         allowed_dapp_chain_sync_exts:
           - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
-          - "net.postchain.eif.EifSynchronizationInfrastructureExtension" 
+          - "net.postchain.eif.EifSynchronizationInfrastructureExtension"
+        allowed_blockchain_features:
+          - "merkle_hash_version"
+        required_blockchain_features: []
+        require_eif_snapshot_version: 2
+      node_software_version:
+        node_image:
+          url: registry.gitlab.com/chromaway/postchain-chromia/chromaway/chromia-server
+          tag: 3.28.1
+          digest: sha256:f426ce4bda073d63ade194a3dbbe095a532466672ef4a80de71df8d165de879e
+        default_subnode_image:
+          url: registry.gitlab.com/chromaway/postchain-chromia/chromaway/chromia-subnode
+          tag: 3.28.1
+          digest: sha256:e736c6d1465b6a5ae480b5431619e16438000a500fae9214a5ef23c69614dd15
 ```
 
 ## Delayed blockchain configuration
