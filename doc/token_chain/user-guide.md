@@ -61,6 +61,12 @@ Once approved you can fetch the asset ID of your newly created asset:
 chr query --blockchain-rid ${TOKEN_CHAIN_RID} ft4.get_assets_by_name name=${YOUR_TOKEN_NAME} page_size=null page_cursor=null
 ```
 
+Then, to retrieve detailed token information:
+
+```shell
+chr query --blockchain-rid ${TOKEN_CHAIN_RID} get_token_info asset_id=${ASSET_ID}
+```
+
 ## Propose a bridge for the token
 
 Follow the official documentation for how to deploy a bridge but skip deploying a validator contract. There is already
