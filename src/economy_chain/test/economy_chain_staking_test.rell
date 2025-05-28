@@ -1954,3 +1954,68 @@ function test_delegation_no_staking_states() {
 
     assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.bob.pub);
 }
+
+function test_withdrawal_with_remaining_states() {
+    rell.test.tx().op(init()).run();
+    add_provider(rell.test.keypairs.bob.pub);
+
+    //Stake on both BSC and Chromia before delegating
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
+    do_evm_stake_update_bsc(alice_evm_address, 100 * units_per_asset);
+    val test_account_alice = require(do_create_account_using_ras_staking(rell.test.keypairs.alice));
+
+    do_staking_deposit_native(rell.test.keypairs.alice, 100 * units_per_asset);
+
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.bob.pub);
+
+     rell.test.tx().op(
+        staking_request_withdrawal_on_network(test_account_alice, network.BSC)
+    ).run();
+
+    rell.test.set_next_block_time_delta(millis_per_year + staking_delegation_delay_ms);
+    rell.test.block().run();
+
+    do_evm_stake_update_bsc(alice_evm_address, 0);
+    assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.bob.pub);
+
+     //Stake on BSC, delegate, stake on Chromia
+    val charlie_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.charlie.priv);
+    do_evm_stake_update_bsc(charlie_evm_address, 100 * units_per_asset);
+    val test_account_charlie = require(do_create_account_using_ras_staking(rell.test.keypairs.charlie));
+
+    do_staking_delegate(rell.test.keypairs.charlie, rell.test.keypairs.bob.pub);
+
+    do_staking_deposit_native(rell.test.keypairs.charlie, 100 * units_per_asset);
+
+     rell.test.tx().op(
+        staking_request_withdrawal_on_network(test_account_charlie, network.BSC)
+    ).run();
+
+    rell.test.set_next_block_time_delta(millis_per_year + staking_delegation_delay_ms);
+    rell.test.block().run();
+
+    do_evm_stake_update_bsc(charlie_evm_address, 0);
+    assert_equals(staking_get_current_delegate(test_account_charlie.id), rell.test.keypairs.bob.pub);
+
+    //Stake on Chromia, delegate, stake on BSC
+     val dave_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.dave.priv);
+    val test_account_dave = require(do_create_account(rell.test.keypairs.dave, auth_privkey));
+    rell.test.tx()
+        .op(mint_to(test_account_dave, 200 * units_per_asset))
+    .sign(admin_privkey).run();
+
+    do_staking_deposit_native(rell.test.keypairs.dave, 100 * units_per_asset);
+    do_staking_delegate(rell.test.keypairs.dave, rell.test.keypairs.bob.pub);
+
+    do_evm_stake_update_bsc(dave_evm_address, 100 * units_per_asset);
+
+     rell.test.tx().op(
+        staking_request_withdrawal_on_network(test_account_dave, network.BSC)
+    ).run();
+
+    rell.test.set_next_block_time_delta(millis_per_year + staking_delegation_delay_ms);
+    rell.test.block().run();
+
+    do_evm_stake_update_bsc(dave_evm_address, 0);
+    assert_equals(staking_get_current_delegate(test_account_dave.id), rell.test.keypairs.bob.pub);
+}

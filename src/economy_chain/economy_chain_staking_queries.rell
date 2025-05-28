@@ -83,12 +83,12 @@ query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubk
 */
 query staking_get_total_delegation_to(pubkey, network? = null) {
     return delegation_state @ {
-         (.current_provider.pubkey == pubkey and (.next_change_at > _staking_last_known_time() or .next_change_at == 0)) or 
-        (.next_provider.pubkey == pubkey and .next_change_at <= _staking_last_known_time())
-        and (empty(network) or .staker_state.network == network)
+        (
+            (.current_provider.pubkey == pubkey and (.next_change_at > _staking_last_known_time() or .next_change_at == 0)) or 
+            (.next_provider.pubkey == pubkey and .next_change_at <= _staking_last_known_time())
+        ) and (empty(network) or .staker_state.network == network)
     } ( @sum .staker_state.balance );
 }
-
 
 /**
  * Number of users delegating to a provider
@@ -99,10 +99,11 @@ query staking_get_total_delegation_to(pubkey, network? = null) {
 */
 query staking_get_number_of_delegates_to(pubkey, network? = null): integer {
     val ds = delegation_state @* {
-         (.current_provider.pubkey == pubkey and (.next_change_at > _staking_last_known_time() or .next_change_at == 0)) or 
-        (.next_provider.pubkey == pubkey and .next_change_at <= _staking_last_known_time())
-        and (empty(network) or .staker_state.network == network)
-    } ( @group .staker_state.account);
+        (
+            (.current_provider.pubkey == pubkey and (.next_change_at > _staking_last_known_time() or .next_change_at == 0)) or 
+            (.next_provider.pubkey == pubkey and .next_change_at <= _staking_last_known_time())
+        ) and (empty(network) or .staker_state.network == network)
+    } ( @group .staker_state.account );
     return ds.size();
 }
 
