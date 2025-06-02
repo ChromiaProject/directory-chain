@@ -1,0 +1,344 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import common_proposal.test.helper_functions.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import test_utils: lib.ft4.test.core;
+}
+
+struct module_args {
+    auth_privkey: byte_array;
+}
+
+function test_create_minting_policy_for_token_without_minting_policy() {
+    // Setup
+    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val token = token @ {};
+    assert_true(empty(token_account_minting_policy @* { token }));
+
+    // Bob proposes minting policy #1
+    val proposal_op1 = propose_minting_policy(
+        asset_id = token.asset.id,
+        minters = set([proposer.id]),
+        max_supply = 10000, 
+        minting_interval_ms = 1000,
+        minting_amount = 1000,
+        accumulating_amount = false
+    );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, proposal_op1),
+        proposal_op1
+    ).run();
+    // Alice votes on the proposal
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    // Bob proposes minting policy #2 for Dave
+    val dave = do_create_account(rell.test.keypairs.dave, chain_context.args.auth_privkey, 0L);
+    val proposal_op2 = propose_minting_policy(
+        asset_id = token.asset.id,
+        minters = set([dave.id]),
+        max_supply = 20000, 
+        minting_interval_ms = 2000,
+        minting_amount = 2000,
+        accumulating_amount = false
+    );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, proposal_op2),
+        proposal_op2
+    ).run();
+    // Alice votes on the proposal
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    // Assert that the minting policy is created
+    assert_true(exists(token_account_minting_policy @* { token }));
+    val token_info = get_token_info(token.asset.id);
+    assert_equals(token_info.minting_policy, [
+        minting_policy(
+            minters = set([proposer.id]),
+            max_supply = 10000L, 
+            minting_interval_ms = 1000,
+            minting_amount = 1000L,
+            accumulating_amount = false
+        ),
+        minting_policy(
+            minters = set([dave.id]), 
+            max_supply = 20000L, 
+            minting_interval_ms = 2000,
+            minting_amount = 2000L,
+            accumulating_amount = false
+        )
+    ]);
+}
+
+function test_create_minting_policy_for_token_with_minting_policy() {
+    // Setup
+    maybe_init_token_chain();
+    val bob = do_create_account(rell.test.keypairs.bob, chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    val dave = do_create_account(rell.test.keypairs.dave, chain_context.args.auth_privkey, 0L);
+
+    // Bob proposes a token with a minting policy
+    val propose_token_op = create_propose_token(
+        minting_policy = [
+            minting_policy(
+                minters = set([bob.id]),
+                max_supply = 10000L, 
+                minting_interval_ms = 1000,
+                minting_amount = 1000L,
+                accumulating_amount = false
+            )
+        ]
+    );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_token_op),
+        propose_token_op
+    ).run();
+    // Alice votes on the proposal
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val token = token @ {};
+
+    // Bob proposes a minting policy for Dave
+    val propose_minting_policy_op = propose_minting_policy(
+        asset_id = token.asset.id,
+        minters = set([dave.id]),
+        max_supply = 20000, 
+        minting_interval_ms = 2000,
+        minting_amount = 2000,
+        accumulating_amount = false
+    );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_minting_policy_op),
+        propose_minting_policy_op
+    ).run();
+    // Alice votes on the proposal
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    // Assert that the minting policy is created
+    assert_true(exists(token_account_minting_policy @* { token }));
+    val token_info = get_token_info(token.asset.id);
+    assert_equals(token_info.minting_policy, [
+        minting_policy(
+            minters = set([bob.id]),
+            max_supply = 10000L, 
+            minting_interval_ms = 1000,
+            minting_amount = 1000L,
+            accumulating_amount = false
+        ),
+        minting_policy(
+            minters = set([dave.id]), 
+            max_supply = 20000L, 
+            minting_interval_ms = 2000,
+            minting_amount = 2000L,
+            accumulating_amount = false
+        )
+    ]);
+}
+
+function test_cannot_create_minting_policy_for_unknown_token_asset() {
+    // Setup
+    val bob = do_create_account(rell.test.keypairs.bob, chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+
+    // Bob proposes a minting policy for a non-existing token
+    val proposal_op = propose_minting_policy(
+        asset_id = x"",
+        minters = set([bob.id]),
+        max_supply = 10000, 
+        minting_interval_ms = 1000,
+        minting_amount = 1000,
+        accumulating_amount = false
+    );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, proposal_op),
+        proposal_op
+    ).run_must_fail("MISSING ASSET: Asset <0x> not found");
+}
+
+function test_only_token_owner_can_propose_minting_policy() {
+    // Setup
+    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    // Create a new account for Dave
+    val dave = do_create_account(rell.test.keypairs.dave, chain_context.args.auth_privkey, 0L);
+
+    // Dave cannot propose a minting policy for the Bob's token
+    val proposal_op = propose_minting_policy(
+        asset_id = token @ {}.asset.id,
+        minters = set([dave.id]),
+        max_supply = 10000, 
+        minting_interval_ms = 1000,
+        minting_amount = 1000,
+        accumulating_amount = false
+    );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.dave.priv, proposal_op),
+        proposal_op
+    ).run_must_fail("Only token owner can propose a minting policy");
+}
+
+function test_minter_cannot_have_multiple_policies_per_token() {
+    // Setup
+    val bob = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    // Bob proposes a minting policy for the token
+    val propose_minting_policy_op1 = propose_minting_policy(
+        asset_id = token @ {}.asset.id,
+        minters = set([bob.id]),
+        max_supply = 10000, 
+        minting_interval_ms = 1000,
+        minting_amount = 1000,
+        accumulating_amount = false
+    );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_minting_policy_op1),
+        propose_minting_policy_op1
+    ).run();
+    val proposal1 = get_latest_common_proposal_id();
+
+    // Bob proposes a second minting policy for the token, which will fail during the vote
+    val propose_minting_policy_op2 = propose_minting_policy(
+        asset_id = token @ {}.asset.id,
+        minters = set([bob.id]),
+        max_supply = 20000, 
+        minting_interval_ms = 2000,
+        minting_amount = 2000,
+        accumulating_amount = false
+    );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_minting_policy_op2),
+        propose_minting_policy_op2
+    ).run();
+    val proposal2 = get_latest_common_proposal_id();
+
+    // Alice votes on the proposal1
+    vote_yes(rell.test.keypairs.alice, proposal1);
+
+    // Cannot vote on the proposal2
+    rell.test.tx().op(
+        make_common_vote(rell.test.keypairs.alice.pub, proposal2, true)
+    )
+        .sign(rell.test.keypairs.alice)
+        .nop()
+        .run();
+
+    // Assert that the proposal2 is rejected
+    assert_equals(common_proposal @ { .rowid == proposal2 }.state, common_proposal_state.FAILED);
+
+    // Bob proposes a third minting policy for the token, which will fail during validation
+    val propose_minting_policy_op3 = propose_minting_policy(
+        asset_id = token @ {}.asset.id,
+        minters = set([bob.id]),
+        max_supply = 20000, 
+        minting_interval_ms = 2000,
+        minting_amount = 2000,
+        accumulating_amount = false
+    );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_minting_policy_op3),
+        propose_minting_policy_op3
+    ).run_must_fail(" Minter account id %s exists in multiple minting policies".format(bob.id));
+}
+
+function test_minting_policy_validation() {
+    // Setup
+    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+    val token = token @ {};
+
+    // Fail due to empty minting policy accounts
+    val proposal_op1 = propose_minting_policy(
+        asset_id = token.asset.id,
+        minters = set<byte_array>(),
+        max_supply = 1, 
+        minting_interval_ms = 1,
+        minting_amount = 1,
+        accumulating_amount = false
+    );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, proposal_op1),
+        proposal_op1
+    ).run_must_fail("Must provide at least one minter account");
+
+    // Fail due to non positive minting policy max supply
+    val proposal_op2 = propose_minting_policy(
+        asset_id = token.asset.id,
+        minters = set([proposer.id]),
+        max_supply = -1, 
+        minting_interval_ms = 1,
+        minting_amount = 1,
+        accumulating_amount = false
+    );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, proposal_op2),
+        proposal_op2
+    ).run_must_fail("Max supply must be a non-negative value");
+
+    // Fail due to non positive minting policy interval
+    val proposal_op3 = propose_minting_policy(
+        asset_id = token.asset.id,
+        minters = set([proposer.id]),
+        max_supply = 1,
+        minting_interval_ms = -1,
+        minting_amount = 1,
+        accumulating_amount = false
+    );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, proposal_op3),
+        proposal_op3
+    ).run_must_fail("Minting interval must be a positive value");
+
+    // Fail due to non positive minting policy amount
+    val proposal_op4 = propose_minting_policy(
+        asset_id = token.asset.id,
+        minters = set([proposer.id]),
+        max_supply = 1,
+        minting_interval_ms = 1,
+        minting_amount = -1,
+        accumulating_amount = false
+    );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, proposal_op4),
+        proposal_op4
+    ).run_must_fail("Minting amount must be a positive value");
+}
+
+function test_get_minting_policy_proposal() {
+    // Setup
+    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val token = token @ {};
+
+    // Create a new account for Dave
+    val dave = do_create_account(rell.test.keypairs.dave, chain_context.args.auth_privkey, 0L);
+
+    // Bob proposes minting policy for Bob and Dave
+    val proposal_op1 = propose_minting_policy(
+        asset_id = token.asset.id,
+        minters = set([proposer.id, dave.id]),
+        max_supply = 10000, 
+        minting_interval_ms = 1000,
+        minting_amount = 1000,
+        accumulating_amount = false
+    );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, proposal_op1),
+        proposal_op1
+    ).run();
+
+    // Verify the minting policy proposal query result
+    val proposal = get_minting_policy_proposal(get_latest_common_proposal_id());
+    assert_equals(proposal, minting_policy(
+        minters = set([proposer.id, dave.id]),
+        max_supply = 10000L,
+        minting_interval_ms = 1000,
+        minting_amount = 1000L,
+        accumulating_amount = false
+    ));
+}
