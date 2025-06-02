@@ -5,7 +5,14 @@ function _staking_offboard_provider(pubkey) {
     val current_time = _staking_last_known_time();
 
     // Handle delegation states where next_change_at has passed and next_provider is this provider
-    update delegation_state @* { 
+    create auto_undelegation (
+        delegation_state @* {
+           .next_provider.pubkey == pubkey,
+           .next_change_at > 0,
+           .next_change_at <= current_time
+        } (struct<auto_undelegation>($, pubkey))
+    );
+    update delegation_state @* {
         .next_provider.pubkey == pubkey,
         .next_change_at > 0,
         .next_change_at <= current_time
@@ -16,19 +23,31 @@ function _staking_offboard_provider(pubkey) {
         .next_provider = null_provider,
         .next_change_at = 0
     );
-    
+
+
     // Cancel any upcoming delegation changes to this provider
-    update delegation_state @* { 
+    create auto_cancel_upcoming_delegation (
+        delegation_state @* {
+            .next_provider.pubkey == pubkey,
+            .next_change_at > current_time
+        } (struct<auto_cancel_upcoming_delegation> ($.staker_state.account, $.next_change_at, $, pubkey))
+    );
+    update delegation_state @* {
         .next_provider.pubkey == pubkey,
         .next_change_at > current_time
     } (
-        .next_provider = null_provider, 
+        .next_provider = null_provider,
         .next_change_at = 0
     );
-    
+
     // Handle delegation states with this provider as the current provider
-    update delegation_state @* { 
-        .current_provider.pubkey == pubkey 
+    create auto_undelegation (
+        delegation_state @* {
+            .current_provider.pubkey == pubkey
+        } (struct<auto_undelegation> ( $, pubkey ))
+    );
+    update delegation_state @* {
+        .current_provider.pubkey == pubkey
     } (
         .previous_provider = .current_provider,
         .current_provider = null_provider,

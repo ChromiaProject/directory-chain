@@ -52,27 +52,82 @@ query staking_get_current_delegate(account_id: byte_array) {
  *  Delegation changes do not take place immediately.
  *
  * @param account_id Given user
- * @return A tuple of the next to be delegated to provider and the timestamp the delegation will take effect. Or null if no re-delegation is scheduled.
-*/
-query staking_get_next_delegation_change(account_id: byte_array) : (pubkey: pubkey?, time: integer)? {
+ * @return Struct containing the next to be delegated provider, the timestamp the delegation will take effect and
+ * a boolean indicating whether the next delegation change was automatically canceled due to the provider being off-boarded.
+ * Or null if no re-delegation is scheduled.
+ */
+query staking_get_next_delegation_change(
+    account_id: byte_array
+): next_delegation_change? {
     val staker = ft4.accounts.Account(account_id);
     val upcoming_delegations = delegation_state @* {
-        .staker_state.account == staker, .next_change_at > _staking_last_known_time()
+        .staker_state.account == staker,
+        .next_change_at > _staking_last_known_time()
     } (
         @omit @sort_desc .next_change_at,
         @omit @sort_desc .rowid,
         pubkey = .next_provider.pubkey,
         time = .next_change_at
     ) limit 1;
-    return if (exists(
+    var result = if (exists(
         upcoming_delegations
-    )) (
-        pubkey = when(upcoming_delegations[0].pubkey) {
+    )) next_delegation_change(
+        pubkey = when (upcoming_delegations[0].pubkey) {
             get_null_account() -> null;
             else -> upcoming_delegations[0].pubkey
         },
-        time = upcoming_delegations[0].time
+        time = upcoming_delegations[0].time,
+        auto_canceled = false
     ) else null;
+    if (result == null) {
+        val auto = auto_cancel_upcoming_delegation @* {
+            .account == staker,
+            .next_change_at > _staking_last_known_time()
+        } (
+            @omit @sort_desc .next_change_at,
+            @omit @sort_desc .delegation_state.rowid,
+            pubkey = .provider,
+            time = .next_change_at
+        ) limit 1;
+        if (exists(auto)) {
+            result = next_delegation_change(pubkey = auto[0].pubkey, time = auto[0].time, auto_canceled = true);
+        }
+    }
+    return result;
+}
+
+struct next_delegation_change {
+    pubkey?;
+    time: timestamp;
+    auto_canceled: boolean;
+}
+
+/**
+ * Returns the previous provider delegate for a given staker account, along with information
+ * about whether the un-delegation was automatic due to provider offboarding.
+ *
+ * @param account_id Given user
+ * @return An object of type `previous_delegate` containing:
+ *   - `pubkey`: The public key of the previous delegate provider. May be `null` if no previous provider exists.
+ *   - `auto_undelegated`: A boolean indicating whether the un-delegation was performed automatically because the
+ *                         provider was off-boarded, as opposed to a manual re-delegation by the user.
+ */
+query staking_get_previous_delegate(account_id: byte_array): previous_delegate? {
+    val d_state = delegation_state @* { .staker_state.account.id == account_id } (
+        @omit @sort_desc .rowid, $
+    ) limit 1;
+    if (exists(d_state)) {
+        val previous_delegate = if (d_state[0].next_change_at > 0 and d_state[0].next_change_at <= _staking_last_known_time()) d_state[0].current_provider.pubkey else d_state[0].previous_provider.pubkey;
+        var auto_undelegated = exists(auto_undelegation @? { .delegation_state == d_state[0], .provider == previous_delegate });
+        return previous_delegate(previous_delegate, auto_undelegated);
+    } else {
+        return null;
+    }
+}
+
+struct previous_delegate {
+    pubkey: pubkey?;
+    auto_undelegated: boolean;
 }
 
 /**
