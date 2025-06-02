@@ -1,0 +1,139 @@
+
+entity pending_minting_policy_proposal {
+    key common_proposal;
+    index token;
+    minters: text;
+    max_supply: big_integer; // 0 to disable
+    minting_interval_ms: integer;
+    minting_amount: big_integer;
+    accumulating_amount: boolean;
+}
+
+
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.tc_propose_minting_policy.name: apply_minting_policy_create(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.tc_propose_minting_policy.name: cleanup_pending_minting_policy_create(*)];
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(propose_minting_policy).mount_name,
+    flags = ["T"],
+);
+
+/**
+ * Token owner can propose a new token minting policy.
+ *
+ * @param asset_id The FT4 asset id of the token
+ * @param minters The set of minter accounts that are allowed to mint the token
+ * @param max_supply The maximum supply of the token (set to 0 to disable)
+ * @param minting_interval_ms The minting interval in milliseconds
+ * @param minting_amount The amount of tokens that can be minted in the minting interval
+ * @param accumulating_amount Whether the minting amount is accumulated or not
+ */
+operation propose_minting_policy(
+    asset_id: byte_array,
+    minters: set<byte_array>,
+    max_supply: big_integer,
+    minting_interval_ms: integer,
+    minting_amount: big_integer,
+    accumulating_amount: boolean,
+) {
+    val account = ft4.auth.authenticate();
+    val asset = ft4.assets.Asset(asset_id);
+    val token = require_token(asset);
+
+    require(account == token.owner, "Only token owner can propose a minting policy");
+
+    val token_minters = token_minters(token);
+    for (minter in minters) {
+        val minter_account = ft4.accounts.Account(minter);
+        require(not token_minters.contains(minter_account), "Minter account id %s exists in multiple minting policies".format(minter));
+    }
+
+    require(not minters.empty(), "Must provide at least one minter account");
+    require(max_supply >= 0, "Max supply must be a non-negative value");
+    require(minting_interval_ms > 0, "Minting interval must be a positive value");
+    require(minting_amount > 0, "Minting amount must be a positive value");
+
+    val proposal = create common_proposal(op_context.last_block_time, common_proposal_type.tc_propose_minting_policy, account.id,
+        require_governance_voter_set());
+
+    create pending_minting_policy_proposal(
+        common_proposal = proposal,
+        token = token,
+        minters = minters.join_to_text(",", "", "", null, "", byte_array_to_hex(*)),
+        max_supply = max_supply,
+        minting_interval_ms = minting_interval_ms,
+        minting_amount = minting_amount,
+        accumulating_amount = accumulating_amount,
+    );
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(revoke_minting_policy_proposal).mount_name,
+    flags = ["T"],
+);
+
+/**
+ * Revokes a token minting policy proposal
+ *
+ * @param proposal_id Proposal to revoke
+ */
+operation revoke_minting_policy_proposal(proposal_id: rowid) {
+    val account = ft4.auth.authenticate();
+    val prop = require_common_proposal(proposal_id);
+    require(prop.proposal_type == common_proposal_type.tc_propose_minting_policy, "Proposal is not a minting policy proposal");
+    require(prop.proposed_by == account.id, "Proposal must be revoked by proposer");
+
+    revoke_common_proposal_unsafe(prop);
+}
+
+function apply_minting_policy_create(proposal: common_proposal) {
+    val pmp = pending_minting_policy_proposal @ { proposal };
+
+    val proposer_account = ft4.accounts.account_by_id(proposal.proposed_by);
+
+    val minting_policy = create token_account_minting_policy(
+        token = pmp.token,
+        max_supply = pmp.max_supply,
+        minting_interval_ms = pmp.minting_interval_ms,
+        minting_amount = pmp.minting_amount,
+        accumulating_amount = pmp.accumulating_amount
+    );
+
+    val token_minters = token_minters(pmp.token);
+    for (minter in pmp.minters.split(",")) {
+        val minter_account = ft4.accounts.Account(byte_array.from_hex(minter));
+        require(not token_minters.contains(minter_account), "Minter account id %s exists in multiple minting policies".format(minter));
+        create token_account_minting_policy_account(minting_policy, minter_account);
+    }
+}
+
+function cleanup_pending_minting_policy_create(proposal: common_proposal) {
+    delete pending_minting_policy_proposal @ { proposal };
+}
+
+/**
+ * Retrieves detailed information about a token minting policy proposal by its ID.
+ * 
+ * @param id Proposal ID
+ * @return Information about a specific token minting policy proposal including minters, max supply, minting interval, minting amount, and accumulating amount
+ * @throws If no proposal exists with the given ID or if the proposal is not a token minting policy proposal
+ */
+query get_minting_policy_proposal(id: rowid): minting_policy {
+    val proposal = require_common_proposal(id);
+    val pmp = require(pending_minting_policy_proposal @? { proposal }, "Proposal %s is not of type minting policy".format(id));
+
+    return minting_policy(
+        minters = pmp.minters.split(",") @ {} ( @set byte_array.from_hex($) ),
+        max_supply = pmp.max_supply,
+        minting_interval_ms = pmp.minting_interval_ms,
+        minting_amount = pmp.minting_amount,
+        accumulating_amount = pmp.accumulating_amount,
+    );
+}
+
+function token_minters(token: token) = (mp: token_account_minting_policy, mpa: token_account_minting_policy_account) @* {
+    mp.token == token, 
+    mpa.token_account_minting_policy == mp,
+} ( mpa.account );

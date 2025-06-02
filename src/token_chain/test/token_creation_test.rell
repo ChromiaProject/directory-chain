@@ -101,6 +101,18 @@ function test_create_token_validation() {
     rell.test.tx().op(ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)).op(propose_op)
         .run_must_fail("Must provide at least one minter account");
 
+    // Fail due to non positive minting policy max supply
+    propose_op = create_propose_token(
+        minting_policy = [minting_policy(
+        set([proposer.id]),
+        max_supply = -1,
+        minting_interval_ms = 1,
+        minting_amount = 1,
+        accumulating_amount = false,
+    )]);
+    rell.test.tx().op(ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)).op(propose_op)
+        .run_must_fail("Max supply must be a non-negative value");
+
     // Fail due to non positive minting policy interval
     propose_op = create_propose_token(
         minting_policy = [minting_policy(
@@ -150,9 +162,9 @@ function test_get_token_proposal() {
 
     setup(
         chain_context.args.auth_privkey,
-            token_chain_constants.listing_fee,
-            minting_policies = minting_policies,
-            account_creation_brids = [account_creation_brid1]
+        token_chain_constants.listing_fee,
+        minting_policies = minting_policies,
+        account_creation_brids = [account_creation_brid1]
     );
 
     assert_equals(get_token_proposal(get_latest_common_proposal_id()),
@@ -163,5 +175,6 @@ function test_get_token_proposal() {
             icon = "http://test.com",
             minting_policy = minting_policies,
             account_creation_brids = [account_creation_brid1]
-        ));
+        )
+    );
 }
