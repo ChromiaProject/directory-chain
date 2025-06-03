@@ -654,14 +654,15 @@ function test_staking_req_reward_successful() {
     val psa = run_staking_pay_out(
         reward = 10,
         staking_amount = economy_constants.staking_requirement_system_node_total_stake_chr +
-            economy_constants.staking_requirement_dapp_node_total_stake_chr + 100
+            economy_constants.staking_requirement_dapp_node_total_stake_chr + 100,
+        staking_rewards_share = 0.2,
     );
     val regular_staking_reward = staking_rewards_claimable_for(psa.staking_account.id);
 
     rell.test.tx().op(staking_claim_rewards(true, true)).sign(admin_privkey).run();
 
     //assert that the reward is paid out. We subtract the regular staking reward from the total
-    assert_equals(get_account_balance(psa.staking_account) - regular_staking_reward, 11);
+    assert_equals(get_account_balance(psa.staking_account) - regular_staking_reward, 12);
     assert_gt(psa.last_approved_stake_requirements, 0);
 }
 
@@ -756,7 +757,8 @@ function remove_delegation_share(total: big_integer) {
 
 function run_staking_pay_out(
     reward: integer = 10,
-    staking_amount: integer = 0
+    staking_amount: integer = 0,
+    staking_rewards_share: decimal = 0.1,
 ) {
 
     if (not state.initialized) rell.test.tx().op(init()).run();
@@ -764,6 +766,10 @@ function run_staking_pay_out(
     val system_cluster = ensure_system_cluster();
     val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
     val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    rell.test.tx().op(
+        set_provider_staking_rewards_share(provider_pubkey, staking_rewards_share)
+    ).run();
+    assert_equals(staking_provider_staking_rewards_share(provider_pubkey), staking_rewards_share);
     val node = ensure_node(provider_pubkey, node_pubkey, true, "SE", 1, 1024, false);
     add_cluster_node(cluster_name, node_pubkey, false);
     val system_node = ensure_node(provider_pubkey, system_node_pubkey, true, "SE", 1, 1024, false);
@@ -878,7 +884,7 @@ function run_pay_reward(reward: big_integer = 0, refill: boolean) {
     }
 
     rell.test.tx().op(
-        pay_reward_op(pool, alice, 0, reward, "test", false)
+        pay_reward_op(pool, alice, 0, reward, "test", 0.0)
     ).run();
 
     return alice;

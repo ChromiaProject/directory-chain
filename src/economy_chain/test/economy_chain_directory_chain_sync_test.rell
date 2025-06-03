@@ -236,11 +236,15 @@ function test_receive_provider_update_message_create() {
             rell.test.pubkeys.alice,
             system = true,
             tier = provider_tier.NODE_PROVIDER.name,
-            active = true
+            active = true,
+            name = "name",
+            url = "url",
         ))
     ).run();
 
-    assert_not_null(provider @? { rell.test.pubkeys.alice });
+    val provider = require(provider @? { rell.test.pubkeys.alice });
+    assert_equals(provider.name, "name");
+    assert_equals(provider.url, "url");
     assert_not_null(provider_account @? { .provider.pubkey == rell.test.pubkeys.alice });
     assert_not_null(common_voter_set_member @? { .voter_set.name == voter_sets.system_p, .pubkey == rell.test.pubkeys.alice });
 }
@@ -255,12 +259,16 @@ function test_receive_provider_update_message_update() {
             rell.test.pubkeys.alice,
             system = true,
             tier = provider_tier.NODE_PROVIDER.name,
-            active = true
+            active = true,
+            name = "name2",
+            url = "url2",
         ))
     ).run();
 
     val provider = provider @? { rell.test.pubkeys.alice };
     assert_not_null(provider);
+    assert_equals(provider.name, "name2");
+    assert_equals(provider.url, "url2");
     assert_true(provider.system);
     assert_not_null(common_voter_set_member @? { .voter_set.name == voter_sets.system_p, .pubkey == rell.test.pubkeys.alice });
 }

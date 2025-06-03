@@ -9,6 +9,7 @@ import proposal_blockchain.*;
 import proposal_cluster.*;
 import proposal_container.*;
 import proposal_provider.*;
+import nm_api;
 
 function test_propose_and_remove_container() {
     setup_module();
@@ -140,6 +141,88 @@ function test_container_duplicate_name() {
     rell.test.tx().op(
         propose_container(sp.pub, clusters.system, "container1", voter_sets.system_p)
     ).nop().sign(sp).run_must_fail("Container with name container1 already exists");
+}
+
+function test_pause_and_resume_container() {
+    setup_module();
+
+    // 0. governance
+    val dp = rell.test.keypairs.bob;
+    val sp = rell.test.keypairs.trudy;
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, dp.pub, provider_tier.DAPP_PROVIDER),
+        register_provider(initial_provider.pub, sp.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, sp.pub, true)
+    ).sign(initial_provider).run();
+
+    val directory_chain_rid = blockchain @ { .name == blockchains.directory_chain } (.rid);
+
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p)
+    ).sign(initial_provider).run();
+    _make_vote(sp);
+
+    var conf = apply_required_configuration_properties();
+    conf["foo"] = "bar".to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "chain1", "container1")
+    ).sign(initial_provider).run();
+    _make_vote(sp);
+
+    val chain1_rid = blockchain @ { .name == "chain1" } (.rid);
+
+    assert_equals(nm_api.nm_get_containers(c.test_node.pubkey), ["system", "container1"]);
+    assert_equals(nm_api.nm_compute_blockchain_info_list(c.test_node.pubkey), [
+        nm_api.blockchain_info(
+            rid = directory_chain_rid,
+            system = true,
+            state = blockchain_state.RUNNING,
+        ),
+        nm_api.blockchain_info(
+            rid = chain1_rid,
+            system = false,
+            state = blockchain_state.RUNNING,
+        ),
+    ]);
+
+    rell.test.tx().op(
+        resume_container(initial_provider.pub, "container1")
+    ).nop().sign(initial_provider).run_must_fail("Can only resume a paused container");
+
+    rell.test.tx().op(
+        propose_container_action(initial_provider.pub, "container1", container_action.pause)
+    ).sign(initial_provider).run();
+    _make_vote(sp);
+    assert_equals(nm_api.nm_get_containers(c.test_node.pubkey), ["system"]);
+    assert_equals(nm_api.nm_compute_blockchain_info_list(c.test_node.pubkey), [
+        nm_api.blockchain_info(
+            rid = directory_chain_rid,
+            system = true,
+            state = blockchain_state.RUNNING,
+        ),
+    ]);
+
+    rell.test.tx().op(
+        propose_container_action(initial_provider.pub, "container1", container_action.pause)
+    ).nop().sign(initial_provider).run_must_fail("Can only pause a running container");
+
+    rell.test.tx().op(
+        resume_container(initial_provider.pub, "container1")
+    ).sign(initial_provider).run();
+    assert_equals(nm_api.nm_get_containers(c.test_node.pubkey), ["system", "container1"]);
+    assert_equals(nm_api.nm_compute_blockchain_info_list(c.test_node.pubkey), [
+        nm_api.blockchain_info(
+            rid = directory_chain_rid,
+            system = true,
+            state = blockchain_state.RUNNING,
+        ),
+        nm_api.blockchain_info(
+            rid = chain1_rid,
+            system = false,
+            state = blockchain_state.RUNNING,
+        ),
+    ]);
 }
 
 function _make_vote(voter: rell.test.keypair) {

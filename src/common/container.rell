@@ -1,19 +1,23 @@
 function create_system_container(me: provider, name, cluster, voter_set): container {
-    val c = create container(name, cluster, voter_set, me, system = true);
+    val c = create container(name, cluster, voter_set, me, system = true, created_at = op_context.last_block_time);
     create container_resource_limit(c, container_resource_limit_type.container_units, cluster.system_container_units);
     create container_resource_limit(c, container_resource_limit_type.max_blockchains, system_container_defaults.max_blockchains);
     create container_resource_limit(c, container_resource_limit_type.extra_storage, system_container_defaults.extra_storage);
+    create container_resource_limit(c, container_resource_limit_type.extra_compute_requests, system_container_defaults.extra_compute_requests);
     return c;
 }
 
-function create_container_with_limits(me: provider, name, cluster, voter_set, container_units: integer, max_blockchains: integer, extra_storage: integer): container {
+function create_container_with_limits(me: provider, name, cluster, voter_set, container_units: integer,
+        max_blockchains: integer, extra_storage: integer, extra_compute_requests: integer): container {
     require(container_units > 0, "Container must have at least 1 container unit");
     require(extra_storage >= 0, "Invalid value for extra_storage: %d, must be greater or equal to 0".format(extra_storage));
+    require(extra_compute_requests >= 0, "Invalid value for extra_compute_requests: %d, must be greater or equal to 0".format(extra_compute_requests));
     require_cluster_quotas(cluster, container_units, extra_storage);
-    val c = create container(name, cluster, voter_set, me);
+    val c = create container(name, cluster, voter_set, me, created_at = op_context.last_block_time);
     create container_resource_limit(c, container_resource_limit_type.container_units, container_units);
     create container_resource_limit(c, container_resource_limit_type.max_blockchains, max_blockchains);
     create container_resource_limit(c, container_resource_limit_type.extra_storage, extra_storage);
+    create container_resource_limit(c, container_resource_limit_type.extra_compute_requests, extra_compute_requests);
     return c;
 }
 
@@ -53,7 +57,8 @@ function require_container_available_for_removal(container) {
 
 @extendable function before_system_container_removal(cluster) {}
 
-function create_container_impl(me: provider, name, cluster, consensus_threshold: integer, deployers: list<pubkey>, container_units: integer, max_blockchains: integer, extra_storage: integer): container {
+function create_container_impl(me: provider, name, cluster, consensus_threshold: integer, deployers: list<pubkey>,
+        container_units: integer, max_blockchains: integer, extra_storage: integer, extra_compute_requests: integer): container {
     require(consensus_threshold >= -1 and consensus_threshold <= deployers.size(), "Invalid threshold");
 
     val vs_name = "container_" + name + "_deployer";
@@ -65,7 +70,7 @@ function create_container_impl(me: provider, name, cluster, consensus_threshold:
         create voter_set_member(vs, deployer);
     }
 
-    return create_container_with_limits(me, name, cluster, vs, container_units, max_blockchains, extra_storage);
+    return create_container_with_limits(me, name, cluster, vs, container_units, max_blockchains, extra_storage, extra_compute_requests);
 }
 
 function remove_container_and_voter_set(container) {
@@ -99,14 +104,17 @@ function get_container_blockchain_count(container) {
     return container_blockchain @* { container } (@sum 1)[0];
 }
 
-function upgrade_container(container, container_units: integer, extra_storage: integer, max_blockchains: integer) {
+function upgrade_container(container, container_units: integer, extra_storage: integer, max_blockchains: integer,
+        extra_compute_requests: integer) {
     require_container_units(container, container_units);
     require_max_blockchains(container, max_blockchains);
     require_extra_storage(container, extra_storage);
+    require(extra_compute_requests >= 0, "Invalid value for extra_compute_requests: %d, must be greater or equal to 0".format(extra_compute_requests));
 
     update container_resource_limit @ { container, container_resource_limit_type.container_units } ( container_units );
     update container_resource_limit @ { container, container_resource_limit_type.max_blockchains } ( max_blockchains );
     update container_resource_limit @ { container, container_resource_limit_type.extra_storage } ( extra_storage );
+    update container_resource_limit @ { container, container_resource_limit_type.extra_compute_requests } ( extra_compute_requests );
 }
 
 function require_container_units(container, new_container_units: integer) {

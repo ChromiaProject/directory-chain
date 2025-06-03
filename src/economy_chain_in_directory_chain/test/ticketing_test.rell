@@ -95,6 +95,7 @@ function test_create_container_with_auto_create_provider() {
             extra_storage = 1024,
             cluster_name = cluster_name,
             subnode_image_name = "",
+            extra_compute_requests = 5,
         ).to_gtv())).run();
     val container2 = container @ { bob_cluster, .system == false, .name != container1.name };
     assert_events(("icmf_message", (
@@ -107,6 +108,9 @@ function test_create_container_with_auto_create_provider() {
 
     val container_extra_storage_limit = container_resource_limit @ { container2, .container_resource_limit_type == container_resource_limit_type.extra_storage }.value;
     assert_equals(container_extra_storage_limit, 1024);
+
+    val container_extra_compute_requests = container_resource_limit @ { container2, .container_resource_limit_type == container_resource_limit_type.extra_compute_requests }.value;
+    assert_equals(container_extra_compute_requests, 5);
 
     assert_not_null(provider @? { test_provider.pub });
 }
@@ -133,7 +137,7 @@ function test_create_container_with_subnode_image() {
     assert_null(provider @? { test_provider.pub });
 
     rell.test.tx().op(
-        create_container_op(create_container_message(
+        create_container_op(create_container_message_v1(
             ticket_id = 1,
             provider_pubkey = test_provider.pub,
             container_units = 1,
@@ -235,10 +239,11 @@ function test_upgrade_container() {
         register_node_with_node_data(initial_provider.pub, register_node_data),
         register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.DAPP_PROVIDER),
         create_container_with_resource_limits(initial_provider.pub, container_name,  cluster_name, 0, [test_provider.pub],
-            [container_resource_limit_type.container_units : 1])
+            [container_resource_limit_type.container_units : 1, container_resource_limit_type.extra_compute_requests : 2])
     ).sign(initial_provider).run();
     val initial_limits = get_current_container_resource_limits(container_name);
     assert_equals(initial_limits[container_resource_limit_type.container_units], 1);
+    assert_equals(initial_limits[container_resource_limit_type.extra_compute_requests], 2);
 
     rell.test.tx().op(
         upgrade_container_op(upgrade_container_message(
@@ -246,7 +251,8 @@ function test_upgrade_container() {
             container_name = container_name,
             container_units = 2,
             extra_storage = 0,
-            cluster_name = cluster_name
+            cluster_name = cluster_name,
+            extra_compute_requests = 5,
         ).to_gtv())).run();
     assert_events(("icmf_message", (
         topic = ticket_container_result_topic,
@@ -255,6 +261,7 @@ function test_upgrade_container() {
 
     val upgraded_limits = get_current_container_resource_limits(container_name);
     assert_equals(upgraded_limits[container_resource_limit_type.container_units], 2);
+    assert_equals(upgraded_limits[container_resource_limit_type.extra_compute_requests], 5);
 }
 
 function test_upgrade_container_fail() {
@@ -314,7 +321,7 @@ function test_upgrade_non_existing_container_fail() {
     ).sign(initial_provider).run();
 
     rell.test.tx().op(
-        upgrade_container_op(upgrade_container_message(
+        upgrade_container_op(upgrade_container_message_v1(
             ticket_id = 1,
             container_name = non_existing_container_name,
             container_units = 2,

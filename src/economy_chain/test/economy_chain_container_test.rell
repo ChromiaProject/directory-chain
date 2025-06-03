@@ -43,6 +43,7 @@ function test_create_container_and_assign_subnode_image_later_success() {
         subnode_image_name = "",
         bridge_leases = [],
         lease_owner_account_id = alice.id,
+        extra_compute_requests = 0,
     );
 
     val leases = get_leases_by_account(alice.id);
@@ -66,6 +67,7 @@ function test_create_container_and_assign_subnode_image_later_success() {
         subnode_image_name = "subnode_image1",
         bridge_leases = [],
         lease_owner_account_id = alice.id,
+        extra_compute_requests = 0,
     );
     val lease_data2 = require(get_lease_by_container_name(container_name));
     assert_equals(lease_data2, expected_lease2);
@@ -167,6 +169,7 @@ function test_create_container_with_subnode_image() {
         subnode_image_name = "subnode_image1",
         bridge_leases = [],
         lease_owner_account_id = alice.id,
+        extra_compute_requests = 0,
     );
 
     val leases = get_leases_by_account(alice.id);
@@ -175,7 +178,7 @@ function test_create_container_with_subnode_image() {
 
     val container_name2 = do_create_container(
         alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 21, cluster_name = cluster_name, container_units = 2,
-            subnode_image_name = "subnode_image2", container_name = "container2");
+            subnode_image_name = "subnode_image2", container_name = "container2", extra_compute_requests = 5);
 
     val expected_lease2 = lease_data(
         container_name = "container2",
@@ -188,6 +191,7 @@ function test_create_container_with_subnode_image() {
         subnode_image_name = "subnode_image2",
         bridge_leases = [],
         lease_owner_account_id = alice.id,
+        extra_compute_requests = 5,
     );
 
     val leases2 = get_leases_by_account(alice.id);
@@ -255,6 +259,7 @@ function test_create_container_with_auto_renew() {
         subnode_image_name = "",
         bridge_leases = [],
         lease_owner_account_id = alice.id,
+        extra_compute_requests = 0,
     );
 
     val leases2 = get_leases_by_account(alice.id);
@@ -349,9 +354,12 @@ function test_auto_renew_and_cancel_renew_lease() {
     rell.test.block().run();
     rell.test.block().run();
 
+    val renew_cost = renew_container_cost(container_name, 1);
+
     val purchases = get_lease_purchases_by_account(alice.id, null, null).data;
     val latest_purchase = lease_purchase_data.from_gtv_pretty(purchases[purchases.size() - 1]);
     assert_equals(latest_purchase.type, lease_purchase_type.RENEWAL);
+    assert_equals(latest_purchase.price, renew_cost);
 
     assert_false(lease @ { container_name } (.expired));
     assert_events(); // assert no ICMF messages sent
@@ -411,17 +419,18 @@ function test_renew_non_expired_container() {
     val pool_balance = get_pool_balance();
 
     assert_equals(lease @ { container_name } (.duration_millis), 1 * millis_per_week);
+    val renew_cost = renew_container_cost(container_name, 1);
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, renew_container(container_name, 1))
     ).op(
         renew_container(container_name, 1)
     ).run();
-    assert_lt(get_account_balance(alice), alice_balance);
-    assert_gt(get_pool_balance(), pool_balance);
     val purchases = get_lease_purchases_by_account(alice.id, null, null).data;
     val latest_purchase = lease_purchase_data.from_gtv_pretty(purchases[purchases.size() - 1]);
     assert_equals(latest_purchase.type, lease_purchase_type.RENEWAL);
+    assert_equals(latest_purchase.price, renew_cost);
     assert_equals(latest_purchase.price, alice_balance - get_account_balance(alice));
+    assert_equals(latest_purchase.price, get_pool_balance() - pool_balance);
 
     assert_equals(lease @ { container_name } (.duration_millis), 2 * millis_per_week);
     assert_false(lease @ { container_name } (.expired));
@@ -445,17 +454,18 @@ function test_renew_expired_container() {
     rell.test.block().run();
     assert_true(lease @ { container_name } (.expired));
 
+    val renew_cost = renew_container_cost(container_name, 1);
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, renew_container(container_name, 1))
     ).op(
         renew_container(container_name, 1)
     ).run();
-    assert_lt(get_account_balance(alice), alice_balance);
-    assert_gt(get_pool_balance(), pool_balance);
     val purchases = get_lease_purchases_by_account(alice.id, null, null).data;
     val latest_purchase = lease_purchase_data.from_gtv_pretty(purchases[purchases.size() - 1]);
     assert_equals(latest_purchase.type, lease_purchase_type.RENEWAL);
+    assert_equals(latest_purchase.price, renew_cost);
     assert_equals(latest_purchase.price, alice_balance - get_account_balance(alice));
+    assert_equals(latest_purchase.price, get_pool_balance() - pool_balance);
 
     assert_equals(lease @ { container_name } (.duration_millis), 2 * millis_per_week + expired_container_time);
     assert_false(lease @ { container_name } (.expired));
@@ -478,6 +488,8 @@ function test_auto_renew_expired_container() {
     rell.test.block().run();
     assert_true(lease @ { container_name } (.expired));
 
+    val renew_cost = renew_container_cost(container_name, 1);
+
     assert_false(lease @ { container_name } (.auto_renew));
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, auto_renew_container(container_name))
@@ -488,6 +500,7 @@ function test_auto_renew_expired_container() {
     val latest_purchase = lease_purchase_data.from_gtv_pretty(purchases[purchases.size() - 1]);
     assert_equals(latest_purchase.type, lease_purchase_type.RENEWAL);
     assert_equals(latest_purchase.price, alice_balance - get_account_balance(alice));
+    assert_equals(latest_purchase.price, renew_cost);
 
     assert_true(lease @ { container_name } (.auto_renew));
     assert_false(lease @ { container_name } (.expired));
@@ -537,7 +550,9 @@ function test_upgrade_container_success() {
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 2);
 
     val created_lease = lease @ { container_name };
-    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 3, ticket_id = ticket_id_after_init + 6, current_lease = created_lease, container_units = 3, upgraded_duration_weeks = 2);
+    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 3,
+        ticket_id = ticket_id_after_init + 6, current_lease = created_lease, container_units = 3,
+        upgraded_duration_weeks = 2, upgraded_extra_compute_requests = 5);
 
     val expected_lease = lease_data(
         container_name = container_name,
@@ -550,6 +565,7 @@ function test_upgrade_container_success() {
         subnode_image_name = "",
         bridge_leases = [],
         lease_owner_account_id = alice.id,
+        extra_compute_requests = 5,
     );
 
     val leases2 = get_leases_by_account(alice.id);
@@ -602,6 +618,7 @@ function test_upgrade_container_with_subnode_image() {
         subnode_image_name = "subnode_image1",
         bridge_leases = [],
         lease_owner_account_id = alice.id,
+        extra_compute_requests = 0,
     );
 
     val leases2 = get_leases_by_account(alice.id);
@@ -631,6 +648,7 @@ function test_upgrade_container_failure() {
         subnode_image_name = "",
         bridge_leases = [],
         lease_owner_account_id = alice.id,
+        extra_compute_requests = 0,
     );
 
     val leases2 = get_leases_by_account(alice.id);
@@ -793,7 +811,7 @@ function test_remaining_lease_value_is_correct() {
 
     val tag = cluster @ { .name == cluster_name }.tag;
     val lease = lease @ { container_name };
-    val lease_value = calculate_container_cost(1, 2, 0, tag);
+    val lease_value = calculate_container_cost(1, 2, 0, tag, extra_compute_requests = 0);
 
     val quarter_week_passed_remaining_value = calculate_remaining_lease_value(lease, lease.start_time + millis_per_week / 4);
     assert_equals(3 * lease_value / 4, quarter_week_passed_remaining_value);
@@ -812,7 +830,7 @@ function test_calculate_container_cost() {
 
     val tag = cluster @ { .name == cluster_name }.tag;
     val lease = lease @ { container_name };
-    val lease_value = calculate_container_cost(1, 2, 0, tag);
+    val lease_value = calculate_container_cost(1, 2, 0, tag, extra_compute_requests = 0);
 
     assert_equals(lease_value, 86380000);
 }
@@ -842,11 +860,18 @@ function test_get_lease_duration() {
 }
 
 function test_auth_messages() {
-    // Create
     rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+
+    // Create
     assert_equals(
         create_container_auth_message([rell.test.keypairs.alice.pub.to_gtv(), (1).to_gtv(), (1).to_gtv(), (0).to_gtv(), cluster_name.to_gtv(), false.to_gtv()].to_gtv()),
         "Please sign the message\nto lease container with 1 SCUs and 0 GiB extra storage\nin cluster Bob's cluster\nfor 1 weeks\ncosting 35.000000 tCHR\non account {account_id}"
+    );
+
+    // Create with subnode image
+    assert_equals(
+        create_container_with_subnode_image_auth_message([rell.test.keypairs.alice.pub.to_gtv(), (1).to_gtv(), (1).to_gtv(), (0).to_gtv(), cluster_name.to_gtv(), false.to_gtv(), "vector".to_gtv(), (5).to_gtv()].to_gtv()),
+        "Please sign the message\nto lease container with 1 SCUs and 0 GiB extra storage and 5 extra compute requests and subnode image vector\nin cluster Bob's cluster\nfor 1 weeks\ncosting 35.000000 tCHR\non account {account_id}"
     );
 
     // Upgrade
@@ -854,8 +879,8 @@ function test_auth_messages() {
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, container_units = 2);
 
     assert_equals(
-        upgrade_container_auth_message([container_name.to_gtv(), (2).to_gtv(), (0).to_gtv(), cluster_name.to_gtv(), (1).to_gtv()].to_gtv()),
-        "Please sign the message\nto upgrade container container name\nto have 2 SCUs and 0 GiB extra storage\nin cluster Bob's cluster\nfor 1 weeks\ncosting (before applying refund of current lease) 70.000000 tCHR\non account {account_id}"
+        upgrade_container_auth_message([container_name.to_gtv(), (2).to_gtv(), (0).to_gtv(), cluster_name.to_gtv(), (1).to_gtv(), (5).to_gtv()].to_gtv()),
+        "Please sign the message\nto upgrade container container name\nto have 2 SCUs and 0 GiB extra storage and 5 extra compute requests\nin cluster Bob's cluster\nfor 1 weeks\ncosting (before applying refund of current lease) 70.000000 tCHR\non account {account_id}"
     );
 
     // Renew
@@ -942,6 +967,7 @@ function test_downgrade_container_and_reduce_cost() {
         subnode_image_name = "",
         bridge_leases = [],
         lease_owner_account_id = alice.id,
+        extra_compute_requests = 0,
     );
 
     val leases2 = get_leases_by_account(alice.id);
@@ -997,6 +1023,7 @@ function test_container_lease_ownership_transfer() {
         subnode_image_name = "",
         bridge_leases = [],
         lease_owner_account_id = bob.id,
+        extra_compute_requests = 0,
     );
 
     assert_equals(get_leases_by_account(alice.id), list<lease_data>());

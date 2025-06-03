@@ -1,0 +1,57 @@
+@mount('gtx_api')
+module;
+
+import ^.*;
+
+/**
+ * Extend to support transaction priority. It will be called for every transaction, and can either return a
+ * `priority_state_v1` or null to use the default value from `no_op_priority_state()`. If function throws, the
+ * transaction will be rejected.
+ *
+ * This function is called for both v1 and v2 of the transaction priority implementation.
+ *
+ * @see https://gitlab.com/chromaway/postchain/blob/dev/postchain-base/src/main/kotlin/net/postchain/base/BaseTransactionPrioritizer.kt
+ *
+ * @param tx_body             the transaction
+ * @param tx_size             size of the transaction in bytes
+ * @param tx_enter_timestamp  when the transaction entered the queue
+ * @param current_timestamp   the current timestamp
+ * @param compound_ops        List of compound operations (subset of tx_body.operations). Will be null if postchain calls v1.
+ */
+@extendable
+function priority_check(
+    tx_body: gtx_transaction_body,
+    tx_size: integer,
+    tx_enter_timestamp: timestamp,
+    current_timestamp: timestamp,
+    compound_ops: set<text>?
+): priority_state_v1?;
+
+/**
+ * Wrapper for `priority_check` and called by Postchain for transaction priority v2.
+ *
+ * @see https://gitlab.com/chromaway/postchain/blob/dev/postchain-base/src/main/kotlin/net/postchain/base/BaseTransactionPrioritizer.kt
+ *
+ * @param tx_body             the transaction
+ * @param tx_size             size of the transaction in bytes
+ * @param tx_enter_timestamp  when the transaction entered the queue
+ * @param current_timestamp   the current timestamp
+ * @param compound_ops        List of compound operations (subset of tx_body.operations)
+ */
+query priority_check_v2(tx_body: gtx_transaction_body, tx_size: integer, tx_enter_timestamp: timestamp, current_timestamp: timestamp, compound_ops: set<text>): priority_state_v1 {
+    return priority_check(tx_body, tx_size, tx_enter_timestamp, current_timestamp, compound_ops) ?: no_op_priority_state();
+}
+
+/**
+ * Wrapper for `priority_check` and called by Postchain for transaction priority v1.
+ *
+ * @see https://gitlab.com/chromaway/postchain/blob/dev/postchain-base/src/main/kotlin/net/postchain/base/BaseTransactionPrioritizer.kt
+ *
+ * @param tx_body             the transaction
+ * @param tx_size             size of the transaction in bytes
+ * @param tx_enter_timestamp  when the transaction entered the queue
+ * @param current_timestamp   the current timestamp
+ */
+query priority_check_v1(tx_body: gtx_transaction_body, tx_size: integer, tx_enter_timestamp: timestamp, current_timestamp: timestamp): priority_state_v1 {
+    return priority_check(tx_body, tx_size, tx_enter_timestamp, current_timestamp, null) ?: no_op_priority_state();
+}

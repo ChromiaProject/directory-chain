@@ -115,7 +115,7 @@ function pay_out_chromia_foundation_reward() {
     val pool = get_pool_account();
     val chromia_foundation_account = get_chromia_foundation_account();
 
-    val pay_reward_result = pay_reward(pool, chromia_foundation_account, chromia_foundation.reward_debt, chromia_foundation_reward, "Chromia Foundation", false);
+    val pay_reward_result = pay_reward(pool, chromia_foundation_account, chromia_foundation.reward_debt, chromia_foundation_reward, "Chromia Foundation", 0.0);
 
     chromia_foundation.reward_debt = pay_reward_result.reward_debt;
 }
@@ -129,7 +129,10 @@ function pay_out_node_rewards(node_reward: map<node, big_integer>, has_delegatio
         val pa = provider_account @ { provider };
 
         if (is_staking_approved(provider, reward)) {
-            val pay_reward_result = pay_reward(pool, pa.account, pa.reward_debt, reward, "provider %s".format(pa.provider.pubkey), has_delegation_share);
+            // Ensure pool funds cover additional delegation rewards in _staking_shared_rewards
+            val delegation_share = if (has_delegation_share) provider.staking_rewards_share else 0;
+
+            val pay_reward_result = pay_reward(pool, pa.account, pa.reward_debt, reward, "provider %s".format(pa.provider.pubkey), delegation_share);
 
             save_node_payed_reward(node.pubkey, pay_reward_result.payed_reward, op_context.last_block_time);
             pa.reward_debt = pay_reward_result.reward_debt;
@@ -137,11 +140,10 @@ function pay_out_node_rewards(node_reward: map<node, big_integer>, has_delegatio
     }
 }
 
-function pay_reward(pool: ft4.accounts.account, account: ft4.accounts.account, reward_debt:big_integer,  reward: big_integer, identity: text, has_delegation_share: boolean): pay_reward_result {
+function pay_reward(pool: ft4.accounts.account, account: ft4.accounts.account, reward_debt: big_integer,
+        reward: big_integer, identity: text, delegation_share: decimal): pay_reward_result {
     var pool_balance = get_account_balance(pool);
     var total_reward_debt = reward + reward_debt;
-    // Ensure pool funds cover additional delegation rewards in _staking_shared_rewards
-    val delegation_share = if (has_delegation_share) chain_context.args.staking_rewards_share else 0;
 
     var amount_to_transfer = 0L;
     if (total_reward_debt > 0) {
@@ -178,11 +180,11 @@ function pay_reward(pool: ft4.accounts.account, account: ft4.accounts.account, r
         pool_balance
     ));
 
-    after_pay_reward(pay_reward_result, has_delegation_share);
+    after_pay_reward(pay_reward_result, delegation_share);
     return pay_reward_result;
 }
 
-@extendable function after_pay_reward(pay_reward_result: pay_reward_result, has_delegation_share: boolean) {}
+@extendable function after_pay_reward(pay_reward_result: pay_reward_result, delegation_share: decimal) {}
 
 function sum_total_max_revenue_per_dapp_cluster(): decimal {
     var sum_total_max_revenue_per_dapp_cluster = 0.0;

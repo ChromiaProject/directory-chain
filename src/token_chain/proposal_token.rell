@@ -83,6 +83,7 @@ operation propose_token(
         }
 
         require(not minters.empty(), "Must provide at least one minter account");
+        require(pm.max_supply >= 0, "Max supply must be a non-negative value");
         require(pm.minting_interval_ms > 0, "Minting interval must be a positive value");
         require(pm.minting_amount > 0, "Minting amount must be a positive value");
 
@@ -96,8 +97,6 @@ operation propose_token(
         );
     }
 }
-
-function byte_array_to_hex(ba: byte_array) = ba.to_hex();
 
 @extend(ft4.auth.auth_handler)
 function () = ft4.auth.add_auth_handler(
@@ -194,8 +193,12 @@ struct token_proposal_data {
 }
 
 /**
+ * Retrieves detailed information about a token proposal by its ID.
+ * 
  * @param id Proposal ID
- * @return Information about a specific token proposal
+ * @return Information about a specific token proposal including name, symbol, decimals, icon, 
+ *         minting policies, and account creation blockchain RIDs
+ * @throws If no proposal exists with the given ID or if the proposal is not a token proposal
  */
 query get_token_proposal(id: rowid) {
     val proposal = require_common_proposal(id);

@@ -6,7 +6,8 @@ function move_container_blockchains_impl(
     destination_cluster_name: text,
     anchored_blockchains: map<byte_array, integer>,
     destination_container_units: integer,
-    destination_container_extra_storage: integer
+    destination_container_extra_storage: integer,
+    destination_container_extra_compute_requests: integer,
 ): (container_name: text, cluster_name: text) {
     // require src container
     val src_container = require_container(src_container_name);
@@ -46,14 +47,15 @@ function move_container_blockchains_impl(
     require(empty(pb), "Container bcs cannot be moved due to a pending proposal %s related to it".format(pb?.proposal));
 
     // create dst container
-    val new_name = src_container.name + "_new";
+    val new_name = increment_move_counter_in_name(src_container.name);
     val new_deployers = voter_set_member @* { src_container.deployer } (.provider.pubkey);
     val dst_container = create_container_impl(
         src_container.proposed_by, new_name, dst_cluster,
         src_container.deployer.threshold, new_deployers,
         destination_container_units,
         standard_container_defaults.max_blockchains,
-        destination_container_extra_storage
+        destination_container_extra_storage,
+        destination_container_extra_compute_requests,
     );
 
     // moving
@@ -91,4 +93,17 @@ function move_container_blockchains_impl(
     }
 
     return (container_name = dst_container.name, cluster_name = dst_cluster.name);
+}
+
+function increment_move_counter_in_name(current_name: text): text {
+    val suffix = "_m";
+    val suffix_index = current_name.last_index_of(suffix);
+    if (suffix_index != -1) {
+        val base_name = current_name.sub(0, suffix_index);
+        val number_part = current_name.sub(suffix_index + suffix.size());
+        if (number_part.matches("[0-9]{1,3}")) {
+            return base_name + suffix + (integer(number_part) + 1);
+        }
+    }
+    return current_name + suffix + "1";
 }

@@ -1,11 +1,12 @@
 enum container_resource_limit_type {
     container_units,
     max_blockchains,
-    extra_storage
+    extra_storage,
+    extra_compute_requests,
 }
 
 enum container_state {
-    RUNNING, STOPPED, MIGRATING
+    RUNNING, STOPPED, MIGRATING, PAUSED
 }
 
 entity container {
@@ -16,6 +17,7 @@ entity container {
     system: boolean = false;
     mutable latest_bc_removal: timestamp = if (op_context.exists) op_context.last_block_time else -1;
     mutable state: container_state = container_state.RUNNING;
+    created_at: timestamp = -1;
 }
 
 entity container_resource_limit {
@@ -62,6 +64,7 @@ object standard_container_defaults {
     mutable container_units: integer = 1;
     mutable max_blockchains: integer = 10;
     mutable extra_storage: integer = 0;
+    mutable extra_compute_requests: integer = 0;
 }
 
 /** Default cluster SCU definition unless provided when created */
@@ -69,6 +72,7 @@ object system_container_defaults {
     mutable container_units: integer = 4;
     mutable max_blockchains: integer = -1;
     mutable extra_storage: integer = 0;
+    mutable extra_compute_requests: integer = 0;
 }
 
 function empty_container_resource_limits() = map<container_resource_limit_type, integer>();

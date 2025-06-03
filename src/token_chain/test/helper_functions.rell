@@ -27,11 +27,12 @@ function setup(
 
     val propose_op = create_propose_token(
         minting_policy = minting_policies,
-        account_creation_brids = account_creation_brids);
+        account_creation_brids = account_creation_brids
+    );
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)
-    ).op(propose_op)
-        .run();
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op),
+        propose_op
+    ).run();
 
     return proposer;
 }
@@ -50,9 +51,13 @@ function do_create_account(keypair: rell.test.keypair, auth_privkey: byte_array,
     tx.run();
     val account_id = eth_address.hash();
     val account = ft4.accounts.account_by_id(account_id);
-    rell.test.tx().op(
-        mint_to(account, initial_mint)
-    ).run();
+
+    if (initial_mint > 0L) {
+        rell.test.tx().op(
+            mint_to(account, initial_mint)
+        ).run();
+    }
+
     return account;
 }
 

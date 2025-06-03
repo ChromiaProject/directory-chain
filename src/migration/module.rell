@@ -6,6 +6,7 @@ module;
 
 import common.*;
 import publish_directory_chain.*;
+import economy_chain_in_directory_chain.*;
 
 /**
  * Migration statuses to only run a migration once.
@@ -14,6 +15,7 @@ object migration_completed {
     mutable provider_multi_key: boolean = false;
     mutable send_container_blockchain_messages: boolean = false;
     mutable remove_system_voter_set: boolean = false;
+    mutable sync_provider_name_and_url_to_ec: boolean = false;
 }
 
 @extend(on_begin_block)
@@ -27,6 +29,12 @@ function begin_block_migration(height: integer) {
     if (not migration_completed.remove_system_voter_set) {
         if (not try_call(remove_system_voter_set(*))) {
             log("Failed to remove system voter set");
+        }
+    }
+
+    if (not migration_completed.sync_provider_name_and_url_to_ec) {
+        if (not try_call(sync_provider_name_and_url_to_ec(*))) {
+            log("Failed to sync provider name and url to EC");
         }
     }
 }
@@ -54,4 +62,14 @@ function remove_system_voter_set() {
         delete system_vs;
     }
     migration_completed.remove_system_voter_set = true;
+}
+
+function sync_provider_name_and_url_to_ec() {
+    log("Sending provider name and url to economy chain...");
+
+    for (p in provider @* {}) {
+        send_provider_update_message(p);
+    }
+
+    migration_completed.sync_provider_name_and_url_to_ec = true;
 }

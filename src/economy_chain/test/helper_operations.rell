@@ -130,7 +130,8 @@ operation create_lease(container_name: text, container_units: integer, account: 
         duration_millis = 0,
         expired = expired,
         auto_renew = false,
-        extra_storage_gib = 0
+        extra_storage_gib = 0,
+        extra_compute_requests = 0,
     );
 }
 
@@ -138,8 +139,8 @@ operation pay_rewards_op(cluster: cluster, node_availability_report: node_availa
     pay_rewards(cluster, node_availability_report);
 }
 
-operation pay_reward_op(pool: ft4.accounts.account, account: ft4.accounts.account, reward_debt:big_integer,  reward: big_integer, identity: text, has_delegation_share: boolean) {
-    pay_reward(pool, account, reward_debt, reward, identity, has_delegation_share);
+operation pay_reward_op(pool: ft4.accounts.account, account: ft4.accounts.account, reward_debt:big_integer,  reward: big_integer, identity: text, delegation_share: decimal) {
+    pay_reward(pool, account, reward_debt, reward, identity, delegation_share);
 }
 
 operation set_pool_details_last_refill_millis_last_block_time_op() {
@@ -190,14 +191,14 @@ operation create_tag_removal_proposal_with_voter_set(voter_set_name: text) {
 function create_or_return_tag(
     tag_name: text,
     scu_price: integer = 1 * units_per_usd,
-    extra_storage_price: integer = 1 * units_per_usd
+    extra_storage_price: integer = 1 * units_per_usd,
 ) {
     var tag = tag @? { tag_name };
     if (tag == null) {
         tag = create tag(
             tag_name,
             scu_price = scu_price,
-            extra_storage_price = extra_storage_price
+            extra_storage_price = extra_storage_price,
         );
     }
     return tag;
@@ -206,7 +207,7 @@ function create_or_return_tag(
 function create_or_return_provider(pubkey, system: boolean) {
     var provider = provider @? { pubkey };
     if (provider == null) {
-        provider = create provider(pubkey, system = system, provider_tier.NODE_PROVIDER, active = true);
+        provider = create provider(pubkey, system = system, provider_tier.NODE_PROVIDER, active = true, name = "", url = "");
     }
     return provider;
 }
@@ -221,6 +222,10 @@ operation do_test_evm_block(network_id: integer, evm_block_height: integer, evm_
 
 operation create_or_return_provider_op(pubkey, system: boolean) {
     create_or_return_provider(pubkey, system);
+}
+
+operation set_provider_staking_rewards_share(pubkey, staking_rewards_share: decimal) {
+    update provider @ { pubkey } (.staking_rewards_share = staking_rewards_share);
 }
 
 operation create_proposal_op(proposal_type: common_proposal_type, voter_set_name: text) {

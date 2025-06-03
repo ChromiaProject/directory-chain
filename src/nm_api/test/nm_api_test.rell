@@ -493,3 +493,48 @@ function test_nm_find_next_and_previous_configuration_height() {
     assert_equals(nm_find_previous_configuration_height(directory_chain.rid, 5), 2);
     assert_equals(nm_find_previous_configuration_height(directory_chain.rid, 2), 0);
 }
+
+function test_nm_get_container_creation_time_null() {
+    setup_module();
+
+    rell.test.tx().op(
+        create_empty_container_op(initial_provider.pub, "container"),
+    ).sign(initial_provider).run();
+
+    assert_null(nm_get_container_creation_time("container"));
+}
+
+function test_nm_get_container_creation_time_value() {
+    setup_module();
+
+    val created_at = rell.test.last_block_time;
+    rell.test.tx().op(
+        create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
+    ).sign(initial_provider).run();
+
+    assert_equals(nm_get_container_creation_time("container"), created_at);
+}
+
+function test_nm_get_container_rate_limits() {
+    setup_module();
+
+    rell.test.tx().op(
+        create_cluster_impl_op(provider @ { initial_provider.pub }, "c1", system_p_voter_set(), [initial_provider.pub],
+            cluster_creation_data()),
+        create_container_with_resource_limits(initial_provider.pub, "container", "c1", 0, [initial_provider.pub],
+            [container_resource_limit_type.extra_compute_requests : 500]),
+        create_subnode_image(
+            name = "chromaway/chromia-subnode",
+            url = "registry.gitlab.com/chromaway/postchain-chromia/chromaway/chromia-subnode",
+            digest = "sha256:3d8ec76e4e510ad90515e5fd71c6185360cd3ba32e3feb80f1cc15460722f482",
+            subnode_image_type = subnode_image_type.COMMON,
+            provider_pubkey = initial_provider.pub,
+            active = true,
+            base_compute_requests = 1000,
+        ),
+        associate_subnode_image_with_container("container", "chromaway/chromia-subnode")
+    ).sign(initial_provider).run();
+    assert_equals(nm_get_container_rate_limits("container"), [
+        "ai_inference" : container_rate_limit(period_length_millis = millis_per_week, rate_limit = 1500),
+    ]);
+}

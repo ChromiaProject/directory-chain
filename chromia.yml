@@ -10,10 +10,6 @@ definitions:
   economy_chain_config: &common_economy_chain
     features:
       merkle_hash_version: 2
-    config_consensus_strategy: HEADER_HASH
-    revolt:
-      fast_revolt_status_timeout: 2000
-      revolt_when_should_build_block: true
     sync_ext:
       - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
     gtx:
@@ -109,7 +105,7 @@ definitions:
       staking_rewards_payout_interval_ms: 86400000 # 1 day
       staking_rewards_payout_batch_size: 1000 # 1000 transactions per batch
       staking_withdrawals_payout_interval_ms: 60000 # 60 seconds (approximately every other block)
-      staking_rewards_share: 0.1
+      staking_default_rewards_share: 0.1
       pool_refill_limit_ms: 86400000 # 1 day
       max_dapp_providers_per_lease: 2 # Good for testing
       max_bridge_leases_per_container: 10
@@ -131,6 +127,7 @@ definitions:
       - "net.postchain.d1.iccf.IccfGTXModule"
       - "net.postchain.eif.EifGTXModule"
       - "net.postchain.web.WebStaticGTXModuleFactory"
+      - "net.postchain.zkp.ZKPGTXModule"
     allowed_dapp_chain_sync_exts:
       - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
       - "net.postchain.eif.EifSynchronizationInfrastructureExtension"
@@ -183,6 +180,13 @@ definitions:
       staking_rewards_payout_interval_ms: 315360000000
       staking_withdrawals_payout_interval_ms: 315360000000 # 60 seconds (approximately every other block)
       oracle_privkey: x"374E87F850FDE54A1FDC6FBE1C647213732A5AE2A6486D782211020535609EEC" # Only for tests
+    economy_chain.test.economy_chain_staking_queries_test:
+      admin_privkey: x"D223C1BEF057A86FCB4603BF8CCBF7FFBFAF1F1928ADBD52A8FCCD08E3C487C3"  # Only for tests
+      account_creator_privkey: x"F5216FCCF80F13A2CCEA31F331D881A620F60596B21A9737989297896A8F7E65"
+      staking_delegation_delay_ms: 60000 # 604800000
+      staking_withdrawal_delay_ms: 120000
+      staking_rewards_payout_interval_ms: 315360000000
+      staking_withdrawals_payout_interval_ms: 315360000000 # 60 seconds (approximately every other block)
     economy_chain_test_claim_tchr.test.economy_chain_test_chr_test:
       account_creator_privkey: x"F5216FCCF80F13A2CCEA31F331D881A620F60596B21A9737989297896A8F7E65"
     economy_chain_test_claim_tchr:
@@ -210,10 +214,6 @@ blockchains:
     config:
       features:
         merkle_hash_version: 2
-      config_consensus_strategy: HEADER_HASH
-      revolt:
-        fast_revolt_status_timeout: 2000
-        revolt_when_should_build_block: true
       signers:
         - x"0350fe40766bc0ce8d08b3f5b810e49a8352fdd458606bd5fafe5acdcdc8ff3f57"
       sync_ext:
@@ -276,12 +276,8 @@ blockchains:
     config:
       features:
         merkle_hash_version: 2
-      config_consensus_strategy: HEADER_HASH
       blockstrategy:
         maxblocktime: 300000
-      revolt:
-        fast_revolt_status_timeout: 2000
-        revolt_when_should_build_block: true
       sync_ext:
         - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
       gtx:
@@ -304,12 +300,8 @@ blockchains:
     config:
       features:
         merkle_hash_version: 2
-      config_consensus_strategy: HEADER_HASH
       blockstrategy:
         maxblocktime: 300000
-      revolt:
-        fast_revolt_status_timeout: 2000
-        revolt_when_should_build_block: true
       sync_ext:
         - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
       gtx:
@@ -468,6 +460,8 @@ blockchains:
           economy_chain_blockchain_rid: x"0000000000000000000000000000000000000000000000000000000000000000" # Workaround so we can mint
         token_chain.test.token_creation_test:
           auth_privkey: x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6"  # Only for tests
+        token_chain.test.minting_policy_creation_test:
+          auth_privkey: x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6"  # Only for tests
         token_chain.test.helper_operations:
           asset_name: "Chromia Test"
           asset_symbol: "tCHR"
@@ -582,6 +576,7 @@ test:
         - "net.postchain.d1.iccf.IccfGTXModule"
         - "net.postchain.eif.EifGTXModule"
         - "net.postchain.web.WebStaticGTXModuleFactory"
+        - "net.postchain.zkp.ZKPGTXModule"
       allowed_dapp_chain_sync_exts:
         - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
         - "net.postchain.eif.EifSynchronizationInfrastructureExtension"

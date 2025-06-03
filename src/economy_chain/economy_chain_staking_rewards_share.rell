@@ -1,0 +1,67 @@
+entity pending_provider_staking_rewards_share {
+    key provider;
+    staking_rewards_share: decimal;
+    scheduled_at: timestamp;
+}
+
+/**
+ * Set the staking rewards share for a node provider.
+ *
+ * This transaction must be signed with the provider's main key, but is not FT4 authenticated.
+ *
+ * @param my_pubkey The provider's main public key with which this transaction has been signed
+ * @param staking_rewards_share New staking rewards share as is the percentage of the node reward,
+ *                              0.0 < staking_rewards_share < 1.0
+ */
+operation update_provider_staking_rewards_share(my_pubkey: pubkey, staking_rewards_share: decimal) {
+    require(staking_rewards_share > 0.0, "Staking rewards share must be positive");
+    require(staking_rewards_share < 1.0, "Staking rewards share must be less than 1.0");
+
+    val provider = require_provider_is_signer(my_pubkey);
+    require(provider.tier == provider_tier.NODE_PROVIDER, "Only node providers can set staking rewards share");
+
+    require(empty(pending_provider_staking_rewards_share @? { provider }),
+        "Provider already has a pending staking rewards share update");
+    val pending = create pending_provider_staking_rewards_share(provider, staking_rewards_share,
+        op_context.last_block_time + chain_context.args.staking_delegation_delay_ms);
+    create_scheduled_callback_after(
+        context = begin_block_context.STAKING_REWARDS_SHARE.value,
+        ref_id = pending.rowid.to_integer(),
+        delay_time = chain_context.args.staking_delegation_delay_ms
+    );
+}
+
+@extend(on_scheduled_callback_map) function() =
+    [begin_block_context.STAKING_REWARDS_SHARE.value: apply_update_provider_staking_rewards_share(*)];
+
+function apply_update_provider_staking_rewards_share(ref_id: integer) {
+    val pending = pending_provider_staking_rewards_share @ { .rowid == rowid(ref_id) };
+    log("Applying pending staking rewards share for provider %s to %f".format(
+        pending.provider.pubkey, pending.staking_rewards_share));
+    pending.provider.staking_rewards_share = pending.staking_rewards_share;
+    delete pending;
+}
+
+struct pending_provider_staking_rewards_share_data {
+    provider_pubkey: pubkey;
+    staking_rewards_share: decimal;
+    scheduled_at: timestamp;
+}
+
+/**
+ * Get any pending staking rewards share update for a node provider, or null if there is none.
+ *
+ * @param provider_pubkey The provider's main public key
+ */
+query get_pending_provider_staking_rewards_share(provider_pubkey: pubkey): pending_provider_staking_rewards_share_data? {
+    val provider = require_provider(provider_pubkey);
+    require(provider.tier == provider_tier.NODE_PROVIDER, "Only node providers have staking rewards share");
+
+    val pending = pending_provider_staking_rewards_share @? { provider };
+    if (pending == null) return null;
+    return pending_provider_staking_rewards_share_data(
+        provider_pubkey,
+        pending.staking_rewards_share,
+        pending.scheduled_at,
+    );
+}
