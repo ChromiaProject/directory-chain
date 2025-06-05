@@ -30,7 +30,14 @@ operation propose_constants(
         op_context.last_block_time,
         common_proposal_type.tc_propose_constants,
         proposed_by,
-        require_governance_voter_set());
+        require_governance_voter_set(),
+        description = "Propose token chain constants: %s. See get_constants_proposal(id) for more details.".format(
+            [
+                (listing_fee, "listing fee %s".format(listing_fee)), 
+                (bridge_fee, "bridge fee %s".format(bridge_fee))
+            ] @* { $[0] != null } ($[1]) .join_to_text(", ")
+        )
+    );
 
     val proposal_details = create pending_tc_constants(
         proposal,
@@ -45,6 +52,7 @@ operation propose_constants(
 function validate_tc_proposal(proposal_details: pending_tc_constants) {
     require(proposal_details.listing_fee == -1 or proposal_details.listing_fee >= 0, "Listing fee must be null, zero or positive");
     require(proposal_details.bridge_fee == -1 or proposal_details.bridge_fee >= 0, "Bridge fee must be null, zero or positive");
+    require(proposal_details.listing_fee != -1 or proposal_details.bridge_fee != -1, "At least one of listing fee or bridge fee must be set");
 }
 
 function apply_tc_constants(proposal: common_proposal) {

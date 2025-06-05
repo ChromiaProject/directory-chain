@@ -25,6 +25,11 @@ function test_propose_constants() {
     ).sign(rell.test.keypairs.alice)
         .run_must_fail("Bridge fee must be null, zero or positive");
 
+    rell.test.tx().op(
+        propose_constants(null, null)
+    ).sign(rell.test.keypairs.alice)
+        .run_must_fail("At least one of listing fee or bridge fee must be set");
+
     // Successful
     rell.test.tx().op(
         propose_constants(init_listing_fee + 1, init_bridge_fee + 1)
@@ -37,13 +42,41 @@ function test_propose_constants() {
 }
 
 function test_get_constants_proposal() {
+    // Bridge fee, no listing fee
     rell.test.tx().op(
         test_init_token_chain(),
         create_voter_set_name_member_op(token_chain_governance_voter_set, rell.test.pubkeys.bob),
         propose_constants(null, 1)
     ).sign(rell.test.keypairs.alice).run();
+    assert_equals(
+        get_latest_common_proposal(rell.test.pubkeys.alice).description, 
+        "Propose token chain constants: bridge fee 1. See get_constants_proposal(id) for more details."
+    );
+    val listing_proposal = get_constants_proposal(get_latest_common_proposal_id());
+    assert_null(listing_proposal.listing_fee);
+    assert_equals(listing_proposal.bridge_fee, 1);
 
-    val pp = get_constants_proposal(get_latest_common_proposal_id());
-    assert_null(pp.listing_fee);
-    assert_equals(pp.bridge_fee, 1);
+    // Listing fee, no bridge fee
+    rell.test.tx().op(
+        propose_constants(1, null)
+    ).sign(rell.test.keypairs.alice).run();
+    assert_equals(
+        get_latest_common_proposal(rell.test.pubkeys.alice).description, 
+        "Propose token chain constants: listing fee 1. See get_constants_proposal(id) for more details."
+    );
+    val bridge_proposal = get_constants_proposal(get_latest_common_proposal_id());
+    assert_equals(bridge_proposal.listing_fee, 1);
+    assert_null(bridge_proposal.bridge_fee);
+
+    // Listing fee, bridge fee
+    rell.test.tx().op(
+        propose_constants(123, 456)
+    ).sign(rell.test.keypairs.alice).run();
+    assert_equals(
+        get_latest_common_proposal(rell.test.pubkeys.alice).description, 
+        "Propose token chain constants: listing fee 123, bridge fee 456. See get_constants_proposal(id) for more details."
+    );
+    val both_proposal = get_constants_proposal(get_latest_common_proposal_id());
+    assert_equals(both_proposal.listing_fee, 123);
+    assert_equals(both_proposal.bridge_fee, 456);
 }

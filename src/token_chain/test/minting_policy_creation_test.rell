@@ -310,7 +310,7 @@ function test_minting_policy_validation() {
 
 function test_get_minting_policy_proposal() {
     // Setup
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    val bob = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
 
     val token = token @ {};
@@ -321,7 +321,7 @@ function test_get_minting_policy_proposal() {
     // Bob proposes minting policy for Bob and Dave
     val proposal_op1 = propose_minting_policy(
         asset_id = token.asset.id,
-        minters = set([proposer.id, dave.id]),
+        minters = set([bob.id, dave.id]),
         max_supply = 10000, 
         minting_interval_ms = 1000,
         minting_amount = 1000,
@@ -333,9 +333,13 @@ function test_get_minting_policy_proposal() {
     ).run();
 
     // Verify the minting policy proposal query result
+    assert_equals(
+        get_latest_common_proposal(bob.id).description, 
+        "Propose minting policy for token %s. See get_minting_policy_proposal(id) for more details.".format(token.asset.symbol)
+    );
     val proposal = get_minting_policy_proposal(get_latest_common_proposal_id());
     assert_equals(proposal, minting_policy(
-        minters = set([proposer.id, dave.id]),
+        minters = set([bob.id, dave.id]),
         max_supply = 10000L,
         minting_interval_ms = 1000,
         minting_amount = 1000L,
