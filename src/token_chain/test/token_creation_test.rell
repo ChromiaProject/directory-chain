@@ -84,13 +84,49 @@ function test_creating_token_revoke() {
     assert_false(exists(pending_token_proposal_minting_policy @* {}));
 }
 
-function test_create_token_validation() {
+function test_propose_token_validation() {
 
     maybe_init_token_chain();
-    val proposer = do_create_account(rell.test.keypairs.bob, chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    val proposer = do_create_account(rell.test.keypairs.bob, chain_context.args.auth_privkey, 2 * token_chain_constants.listing_fee);
+
+    // Fail due to invalid decimals
+    var propose_op = create_propose_token(decimals = 80);
+    rell.test.tx().op(ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)).op(propose_op)
+        .run_must_fail("INVALID DECIMALS: Decimals must be between 0 and 78 (included)");
+
+    // Fail due to invalid name
+    propose_op = create_propose_token(name = "a".repeat(1025));
+    rell.test.tx().op(ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)).op(propose_op)
+        .run_must_fail("INVALID TEXT: Asset name cannot be longer than 1024 characters");
+
+    // Fail due to invalid symbol
+    propose_op = create_propose_token(symbol = "a".repeat(1025));
+    rell.test.tx().op(ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)).op(propose_op)
+        .run_must_fail("INVALID TEXT: Asset symbol cannot be longer than 1024 characters");
+
+    // Fail due to invalid icon
+    propose_op = create_propose_token(icon = "a:b");
+    rell.test.tx().op(ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)).op(propose_op)
+        .run_must_fail("INVALID ASSET URL: Invalid URL for icon");
+    
+    // Success
+    propose_op = create_propose_token();
+    rell.test.tx().op(ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)).op(propose_op).run();
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    // Fail due to token with name already exists
+    propose_op = create_propose_token(name = "Test");
+    rell.test.tx().op(ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)).op(propose_op)
+        .run_must_fail("Token with name %s already exists".format("Test"));
+
+    // Fail due to token with symbol already exists
+    propose_op = create_propose_token(name = "Test2", symbol = "TST");
+    rell.test.tx().op(ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)).op(propose_op)
+        .run_must_fail("Token with symbol %s already exists".format("TST"));
 
     // Fail due to empty minting policy accounts
-    var propose_op = create_propose_token(
+    propose_op = create_propose_token(
+        name = "Test2", symbol = "TST2",
         minting_policy = [minting_policy(
             set<byte_array>(),
             max_supply = 0,
@@ -103,6 +139,7 @@ function test_create_token_validation() {
 
     // Fail due to non positive minting policy max supply
     propose_op = create_propose_token(
+        name = "Test2", symbol = "TST2",
         minting_policy = [minting_policy(
         set([proposer.id]),
         max_supply = -1,
@@ -115,6 +152,7 @@ function test_create_token_validation() {
 
     // Fail due to non positive minting policy interval
     propose_op = create_propose_token(
+        name = "Test2", symbol = "TST2",
         minting_policy = [minting_policy(
         set([proposer.id]),
         max_supply = 0,
@@ -127,6 +165,7 @@ function test_create_token_validation() {
 
     // Fail due to non positive minting policy amount
     propose_op = create_propose_token(
+        name = "Test2", symbol = "TST2",
         minting_policy = [minting_policy(
         set([proposer.id]),
         max_supply = 0,
@@ -136,6 +175,39 @@ function test_create_token_validation() {
     )]);
     rell.test.tx().op(ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)).op(propose_op)
         .run_must_fail("Minting amount must be a positive value");
+}
+
+function test_apply_token_create_validation() {
+
+    maybe_init_token_chain();
+    val proposer = do_create_account(rell.test.keypairs.bob, chain_context.args.auth_privkey, 3 * token_chain_constants.listing_fee);
+
+    // Success
+    var propose_op = create_propose_token();
+    rell.test.tx().op(ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)).op(propose_op).run();
+    val token_proposal = get_latest_common_proposal_id();
+
+    // Propose token with the same name
+    propose_op = create_propose_token(name = "Test", symbol = "TST2");
+    rell.test.tx().op(ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)).op(propose_op).run();
+    val name_proposal_id = get_latest_common_proposal_id();
+
+    // Propose token with the same symbol
+    propose_op = create_propose_token(name = "Test2", symbol = "TST");
+    rell.test.tx().op(ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op)).op(propose_op).run();
+    val symbol_proposal_id = get_latest_common_proposal_id();
+
+    // Vote yes on the token proposal
+    vote_yes(rell.test.keypairs.alice, token_proposal);
+    assert_equals(get_common_proposal(token_proposal)?.state, common_proposal_state.APPROVED);
+
+    // Vote yes on the name proposal, must fail
+    vote_yes(rell.test.keypairs.alice, name_proposal_id);
+    assert_equals(get_common_proposal(name_proposal_id)?.state, common_proposal_state.FAILED);
+
+    // Vote yes on the symbol proposal, must fail
+    vote_yes(rell.test.keypairs.alice, symbol_proposal_id);
+    assert_equals(get_common_proposal(symbol_proposal_id)?.state, common_proposal_state.FAILED);
 }
 
 function test_get_token_proposal() {
