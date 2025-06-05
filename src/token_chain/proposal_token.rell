@@ -52,12 +52,14 @@ operation propose_token(
 ) {
     require_initialized();
 
+    val account = ft4.auth.authenticate();
+
     ft4.assets.validate_asset_decimals(decimals);
     ft4.assets.validate_asset_name(name);
     ft4.assets.validate_asset_symbol(symbol);
     ft4.assets.parse_icon_url(icon);
-
-    val account = ft4.auth.authenticate();
+    require_token_name_unique(name);
+    require_token_symbol_unique(symbol);
 
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(),
         token_chain_constants.listing_fee);
@@ -120,6 +122,8 @@ operation revoke_token_proposal(proposal_id: rowid) {
 
 function apply_token_create(proposal: common_proposal) {
     val pending_token = pending_token_proposal @ { proposal };
+    require_token_name_unique(pending_token.name);
+    require_token_symbol_unique(pending_token.symbol);
 
     ft4.assets.Unsafe.transfer(get_pool_account(), get_token_chain_governance_account(), get_asset(), pending_token.fee);
 
@@ -226,3 +230,13 @@ query get_token_proposal(id: rowid) {
         account_creation_brids = pending_token_proposal.account_creation_brids.split(",") @* {} ( byte_array.from_hex($) ),
     );
 }
+
+function require_token_symbol_unique(symbol: text) = require(
+    empty(ft4.assets.get_paginated_assets_by_symbol(symbol, null, null)), 
+    "Token with symbol %s already exists".format(symbol)
+);
+
+function require_token_name_unique(name: text) = require(
+    empty(ft4.assets.get_paginated_assets_by_name(name, null, null)), 
+    "Token with name %s already exists".format(name)
+);
