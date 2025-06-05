@@ -97,8 +97,13 @@ operation propose_token_bridge(asset_id: byte_array, bridge_configurations: list
     val fee = bridge_configurations.size() * token_chain_constants.bridge_fee;
     ft4.assets.Unsafe.transfer(account, get_pool_account(), get_asset(), fee);
 
-    val proposal = create common_proposal(op_context.last_block_time, common_proposal_type.tc_propose_token_bridge, account.id,
-        require_governance_voter_set());
+    val proposal = create common_proposal(
+        op_context.last_block_time, 
+        common_proposal_type.tc_propose_token_bridge, 
+        account.id,
+        require_governance_voter_set(),
+        description = "Propose token bridge for token %s. See get_token_bridge_proposal(id) for more details.".format(token.asset.symbol)
+    );
 
     val bridge_proposal = create pending_bridge_proposal(proposal, token, fee);
     for (bridge_configuration in bridge_configurations) {

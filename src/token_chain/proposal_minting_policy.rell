@@ -54,8 +54,13 @@ operation propose_minting_policy(
     require(minting_interval_ms > 0, "Minting interval must be a positive value");
     require(minting_amount > 0, "Minting amount must be a positive value");
 
-    val proposal = create common_proposal(op_context.last_block_time, common_proposal_type.tc_propose_minting_policy, account.id,
-        require_governance_voter_set());
+    val proposal = create common_proposal(
+        op_context.last_block_time, 
+        common_proposal_type.tc_propose_minting_policy, 
+        account.id,
+        require_governance_voter_set(),
+        description = "Propose minting policy for token %s. See get_minting_policy_proposal(id) for more details.".format(token.asset.symbol)
+    );
 
     create pending_minting_policy_proposal(
         common_proposal = proposal,

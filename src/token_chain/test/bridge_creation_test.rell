@@ -269,3 +269,45 @@ function test_bridge_proposal_revoke() {
     assert_equals(get_account_balance(get_token_chain_governance_account()), token_chain_constants.listing_fee);
     assert_equals(get_account_balance(proposer), token_chain_constants.bridge_fee);
 }
+
+function test_bridge_proposal_get_query() {
+    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee + token_chain_constants.bridge_fee);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+    
+    val test_token = token @ { };
+    val propose_bridge_op = propose_token_bridge(
+        test_token.asset.id,
+        [bridge_configuration(
+            network_id = 97,
+            bridge_contract = bridge_contract,
+            token_contract = token_contract,
+            eif.hbridge.bridge_mode.foreign,
+            true,
+            skip_to_height = 0
+        )]
+    );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_bridge_op),
+        propose_bridge_op
+    ).run();
+
+    // Verify the token bridge proposal query result
+    assert_equals(
+        get_latest_common_proposal(proposer.id).description, 
+        "Propose token bridge for token %s. See get_token_bridge_proposal(id) for more details.".format(test_token.asset.symbol)
+    );
+    assert_equals(
+        get_token_bridge_proposal(get_latest_common_proposal_id()), 
+        token_bridge_proposal_data(
+            asset_id = test_token.asset.id,
+            configurations = [bridge_configuration(
+                network_id = 97,
+                bridge_contract = bridge_contract,
+                token_contract = token_contract,
+                eif.hbridge.bridge_mode.foreign,
+                true,
+                skip_to_height = 0
+            )]
+        )
+    );
+}
