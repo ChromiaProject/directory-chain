@@ -1,0 +1,84 @@
+@test module;
+
+import ^^.main.*;
+import test.helper_operations.*;
+import lib.ft4.external.assets;
+
+val new_token_asset_id = x"02D05904953A421C2ACFB19974F5EC7DF8893CFEAB8DE63E2FC96C342D132D81";
+val token_chain_brid = x"385B5F0BE4E3B0F76779643A54CD16B88DEDBA86E8439C315892F3C489F51D72";
+
+function test_migration() {
+
+    assert_equals(token_migration.migrating, false);
+    assert_true(empty(migrated_accounts @* {}));
+
+    val migration_account_id = get_account_id(rell.test.pubkeys.alice);
+    val bob_account_id = get_account_id(rell.test.pubkeys.bob);
+    val charlie_account_id = get_account_id(rell.test.pubkeys.charlie);
+    val dave_account_id = get_account_id(rell.test.pubkeys.dave);
+    val eve_account_id = get_account_id(rell.test.pubkeys.eve);
+
+    rell.test.tx().op(
+        init(migration_account_id),
+    ).run();
+
+    rell.test.tx().op(
+        mint(rell.test.pubkeys.bob, get_original_token_asset_id(), 10000),
+        mint(rell.test.pubkeys.charlie, get_original_token_asset_id(), 20000),
+        mint(rell.test.pubkeys.dave, get_original_token_asset_id(), 55000),
+        get_or_create_account_op(rell.test.pubkeys.eve),
+        register_cross_chain_asset(new_token_asset_id, "New Token", "NT", token_chain_brid),
+    ).run();
+
+    rell.test.tx().op(
+        fake_cross_transfer(get_new_token_asset_id(), get_account_id(rell.test.pubkeys.alice), 10000 + 20000 + 55000),
+    ).run();
+
+    // Verify account balances for original token
+    assert_null(assets.get_asset_balance(migration_account_id, get_original_token_asset_id()));
+    assert_equals(assets.get_asset_balance(bob_account_id, get_original_token_asset_id())?.amount, 10000);
+    assert_equals(assets.get_asset_balance(charlie_account_id, get_original_token_asset_id())?.amount, 20000);
+    assert_equals(assets.get_asset_balance(dave_account_id, get_original_token_asset_id())?.amount, 55000);
+    assert_null(assets.get_asset_balance(eve_account_id, get_original_token_asset_id()));
+
+    // Verify account balances for new token
+    assert_equals(assets.get_asset_balance(migration_account_id, get_new_token_asset_id())?.amount, 10000 + 20000 + 55000);
+    assert_null(assets.get_asset_balance(bob_account_id, get_new_token_asset_id()));
+    assert_null(assets.get_asset_balance(charlie_account_id, get_new_token_asset_id()));
+    assert_null(assets.get_asset_balance(dave_account_id, get_new_token_asset_id()));
+    assert_null(assets.get_asset_balance(eve_account_id, get_new_token_asset_id()));
+
+    // Start migration
+    rell.test.tx().op(
+        migrate_asset(get_original_token_asset_id(), get_new_token_asset_id(), get_account_id(rell.test.pubkeys.alice), 1),
+    ).run();
+
+    // No transfers accepted for original token once the migration has started
+    rell.test.tx().op(
+        transfer(get_original_token_asset_id(), charlie_account_id, bob_account_id, 10000)
+    ).run_must_fail("No transfers accepted during token migration");
+
+    rell.test.block().run();
+    rell.test.block().run();
+    rell.test.block().run();
+    rell.test.block().run();
+    rell.test.block().run();
+    rell.test.block().run();
+
+    // Migration is done, verify results
+    assert_equals(token_migration.migrating, false);
+    assert_true(empty(migrated_accounts @* {}));
+
+    // Accounts received the same amount on new token
+    assert_null(assets.get_asset_balance(migration_account_id, get_new_token_asset_id()));
+    assert_equals(assets.get_asset_balance(bob_account_id, get_new_token_asset_id())?.amount, 10000);
+    assert_equals(assets.get_asset_balance(charlie_account_id, get_new_token_asset_id())?.amount, 20000);
+    assert_equals(assets.get_asset_balance(dave_account_id, get_new_token_asset_id())?.amount, 55000);
+    assert_null(assets.get_asset_balance(eve_account_id, get_new_token_asset_id()));
+
+    // Original tokens burned
+    assert_null(assets.get_asset_balance(bob_account_id, get_original_token_asset_id()));
+    assert_null(assets.get_asset_balance(charlie_account_id, get_original_token_asset_id()));
+    assert_null(assets.get_asset_balance(dave_account_id, get_original_token_asset_id()));
+    assert_null(assets.get_asset_balance(eve_account_id, get_original_token_asset_id()));
+}

@@ -1,0 +1,36 @@
+module;
+
+import ^^.main.*;
+
+operation fake_cross_transfer(asset_id: byte_array, account_id: byte_array, amount: integer) {
+
+    val account = ft4.accounts.Account(account_id);
+    val asset = ft4.assets.Asset(asset_id);
+    ft4.assets.increase_balance(account, asset, amount);
+
+    asset.total_supply += amount;
+
+    create ft4.assets.transfer_history_entry (
+        account,
+        asset,
+        .delta = amount,
+        .op_index = op_context.op_index,
+        .is_input = false
+    );
+}
+
+operation get_or_create_account_op(pubkey) {
+    get_or_create_account(pubkey);
+}
+
+operation transfer(asset_id: byte_array, from_account_id: byte_array, to_account_id: byte_array, amount: integer) {
+    val asset = ft4.assets.Asset(asset_id);
+    val from_account = ft4.accounts.Account(from_account_id);
+    val to_account = ft4.accounts.Account(to_account_id);
+    ft4.assets.Unsafe.transfer(
+            from_account,
+            to_account,
+            asset,
+            amount
+        );
+}
