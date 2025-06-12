@@ -17,6 +17,8 @@ The migration process involves the following high-level steps:
 
 1. Install `chr`
 2. Install `pmc` (can be replaced by slightly different commands)
+3. The original token exists only on one chain.
+4. The chain with the original token needs to disable minting and burning during migration.
 
 ## Step-by-Step Migration Guide
 
@@ -102,6 +104,9 @@ Set the `INITIAL_SUPPLY` to the total `supply` for your original token (`chr que
 ```bash
 INITIAL_SUPPLY=21222 # Same as total supply of the original token
 ```
+
+**⚠️ Warning**
+> It is important that the total supply for the original token isn't changed from now on. This guide and [my-dapp](./my-dapp) assumes this won't happen, but make sure to disable it in your dapp. One way to do this is to introduce one pre-step to disable minting and burning until the migration starts.
 
 On Token chain, propose a new token. Make sure you use the desired keypair for `chr` since this will be the token owner.
 
