@@ -1,0 +1,189 @@
+module;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.assets;
+    import lib.ft4.crosschain;
+}
+
+object dapp_data {
+    mutable original_token_asset_id: byte_array = x"";
+    mutable new_token_asset_id: byte_array = x"";
+}
+
+/**
+ * Init operation to create the original token on the chain, and also create the
+ * transfer account used for the migration later.
+ */
+operation init(transfer_account_id: byte_array) {
+    dapp_data.original_token_asset_id = ft4.assets.Unsafe.register_asset(
+            "Original Token",
+            "OT",
+            6,
+            chain_context.blockchain_rid,
+            ""
+        ).id;
+    ft4.accounts.ensure_account_without_auth(transfer_account_id, "MIGRATION_TRANSFER_ACCOUNT");
+}
+
+/**
+ * Register a cross chain asset. Will be used to create the new token on this chain to reference the one on Token chain.
+ */
+operation register_cross_chain_asset(asset_id: byte_array, name: text, symbol: text, issuing_brid: byte_array) {
+    dapp_data.new_token_asset_id = ft4.crosschain.Unsafe.register_crosschain_asset(
+            asset_id = asset_id,
+            name = name,
+            symbol = symbol,
+            decimals = 6,
+            issuing_blockchain_rid = issuing_brid,
+            icon_url = "",
+            type = ft4.assets.ASSET_TYPE_FT4,
+            uniqueness_resolver = x"",
+            origin_blockchain_rid = issuing_brid,
+        ).asset.id;
+}
+
+query get_original_token_asset_id() = dapp_data.original_token_asset_id;
+
+query get_new_token_asset_id() = dapp_data.new_token_asset_id;
+
+query get_account_id(pubkey) = ft4.accounts.get_account_id_from_signers([pubkey]);
+
+/** Mint and create accounts to generate some test data */
+operation mint(pubkey, asset_id: byte_array, amount: integer) {
+    val account = get_or_create_account(pubkey);
+    val asset = ft4.assets.asset @ { .id == asset_id };
+    ft4.assets.Unsafe.mint(account, asset, amount);
+}
+
+function get_or_create_account(pubkey) {
+
+    val account = ft4.accounts.account @? { get_account_id(pubkey) };
+    if (account != null) {
+        return account;
+    }
+
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(pubkey, set(["A", "T"]));
+    return ft4.accounts.create_account_with_auth(auth_descriptor);
+}
+
+object token_migration {
+    /** Is the migration active and running ? */
+    mutable migrating: boolean = false;
+    mutable from_asset_id: byte_array = x"";
+    mutable to_asset_id: byte_array = x"";
+    mutable from_account_id: byte_array = x"";
+    /** Number of accounts to migrate in each block */
+    mutable batch_size: integer = 0;
+}
+
+/** Keeps track of all migrated accounts */
+entity migrated_accounts {
+    account_id: byte_array;
+}
+
+/**
+ * Prepares and initializes a token migration. The actual migration starts in next block.
+ */
+operation migrate_asset(
+    from_asset_id: byte_array,
+    to_asset_id: byte_array,
+    from_account_id: byte_array,
+    batch_size: integer
+) {
+    val from_asset = ft4.assets.Asset(from_asset_id);
+    val to_asset = ft4.assets.Asset(to_asset_id);
+    val from_account = ft4.accounts.Account(from_account_id);
+
+    require(token_migration.migrating == false, "Migration is started already");
+    require(from_asset.decimals == to_asset.decimals, "Assets do not have the same number of decimals");
+
+    val from_account_balance = ft4.assets.get_asset_balance(from_account, to_asset);
+    require(
+        from_account_balance >= from_asset.total_supply,
+        "Account %s does not have enough funds for asset %s to be distributed".format(from_account_id, from_asset_id)
+    );
+
+    token_migration.migrating = true;
+    token_migration.from_asset_id = from_asset.id;
+    token_migration.to_asset_id = to_asset.id;
+    token_migration.from_account_id = from_account.id;
+    token_migration.batch_size = batch_size;
+
+    log("Migration of token %s to %s has started, with account %s".format(from_asset_id, to_asset_id, from_account_id));
+}
+
+/** Entrypoint to run the `run_batch_migration` function in each block */
+operation __begin_block(height: integer) {
+    run_batch_migration();
+}
+
+/**
+ * This is the actual migration job and takes X number of accounts each block and transfer new tokens to each account from
+ * the provided transfer account.
+ */
+function run_batch_migration() {
+
+    if (token_migration.migrating) {
+
+        log(
+            "Token batch migration, %s accounts migrated out of %s".format(
+                migrated_accounts @ { } ( @sum 1 ),
+                ft4.accounts.account @ { .id != token_migration.from_account_id } ( @sum 1 )
+            )
+        );
+
+        val from_asset = ft4.assets.Asset(token_migration.from_asset_id);
+        val to_asset = ft4.assets.Asset(token_migration.to_asset_id);
+        val from_account = ft4.accounts.Account(token_migration.from_account_id);
+        val accounts_to_migrate = ft4.accounts.account @* {
+                .id != token_migration.from_account_id,
+                .id not in migrated_accounts @* {} ( .account_id )
+            } limit token_migration.batch_size;
+
+        if (accounts_to_migrate.size() > 0) {
+
+            log("Migrating %s accounts".format(accounts_to_migrate.size()));
+
+            for (to_account in accounts_to_migrate) {
+
+                val account_balance = ft4.assets.get_asset_balance(to_account, from_asset);
+
+                if (account_balance > 0) {
+
+                    log("Transferring %s to account %s".format(account_balance, to_account.id));
+
+                    ft4.assets.Unsafe.transfer(
+                            from_account,
+                            to_account,
+                            to_asset,
+                            account_balance
+                        );
+
+                    ft4.assets.Unsafe.burn(to_account, from_asset, account_balance);
+                }
+            }
+
+            create migrated_accounts ( accounts_to_migrate @* {} ( struct<migrated_accounts>(.id) ) );
+        } else {
+
+            log("Token migration completed");
+
+            token_migration.migrating = false;
+            delete migrated_accounts @* { };
+        }
+    }
+}
+
+/**
+ * When a migration is active this will disable transfers of the "from asset" token. This is to prevent changes during migration.
+ * Consider also disabling minting and burning burning from the point you query for the original token total supply to make
+ * sure it won't change until the migration starts.
+ */
+@extend(ft4.assets.before_transfer)
+function before_transfer(from: ft4.accounts.account, to: ft4.accounts.account, ft4.assets.asset, amount: big_integer) {
+    require(
+        token_migration.migrating == false or asset.id != token_migration.from_asset_id,
+        "No transfers accepted during token migration"
+    );
+}
