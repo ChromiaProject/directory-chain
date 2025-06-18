@@ -9,6 +9,7 @@ struct module_args {
     max_block_size: integer;
     min_fast_revolt_status_timeout: integer;
     min_inter_block_interval: integer;
+    min_max_block_time: integer = 0;
     allowed_dapp_chain_gtx_modules: gtv;
     allowed_dapp_chain_sync_exts: gtv;
     allowed_blockchain_features: gtv;
@@ -103,6 +104,14 @@ function validate_block_strategy_config(block_strategy_config: map<text, gtv>) {
         "Configured min inter block interval is lower than minimum allowed %s"
             .format(chain_context.args.min_inter_block_interval)
     );
+    val config_max_block_time = block_strategy_config.get_or_null("maxblocktime");
+    if (config_max_block_time != null) {
+        require(
+            integer.from_gtv(config_max_block_time) >= chain_context.args.min_max_block_time,
+            "Configured max block time is lower than minimum allowed %s"
+                .format(chain_context.args.min_max_block_time)
+        );
+    }
 }
 
 function validate_revolt_config(revolt_config: map<text, gtv>) {

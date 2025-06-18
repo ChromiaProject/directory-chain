@@ -427,6 +427,13 @@ function test_precise_configuration_update_rejected_invalid_block_strategy_confi
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config_with_too_big_block_size.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run_must_fail("Configured max block size exceeds maximum allowed size 27262976");
+
+    val config_with_too_low_maxblocktime = apply_required_configuration_properties([
+        "blockstrategy": ["mininterblockinterval": (1000).to_gtv(), "maxblocktime": (100).to_gtv()].to_gtv()
+    ]);
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config_with_too_low_maxblocktime.to_gtv_pretty().to_bytes(), "")
+    ).sign(initial_provider).run_must_fail("Configured max block time is lower than minimum allowed 1000");
 }
 
 function test_precise_configuration_update_rejected_invalid_revolt_config() {
