@@ -26,15 +26,16 @@ Module args for `common.queries` module:
 
 Module args for `proposal_blockchain` module:
 
-| Name                             | Description                                         | Type      | Required           | Default |
-|----------------------------------|-----------------------------------------------------|-----------|--------------------|---------|
-| `max_config_path_depth`          | Maximum configuration path depth.                   | integer   | :white_check_mark: |         |
-| `max_config_size`                | Maximum config size.                                | integer   | :white_check_mark: |         |
-| `max_block_size`                 | Maximum block size.                                 | integer   | :white_check_mark: |         |
-| `min_inter_block_interval`       | Minimum inter block interval in milliseconds.       | integer   | :white_check_mark: |         |
-| `min_fast_revolt_status_timeout` | Minimum fast revolt status timeout in milliseconds. | integer   | :white_check_mark: |         |
-| `allowed_dapp_chain_gtx_modules` | Allowed dapp chain gtx modules.                     | set<text> | :white_check_mark: |         |
-| `allowed_dapp_chain_sync_exts`   | Allowed dapp chain sync extensions.                 | set<text> | :white_check_mark: |         |
+| Name                             | Description                                          | Type      | Required           | Default |
+|----------------------------------|------------------------------------------------------|-----------|--------------------|---------|
+| `max_config_path_depth`          | Maximum configuration path depth.                    | integer   | :white_check_mark: |         |
+| `max_config_size`                | Maximum config size.                                 | integer   | :white_check_mark: |         |
+| `max_block_size`                 | Maximum block size.                                  | integer   | :white_check_mark: |         |
+| `min_inter_block_interval`       | Minimum inter block interval in milliseconds.        | integer   | :white_check_mark: |         |
+| `min_max_block_time`             | Minimum custom maxblocktime setting in milliseconds. | integer   |                    | 0       |
+| `min_fast_revolt_status_timeout` | Minimum fast revolt status timeout in milliseconds.  | integer   | :white_check_mark: |         |
+| `allowed_dapp_chain_gtx_modules` | Allowed dapp chain gtx modules.                      | set<text> | :white_check_mark: |         |
+| `allowed_dapp_chain_sync_exts`   | Allowed dapp chain sync extensions.                  | set<text> | :white_check_mark: |         |
 
 Module args for `proposal_blockchain_move` module:
 
