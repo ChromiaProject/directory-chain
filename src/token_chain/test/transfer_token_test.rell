@@ -1,0 +1,97 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import test_utils: lib.ft4.test.core;
+}
+
+struct module_args {
+    auth_privkey: byte_array = x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6";
+}
+
+function test_transfer_token_ownership() {
+    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val token = token @ {};
+    assert_equals(token.owner, proposer);
+    assert_equals(token.asset.name, "Test");
+
+    // No offer yet, null is returned
+    assert_null(get_token_ownership_transfer_offer(token.asset.id));
+
+    var op = offer_token_ownership_transfer(x"AA", x"00");
+    rell.test.tx().op(op).run_must_fail("MISSING AUTH OP: Expected at least two operations");
+
+    op = offer_token_ownership_transfer(x"AA", x"00");
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, op)
+    ).op(op).run_must_fail("Account not found: '0x00'");
+
+    val charlie_account = do_create_account(rell.test.keypairs.charlie, chain_context.args.auth_privkey, 0L);
+
+    op = offer_token_ownership_transfer(x"AA", charlie_account.id);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, op)
+    ).op(op).run_must_fail("MISSING ASSET");
+
+    op = offer_token_ownership_transfer(token.asset.id, charlie_account.id);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, op)
+    ).op(op).run();
+
+    // Transfer initiated - now the recipient needs to accept it
+    assert_equals(get_token_ownership_transfer_offer(token.asset.id), charlie_account.id);
+
+    // Accept failure - signed by current owner and not receiver
+    op = accept_token_ownership_transfer_offer(token.asset.id);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, op)
+    ).op(op).run_must_fail("No offer exists");
+
+    // Accept failure - no such token
+    op = accept_token_ownership_transfer_offer(x"AA");
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, op)
+    ).op(op).run_must_fail("MISSING ASSET");
+
+    // Accept successful
+    op = accept_token_ownership_transfer_offer(token.asset.id);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.charlie.priv, op)
+    ).op(op).run();
+
+    // Verify owner is changed on entity
+    assert_equals(token.owner.id, charlie_account.id);
+}
+
+function test_remove_transfer_token_ownership() {
+    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val token = token @ {};
+    assert_equals(token.owner, proposer);
+    assert_equals(token.asset.name, "Test");
+
+    val charlie_account = do_create_account(rell.test.keypairs.charlie, chain_context.args.auth_privkey, 0L);
+
+    var op = offer_token_ownership_transfer(token.asset.id, charlie_account.id);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, op)
+    ).op(op).run();
+
+    // Transfer initiated
+    assert_equals(get_token_ownership_transfer_offer(token.asset.id), charlie_account.id);
+
+    // Remove transfer
+    op = remove_token_ownership_transfer_offer(token.asset.id);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, op)
+    ).op(op).run();
+
+    // Transfer offer removed
+    assert_null(get_token_ownership_transfer_offer(token.asset.id));
+}
