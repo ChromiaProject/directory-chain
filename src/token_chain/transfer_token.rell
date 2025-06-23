@@ -1,0 +1,128 @@
+
+entity token_ownership_transfer_offer {
+    key token;
+    receiver_account: ft4.accounts.account;
+}
+
+/**
+ * Offer token ownership transfer to a receiver FT4 account. Receiver FT4 account needs to accept the transfer by
+ * using the `operation accept_token_ownership_transfer_offer`
+ *
+ * ft4.ft_auth operation by current token owner is required to offer ownership transfer.
+ *
+ * @param asset_id The token asset id to transfer
+ * @param receiver_account_id FT4 account to receive ownership
+ */
+operation offer_token_ownership_transfer(asset_id: byte_array, receiver_account_id: byte_array) {
+    val owner_account = ft4.auth.authenticate();
+    val receiver_account = ft4.accounts.account_by_id(receiver_account_id);
+    val asset = ft4.assets.Asset(asset_id);
+    val token = require_token(asset);
+
+    require(owner_account == token.owner, "Only token owner (account id %s) can transfer ownership".format(token.owner.id));
+    require(owner_account != receiver_account, "You cannot transfer ownership to yourself.");
+    require(not(exists(token_ownership_transfer_offer @? { token })), "Offer for transferring ownership for asset id %s already exists".format(asset_id));
+    create token_ownership_transfer_offer(token, receiver_account);
+
+    log("Initiated transfer of token ownership for asset id %s to account id %s".format(
+        asset_id, receiver_account_id));
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(offer_token_ownership_transfer).mount_name,
+    flags = ["T"],
+    message = offer_token_ownership_transfer_auth_message(*)
+);
+
+function offer_token_ownership_transfer_auth_message(gtv): text {
+    val args = struct<offer_token_ownership_transfer>.from_gtv(gtv);
+    return "Please sign the message\nto offer transfer of ownership of token %s\nto account %s".format(
+        args.asset_id, args.receiver_account_id);
+}
+
+/**
+ * Returns the receiver account id for a token ownership transfer offer if such exists.
+ *
+ * @return The ownership receiver account id, or null it no transfer offer exists.
+ */
+query get_token_ownership_transfer_offer(asset_id: byte_array): byte_array? {
+    val asset = ft4.assets.Asset(asset_id);
+    val token = require_token(asset);
+    return token_ownership_transfer_offer @? { token } ( .receiver_account.id );
+}
+
+/**
+ * Remove token ownership transfer offer.
+ *
+ * ft4.ft_auth operation by current token owner is required to offer ownership transfer.
+ *
+ * @param asset_id Token asset id to be transferred
+ */
+operation remove_token_ownership_transfer_offer(asset_id: byte_array) {
+    require_initialized();
+    val account = ft4.auth.authenticate();
+    val asset = ft4.assets.Asset(asset_id);
+    val token = require_token(asset);
+
+    require(account == token.owner, "Only token owner can remove ownership transfer offer");
+    require(exists(token_ownership_transfer_offer @? { token }), "No offer for transferring ownership for asset id %s exists".format(asset_id));
+    delete token_ownership_transfer_offer @? { token };
+
+    log("Cancelled initiated token ownership transfer for asset id %s".format(asset_id));
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(remove_token_ownership_transfer_offer).mount_name,
+    flags = ["T"],
+    message = remove_token_ownership_transfer_offer_auth_message(*)
+);
+
+function remove_token_ownership_transfer_offer_auth_message(gtv): text {
+    val args = struct<remove_token_ownership_transfer_offer>.from_gtv(gtv);
+    val asset = ft4.assets.Asset(args.asset_id);
+    val token = require_token(asset);
+    val receiver_account_id = token_ownership_transfer_offer @? { token } ( .receiver_account.id );
+    return "Please sign the message\nto remove token ownership transfer offer of asset id %s\nto %s".format(
+        args.asset_id,
+        receiver_account_id
+    );
+}
+
+/**
+ * Accept offered token ownership transfer.
+ *
+ * ft4.ft_auth operation by recipient is required to offer ownership transfer.
+ *
+ * @param asset_id Asset id to be transferred
+ */
+operation accept_token_ownership_transfer_offer(asset_id: byte_array) {
+    val account = ft4.auth.authenticate();
+    val asset = ft4.assets.Asset(asset_id);
+    val token = require_token(asset);
+    val offer = require(token_ownership_transfer_offer @? { token, account },
+        "No offer exists to transfer ownership of token with asset id %s to account id %s".format(asset_id, account.id));
+    
+    delete offer;
+    
+    log("Ownership of token with asset id %s has been transferred from account id %s to %s".format(
+        asset_id, token.owner.id, account.id
+    ));
+
+    token.owner = account;
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(accept_token_ownership_transfer_offer).mount_name,
+    flags = ["T"],
+    message = accept_token_ownership_transfer_offer_auth_message(*)
+);
+
+function accept_token_ownership_transfer_offer_auth_message(gtv): text {
+    val args = struct<accept_token_ownership_transfer_offer>.from_gtv(gtv);
+    return "Please sign the message\nto accept transfer of token ownership of asset id %s".format(
+        args.asset_id
+    );
+}
