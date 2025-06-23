@@ -19,7 +19,7 @@ operation offer_token_ownership_transfer(asset_id: byte_array, receiver_account_
     val asset = ft4.assets.Asset(asset_id);
     val token = require_token(asset);
 
-    require(owner_account == token.owner, "Only token owner can transfer ownership");
+    require(owner_account == token.owner, "Only token owner (account id %s) can transfer ownership".format(token.owner.id));
     require(owner_account != receiver_account, "You cannot transfer ownership to yourself.");
     require(not(exists(token_ownership_transfer_offer @? { token })), "Offer for transferring ownership for asset id %s already exists".format(asset_id));
     create token_ownership_transfer_offer(token, receiver_account);
@@ -102,7 +102,7 @@ operation accept_token_ownership_transfer_offer(asset_id: byte_array) {
     val asset = ft4.assets.Asset(asset_id);
     val token = require_token(asset);
     val offer = require(token_ownership_transfer_offer @? { token, account },
-        "No offer exists to transfer ownership of token with asset id %s to account id %s".format(asset_id, account));
+        "No offer exists to transfer ownership of token with asset id %s to account id %s".format(asset_id, account.id));
     
     delete offer;
     
