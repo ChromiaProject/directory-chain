@@ -4,8 +4,10 @@ import ^^.*;
 import ^.helper_operations.*;
 import common.*;
 import common.test.setup.*;
+import common.test.util.*;
 import roles.test.ops.*;
 import common.test.helper_operations.*;
+import proposal_provider.*;
 import publish_directory_chain.test.helpers.*;
 
 function test_send_container_blockchain_messages() {
@@ -82,4 +84,51 @@ function test_begin_block_migration_remove_system_voter_set() {
     assert_true(empty(voter_set @? { "SYSTEM" }));
     assert_true(empty(voter_set_governance @? { .voter_set.name == "SYSTEM" }));
     assert_true(migration_completed.remove_system_voter_set);
+}
+
+function test_restore_mna_vs() {
+    setup_module();
+
+    val provider_infos = [
+        provider_info(x"03ea5f5fd17db21ce786812d4007e47f20816154a2175bdacdf0b42839f81d34ad"),
+        provider_info(x"02c5253375f357ba763f174514cf190c4d76315470e0a0f3b829d9a2f39d2293da"),
+        provider_info(x"021a0b734c4d1a7f0eb65b6df9acd38c02d99ffc4cfd0fb2c6fc0c853d8b193559")
+    ];
+    val provider_keys = provider_infos @* {}.pubkey;
+
+    val mna_vs_name = "container_611062cdf1047b265b652d229858e5a18dbf487afbb62f0f6d30ec4fd81366f9_deployer";
+
+    rell.test.tx().op(
+        propose_providers(initial_provider().pubkey, provider_infos, provider_tier.DAPP_PROVIDER, false, true),
+        create_voter_set_internal_op(mna_vs_name, 0, null, provider_keys)
+    ).sign(initial_provider).run();
+
+    val mna_vs = voter_set @ { .name == mna_vs_name };
+    assert_voter_set_members(mna_vs, provider_keys);
+
+    // Disable all providers
+    for (provider_key in provider_keys) {
+        rell.test.tx().op(
+            propose_provider_state(initial_provider().pubkey, provider_key, false)
+        ).sign(initial_provider).run();
+    }
+
+    // Assert empty
+    assert_voter_set_members(mna_vs, []);
+
+    // Run migration
+    rell.test.tx().op(
+        restore_mna_voter_set(initial_provider().pubkey)
+    ).sign(initial_provider).run();
+
+    assert_voter_set_members(mna_vs, provider_keys);
+
+    // Can't run twice
+    rell.test.tx().op(
+        restore_mna_voter_set(initial_provider().pubkey)
+    ).nop().sign(initial_provider).run_must_fail("Voter set is not empty. Did you trigger restoration twice?");
+}
+
+function assert_voter_set_members(voter_set, members: list<pubkey>) {
+    assert_equals((voter_set_member @* { voter_set, .provider.pubkey in members }).size(), members.size());
 }

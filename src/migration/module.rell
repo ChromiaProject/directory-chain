@@ -55,3 +55,29 @@ function remove_system_voter_set() {
     }
     migration_completed.remove_system_voter_set = true;
 }
+
+// Temporary operation that will be removed once completed
+operation restore_mna_voter_set(my_pubkey: pubkey) {
+    val me = require_is_provider_with_rate_limit(my_pubkey);
+    require_system_access(me);
+
+    val mna_vs = voter_set @ { .name == "container_611062cdf1047b265b652d229858e5a18dbf487afbb62f0f6d30ec4fd81366f9_deployer" };
+
+    require(empty(voter_set_member @* { mna_vs }), "Voter set is not empty. Did you trigger restoration twice?");
+
+    log("Starting restoration of MNA voter set");
+    val provider_keys = [
+        x"03ea5f5fd17db21ce786812d4007e47f20816154a2175bdacdf0b42839f81d34ad",
+        x"02c5253375f357ba763f174514cf190c4d76315470e0a0f3b829d9a2f39d2293da",
+        x"021a0b734c4d1a7f0eb65b6df9acd38c02d99ffc4cfd0fb2c6fc0c853d8b193559"
+    ];
+
+    val providers_to_add = provider @* { .pubkey in provider_keys };
+
+    for (provider in providers_to_add) {
+        enable_provider(provider);
+        create voter_set_member(mna_vs, provider);
+    }
+
+    log("Restoration of MNA voter set completed");
+}

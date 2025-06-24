@@ -18,6 +18,9 @@ operation begin_block_migration_op() {
     begin_block_migration(0);
 }
 
-operation create_voter_set_internal_op(name, threshold: integer = 0, governor: voter_set? = null) {
-    create_voter_set_internal(name, threshold);
+operation create_voter_set_internal_op(name, threshold: integer = 0, governor: voter_set? = null, initial_members: list<pubkey> = []) {
+    val vs = create_voter_set_internal(name, threshold);
+    for (member in initial_members) {
+        create voter_set_member(vs, provider @ { member });
+    }
 }
