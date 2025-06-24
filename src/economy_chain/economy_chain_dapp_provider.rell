@@ -83,26 +83,8 @@ function validate_provider(new_provider: pubkey) {
     require(empty(node @? { .pubkey == new_provider }), "A node is already registered with the same public key");
 }
 
-@extend(on_lease_expired) function disable_lease_providers(lease) {
-    change_lease_providers_state(lease, false);
-}
-
-@extend(on_lease_resurrected) function enable_lease_providers(lease) {
-    change_lease_providers_state(lease, true);
-}
-
 @extend(on_expired_lease_removed) function remove_already_expired_lease_providers(lease) {
     delete lease_dapp_provider @* { lease };
-}
-
-function change_lease_providers_state(lease, enable: boolean) {
-    val lease_providers = lease_dapp_provider @* { lease }.provider;
-    if (exists(lease_providers)) {
-        send_message(change_dapp_providers_state_topic, change_dapp_providers_state_message(
-            providers = lease_providers,
-            enable
-        ).to_gtv());
-    }
 }
 
 function delete_lease_dapp_providers(lease): list<pubkey> {

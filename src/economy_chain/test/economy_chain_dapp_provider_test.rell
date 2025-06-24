@@ -48,7 +48,7 @@ function test_register_dapp_provider() {
     ).nop().sign(rell.test.keypairs.alice).run_must_fail("Provider has already been added");
 }
 
-function test_expired_container_lease_disables_dapp_providers() {
+function test_dapp_providers_can_not_be_added_when_lease_is_expired() {
     rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
     val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, cluster_name = cluster_name, container_units = 2);
@@ -66,19 +66,6 @@ function test_expired_container_lease_disables_dapp_providers() {
     rell.test.block().run();
     rell.test.set_next_block_time_delta(1);
     rell.test.block().run();
-
-    assert_true(container_lease.expired);
-    assert_events(("icmf_message", (
-        topic = stop_container_topic,
-        body = stop_container_message(container_name).to_gtv()
-    ).to_gtv_pretty()),
-        ("icmf_message", (
-            topic = change_dapp_providers_state_topic,
-            body = change_dapp_providers_state_message(
-                providers = [rell.test.pubkeys.bob],
-                enable = false
-            ).to_gtv()
-        ).to_gtv_pretty()));
 
     // Assert no dapp providers can be added when lease is expired
     rell.test.tx().op(
