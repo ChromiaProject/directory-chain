@@ -48,6 +48,42 @@ function test_register_dapp_provider() {
     ).nop().sign(rell.test.keypairs.alice).run_must_fail("Provider has already been added");
 }
 
+function test_dapp_providers_can_not_be_added_when_lease_is_expired() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init, cluster_name = cluster_name, container_units = 2);
+
+    val container_lease = lease @ { container_name };
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, register_dapp_provider(container_name, rell.test.pubkeys.bob)),
+        register_dapp_provider(container_name, rell.test.pubkeys.bob)
+    ).sign(rell.test.keypairs.alice).run();
+
+    assert_not_null(lease_dapp_provider @? { .lease == container_lease, .provider == rell.test.pubkeys.bob });
+
+    rell.test.set_next_block_time_delta(millis_per_week + 1);
+    rell.test.block().run();
+    rell.test.set_next_block_time_delta(1);
+    rell.test.block().run();
+
+    // Assert no dapp providers can be added when lease is expired
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, register_dapp_provider(container_name, rell.test.pubkeys.trudy)),
+        register_dapp_provider(container_name, rell.test.pubkeys.trudy)
+    ).sign(rell.test.keypairs.alice).run_must_fail("Container lease is expired");
+
+    // Assert complete removal when lease is removed
+    rell.test.set_next_block_time_delta(chain_context.args.container_removal_timeout);
+    rell.test.block().run();
+    rell.test.block().run();
+    assert_events(("icmf_message", (
+        topic = remove_container_topic,
+        body = remove_container_message(container_name).to_gtv()
+    ).to_gtv_pretty()));
+    assert_null(lease_dapp_provider @? { .lease == container_lease, .provider == rell.test.pubkeys.bob });
+}
+
 function test_dapp_providers_are_transferred_on_container_upgrade() {
     rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
     val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
