@@ -538,3 +538,31 @@ function test_nm_get_container_rate_limits() {
         "ai_inference" : container_rate_limit(period_length_millis = millis_per_week, rate_limit = 1500),
     ]);
 }
+
+function test_nm_get_all_node_containers() {
+    setup_module(provider_quota_max_containers = 10);
+
+    val node_pubkey = node @ {} (.pubkey);
+
+    rell.test.tx().op(
+        create_cluster_with_cluster_data(initial_provider.pub, "cluster2", voter_sets.system_p, [initial_provider.pub], cluster_creation_data(
+            cluster_units = 10,
+             extra_storage = 0,
+             system_container_units = 0,
+             container_unit_cpu = 10,
+             container_unit_ram = 10,
+             container_unit_io_read = 10,
+             container_unit_io_write = 10,
+             container_unit_storage = 10
+        )),
+        update_node_with_units(initial_provider.pub, node_pubkey, null, null, null, 20),
+        add_node_to_cluster(initial_provider.pub, node_pubkey, "cluster2"),
+        create_container(initial_provider.pub, "container1", clusters.system, 1, [initial_provider.pub]),
+        create_container(initial_provider.pub, "container2", clusters.system, 1, [initial_provider.pub]),
+        stop_container_op("container2"),
+        create_container(initial_provider.pub, "container3", "cluster2", 1, [initial_provider.pub]),
+    ).sign(initial_provider).run();
+
+    assert_equals(nm_get_containers(node_pubkey), list<text>(["system", "container1", "cluster2_system", "container3"]));
+    assert_equals(nm_get_all_node_containers(node_pubkey), list<text>(["system", "cluster2_system", "container1", "container2", "container3"]));
+}
