@@ -1,0 +1,95 @@
+
+entity pending_update_token_proposal {
+    key proposal: common_proposal;
+    key token;
+    icon_url: text;
+}
+
+struct update_token_proposal_data {
+    icon_url: text;
+}
+
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.tc_update_token.name: apply_update_token(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.tc_update_token.name: cleanup_pending_update_token(*)];
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(propose_update_token).mount_name,
+    flags = ["T"],
+);
+
+/**
+ * Propose updating a token. Now only supports updating asset icon_url.
+ *
+ * @param asset_id FT4 asset id
+ */
+operation propose_update_token(asset_id: byte_array, data: update_token_proposal_data) {
+    require_initialized();
+
+    val account = ft4.auth.authenticate();
+    val asset = ft4.assets.Asset(asset_id);
+    val token = require_token(asset);
+
+    require(account == token.owner, "Only token owner can propose updating a token");
+    require(empty(pending_update_token_proposal @? { token }), "A proposal for updating this token already exists");
+
+    val proposal = create common_proposal(
+        op_context.last_block_time, 
+        common_proposal_type.tc_update_token,
+        account.id,
+        require_governance_voter_set(),
+        description = "Propose updating token with name '%s' and asset id '%s'.".format(asset.name, asset.id)
+    );
+
+    create pending_update_token_proposal(
+        proposal,
+        token,
+        icon_url = ft4.assets.parse_icon_url(data.icon_url),
+    );
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(revoke_update_token_proposal).mount_name,
+    flags = ["T"],
+);
+
+/**
+ * Revokes an update token proposal
+ *
+ * @param proposal_id Proposal to revoke
+ */
+operation revoke_update_token_proposal(proposal_id: rowid) {
+    val account = ft4.auth.authenticate();
+    val prop = require_common_proposal(proposal_id);
+    require(prop.proposal_type == common_proposal_type.tc_update_token, "Proposal is not an update token proposal");
+    require(prop.proposed_by == account.id, "Proposal must be revoked by proposer");
+
+    revoke_common_proposal_unsafe(prop);
+}
+
+function apply_update_token(proposal: common_proposal) {
+    val pending_proposal = pending_update_token_proposal @ { proposal };
+    val token = pending_proposal.token;
+    val asset_id = token.asset.id;
+
+    update ft4.assets.asset @ { .id == asset_id } ( .icon_url = pending_proposal.icon_url );
+}
+
+function cleanup_pending_update_token(proposal: common_proposal) {
+    delete pending_update_token_proposal @? { proposal };
+}
+
+/**
+ * Retrieves detailed information about an update token proposal by its ID.
+ *
+ * @param id Proposal ID
+ * @return A struct with token attributes to be updated, such as icon_url.
+ * @throws If no proposal exists with the given ID or if the proposal is not a token proposal
+ */
+query get_update_token_proposal(id: rowid) {
+    val proposal = require_common_proposal(id);
+    val pending_proposal = require(pending_update_token_proposal @? { proposal }, "Proposal %s is not of type update token".format(id));
+
+    return update_token_proposal_data(pending_proposal.icon_url);
+}

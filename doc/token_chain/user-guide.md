@@ -37,7 +37,7 @@ chr tx --evm-auth ${EVM_WALLET_ADDRESS} --blockchain-rid ${TOKEN_CHAIN_RID} prop
 
 You can define zero or more minting policies for your token. It has the following format:
 
-```kotlin
+```rell
 struct minting_policy {
     minters: set<byte_array>;
     /** 0 to disable */
@@ -91,7 +91,7 @@ chr tx --evm-auth EVM_WALLET_ADDRESS --blockchain-rid ${TOKEN_CHAIN_RID} propose
 
 Where bridge configurations are defined by the following struct:
 
-```kotlin
+```rell
 struct bridge_configuration {
     network_id: integer;
     bridge_contract: byte_array;
@@ -128,3 +128,14 @@ chr tx --evm-auth EVM_WALLET_ADDRESS --blockchain-rid ${TOKEN_CHAIN_RID} propose
 ```
 
 The token chain governance needs to approve this proposal before the token is deleted.
+
+## Updating a token
+
+Most token attributes are immutable, with one exception, the `icon url`, which can be updated through a proposal by the token owner:
+
+```shell
+chr tx --evm-auth EVM_WALLET_ADDRESS --blockchain-rid ${TOKEN_CHAIN_RID} propose_update_token ${ASSET_ID} '["http://www.icon.url"]'
+```
+
+The token chain governance also needs to approve this before the change is applied.
+
