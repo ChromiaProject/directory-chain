@@ -116,3 +116,15 @@ chr tx --evm-auth EVM_WALLET_ADDRESS --blockchain-rid ${TOKEN_CHAIN_RID} mint_to
 
 You can specify blockchains that are allowed to create accounts on token chain on your behalf.
 You can read more in the documentation of the `ras_token_iccf` operation.
+
+## Delete a token
+
+It is possible to propose deleting an unused token which means there are no transfers, minting or bridges for the asset.
+
+Use Chromia CLI to propose the deletion:
+
+```shell
+chr tx --evm-auth EVM_WALLET_ADDRESS --blockchain-rid ${TOKEN_CHAIN_RID} propose_delete_token ${ASSET_ID}
+```
+
+The token chain governance needs to approve this proposal before the token is deleted.

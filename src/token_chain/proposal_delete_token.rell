@@ -1,0 +1,115 @@
+
+entity pending_delete_token_proposal {
+    key proposal: common_proposal;
+    key token;
+}
+
+struct delete_token_proposal_data {
+    asset_id: byte_array;
+}
+
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.tc_delete_token.name: apply_delete_token(*)];
+@extend(delete_common_proposal_handlers) function(): map<text, (common_proposal) -> unit> = [common_proposal_type.tc_delete_token.name: cleanup_pending_delete_token(*)];
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(propose_delete_token).mount_name,
+    flags = ["T"],
+);
+
+/**
+ * Propose deleting an unused token. Only allowed if no transfers have been made and no bridge exists.
+ *
+ * @param asset_id FT4 asset id
+ */
+operation propose_delete_token(asset_id: byte_array) {
+    require_initialized();
+
+    val account = ft4.auth.authenticate();
+    val asset = ft4.assets.Asset(asset_id);
+    val token = require_token(asset);
+
+    require(account == token.owner, "Only token owner can propose deleting a token");
+    require(empty(pending_delete_token_proposal @? { token }), "A proposal for deleting this token already exists");
+
+    val proposal = create common_proposal(
+        op_context.last_block_time, 
+        common_proposal_type.tc_delete_token,
+        account.id,
+        require_governance_voter_set(),
+        description = "Propose deleting token with name '%s' and asset id '%s'.".format(asset.name, asset.id)
+    );
+
+    val pending_proposal = create pending_delete_token_proposal(
+        proposal,
+        token
+    );
+
+    validate_delete_token_proposal(pending_proposal);
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(revoke_delete_token_proposal).mount_name,
+    flags = ["T"],
+);
+
+/**
+ * Revokes a delete token proposal
+ *
+ * @param proposal_id Proposal to revoke
+ */
+operation revoke_delete_token_proposal(proposal_id: rowid) {
+    val account = ft4.auth.authenticate();
+    val prop = require_common_proposal(proposal_id);
+    require(prop.proposal_type == common_proposal_type.tc_delete_token, "Proposal is not a delete token proposal");
+    require(prop.proposed_by == account.id, "Proposal must be revoked by proposer");
+
+    revoke_common_proposal_unsafe(prop);
+}
+
+function apply_delete_token(proposal: common_proposal) {
+    val pending_proposal = pending_delete_token_proposal @ { proposal };
+    val token = pending_proposal.token;
+    val asset_id = token.asset.id;
+
+    validate_delete_token_proposal(pending_proposal);
+
+    log("Deleting token '%s' with id '%s'".format(token, token.asset.id));
+
+    // Delete token chain dependencies
+    cleanup_pending_delete_token(proposal);
+    delete token_account_minting_policy_account @* { .token_account_minting_policy.token == token };
+    delete token_account_minting_policy @* { token };
+    delete token_account_creation_brid @* { token };
+    delete token;
+
+    // Delete asset
+    delete ft4.assets.asset @ { .id == asset_id };
+}
+
+function validate_delete_token_proposal(proposal: pending_delete_token_proposal) {
+
+    require(empty(ft4.assets.transfer_history_entry @* { proposal.token.asset }), "Token has a transfer history and can't be deleted");
+    require(empty(ft4.assets.crosschain_transfer_history_entry @* { proposal.token.asset }), "Token has a cross chain transfer history and can't be deleted");
+    require(empty(eif.hbridge.get_erc20_for_asset(proposal.token.asset.id)),
+        "Bridge exists for asset id '%s' and needs to be removed before the token can be deleted".format(proposal.token.asset.id));
+}
+
+function cleanup_pending_delete_token(proposal: common_proposal) {
+    delete pending_delete_token_proposal @? { proposal };
+}
+
+/**
+ * Retrieves detailed information about a delete token proposal by its ID.
+ *
+ * @param id Proposal ID
+ * @return A struct with token name of the specific delete token proposal including name.
+ * @throws If no proposal exists with the given ID or if the proposal is not a token proposal
+ */
+query get_delete_token_proposal(id: rowid) {
+    val proposal = require_common_proposal(id);
+    val pending_proposal = require(pending_delete_token_proposal @? { proposal }, "Proposal %s is not of type delete token".format(id));
+
+    return delete_token_proposal_data(pending_proposal.token.asset.id);
+}
