@@ -51,8 +51,13 @@ operation revoke_common_proposal(my_pubkey: pubkey, proposal_id: rowid) {
     revoke_common_proposal_unsafe(prop);
 }
 
+/**
+ * Unsafe revoke a common proposal. Can be used for operations with different authentication, such as ft4, when
+ * voter set isn't respected.
+ */
 function revoke_common_proposal_unsafe(prop: common_proposal) {
-    require(prop.state == common_proposal_state.PENDING or prop.state == common_proposal_state.DELAYED, "The proposal is already %s".format(prop.state));
+    require(prop.state == common_proposal_state.PENDING or prop.state == common_proposal_state.DELAYED,
+        "The proposal is already %s".format(prop.state));
     prop.state = common_proposal_state.REVOKED;
     delete_common_proposal(prop);
 }
