@@ -29,7 +29,7 @@ operation propose_delete_token(asset_id: byte_array) {
     val asset = ft4.assets.Asset(asset_id);
     val token = require_token(asset);
 
-    require(account == token.owner, "Only token owner can propose deleting a token");
+    require(account == token.owner, "Only the token owner can propose deleting a token");
     require(empty(pending_delete_token_proposal @? { token }), "A proposal for deleting this token already exists");
 
     val proposal = create common_proposal(
@@ -62,8 +62,8 @@ function () = ft4.auth.add_auth_handler(
 operation revoke_delete_token_proposal(proposal_id: rowid) {
     val account = ft4.auth.authenticate();
     val prop = require_common_proposal(proposal_id);
-    require(prop.proposal_type == common_proposal_type.tc_delete_token, "Proposal is not a delete token proposal");
-    require(prop.proposed_by == account.id, "Proposal must be revoked by proposer");
+    require(prop.proposal_type == common_proposal_type.tc_delete_token, "The proposal is not a delete token proposal");
+    require(prop.proposed_by == account.id, "The proposal must be revoked by proposer");
 
     revoke_common_proposal_unsafe(prop);
 }
@@ -90,10 +90,10 @@ function apply_delete_token(proposal: common_proposal) {
 
 function validate_delete_token_proposal(proposal: pending_delete_token_proposal) {
 
-    require(empty(ft4.assets.transfer_history_entry @* { proposal.token.asset }), "Token has a transfer history and can't be deleted");
+    require(empty(ft4.assets.transfer_history_entry @* { proposal.token.asset }), "The token has a transfer history and can't be deleted");
     require(empty(ft4.assets.crosschain_transfer_history_entry @* { proposal.token.asset }), "Token has a cross chain transfer history and can't be deleted");
     require(empty(eif.hbridge.get_erc20_for_asset(proposal.token.asset.id)),
-        "Bridge exists for asset id '%s' and needs to be removed before the token can be deleted".format(proposal.token.asset.id));
+        "A bridge exists for asset id '%s' and needs to be removed before the token can be deleted".format(proposal.token.asset.id));
 }
 
 function cleanup_pending_delete_token(proposal: common_proposal) {

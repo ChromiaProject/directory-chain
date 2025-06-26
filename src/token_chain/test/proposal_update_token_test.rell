@@ -1,0 +1,93 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import common_proposal.test.helper_functions.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import test_utils: lib.ft4.test.core;
+    import lib.ft4.assets;
+}
+
+function test_update_token_success() {
+    val new_icon_url = "https://best.icon";
+
+    setup(x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6",
+        token_chain_constants.listing_fee);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+    do_create_account(rell.test.keypairs.charlie, x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6", 1);
+
+    val token = token @ {};
+    assert_equals(token.asset.icon_url, "http://test.com");
+
+    // Fail due to not the owner
+    var propose_op = propose_update_token(token.asset.id, new_icon_url);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.charlie.priv, propose_op),
+        propose_op
+    ).run_must_fail("Only token owner can propose updating a token");
+
+    // Fail due to no url is provided
+    propose_op = propose_update_token(token.asset.id);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op),
+        propose_op
+    ).run_must_fail("Update contains no change");
+
+    // Fail due to invalid url format
+    propose_op = propose_update_token(token.asset.id, "invalid");
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op),
+        propose_op
+    ).run_must_fail("INVALID ASSET URL");
+
+    // Update with valid icon url
+    propose_op = propose_update_token(token.asset.id, new_icon_url);
+        rell.test.tx().op(
+            ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op),
+            propose_op
+        ).run();
+
+    val proposal_query = get_update_token_proposal(get_latest_common_proposal_id());
+    assert_equals(proposal_query.icon_url, new_icon_url);
+
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    assert_equals(token.asset.icon_url, new_icon_url);
+}
+
+
+function test_revoke_update_token_success() {
+    val new_icon_url = "https://best.icon";
+
+    setup(x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6",
+        token_chain_constants.listing_fee);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+    do_create_account(rell.test.keypairs.charlie, x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6", 1);
+
+    val token = token @ {};
+
+    val propose_op = propose_update_token(token.asset.id, new_icon_url);
+        rell.test.tx().op(
+            ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op),
+            propose_op
+        ).run();
+
+    // Fail to revoke due to not owner
+    var revoke_op = revoke_update_token_proposal(get_latest_common_proposal_id());
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.charlie.priv, revoke_op),
+        revoke_op
+    ).run_must_fail("Proposal must be revoked by proposer");
+
+    // Owner can revoke
+    revoke_op = revoke_update_token_proposal(get_latest_common_proposal_id());
+        rell.test.tx().op(
+            ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, revoke_op),
+            revoke_op
+        ).run();
+
+    assert_true(exists(common_proposal @? { get_latest_common_proposal_id(), common_proposal_state.REVOKED }));
+    assert_null(pending_update_token_proposal @? { .proposal.rowid == get_latest_common_proposal_id() });
+}
