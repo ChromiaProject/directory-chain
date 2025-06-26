@@ -2,6 +2,7 @@
 entity pending_update_token_proposal {
     key proposal: common_proposal;
     key token;
+    icon_url_provided: boolean;
     icon_url: text;
 }
 
@@ -22,8 +23,9 @@ function () = ft4.auth.add_auth_handler(
  * Propose updating a token. Now only supports updating asset icon_url.
  *
  * @param asset_id FT4 asset id
+ * @param icon_url A valid FT4 icon url. (see FT4 documentation for valid format)
  */
-operation propose_update_token(asset_id: byte_array, data: update_token_proposal_data) {
+operation propose_update_token(asset_id: byte_array, icon_url: text? = null) {
     require_initialized();
 
     val account = ft4.auth.authenticate();
@@ -41,11 +43,18 @@ operation propose_update_token(asset_id: byte_array, data: update_token_proposal
         description = "Propose updating token with name '%s' and asset id '%s'.".format(asset.name, asset.id)
     );
 
-    create pending_update_token_proposal(
+    val update_proposal = create pending_update_token_proposal(
         proposal,
         token,
-        icon_url = ft4.assets.parse_icon_url(data.icon_url),
+        icon_url_provided = icon_url != null,
+        icon_url = if (icon_url != null) ft4.assets.parse_icon_url(icon_url) else "",
     );
+
+    validate_pending_update_token_proposal(update_proposal);
+}
+
+function validate_pending_update_token_proposal(update_proposal: pending_update_token_proposal) {
+    require(update_proposal.icon_url_provided, "Update contains no change");
 }
 
 @extend(ft4.auth.auth_handler)
@@ -73,7 +82,9 @@ function apply_update_token(proposal: common_proposal) {
     val token = pending_proposal.token;
     val asset_id = token.asset.id;
 
-    update ft4.assets.asset @ { .id == asset_id } ( .icon_url = pending_proposal.icon_url );
+    if (pending_proposal.icon_url_provided) {
+        update ft4.assets.asset @ { .id == asset_id } ( .icon_url = pending_proposal.icon_url );
+    }
 }
 
 function cleanup_pending_update_token(proposal: common_proposal) {

@@ -22,21 +22,28 @@ function test_update_token_success() {
     assert_equals(token.asset.icon_url, "http://test.com");
 
     // Fail due to not the owner
-    var propose_op = propose_update_token(token.asset.id, update_token_proposal_data(new_icon_url));
+    var propose_op = propose_update_token(token.asset.id, new_icon_url);
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.charlie.priv, propose_op),
         propose_op
-    ).run_must_fail("nly token owner can propose updating a token");
+    ).run_must_fail("Only token owner can propose updating a token");
+
+    // Fail due to no url is provided
+    propose_op = propose_update_token(token.asset.id);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op),
+        propose_op
+    ).run_must_fail("Update contains no change");
 
     // Fail due to invalid url format
-    propose_op = propose_update_token(token.asset.id, update_token_proposal_data("invalid"));
+    propose_op = propose_update_token(token.asset.id, "invalid");
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op),
         propose_op
     ).run_must_fail("INVALID ASSET URL");
 
     // Update with valid icon url
-    propose_op = propose_update_token(token.asset.id, update_token_proposal_data(new_icon_url));
+    propose_op = propose_update_token(token.asset.id, new_icon_url);
         rell.test.tx().op(
             ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op),
             propose_op
@@ -61,7 +68,7 @@ function test_revoke_update_token_success() {
 
     val token = token @ {};
 
-    val propose_op = propose_update_token(token.asset.id, update_token_proposal_data(new_icon_url));
+    val propose_op = propose_update_token(token.asset.id, new_icon_url);
         rell.test.tx().op(
             ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op),
             propose_op

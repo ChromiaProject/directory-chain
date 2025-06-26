@@ -134,7 +134,7 @@ The token chain governance needs to approve this proposal before the token is de
 Most token attributes are immutable, with one exception, the `icon url`, which can be updated through a proposal by the token owner:
 
 ```shell
-chr tx --evm-auth EVM_WALLET_ADDRESS --blockchain-rid ${TOKEN_CHAIN_RID} propose_update_token ${ASSET_ID} '["http://www.icon.url"]'
+chr tx --evm-auth EVM_WALLET_ADDRESS --blockchain-rid ${TOKEN_CHAIN_RID} propose_update_token ${ASSET_ID} "http://www.icon.url"
 ```
 
 The token chain governance also needs to approve this before the change is applied.
