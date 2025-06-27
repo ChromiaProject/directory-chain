@@ -156,7 +156,6 @@ From economy-chain:
           - "net.postchain.d1.iccf.IccfGTXModule"
           - "net.postchain.eif.EifGTXModule"
           - "net.postchain.web.WebStaticGTXModuleFactory"
-          - "net.postchain.zkp.ZKPGTXModule"
         allowed_dapp_chain_sync_exts:
           - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
           - "net.postchain.eif.EifSynchronizationInfrastructureExtension"
