@@ -12,71 +12,27 @@ object migration_completed {
 }
 
 function remove_alice_bsc_snapshots() {
-    log("Disabling ALICE BSC snapshots...");
+    log("State slot migration started...");
 
-    // Get the ALICE asset and the ALICE BSC erc20_asset
-    val asset = ft4.assets.Asset(chain_context.args.migration_alice_asset_id);
-    val erc20_asset = eif.hbridge.erc20_asset @ { asset, .network_id == chain_context.args.migration_alice_network_id };
+    /**
+     * We can remove all state slots for all assets (both types `erc20` and `erc20_withdrawal`).
+     * There's no need to emit any state events with a 0 balance,
+     * since it's unlikely that a mass exit will be triggered in the next three days.
+     * 
+     * If snapshot-enabled assets are added in the future, new state slots may reuse IDs of deleted ones. 
+     * Emitted state events will then overwrite existing entries in the event Merkle tree.
+     */
 
-    /** 1. Remove state slots */
-    // We want to remove all ALICE BSC snapshots for all accounts that have any balance of this asset.
-    // This is done by emitting a 0 balance for the account state slot.
-    val accounts = ft4.assets.balance @* { asset } (.account);
-    log("Step 1: Removing ALICE BSC snapshots for %d accounts...".format(accounts.size()));
-    for (account in accounts) {
-        log("Removing ALICE BSC snapshots for account %s".format(account.id));
-        val slot = eif.hbridge.get_local_erc20_state_slot(account, erc20_asset);
-        if (exists(slot)) {
-            val balance_records = [eif.hbridge.balance_record(erc20_asset.token_address, 0L)];
-            eif.hbridge.emit_erc20_state_eif_event(slot, balance_records);
-        }
+    // Delete all state slots
+    val slots = eif.hbridge.state_slot @* {} ($.to_struct());
+    log("Deleting state slots: %s".format(slots));
+    delete eif.hbridge.state_slot @* {};
 
-        // Unbind the slot from the account
-        delete eif.hbridge.local_erc20_state_slot_binding @? { account, erc20_asset };
-    }
-
-    /** 2. Remove withdrawal slots */
-    val event_hashes = (
-        w: eif.hbridge.erc20_withdrawal,
-        s: eif.hbridge.erc20_withdrawal_status
-    ) @* {
-        w.network_id == chain_context.args.migration_alice_network_id,
-        w.token_address == erc20_asset.token_address,
-        s.erc20_withdrawal == w,
-        s.withdrawal_status != eif.hbridge.withdrawal_status.withdrawn,
-        s.withdrawal_status != eif.hbridge.withdrawal_status.withdrawn_to_chromia
-    } ( w.beneficiary, w.event_hash );
-    log("Step 2: Removing ALICE BSC withdrawal slots for %d withdrawals...".format(event_hashes.size()));
-
-    for ((beneficiary, event_hash) in event_hashes) {
-        log("Removing ALICE BSC withdrawal slot for beneficiary %s and event hash %s".format(beneficiary, event_hash));
-
-        // Create new erc20_withdrawal slot for this beneficiary
-        val new_slot = create eif.hbridge.state_slot (
-            id = eif.hbridge.get_next_state_slot_id(),
-            network_id = chain_context.args.migration_alice_network_id,
-            recipient_address = beneficiary,
-            type = eif.hbridge.state_slot_type.erc20_withdrawal,
-            discriminator = eif.hbridge.build_discriminator(erc20_asset),
-            local = true
-        );
-
-        // Delete all other slots for this beneficiary
-        delete eif.hbridge.state_slot @* {
-            .id != new_slot.id,
-            .recipient_address == beneficiary,
-            .network_id == chain_context.args.migration_alice_network_id,
-            .type == eif.hbridge.state_slot_type.erc20_withdrawal,
-            .local == true
-        };
-
-        // Emit the new slot events without any event_hashes
-        eif.hbridge.emit_erc20_withdrawal_state_eif_event(new_slot, []);
-    }
-
-    // 3. Disable snapshots for this ALICE asset
-    delete eif.hbridge.erc20_asset_snapshots_enabled @? { asset };
+    // Disable snapshots for all current assets
+    val assets = eif.hbridge.erc20_asset_snapshots_enabled @* {} ($.erc20_asset.to_struct());
+    log("Disabling snapshots for assets: %s".format(assets));
+    delete eif.hbridge.erc20_asset_snapshots_enabled @* {};
 
     migration_completed.remove_alice_bsc_snapshots = true;
-    log("ALICE BSC snapshots disabled");
+    log("State slot migration completed");
 }
