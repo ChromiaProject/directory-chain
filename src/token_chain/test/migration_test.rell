@@ -1,0 +1,119 @@
+@test module;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.auth;
+    import lib.ft4.admin;
+    import lib.ft4.assets;
+    import test: lib.ft4.test.core;
+}
+
+namespace eif {
+    import lib.hbridge;
+    import lib.eif.messaging.*;
+}
+
+import helpers: ^.migration_helpers;
+
+val admin_privkey = x"00CED79962D1150BF844CACB76310D4746C4426558A7FD9C827B30203DACC4CE";
+
+function test_remove_alice_bsc_snapshots_migration() {
+    // Asset ID: 0x86d217bc69ab173688b1d2aa6f7e5623d76967a72f78cacaf1467eb52cd73394
+    val asset_id = ("ALICE", x"0000000000000000000000000000000000000000000000000000000000000000").hash();
+    log("Asset ID: %s".format(asset_id));
+
+    rell.test.tx().op(
+        ft4.admin.external.register_asset("ALICE", "ALICE", 6, "https://example.com/alice.png")
+    ).sign(admin_privkey).run();
+
+    val asset = ft4.assets.Asset(asset_id);
+    log("Asset: %s".format(asset.to_struct()));
+
+    // Register Alice account
+    val alice_auth_descriptor = ft4.test.create_auth_descriptor(rell.test.pubkeys.alice, ["A", "T"]);
+    val alice_account_id = rell.test.pubkeys.alice.hash();
+    val alice_evm_address = crypto.eth_pubkey_to_address(rell.test.pubkeys.eve);
+    rell.test.tx().op(
+        ft4.admin.external.register_account(alice_auth_descriptor)
+    ).sign(admin_privkey).run();
+    val alice_account = ft4.accounts.Account(alice_account_id);
+
+    // Link Alice accounts
+    _link_eoa_account(
+        rell.test.keypairs.eve,
+        rell.test.keypairs.alice,
+        alice_account_id,
+        alice_auth_descriptor.hash()
+    );
+
+    // Deposit
+    assert_equals(ft4.assets.get_asset_balance(alice_account, asset), 0L);
+    _deposit_from_evm(alice_evm_address, 10000000, block_height = 1);
+    assert_equals(ft4.assets.get_asset_balance(alice_account, asset), 10000000);
+}
+
+function _link_eoa_account(
+    evm_keypair: rell.test.keypair,
+    ft_keypair: rell.test.keypair,
+    account_id: byte_array,
+    auth_descriptor_id: byte_array
+) {
+    val evm_address = crypto.eth_pubkey_to_address(evm_keypair.pub);
+    val op = eif.hbridge.link_evm_eoa_account(evm_address);
+    val message = ft4.test.create_evm_auth_message(op)
+        .replace(ft4.auth.ACCOUNT_ID_PLACEHOLDER, account_id.to_hex().upper_case())
+        .replace(ft4.auth.AUTH_DESCRIPTOR_ID_PLACEHOLDER, auth_descriptor_id.to_hex().upper_case());
+    val signature = ft4.test.evm_sign(message, evm_keypair.priv);
+    rell.test.tx()
+        .op(ft4.auth.evm_signatures([evm_address], [signature]))
+        .op(ft4.auth.external.ft_auth(account_id, auth_descriptor_id))
+        .op(op)
+        .nop()
+        .sign(ft_keypair).run();
+    assert_not_null(eif.hbridge.evm_eoa_account_link @? { .address == evm_address });
+
+    assert_equals(eif.hbridge.get_account_for_eoa_address(evm_address), account_id);
+    assert_equals(eif.hbridge.get_eoa_addresses_for_account(account_id), [evm_address]);
+}
+
+struct asset_info {
+    token_address: byte_array;
+    token_name: text;
+    token_symbol: text;
+    token_decimal: integer;
+    token_icon_url: text;
+}
+
+val CHR = asset_info(
+    token_address = x"39615b16b74589919c9ce1ea73f1fc5d53141a78",
+    token_name = "Chromia",
+    token_symbol = "CHR",
+    token_decimal = 6,
+    token_icon_url = "https://chromaway.com/chr",
+);
+
+function _deposit_from_evm(
+    sender_address: byte_array,
+    amount: big_integer,
+    block_height: integer = 1,
+    account_id: byte_array = eif.hbridge.zero_beneficiary,
+    asset: asset_info = CHR,
+    network_id: integer = 1,
+    contract_address: byte_array = x"00".repeat(20)
+) {
+    val events = [
+        eif.event_data(
+            tnx_hash = ("TX", block_height).hash(),
+            log_index = 1,
+            signature = ("SIG", block_height).hash(),
+            contract_address = contract_address,
+            name = "DepositedERC20",
+            indexed_values = [sender_address.to_gtv(), asset.token_address.to_gtv()],
+            non_indexed_values = [amount.to_gtv(), account_id.to_gtv()]
+        )
+    ];
+    val block_hash = ("BLOCK", block_height).hash();
+    rell.test.tx().nop().op(
+        helpers.evm_block_op(network_id, block_height, block_hash, events)
+    ).run();
+}
