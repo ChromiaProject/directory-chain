@@ -1,0 +1,78 @@
+@test module;
+
+import common.operations.*;
+import common.queries.*;
+import common.test.setup.*;
+import common.test.util.*;
+import model.*;
+import proposal_subnode_image.*;
+import proposal_container.*;
+import proposal_provider.*;
+import direct_cluster.*;
+
+function test_propose_subnode_image_update() {
+    setup_module();
+    val sp1 = rell.test.keypairs.bob;
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, sp1.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, sp1.pub, true),
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        propose_subnode_image(initial_provider.pub, "subnode_image1", "url", "digest", subnode_image_type.SPECIAL,
+            "image description", "gtx", "sync_ext", "prop description", null, base_compute_requests = 1000)
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(sp1);
+
+    assert_not_null(subnode_image @? { .name == "subnode_image1" });
+
+    // Update url, digest and description
+    rell.test.tx().op(
+        propose_update_subnode_image(initial_provider.pub, "subnode_image1", "url2", "digest2", "v2", null, null,
+            "Pop desc", null, null)
+    ).sign(initial_provider).run();
+
+    val proposal1 = get_update_subnode_image_proposal(last_proposal().rowid);
+    assert_not_null(proposal1);
+    assert_equals(proposal1.url, "url2");
+    assert_equals(proposal1.digest, "digest2");
+    assert_equals(proposal1.description, "v2");
+    assert_null(proposal1.gtx_modules);
+    assert_null(proposal1.sync_exts);
+    assert_null(proposal1.base_compute_requests);
+
+    vote_for_last_proposal(sp1);
+
+    val si = subnode_image @ { .name == "subnode_image1" };
+    assert_equals(si.url, "url2");
+    assert_equals(si.digest, "digest2");
+    assert_equals(si.description, "v2");
+    assert_equals(si.gtx_modules, "gtx");           // Unchanged
+    assert_equals(si.sync_exts, "sync_ext");        // Unchanged
+    assert_equals(si.base_compute_requests, 1000);  // Unchanged
+
+    // Update gtx, sync_ext and base_compute_requests
+    rell.test.tx().op(
+        propose_update_subnode_image(initial_provider.pub, "subnode_image1", null, null, null, "gtx,gtx2", "ext1,ext2",
+            "Pop desc", null, 2000)
+    ).sign(initial_provider).run();
+
+    val proposal2 = get_update_subnode_image_proposal(last_proposal().rowid);
+    assert_not_null(proposal2);
+    assert_null(proposal2.url);
+    assert_null(proposal2.digest);
+    assert_null(proposal2.description);
+    assert_equals(proposal2.gtx_modules, list(["gtx","gtx2"]));
+    assert_equals(proposal2.sync_exts, list(["ext1","ext2"]));
+    assert_equals(proposal2.base_compute_requests, 2000);
+
+    vote_for_last_proposal(sp1);
+
+    assert_equals(si.url, "url2");           // Unchanged
+    assert_equals(si.digest, "digest2");     // Unchanged
+    assert_equals(si.description, "v2");     // Unchanged
+    assert_equals(si.gtx_modules, "gtx,gtx2");
+    assert_equals(si.sync_exts, "ext1,ext2");
+    assert_equals(si.base_compute_requests, 2000);
+}
