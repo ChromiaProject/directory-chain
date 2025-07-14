@@ -13,6 +13,20 @@ entity pending_subnode_image {
     base_compute_requests: integer = 0;
 }
 
+struct pending_subnode_image_data {
+    name;
+    url: text;
+    digest: text;
+    subnode_image_type;
+    description: text;
+    /** GTX modules exposed by this subnode image (comma separated list of FQCNs) */
+    gtx_modules: text;
+    /** Synchronization infrastructure extensions exposed by this subnode image (comma separated list of FQCNs) */
+    sync_exts: text;
+    /** How many compute requests per week a container gets by default. */
+    base_compute_requests: integer;
+}
+
 @extend(apply_voting_result_handlers) function() = [proposal_type.subnode_image.name: apply_subnode_image(*)];
 function apply_subnode_image(proposal) {
     val psi = pending_subnode_image @? { proposal };
@@ -53,9 +67,9 @@ function scheduled_subnode_image_proposal_delay_time_handler(proposal): (blockch
  * 
  * Rate limit: actions
  * 
- * @param my_pubkey  pubkey of provider
- * @param gtx_modules  GTX modules exposed by this subnode image (comma separated list of FQCNs)
- * @param sync_exts  Synchronization infrastructure extensions exposed by this subnode image (comma separated list of FQCNs)
+ * @param my_pubkey Pubkey of the provider creating this proposal
+ * @param gtx_modules GTX modules exposed by this subnode image (comma separated list of FQCNs)
+ * @param sync_exts Synchronization infrastructure extensions exposed by this subnode image (comma separated list of FQCNs)
  * @param scheduled_at The time to apply this proposal when approved. If the proposal is approved after the time has passed the proposal is applied right away.
  * @param base_compute_requests How many compute requests per week a container gets by default.
  */
@@ -95,15 +109,19 @@ operation propose_subnode_image(my_pubkey: pubkey, name, url: text, digest: text
 /**
  * Returns new subnode image proposal.
  */
-query get_subnode_image_proposal(rowid) {
+query get_subnode_image_proposal(rowid): pending_subnode_image_data? {
     val proposal = get_latest_proposal(rowid, proposal_type.subnode_image);
     if (proposal == null) return null;
     val psi = pending_subnode_image @ { proposal };
-    return (
+    return pending_subnode_image_data(
         name = psi.name,
         url = psi.url,
         digest = psi.digest,
         subnode_image_type = psi.subnode_image_type,
+        description = psi.description,
+        gtx_modules = psi.gtx_modules,
+        sync_exts = psi.sync_exts,
+        base_compute_requests = psi.base_compute_requests,
     );
 }
 

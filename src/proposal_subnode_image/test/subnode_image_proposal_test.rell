@@ -27,8 +27,8 @@ function test_propose_subnode_image() {
         propose_provider_state(initial_provider.pub, np.pub, true),
         create_cluster(initial_provider.pub, "cluster1", voter_sets.system_p, list()),
     ).sign(initial_provider).run();
-    _make_vote(sp1);
-    _make_vote(sp1);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp1);
     
     val cluster1 = require_cluster("cluster1");
 
@@ -45,8 +45,8 @@ function test_propose_subnode_image() {
     rell.test.tx().op(
         propose_subnode_image(initial_provider.pub, "subnode_image1", "url", "digest", subnode_image_type.COMMON, "one", "", "")
     ).sign(initial_provider).run();
-    _make_vote(sp1);
-    _make_vote(sp2);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
 
     val subnode_image1 = get_subnode_image("subnode_image1");
     assert_true(subnode_image1.active);
@@ -61,8 +61,8 @@ function test_propose_subnode_image() {
         propose_subnode_image(initial_provider.pub, "subnode_image2", "url2", "digest2", subnode_image_type.SPECIAL, "two", "", "",
             scheduled_at = get_last_blocktime() + 10000000, base_compute_requests = 1000)
     ).sign(initial_provider).run();
-    _make_vote(sp1);
-    _make_vote(sp2);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
 
     assert_null(subnode_image @? { .name == "subnode_image2" });
 
@@ -82,8 +82,8 @@ function test_propose_subnode_image() {
     rell.test.tx().op(
         propose_subnode_image_state(initial_provider.pub, "subnode_image1", false)
     ).sign(initial_provider).run();
-    _make_vote(sp1);
-    _make_vote(sp2);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
 
     val subnode_image1_2 = get_subnode_image("subnode_image1");
     assert_false(subnode_image1_2.active);
@@ -105,8 +105,8 @@ function test_propose_subnode_image() {
     rell.test.tx().op(
         propose_add_cluster_subnode_image(initial_provider.pub, "cluster1", "subnode_image2")
     ).sign(initial_provider).run();
-    _make_vote(sp1);
-    _make_vote(sp2);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
 
     assert_equals(get_cluster_subnode_images(cluster1.name), [
         (name="subnode_image2", url="url2", digest="digest2")
@@ -116,8 +116,8 @@ function test_propose_subnode_image() {
         propose_remove_cluster_subnode_image(initial_provider.pub, "cluster1", "subnode_image2",
             scheduled_at = get_last_blocktime() + 10000000)
     ).sign(initial_provider).run();
-    _make_vote(sp1);
-    _make_vote(sp2);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
     assert_false(get_cluster_subnode_images(cluster1.name).empty());
 
     // Wait for scheduled
@@ -138,8 +138,8 @@ function test_propose_subnode_image() {
         propose_update_subnode_image(initial_provider.pub, "subnode_image1", "url", "digest2"
         , scheduled_at = get_last_blocktime() + 10000000)
     ).sign(initial_provider).run();
-    _make_vote(sp1);
-    _make_vote(sp2);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
     assert_equals(get_subnode_image("subnode_image1").digest, "digest");
 
     // Wait for scheduled
@@ -190,34 +190,34 @@ function test_propose_container_with_subnode_image() {
         propose_provider_state(initial_provider.pub, np.pub, true),
         create_cluster(initial_provider.pub, "cluster1", voter_sets.system_p, list()),
     ).sign(initial_provider).run();
-    _make_vote(sp1);
-    _make_vote(sp1);
-    _make_vote(sp1);
-    _make_vote(sp2);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
 
     rell.test.tx().op(
-        propose_subnode_image(initial_provider.pub, "subnode_image1", "url", "digest", subnode_image_type.COMMON, "one", "", "")
+        propose_subnode_image(initial_provider.pub, "subnode_image1", "url", "digest", subnode_image_type.COMMON, "one", "gtx_module1,gtx_module2", "ext1,ext2")
     ).sign(initial_provider).run();
-    _make_vote(sp1);
-    _make_vote(sp2);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
 
     rell.test.tx().op(
         propose_subnode_image(initial_provider.pub, "subnode_image2", "url", "digest", subnode_image_type.SPECIAL, "two", "", "")
     ).sign(initial_provider).run();
-    _make_vote(sp1);
-    _make_vote(sp2);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
 
     rell.test.tx().op(
         propose_subnode_image(initial_provider.pub, "subnode_image3", "url", "digest", subnode_image_type.COMMON, "three", "", "")
     ).sign(initial_provider).run();
-    _make_vote(sp1);
-    _make_vote(sp2);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
 
     rell.test.tx().op(
         propose_subnode_image_state(initial_provider.pub, "subnode_image3", false, scheduled_at = get_last_blocktime() + 10000000)
     ).sign(initial_provider).run();
-    _make_vote(sp1);
-    _make_vote(sp2);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
     assert_true(get_subnode_image("subnode_image3").active);
 
     // Wait for scheduled
@@ -229,8 +229,8 @@ function test_propose_container_with_subnode_image() {
     rell.test.tx().op(
         propose_container_with_subnode_image(initial_provider.pub, "cluster1", "container1", voter_sets.system_p, "subnode_image1")
     ).sign(initial_provider).run();
-    _make_vote(sp1);
-    _make_vote(sp2);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
 
     assert_equals(get_container_data("container1").subnode_image, "subnode_image1");
 
@@ -241,8 +241,8 @@ function test_propose_container_with_subnode_image() {
     rell.test.tx().op(
         propose_add_cluster_subnode_image(initial_provider.pub, "cluster1", "subnode_image2", scheduled_at = get_last_blocktime() + 10000000)
     ).sign(initial_provider).run();
-    _make_vote(sp1);
-    _make_vote(sp2);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
     // Wait for scheduled
     rell.test.set_next_block_time_delta(10000000);
     rell.test.block().run();
@@ -251,8 +251,8 @@ function test_propose_container_with_subnode_image() {
     rell.test.tx().op(
         propose_container_with_subnode_image(initial_provider.pub, "cluster1", "container2", voter_sets.system_p, "subnode_image2")
     ).sign(initial_provider).run();
-    _make_vote(sp1);
-    _make_vote(sp2);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
 
     assert_equals(get_container_data("container2").subnode_image, "subnode_image2");
 
@@ -263,16 +263,16 @@ function test_propose_container_with_subnode_image() {
     rell.test.tx().op(
         propose_container(initial_provider.pub, "cluster1", "container3", voter_sets.system_p, "subnode_image1")
     ).sign(initial_provider).run();
-    _make_vote(sp1);
-    _make_vote(sp2);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
 
     assert_equals(get_container_data("container3").subnode_image, null);
 
     rell.test.tx().op(
         propose_container_subnode_image(initial_provider.pub, "container3", "subnode_image1")
     ).sign(initial_provider).run();
-    _make_vote(sp1);
-    _make_vote(sp2);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
 
     assert_equals(get_container_data("container3").subnode_image, "subnode_image1");
 
@@ -281,8 +281,29 @@ function test_propose_container_with_subnode_image() {
     ).sign(initial_provider).run_must_fail("Container already has a subnode image");
 }
 
-function _make_vote(voter: rell.test.keypair) {
+function test_get_subnode_image_proposal() {
+    setup_module();
+
+    val sp2 = rell.test.keypairs.bob;
+
     rell.test.tx().op(
-        make_vote(voter.pub, last_proposal().rowid.to_integer(), true)
-    ).sign(voter).run();
+        register_provider(initial_provider.pub, sp2.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, sp2.pub, true),
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        propose_subnode_image(initial_provider.pub,
+            "subnode_image1", "url", "digest", subnode_image_type.COMMON, "one",
+            "gtx_module1,gtx_module2", "ext1,ext2")
+    ).sign(initial_provider).run();
+
+    val subnode = get_subnode_image_proposal(last_proposal().rowid);
+
+    assert_equals(subnode?.name, "subnode_image1");
+    assert_equals(subnode?.url, "url");
+    assert_equals(subnode?.digest, "digest");
+    assert_equals(subnode?.subnode_image_type, subnode_image_type.COMMON);
+    assert_equals(subnode?.gtx_modules, "gtx_module1,gtx_module2");
+    assert_equals(subnode?.sync_exts, "ext1,ext2");
+    assert_equals(subnode?.base_compute_requests, 0);
 }
