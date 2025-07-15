@@ -1,0 +1,612 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import common_proposal.test.helper_functions.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.assets;
+    import lib.ft4.auth;
+    import test_utils: lib.ft4.test.core;
+}
+
+struct module_args {
+    account_creator_privkey: byte_array = x"F5216FCCF80F13A2CCEA31F331D881A620F60596B21A9737989297896A8F7E65";
+}
+
+val auth_privkey = chain_context.args.account_creator_privkey;
+
+val provider_key = rell.test.keypairs.bob;
+val provider_pubkey = provider_key.pub;
+val cluster_name = "bob_cluster";
+val cluster_bob = "bob_cluster";
+val cluster_charlie = "charlie_cluster";
+val node_pubkey_bob = rell.test.pubkeys.bob;
+val node_pubkey_charlie = rell.test.pubkeys.charlie;
+val node_pubkey_alice = rell.test.pubkeys.alice;
+val node_pubkey_dave = rell.test.pubkeys.dave;
+val node_pubkey_eve = rell.test.pubkeys.eve;
+
+function test_get_all_provider_nodes_by_cluster() {
+    val provider1 = add_provider(rell.test.pubkeys.alice, false, provider_tier.NODE_PROVIDER);
+    val provider2 = add_provider(rell.test.pubkeys.bob, false, provider_tier.NODE_PROVIDER);
+    val node1 = x"0001"; // In cluster 1
+    val node2 = x"0002"; // In cluster 2
+    val node4 = x"0004"; // Deleted node, previously in cluster 1
+    val node5 = x"0005"; // Provider 2 node
+
+    val cluster1 = ensure_cluster("c1", false, false, 1, 1024);
+    val cluster2 = ensure_cluster("c2", false, false, 1, 1024);
+    ensure_node(provider1.pubkey, node1, true, "SE", 1, 1024, false);
+    ensure_node(provider1.pubkey, node2, true, "SE", 1, 1024, false);
+    ensure_node(provider2.pubkey, node5, true, "SE", 1, 1024, false);
+    add_cluster_node(cluster1.name, node1, false);
+    add_cluster_node(cluster2.name, node2, false);
+    add_cluster_node(cluster1.name, node5, false);
+    add_reward_provider_deleted_node(provider1, node4, cluster1);
+
+    assert_equals(get_all_provider_nodes_by_cluster(provider1), map<text, set<pubkey>>([
+        ("c1", set([node1, node4])),
+        ("c2", set([node2])),
+    ]));
+}
+
+function test_get_average_availability_on_a_providers_nodes() {
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    ensure_node(provider_pubkey, node_pubkey_bob, true, "SE", 1, 1024, false);
+    ensure_node(provider_pubkey, node_pubkey_charlie, true, "SE", 1, 1024, false);
+    val cluster1 = ensure_cluster(cluster_bob, false, false, 1, 1024);
+    val cluster2 = ensure_cluster(cluster_charlie, false, false, 1, 1024);
+    add_cluster_node(cluster1.name, node_pubkey_bob, false);
+    add_cluster_node(cluster2.name, node_pubkey_charlie, false);
+    val last_block_time = get_last_blocktime();
+    val node_availability_report1 = node_availability_report(start_time = 0, end_time = last_block_time, [node_pubkey_charlie: 0.90]);
+    val node_availability_report2 = node_availability_report(start_time = 0, end_time = last_block_time, [node_pubkey_bob: 1.0]);
+    rell.test.tx().op(
+        save_node_availability_op(node_availability_report1),
+        save_node_availability_op(node_availability_report2))
+        .sign(provider_key)
+        .run();
+
+    val provider_cluster_nodes = get_all_provider_nodes_by_cluster(provider);
+    val average = get_average_availability_on_a_provider_nodes_in_the_last_24h(provider_cluster_nodes);
+
+    assert_equals(average, 0.95);
+}
+
+function test_get_average_availability_on_a_providers_nodes_only_last_24_hours() {
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    ensure_node(provider_pubkey, node_pubkey_bob, true, "SE", 1, 1024, false);
+    val cluster1 = ensure_cluster(cluster_bob, false, false, 1, 1024);
+    add_cluster_node(cluster1.name, node_pubkey_bob, false);
+    val node_availability_report1 = node_availability_report(start_time = 1, end_time = get_last_blocktime(), [node_pubkey_bob: 1.0]);
+    rell.test.block().run();
+    rell.test.set_next_block_time(get_last_blocktime() + millis_per_day);
+    rell.test.block().run();
+    val last_blocktime = get_last_blocktime();
+    val node_availability_report2 = node_availability_report(start_time = last_blocktime, end_time = last_blocktime, [node_pubkey_bob: 0.5]);
+    rell.test.tx().op(
+        save_node_availability_op(node_availability_report1),
+        save_node_availability_op(node_availability_report2))
+        .sign(provider_key)
+        .run();
+
+    val cluster_nodes = get_all_provider_nodes_by_cluster(provider);
+    val average = get_average_availability_on_a_provider_nodes_in_the_last_24h(cluster_nodes);
+
+    assert_equals(average, 0.5);
+}
+
+function test_get_average_availability_on_a_providers_nodes_in_the_last_24h_no_availability_data() {
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    ensure_node(provider_pubkey, node_pubkey_bob, true, "SE", 1, 1024, false);
+
+    val cluster_nodes = get_all_provider_nodes_by_cluster(provider);
+    val average = get_average_availability_on_a_provider_nodes_in_the_last_24h(cluster_nodes);
+
+    assert_equals(average, 0.0);
+}
+
+function test_get_total_number_of_scus_per_provider() {
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val node_charlie = ensure_node(provider_pubkey, node_pubkey_charlie, true, "SE", 1, 1024, false);
+    val node_bob = ensure_node(provider_pubkey, node_pubkey_bob, true, "SE", 2, 1024, false);
+    val cluster1 = ensure_cluster(cluster_bob, false, false, 1, 1024);
+    val cluster2 = ensure_cluster(cluster_charlie, false, false, 2, 1024);
+
+    rell.test.tx().op(
+        create_cluster_node_op(cluster1, node_bob),
+        create_cluster_node_op(cluster2, node_charlie),
+    ).sign(provider_key)
+    .run();
+
+    val provider_nodes = get_provider_nodes(provider);
+    val total = get_total_number_of_scus_per_provider(provider_nodes);
+
+    assert_equals(total, 40);
+}
+
+function test_get_average_occupancy_rate_of_a_providers_scus_no_occupancy() {
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val cluster1 = ensure_cluster(cluster_bob, false, false, 1, 1024);
+    val node_bob = ensure_node(provider_pubkey, node_pubkey_bob, true, "SE", 1, 1024, false);
+
+    rell.test.tx().op(
+        create_cluster_node_op(cluster1,node_bob)
+    ).run();
+
+    val provider_nodes = get_provider_nodes(provider);
+    val total = get_average_occupancy_rate_of_a_providers_scus(provider_nodes);
+
+    assert_equals(total, 0);
+}
+
+function test_get_average_occupancy_rate_of_a_providers_scus_full_occupancy() {
+    rell.test.tx().op(init()).run();
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val cluster1 = ensure_cluster(cluster_bob, false, false, 1, 1024);
+    val cluster2 = ensure_cluster(cluster_charlie, false, false, 2, 1024);
+    val node_bob = ensure_node(provider_pubkey, node_pubkey_bob, true, "SE", 1, 1024, false);
+    val node_charlie = ensure_node(provider_pubkey, node_pubkey_charlie, true, "SE", 2, 1024, false);
+
+    val provider_account = require(do_create_account(provider_key, auth_privkey));
+
+    rell.test.tx().op(
+        create_cluster_node_op(cluster1, node_bob),
+        create_cluster_node_op(cluster2, node_charlie),
+        create_lease("lease1", 12, provider_account, cluster1, false),
+        create_lease("lease2", 28, provider_account, cluster2, false)
+    ).run();
+
+    val provider_nodes = get_provider_nodes(provider);
+    val total = get_average_occupancy_rate_of_a_providers_scus(provider_nodes);
+
+    assert_equals(total, 1);
+}
+
+function test_only_dapp_nodes_included_in_occupancy() {
+    rell.test.tx().op(init()).run();
+    val system_provider = add_provider(provider_pubkey, true, provider_tier.NODE_PROVIDER);
+    val system_cluster = ensure_cluster(system_cluster_name, false, false, 1, 0);
+    val dapp_cluster = ensure_cluster(cluster_bob, false, false, 1, 0);
+    val system_cluster_node = ensure_node(provider_pubkey, node_pubkey_bob, true, "SE", 1, 0, false);
+    val dapp_cluster_node = ensure_node(provider_pubkey, node_pubkey_charlie, true, "SE", 1, 0, false);
+
+    val provider_account = require(do_create_account(provider_key, auth_privkey));
+
+    rell.test.tx().op(
+        create_cluster_node_op(system_cluster, system_cluster_node),
+        create_cluster_node_op(dapp_cluster, dapp_cluster_node),
+        create_lease("lease1", 12, provider_account, dapp_cluster, false),
+    ).run();
+
+    val provider_nodes = get_provider_nodes(system_provider);
+    val total = get_average_occupancy_rate_of_a_providers_scus(provider_nodes);
+
+    assert_equals(total, 1);
+}
+
+function test_get_total_reward_payed_in_the_last_24h() {
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val node_bob = ensure_node(provider_pubkey, node_pubkey_bob, true, "SE", 1, 1024, false);
+    val node_charlie = ensure_node(provider_pubkey, node_pubkey_charlie, true, "SE", 1, 1024, false);
+    val dapp_cluster = ensure_cluster(cluster_bob, false, false, 1, 0);
+    val last_block_time = get_last_blocktime();
+    rell.test.tx().op(
+        create_cluster_node_op(dapp_cluster, node_bob),
+        create_cluster_node_op(dapp_cluster, node_charlie),
+        save_node_payed_reward_op(node_pubkey_bob, 100, last_block_time),
+        save_node_payed_reward_op(node_pubkey_charlie, 200, last_block_time))
+        .sign(provider_key)
+        .run();
+
+    assert_equals(get_total_node_reward_payed_in_the_last_24h(node_pubkey_bob), 100);
+    assert_equals(get_total_node_reward_payed_in_the_last_24h(node_pubkey_charlie), 200);
+    assert_equals(get_total_provider_reward_payed_in_the_last_24h(provider), 300);
+}
+
+function test_get_total_reward_payed_in_the_last_24h_old_rewards() {
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val node_bob = ensure_node(provider_pubkey, node_pubkey_bob, true, "SE", 1, 1024, false);
+    val dapp_cluster = ensure_cluster(cluster_bob, false, false, 1, 0);
+    val old_time = get_last_blocktime();
+    rell.test.set_next_block_time(old_time + millis_per_day);
+    rell.test.block().run();
+
+    rell.test.tx().op(
+        create_cluster_node_op(dapp_cluster, node_bob),
+        save_node_payed_reward_op(node_pubkey_bob, 100, old_time),
+        save_node_payed_reward_op(node_pubkey_bob, 200, get_last_blocktime()))
+        .sign(provider_key)
+        .run();
+
+    assert_equals(get_total_node_reward_payed_in_the_last_24h(node_pubkey_bob), 200);
+    assert_equals(get_total_provider_reward_payed_in_the_last_24h(provider), 200);
+}
+
+function test_get_total_reward_payed_in_the_last_24h_no_rewards() {
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    ensure_node(provider_pubkey, node_pubkey_bob, true, "SE", 1, 1024, false);
+
+    assert_equals(get_total_node_reward_payed_in_the_last_24h(node_pubkey_bob), 0);
+    assert_equals(get_total_provider_reward_payed_in_the_last_24h(provider), 0);
+}
+
+function test_get_economy_metrics() {
+    rell.test.tx().op(init()).run();
+    add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val cluster = ensure_cluster(cluster_bob, false, false, 1, 1024);
+    val node_bob = ensure_node(provider_pubkey, node_pubkey_bob, true, "SE", 1, 1024, false);
+    val last_block_time = get_last_blocktime();
+    val node_availability_report = node_availability_report(start_time = 0, end_time = last_block_time, [node_pubkey_bob: 0.90]);
+    val provider_account = require(do_create_account(provider_key, auth_privkey));
+    rell.test.tx().op(
+        save_node_availability_op(node_availability_report),
+        save_node_payed_reward_op(node_pubkey_bob, 200, last_block_time),
+        create_cluster_node_op(cluster, node_bob),
+        create_lease("lease1", 6, provider_account, cluster, false))
+        .sign(provider_key)
+        .run();
+
+    val economy_metrics = get_economy_metrics(provider_pubkey);
+
+    val expected = economy_metrics(
+        average_availability_on_a_providers_nodes = 0.90,
+        total_number_of_nodes_per_provider = 1,
+        total_number_of_scus_per_provider = 12,
+        average_occupancy_rate_of_a_providers_scus = 0.5,
+        amount_of_the_last_reward_payout = 200);
+
+    assert_equals(economy_metrics, expected);
+}
+
+// Tests get_economy_metrics, get_economy_metrics_per_node and get_economy_metrics_per_provider_nodes
+function test_economy_metrics_queries() {
+    rell.test.tx().op(init()).run();
+    add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+
+    val system_cluster = ensure_cluster(system_cluster_name, false, false, 1, 0);
+    val cluster = ensure_cluster(cluster_bob, false, false, 1, 1024);
+    val cluster2 = ensure_cluster(cluster_charlie, false, false, 1, 1024);
+
+    val node_alice = ensure_node(provider_pubkey, node_pubkey_alice, true, "SE", 1, 1024, false);
+    val node_bob = ensure_node(provider_pubkey, node_pubkey_bob, true, "SE", 1, 1024, false);
+    val node_charlie = ensure_node(provider_pubkey, node_pubkey_charlie, true, "SE", 1, 1024, false);
+    val node_dave = ensure_node(provider_pubkey, node_pubkey_dave, true, "SE", 1, 1024, false);
+
+    val last_block_time = get_last_blocktime();
+    val node_availability_report = node_availability_report(
+        start_time = 0,
+        end_time = last_block_time,
+        [node_pubkey_alice: 0.99, node_pubkey_bob: 0.90, node_pubkey_charlie: 1.0]
+    );
+    val provider_account = require(do_create_account(provider_key, auth_privkey));
+    rell.test.tx().op(
+            save_node_availability_op(node_availability_report),
+            save_node_payed_reward_op(node_pubkey_alice, 280, last_block_time),
+            save_node_payed_reward_op(node_pubkey_bob, 200, last_block_time),
+            save_node_payed_reward_op(node_pubkey_charlie, 300, last_block_time),
+            create_cluster_node_op(system_cluster, node_alice),
+            create_cluster_node_op(cluster, node_bob),
+            create_cluster_node_op(cluster2, node_charlie),
+            create_cluster_replica_node_op(cluster2, node_dave),
+            create_lease("lease1", 6, provider_account, cluster, false),
+            create_lease("lease2", 2, provider_account, cluster2, false),
+            create_lease("lease3", 1, provider_account, cluster2, false),
+        ).sign(provider_key).run();
+
+    val expected_alice_metrics = economy_node_metrics(
+        node_pubkey = node_pubkey_alice,
+        availability = 0.99,
+        amount_of_the_last_reward_payout = 280,
+        signing_clusters = [system_cluster_name],
+        replicating_clusters = [],
+    );
+    val expected_bob_metrics = economy_node_metrics(
+        node_pubkey = node_pubkey_bob,
+        availability = 0.9,
+        amount_of_the_last_reward_payout = 200,
+        signing_clusters = [cluster_bob],
+        replicating_clusters = [],
+    );
+    val expected_charlie_metrics = economy_node_metrics(
+        node_pubkey = node_pubkey_charlie,
+        availability = 1,
+        amount_of_the_last_reward_payout = 300,
+        signing_clusters = [cluster_charlie],
+        replicating_clusters = [],
+    );
+    val expected_dave_metrics = economy_node_metrics(
+        node_pubkey = node_pubkey_dave,
+        availability = 0,
+        amount_of_the_last_reward_payout = 0,
+        signing_clusters = [],
+        replicating_clusters = [cluster_charlie],
+    );
+
+    assert_equals(get_economy_metrics_per_node(node_pubkey_alice), expected_alice_metrics);
+    assert_equals(get_economy_metrics_per_node(node_pubkey_bob), expected_bob_metrics);
+    assert_equals(get_economy_metrics_per_node(node_pubkey_charlie), expected_charlie_metrics);
+    assert_equals(get_economy_metrics_per_node(node_pubkey_dave), expected_dave_metrics);
+    assert_equals(
+        get_economy_metrics_per_provider_nodes(provider_pubkey),
+        [expected_alice_metrics, expected_bob_metrics, expected_charlie_metrics, expected_dave_metrics]
+    );
+
+    assert_equals(
+        get_economy_metrics(provider_pubkey),
+        economy_metrics(
+            average_availability_on_a_providers_nodes = (0.99 + 0.9 + 1) / 3,
+            total_number_of_nodes_per_provider = 4,
+            total_number_of_scus_per_provider = 2 * 12, // 2 dapp nodes * (16 - 4 system)
+            average_occupancy_rate_of_a_providers_scus = (0.5 + 0.25) / 2,
+            amount_of_the_last_reward_payout = 200 + 280 + 300
+        )
+    );
+}
+
+function test_get_provider_node_availabilities() {
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val cluster1 = ensure_cluster(cluster_bob, false, false, 1, 1024);
+    val cluster2 = ensure_cluster(cluster_charlie, false, false, 2, 1024);
+    val node_bob = ensure_node(provider_pubkey, node_pubkey_bob, true, "SE", 1, 1024, false);
+    val node_charlie = ensure_node(provider_pubkey, node_pubkey_charlie, true, "SE", 1, 1024, false);
+    rell.test.set_next_block_time(get_last_blocktime() + millis_per_week);
+    rell.test.block().run();
+    val block_time = get_last_blocktime() + 10000;
+    rell.test.tx().op(
+        save_node_availability_op(node_availability_report(start_time = block_time - 2 * millis_per_day, end_time = block_time - millis_per_day + 5000, [node_pubkey_bob: 0.6])),
+        save_node_availability_op(node_availability_report(start_time = block_time - millis_per_day, end_time = block_time, [node_pubkey_bob: 0.4])),
+        create_cluster_node_op(cluster1, node_bob),
+
+        save_node_availability_op(node_availability_report(start_time = block_time - 2 * millis_per_day + 1, end_time = block_time - millis_per_day + 5001, [node_pubkey_charlie: 0.5])),
+        save_node_availability_op(node_availability_report(start_time = block_time - millis_per_day + 1, end_time = block_time + 5001, [node_pubkey_charlie: 0.3])),
+        create_cluster_node_op(cluster2, node_charlie)
+    )
+        .sign(provider_key)
+    .run();
+
+    val provider_nodes = get_all_provider_nodes_by_cluster(provider);
+    val availabilities = get_provider_node_availabilities(provider_nodes, get_last_blocktime() - millis_per_week);
+
+    val availability_2_days_ago = provider_availability(
+        availability = 0.55,
+        start_time = block_time - 2 * millis_per_day,
+        end_time = block_time - millis_per_day - 1
+    );
+
+    val availability_1_days_ago = provider_availability(
+        availability = 0.35,
+        start_time = block_time - millis_per_day,
+        end_time = block_time - 1
+    );
+
+    assert_equals(availabilities[0], availability_2_days_ago);
+    assert_equals(availabilities[1], availability_1_days_ago);
+}
+
+function test_get_provider_payed_rewards() {
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val cluster = ensure_cluster(cluster_bob, false, false, 1, 1024);
+    val node_bob = ensure_node(provider_pubkey, node_pubkey_bob, true, "SE", 1, 1024, false);
+    val node_charlie = ensure_node(provider_pubkey, node_pubkey_charlie, true, "SE", 1, 1024, false);
+    rell.test.tx().op(
+        save_node_payed_reward_op(node_pubkey_bob, 200, 1000),
+        save_node_payed_reward_op(node_pubkey_bob, 300, 2000),
+        save_node_payed_reward_op(node_pubkey_bob, 400, 3000),
+        save_node_payed_reward_op(node_pubkey_charlie, 200, 1000),
+        save_node_payed_reward_op(node_pubkey_charlie, 350, 2000),
+        save_node_payed_reward_op(node_pubkey_charlie, 450, 3000),
+        create_cluster_node_op(cluster, node_bob),
+        create_cluster_node_op(cluster, node_charlie))
+        .sign(provider_key)
+        .run();
+
+    val provider_payed_rewards = get_provider_payed_rewards(provider, 1500);
+
+    val provider_payed_reward1 = provider_payed_reward(
+        time = 2000,
+        value = 650
+    );
+
+    val provider_payed_reward2 = provider_payed_reward(
+        time = 3000,
+        value = 850
+    );
+
+    assert_equals(provider_payed_rewards[0], provider_payed_reward1);
+    assert_equals(provider_payed_rewards[1], provider_payed_reward2);
+}
+
+function test_get_provider_performance_metrics() {
+    val provider = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val cluster1 = ensure_cluster(cluster_bob, false, false, 1, 1024);
+    val cluster2 = ensure_cluster(cluster_charlie, false, false, 1, 1024);
+    val cluster3 = ensure_cluster("c3", false, false, 1, 1024);
+    val node_bob = ensure_node(provider_pubkey, node_pubkey_bob, true, "SE", 1, 1024, false);
+    val node_charlie = ensure_node(provider_pubkey, node_pubkey_charlie, true, "SE", 1, 1024, false);
+    // Deleted node in shared cluster1
+    add_reward_provider_deleted_node(provider, node_pubkey_dave, cluster1);
+    // Deleted node in empty cluster3
+    add_reward_provider_deleted_node(provider, node_pubkey_eve, cluster3);
+    rell.test.tx().op(
+        save_node_availability_op(node_availability_report(start_time = 1000, end_time = 2000, [node_pubkey_dave: 0.61])), // Deleted node in cluster1
+        save_node_availability_op(node_availability_report(start_time = 1000, end_time = 2000, [node_pubkey_bob: 0.35])), // Existing node in cluster1
+        save_node_availability_op(node_availability_report(start_time = 1000, end_time = 2000, [node_pubkey_charlie: 1.0])), // Existing node in cluster2
+        save_node_availability_op(node_availability_report(start_time = 1000, end_time = 2000, [node_pubkey_eve: 0.98])), // Deleted nodein cluster3
+        save_node_payed_reward_op(node_pubkey_bob, 200, 1000),
+        save_node_payed_reward_op(node_pubkey_charlie, 300, 1000),
+        create_cluster_node_op(cluster1, node_bob),
+        create_cluster_node_op(cluster2, node_charlie))
+        .sign(provider_key)
+        .run();
+
+    log("JJJ get_provider_cluster_nodes: %s".format(get_all_provider_nodes_by_cluster(provider)));
+    log("JJJ get_provider_availabilities: %s".format(get_provider_availabilities(provider, 1000)));
+
+    val provider_performance_metrics = get_provider_performance_metrics(provider_pubkey, 1000);
+
+    val expected = provider_performance_metrics([
+        provider_availability(
+        availability = 0.98, // Average of all cluster nodes (cluster1: dave + bob / 2 due to node swap)
+        start_time = 1000,
+        end_time = 86400999
+    )],[provider_payed_reward(
+        time = 1000,
+        value = 500
+    )]);
+
+    assert_equals(provider_performance_metrics, expected);
+}
+
+function test_get_provider_performance_metrics_multiple_days() {
+    val day1_start = 1000;
+    val day1_end = day1_start + millis_per_day;
+    val day2_start = day1_end + 1;
+    val day2_end = day2_start + millis_per_day;
+    val node1_replaced = x"00000001";
+    val node2_replacement = x"00000002";
+    val node3_other_provider = x"00000003";
+    val provider1 = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val provider2 = add_provider(rell.test.pubkeys.alice, false, provider_tier.NODE_PROVIDER);
+    val cluster1 = ensure_cluster(cluster_bob, false, false, 1, 1024);
+    ensure_node(provider_pubkey, node2_replacement, true, "SE", 1, 1024, false);
+    ensure_node(provider2.pubkey, node3_other_provider, true, "SE", 1, 1024, false);
+    add_cluster_node(cluster1.name, node2_replacement, false);
+    add_cluster_node(cluster1.name, node3_other_provider, false);
+    add_reward_provider_deleted_node(provider1, node1_replaced, cluster1);
+    rell.test.tx().op(
+        save_node_availability_op(node_availability_report(start_time = day1_start, end_time = day1_end, [node1_replaced: 0.61])),
+        save_node_availability_op(node_availability_report(start_time = day1_start, end_time = day1_end, [node2_replacement: 0.35])),
+        save_node_availability_op(node_availability_report(start_time = day2_start, end_time = day2_end, [node2_replacement: 1.0])),
+        save_node_availability_op(node_availability_report(start_time = day2_start, end_time = day2_end, [node3_other_provider: 0.98])),
+        save_node_payed_reward_op(node1_replaced, 200, day1_end + 1000),
+        save_node_payed_reward_op(node2_replacement, 200, day1_end + 1000),
+        save_node_payed_reward_op(node2_replacement, 200, day2_end + 1000),
+        save_node_payed_reward_op(node3_other_provider, 300, day2_end + 1000))
+        .sign(provider_key)
+        .run();
+
+    log("JJJ get_provider_cluster_nodes: %s".format(get_all_provider_nodes_by_cluster(provider1)));
+    log("JJJ get_provider_availabilities: %s".format(get_provider_availabilities(provider1, 1000)));
+
+    val provider_performance_metrics = get_provider_performance_metrics(provider_pubkey, 1000);
+
+    val expected_availabilities = [
+        provider_availability(
+        availability = 0.96,
+        start_time = day1_start,
+        end_time = day1_end - 1
+    ), provider_availability(
+        availability = 1.0,
+        start_time = day2_start - 1,
+        end_time = day2_end - 2
+    )];
+    val expected_rewards = [provider_payed_reward(
+        time = day1_end + 1000,
+        value = 400
+    ),provider_payed_reward(
+        time = day2_end + 1000,
+        value = 200
+    )];
+
+    assert_equals(provider_performance_metrics.availabilities, expected_availabilities);
+    assert_equals(provider_performance_metrics.payed_rewards, expected_rewards);
+}
+
+
+function test_get_provider_performance_metrics_deleted_node() {
+    val day1_start = 1000;
+    val day1_end = day1_start + millis_per_day;
+    val node1_replaced = x"00000001";
+    val provider1 = add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val cluster1 = ensure_cluster(cluster_bob, false, false, 1, 1024);
+    add_reward_provider_deleted_node(provider1, node1_replaced, cluster1);
+    rell.test.tx().op(
+        save_node_availability_op(node_availability_report(start_time = day1_start, end_time = day1_end, [node1_replaced: 0.61])),
+        save_node_payed_reward_op(node1_replaced, 200, day1_end + 1000))
+        .sign(provider_key)
+        .run();
+
+    val provider_performance_metrics = get_provider_performance_metrics(provider_pubkey, 1000);
+
+    val expected_availabilities = [
+        provider_availability(
+        availability = 0.61,
+        start_time = day1_start,
+        end_time = day1_end - 1
+    )];
+    val expected_rewards = [provider_payed_reward(
+        time = day1_end + 1000,
+        value = 200
+    )];
+
+    assert_equals(provider_performance_metrics.availabilities, expected_availabilities);
+    assert_equals(provider_performance_metrics.payed_rewards, expected_rewards);
+}
+
+function test_get_provider_performance_metrics_periods() {
+    add_provider(provider_pubkey, false, provider_tier.NODE_PROVIDER);
+    val cluster = ensure_cluster(cluster_bob, false, false, 1, 1024);
+    val node_bob = ensure_node(provider_pubkey, node_pubkey_bob, true, "SE", 1, 1024, false);
+    rell.test.set_next_block_time(get_last_blocktime() + millis_per_year);
+    rell.test.block().run();
+    val block_time = get_last_blocktime() + 10000;
+    rell.test.tx().op(
+        save_node_availability_op(node_availability_report(start_time = block_time - millis_per_year, end_time = block_time - millis_per_year, [node_pubkey_bob: 1.00])),
+        save_node_availability_op(node_availability_report(start_time = block_time - millis_per_month, end_time = block_time - millis_per_month, [node_pubkey_bob: 0.95])),
+        save_node_availability_op(node_availability_report(start_time = block_time - millis_per_week, end_time = block_time - millis_per_week, [node_pubkey_bob: 0.90])),
+        save_node_payed_reward_op(node_pubkey_bob, 300, block_time - millis_per_year),
+        save_node_payed_reward_op(node_pubkey_bob, 200, block_time - millis_per_month),
+        save_node_payed_reward_op(node_pubkey_bob, 100, block_time - millis_per_week),
+        create_cluster_node_op(cluster, node_bob))
+        .sign(provider_key)
+        .run();
+
+    val last_week = get_provider_performance_metrics_last_7_days(provider_pubkey);
+    val last_month = get_provider_performance_metrics_last_30_days(provider_pubkey);
+    val last_year = get_provider_performance_metrics_last_365_days(provider_pubkey);
+
+    val provider_availability_last_7_days = provider_availability(
+        availability = 0.90,
+        start_time = block_time - millis_per_week,
+        end_time = block_time - millis_per_week + millis_per_day - 1
+        );
+    val provider_payed_reward_last_7_days = provider_payed_reward(
+        time = block_time - millis_per_week,
+        value = 100
+    );
+    val provider_availability_last_30_days = provider_availability(
+        availability = 0.95,
+        start_time = block_time - millis_per_month,
+        end_time = block_time - millis_per_month + millis_per_day - 1
+    );
+    val provider_payed_reward_last_30_days = provider_payed_reward(
+        time = block_time - millis_per_month,
+        value = 200
+    );
+    val provider_availability_last_365_days = provider_availability(
+        availability = 1.00,
+        start_time = block_time - millis_per_year,
+        end_time = block_time - millis_per_year + millis_per_day - 1
+    );
+    val provider_payed_reward_last_365_days = provider_payed_reward(
+        time = block_time - millis_per_year,
+        value = 300
+    );
+
+    val expected_last_7_days = provider_performance_metrics(
+        [provider_availability_last_7_days],
+        [provider_payed_reward_last_7_days]);
+    val expected_last_30_days = provider_performance_metrics(
+        [provider_availability_last_30_days, provider_availability_last_7_days],
+        [provider_payed_reward_last_30_days, provider_payed_reward_last_7_days]);
+    val expected_last_365_days = provider_performance_metrics(
+        [provider_availability_last_365_days, provider_availability_last_30_days, provider_availability_last_7_days],
+        [provider_payed_reward_last_365_days, provider_payed_reward_last_30_days, provider_payed_reward_last_7_days]);
+
+    assert_equals(last_week, expected_last_7_days);
+    assert_equals(last_month, expected_last_30_days);
+    assert_equals(last_year, expected_last_365_days);
+}
