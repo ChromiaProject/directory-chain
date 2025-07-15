@@ -3,13 +3,15 @@
 import ^^.*;
 import ^.helper_functions.*;
 import ^.helper_operations.*;
-import test: ^.ft4;
 
 namespace ft4 {
     import lib.ft4.accounts;
     import lib.ft4.assets;
     import lib.ft4.auth;
     import test_utils: lib.ft4.test.core;
+    import test_auth: lib.ft4.test.core.auth;
+    import test_accounts: lib.ft4.test.core.accounts;
+    import test_assets: lib.ft4.test.core.assets;
 }
 
 struct module_args {
@@ -992,7 +994,7 @@ function test_container_lease_ownership_transfer() {
     );
 
     rell.test.tx()
-        .op(test.evm_auth_operation_for(rell.test.keypairs.alice.priv, offer_container_lease_ownership_transfer(container_name, bob.id)))
+        .op(ft4.test_auth.evm_auth_operation_for(rell.test.keypairs.alice.priv, offer_container_lease_ownership_transfer(container_name, bob.id)))
         .op(offer_container_lease_ownership_transfer(container_name, bob.id))
         .run();
 
@@ -1006,7 +1008,7 @@ function test_container_lease_ownership_transfer() {
     );
 
     rell.test.tx()
-        .op(test.evm_auth_operation_for(rell.test.keypairs.bob.priv, accept_container_lease_ownership_transfer_offer(container_name)))
+        .op(ft4.test_auth.evm_auth_operation_for(rell.test.keypairs.bob.priv, accept_container_lease_ownership_transfer_offer(container_name)))
         .op(accept_container_lease_ownership_transfer_offer(container_name))
         .run();
 
@@ -1051,22 +1053,22 @@ function test_wrong_call_offer_container_lease_ownership_transfer_operation() {
         .run_must_fail("Expected at least two operations, make sure that you included auth operation.");
 
     rell.test.tx()
-        .op(test.evm_auth_operation_for(rell.test.keypairs.bob.priv, offer_container_lease_ownership_transfer(container_name, bob.id)))
+        .op(ft4.test_auth.evm_auth_operation_for(rell.test.keypairs.bob.priv, offer_container_lease_ownership_transfer(container_name, bob.id)))
         .op(offer_container_lease_ownership_transfer(container_name, bob.id))
         .run_must_fail("Lease for container: %s was not created by you.".format(container_name));
 
     rell.test.tx()
-        .op(test.evm_auth_operation_for(rell.test.keypairs.alice.priv, offer_container_lease_ownership_transfer(container_name, alice.id)))
+        .op(ft4.test_auth.evm_auth_operation_for(rell.test.keypairs.alice.priv, offer_container_lease_ownership_transfer(container_name, alice.id)))
         .op(offer_container_lease_ownership_transfer(container_name, alice.id))
         .run_must_fail("You cannot transfer lease ownership to yourself.");
 
     rell.test.tx()
-        .op(test.evm_auth_operation_for(rell.test.keypairs.alice.priv, offer_container_lease_ownership_transfer(container_name, bob.id)))
+        .op(ft4.test_auth.evm_auth_operation_for(rell.test.keypairs.alice.priv, offer_container_lease_ownership_transfer(container_name, bob.id)))
         .op(offer_container_lease_ownership_transfer(container_name, bob.id))
         .run();
 
     rell.test.tx()
-        .op(test.evm_auth_operation_for(rell.test.keypairs.alice.priv, offer_container_lease_ownership_transfer(container_name, bob.id)))
+        .op(ft4.test_auth.evm_auth_operation_for(rell.test.keypairs.alice.priv, offer_container_lease_ownership_transfer(container_name, bob.id)))
         .op(offer_container_lease_ownership_transfer(container_name, bob.id))
         .run_must_fail("Offer for container: %s already exists!".format(container_name));
 }
@@ -1080,7 +1082,7 @@ function test_remove_container_lease_ownership_transfer_offer() {
     val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 9);
 
     rell.test.tx()
-        .op(test.evm_auth_operation_for(rell.test.keypairs.alice.priv, offer_container_lease_ownership_transfer(container_name, bob.id)))
+        .op(ft4.test_auth.evm_auth_operation_for(rell.test.keypairs.alice.priv, offer_container_lease_ownership_transfer(container_name, bob.id)))
         .op(offer_container_lease_ownership_transfer(container_name, bob.id))
         .run();
 
@@ -1093,7 +1095,7 @@ function test_remove_container_lease_ownership_transfer_offer() {
         "Please sign the message\nto remove lease ownership transfer offer of container %s\nto %s".format(container_name, bob.id));
 
     rell.test.tx()
-        .op(test.evm_auth_operation_for(rell.test.keypairs.alice.priv, remove_container_lease_ownership_transfer_offer(container_name)))
+        .op(ft4.test_auth.evm_auth_operation_for(rell.test.keypairs.alice.priv, remove_container_lease_ownership_transfer_offer(container_name)))
         .op(remove_container_lease_ownership_transfer_offer(container_name))
         .run();
 
@@ -1117,7 +1119,7 @@ function test_wrong_remove_container_lease_ownership_transfer_offer() {
         .run_must_fail("Expected at least two operations, make sure that you included auth operation.");
 
     rell.test.tx()
-        .op(test.evm_auth_operation_for(rell.test.keypairs.bob.priv, remove_container_lease_ownership_transfer_offer(container_name)))
+        .op(ft4.test_auth.evm_auth_operation_for(rell.test.keypairs.bob.priv, remove_container_lease_ownership_transfer_offer(container_name)))
         .op(remove_container_lease_ownership_transfer_offer(container_name))
         .run_must_fail("Lease for container container name was not created by you.");
 }
@@ -1139,7 +1141,7 @@ function test_wrong_accept_container_lease_ownership_transfer() {
         .run_must_fail("Expected at least two operations, make sure that you included auth operation.");
 
     rell.test.tx()
-        .op(test.evm_auth_operation_for(rell.test.keypairs.alice.priv, accept_container_lease_ownership_transfer_offer(container_name)))
+        .op(ft4.test_auth.evm_auth_operation_for(rell.test.keypairs.alice.priv, accept_container_lease_ownership_transfer_offer(container_name)))
         .op(accept_container_lease_ownership_transfer_offer(container_name))
         .run_must_fail("There is no lease ownership transfer offer for you to accept.");
 }
