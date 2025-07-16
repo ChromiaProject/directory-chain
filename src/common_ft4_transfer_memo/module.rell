@@ -1,12 +1,21 @@
-import lib.ft4.accounts;
-import lib.ft4.assets;
-import lib.ft4.crosschain;
-import lib.ft4.auth;
+/**
+ * This module adds memo support to FT4 transfers. Each account can enable or disable memo but if enabled a transfer
+ * operation must be combined with a memo operation.
+ */
+
+module;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.assets;
+    import lib.ft4.auth;
+    import lib.ft4.crosschain;
+}
 
 val MEMO_MAX_LENGTH = 50;
 
 entity memo_account {
-    key accounts.account;
+    key ft4.accounts.account;
 }
 
 @extend(ft4.auth.auth_handler)
@@ -24,7 +33,7 @@ function enable_transfer_memo_auth_message(gtv) {
  * Enable transfer memos for this FT4 account.
  */
 operation enable_transfer_memo() {
-    val account = auth.authenticate();
+    val account = ft4.auth.authenticate();
     require(not account_require_memo(account), "Memo is already enabled for this account");
     create memo_account(account);
 }
@@ -44,7 +53,7 @@ function disable_transfer_memo_auth_message(gtv) {
  * Disable transfer memos for this FT4 account.
  */
 operation disable_transfer_memo() {
-    val account = auth.authenticate();
+    val account = ft4.auth.authenticate();
     require(account_require_memo(account), "Memo is not enabled for this account");
     delete memo_account @ { account };
 }
@@ -53,16 +62,16 @@ operation disable_transfer_memo() {
  * Check if an FT4 account requires memo when transferring assets to it.
  */
 query does_account_require_memo(account_id: byte_array): boolean {
-    val account = accounts.Account(account_id);
+    val account = ft4.accounts.Account(account_id);
     return account_require_memo(account);
 }
 
-function account_require_memo(accounts.account): boolean = exists(memo_account @? { account });
+function account_require_memo(ft4.accounts.account): boolean = exists(memo_account @? { account });
 
 function account_id_require_memo(account_id: byte_array): boolean = exists(memo_account @? { .account.id == account_id });
 
-@extend(assets.before_transfer)
-function (from: accounts.account, to: accounts.account, assets.asset, amount: big_integer) {
+@extend(ft4.assets.before_transfer)
+function (from: ft4.accounts.account, to: ft4.accounts.account, ft4.assets.asset, amount: big_integer) {
     if (account_require_memo(to)) {
         val all_ops = op_context.get_all_operations();
         val curr_idx = op_context.op_index;
@@ -73,7 +82,7 @@ function (from: accounts.account, to: accounts.account, assets.asset, amount: bi
             val prev_op = all_ops[i];
 
             // auth ops must be in between memo and transfer, could be one or two
-            if (not auth.is_auth_op(prev_op)) {
+            if (not ft4.auth.is_auth_op(prev_op)) {
                 // before any auth ops, there must be memo
                 require(
                     prev_op.name == rell.meta(memo).mount_name,
@@ -90,12 +99,12 @@ function (from: accounts.account, to: accounts.account, assets.asset, amount: bi
     }
 }
 
-@extend(crosschain.before_apply_transfer)
+@extend(ft4.crosschain.before_apply_transfer)
 function (
     sender_blockchain_rid: byte_array,
     sender_account_id: byte_array,
     recipient_id: byte_array,
-    assets.asset,
+    ft4.assets.asset,
     amount: big_integer,
     hop_index: integer,
     is_final: boolean,
@@ -130,10 +139,10 @@ operation memo(text) {
         val next_op = all_ops[i];
 
         // auth ops must be in between memo and transfer, could be one or two
-        if (not auth.is_auth_op(next_op)) {
+        if (not ft4.auth.is_auth_op(next_op)) {
             // after any auth ops, there must be transfer
             require(
-                next_op.name == rell.meta(assets.external.transfer).mount_name,
+                next_op.name == rell.meta(ft4.assets.external.transfer).mount_name,
                 "Operation memo can only be used in transfers to memo account"
             );
             // transfer must be towards memo account

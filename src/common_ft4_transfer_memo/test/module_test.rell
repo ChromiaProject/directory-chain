@@ -11,15 +11,12 @@ namespace ft4 {
     import test_assets: lib.ft4.test.core.assets;
 }
 import ^^.*;
-import ^.helper_operations.*;
 import common.test.util.ft4_accounts.*;
 
 val MEMO_ERROR = "Operation memo can only be used in transfers to memo account";
 val cluster_name = "test_cluster";
 
 function test_enable_and_disable_memo() {
-    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
-
     val eve = register_eve();
 
     assert_false(does_account_require_memo(eve.account.id));
@@ -55,8 +52,6 @@ function test_enable_and_disable_memo() {
 }
 
 function test_transfer_to_memo_account_succeeds_with_memo() {
-    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
-
     val alice = register_alice();
     val eve = register_eve();
     rell.test.tx()
@@ -77,8 +72,6 @@ function test_transfer_to_memo_account_succeeds_with_memo() {
 }
 
 function test_transfer_to_regular_account_succeeds_without_memo() {
-    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
-
     val alice = register_alice();
     val bob = register_bob();
 
@@ -93,8 +86,6 @@ function test_transfer_to_regular_account_succeeds_without_memo() {
 }
 
 function test_transfer_to_memo_account_fails_without_memo() {
-    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
-
     val alice = register_alice();
     val eve = register_eve();
     rell.test.tx()
@@ -114,8 +105,6 @@ function test_transfer_to_memo_account_fails_without_memo() {
 }
 
 function test_transfer_to_regular_account_fails_with_memo() {
-    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
-
     val alice = register_alice();
     val bob = register_bob();
 
@@ -160,28 +149,3 @@ function test_memo_fails_with_too_long_text() {
         .op(memo("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc mattis interdum sapien quis pellentesque. Ut augue ligula, efficitur ut neque non, posuere aliquet ante. Nulla sed erat non lacus gravida euismod ac vel sem."))
         .run_must_fail("Memo is too long");
 }
-
-function test_disabled_operations_with_memo() {
-    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
-
-    val eve = register_eve();
-
-    rell.test.tx()
-        .op(ft4.test_auth.ft_auth_operation_for(eve.keypair.pub))
-        .op(enable_transfer_memo())
-        .sign(eve.keypair)
-        .run();
-
-    rell.test.tx()
-        .op(ft4.test_auth.ft_auth_operation_for(eve.keypair.pub))
-        .op(staking_deposit_native(10, null))
-        .sign(eve.keypair)
-        .run_must_fail("Operation is not allowed for memo account");
-
-    rell.test.tx()
-        .op(ft4.test_auth.ft_auth_operation_for(eve.keypair.pub))
-        .op(create_container_with_subnode_image(eve.keypair.pub, 1, 1, 0, cluster_name, false, ""))
-        .sign(eve.keypair)
-        .run_must_fail("Operation is not allowed for memo account");
-}
-
