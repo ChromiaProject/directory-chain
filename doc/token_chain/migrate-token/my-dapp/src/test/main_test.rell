@@ -10,7 +10,7 @@ val token_chain_brid = x"385B5F0BE4E3B0F76779643A54CD16B88DEDBA86E8439C315892F3C
 function test_migration() {
 
     assert_equals(token_migration.migrating, false);
-    assert_true(empty(migrated_accounts @* {}));
+    assert_true(empty(migrated_accounts @* { }));
 
     val migration_account_id = get_account_id(rell.test.pubkeys.alice);
     val bob_account_id = get_account_id(rell.test.pubkeys.bob);
@@ -19,20 +19,20 @@ function test_migration() {
     val eve_account_id = get_account_id(rell.test.pubkeys.eve);
 
     rell.test.tx().op(
-        init(migration_account_id),
-    ).run();
+            init(migration_account_id),
+        ).run();
 
     rell.test.tx().op(
-        mint(rell.test.pubkeys.bob, get_original_token_asset_id(), 10000),
-        mint(rell.test.pubkeys.charlie, get_original_token_asset_id(), 20000),
-        mint(rell.test.pubkeys.dave, get_original_token_asset_id(), 55000),
-        get_or_create_account_op(rell.test.pubkeys.eve),
-        register_cross_chain_asset(new_token_asset_id, "New Token", "NT", token_chain_brid),
-    ).run();
+            mint(rell.test.pubkeys.bob, get_original_token_asset_id(), 10000),
+            mint(rell.test.pubkeys.charlie, get_original_token_asset_id(), 20000),
+            mint(rell.test.pubkeys.dave, get_original_token_asset_id(), 55000),
+            get_or_create_account_op(rell.test.pubkeys.eve),
+            register_cross_chain_asset(new_token_asset_id, "New Token", "NT", token_chain_brid),
+        ).run();
 
     rell.test.tx().op(
-        fake_cross_transfer(get_new_token_asset_id(), get_account_id(rell.test.pubkeys.alice), 10000 + 20000 + 55000),
-    ).run();
+            fake_cross_transfer(get_new_token_asset_id(), get_account_id(rell.test.pubkeys.alice), 10000 + 20000 + 55000),
+        ).run();
 
     // Verify account balances for original token
     assert_null(assets.get_asset_balance(migration_account_id, get_original_token_asset_id()));
@@ -42,7 +42,14 @@ function test_migration() {
     assert_null(assets.get_asset_balance(eve_account_id, get_original_token_asset_id()));
 
     // Verify account balances for new token
-    assert_equals(assets.get_asset_balance(migration_account_id, get_new_token_asset_id())?.amount, 10000 + 20000 + 55000);
+    assert_equals(
+        assets
+            .get_asset_balance(
+                migration_account_id,
+                get_new_token_asset_id()
+            )?.amount,
+        10000 + 20000 + 55000
+    );
     assert_null(assets.get_asset_balance(bob_account_id, get_new_token_asset_id()));
     assert_null(assets.get_asset_balance(charlie_account_id, get_new_token_asset_id()));
     assert_null(assets.get_asset_balance(dave_account_id, get_new_token_asset_id()));
@@ -50,24 +57,30 @@ function test_migration() {
 
     // Start migration
     rell.test.tx().op(
-        migrate_asset(get_original_token_asset_id(), get_new_token_asset_id(), get_account_id(rell.test.pubkeys.alice), 1),
-    ).run();
+            migrate_asset(
+                get_original_token_asset_id(),
+                get_new_token_asset_id(),
+                get_account_id(
+                    rell
+                        .test
+                        .pubkeys
+                        .alice
+                ),
+                1
+            ),
+        ).run();
 
     // No transfers accepted for original token once the migration has started
     rell.test.tx().op(
-        transfer(get_original_token_asset_id(), charlie_account_id, bob_account_id, 10000)
-    ).run_must_fail("No transfers accepted during token migration");
+            transfer(get_original_token_asset_id(), charlie_account_id, bob_account_id, 10000)
+        ).run_must_fail("Transfer and minting is disabled for this token");
 
-    rell.test.block().run();
-    rell.test.block().run();
-    rell.test.block().run();
-    rell.test.block().run();
-    rell.test.block().run();
-    rell.test.block().run();
+    while (token_migration.migrating) {
+        rell.test.block().run();
+    }
 
     // Migration is done, verify results
-    assert_equals(token_migration.migrating, false);
-    assert_true(empty(migrated_accounts @* {}));
+    assert_true(empty(migrated_accounts @* { }));
 
     // Accounts received the same amount on new token
     assert_null(assets.get_asset_balance(migration_account_id, get_new_token_asset_id()));
@@ -81,4 +94,64 @@ function test_migration() {
     assert_null(assets.get_asset_balance(charlie_account_id, get_original_token_asset_id()));
     assert_null(assets.get_asset_balance(dave_account_id, get_original_token_asset_id()));
     assert_null(assets.get_asset_balance(eve_account_id, get_original_token_asset_id()));
+}
+
+function test_migration_with_transfer_account_tokens() {
+
+    assert_equals(token_migration.migrating, false);
+    assert_true(empty(migrated_accounts @* { }));
+
+    val migration_account_id = get_account_id(rell.test.pubkeys.alice);
+    val bob_account_id = get_account_id(rell.test.pubkeys.bob);
+
+    rell.test.tx().op(
+            init(migration_account_id),
+        ).run();
+
+    rell.test.tx().op(
+            mint(rell.test.pubkeys.alice, get_original_token_asset_id(), 500),
+            mint(rell.test.pubkeys.bob, get_original_token_asset_id(), 10000),
+            get_or_create_account_op(rell.test.pubkeys.eve),
+            register_cross_chain_asset(new_token_asset_id, "New Token", "NT", token_chain_brid),
+        ).run();
+
+    rell.test.tx().op(
+            fake_cross_transfer(get_new_token_asset_id(), get_account_id(rell.test.pubkeys.alice), 500 + 10000),
+        ).run();
+
+    // Verify account balances for original token
+    assert_equals(assets.get_asset_balance(migration_account_id, get_original_token_asset_id())?.amount, 500);
+    assert_equals(assets.get_asset_balance(bob_account_id, get_original_token_asset_id())?.amount, 10000);
+
+    // Verify account balances for new token
+    assert_equals(assets.get_asset_balance(migration_account_id, get_new_token_asset_id())?.amount, 500 + 10000);
+    assert_null(assets.get_asset_balance(bob_account_id, get_new_token_asset_id()));
+
+    // Start migration
+    rell.test.tx().op(
+            migrate_asset(
+                get_original_token_asset_id(),
+                get_new_token_asset_id(),
+                get_account_id(
+                    rell
+                        .test
+                        .pubkeys
+                        .alice
+                ),
+                100
+            ),
+        ).run();
+
+    rell.test.block().run();
+
+    // Migration is done, verify results
+    assert_true(empty(migrated_accounts @* { }));
+
+    // Accounts received the same amount on new token
+    assert_equals(assets.get_asset_balance(migration_account_id, get_new_token_asset_id())?.amount, 500);
+    assert_equals(assets.get_asset_balance(bob_account_id, get_new_token_asset_id())?.amount, 10000);
+
+    // Original tokens burned
+    assert_null(assets.get_asset_balance(migration_account_id, get_original_token_asset_id()));
+    assert_null(assets.get_asset_balance(bob_account_id, get_original_token_asset_id()));
 }
