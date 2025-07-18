@@ -8,7 +8,7 @@ entity provisional_stake_balance {
     mutable staked_balance: integer;
 }
 
-@extend(eif.hbridge.after_evm_account_linked)
+@extend(eif.hbridge_core.after_evm_account_linked)
 function (address: byte_array, account: ft4.accounts.account, network_id: integer, is_contract: boolean) {
     flush_provisional_stake_balance(account, address);
 }
@@ -39,7 +39,7 @@ function __handle_staking_events(network_id: integer, events: list<eif.messaging
             return;
         }
 
-        val ft4_account = eif.hbridge.find_ft4_account_for_address(evm_address, network_id);
+        val ft4_account = eif.hbridge_core.find_ft4_account_for_address(evm_address, network_id);
 
         log("Processing EVM event of %s for EVM address %s on network id %s".format(event.name, evm_address, network_id));
         if (event.name == "StakeUpdate") {
