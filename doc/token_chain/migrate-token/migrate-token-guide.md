@@ -425,7 +425,7 @@ Here are some more that can be set automatically:
 DC_BRID=$(curl -s $API_URL/brid/iid_0)
 echo "DC brid: $DC_BRID"
 
-TC_BRID=$(chr query --api-url $API_URL get_token_chain_rid | sed 's/[x"]//g')
+TC_BRID=$(chr query --api-url $API_URL -brid $DC_BRID get_token_chain_rid | sed 's/[x"]//g')
 echo "TC brid: $TC_BRID"
 
 ORIGINAL_TOKEN_SUPPLY=$(chr query --api-url $API_URL -brid $MD_BRID -f json ft4.get_asset_by_id asset_id=$ORIGINAL_ASSET_ID | jq -r .supply)
