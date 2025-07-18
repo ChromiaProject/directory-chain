@@ -425,7 +425,7 @@ Here are some more that can be set automatically:
 DC_BRID=$(curl -s $API_URL/brid/iid_0)
 echo "DC brid: $DC_BRID"
 
-TC_BRID=$(curl -s "$API_URL/query/${DC_BRID}?type=get_blockchain_info_list&include_inactive=false" | jq -r ".[] | select(.name == \"token_chain\") | .rid")
+TC_BRID=$(chr query --api-url $API_URL get_token_chain_rid | sed 's/[x"]//g')
 echo "TC brid: $TC_BRID"
 
 ORIGINAL_TOKEN_SUPPLY=$(chr query --api-url $API_URL -brid $MD_BRID -f json ft4.get_asset_by_id asset_id=$ORIGINAL_ASSET_ID | jq -r .supply)
@@ -435,7 +435,7 @@ echo "Original token supply: $ORIGINAL_TOKEN_SUPPLY"
 
 #### 3. Register new token on Token chain
 
-To register a new token, we'll use `chr` since there is no frontend yet for this. When you register a new token, a proposal is created that must be approved by the Token chain governor before the token is created. Verify all details before you submit since it might not be possible to revert. 
+To register a new token, we'll use `chr` since there is no frontend yet for this. When you register a new token, a proposal is created that must be approved by the Token chain governor before the token is created.
 
 > **⚠️ Warning:** Make sure to verify all details for your token, since it might not be possible to revert or update later.
 
@@ -474,7 +474,7 @@ chr tx --api-url $API_URL --ft-auth --evm-auth=$WALLET_ADDRESS -brid $TC_BRID mi
 Verify that the total supply matches `$ORIGINAL_TOKEN_SUPPLY`:
 
 ```bash
-chr query --api-url $API_URL -brid $MD_BRID -f json ft4.get_asset_by_id asset_id=$NEW_ASSET_ID | jq -r .supply
+chr query --api-url $API_URL -brid $TC_BRID -f json ft4.get_asset_by_id asset_id=$NEW_ASSET_ID | jq -r .supply
 ```
 
 We now have a new token with the same amount of tokens as our original token.
