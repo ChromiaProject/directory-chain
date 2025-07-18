@@ -111,6 +111,8 @@ operation migrate_asset(
     token_migration.batch_size = batch_size;
 
     log("Migration of token %s to %s has started, with account %s".format(from_asset_id, to_asset_id, from_account_id));
+
+    run_batch_migration();
 }
 
 /** Entrypoint to run the `run_batch_migration` function in each block */
@@ -137,9 +139,8 @@ function run_batch_migration() {
         val to_asset = ft4.assets.Asset(token_migration.to_asset_id);
         val from_account = ft4.accounts.Account(token_migration.from_account_id);
         val accounts_to_migrate = ft4.accounts.account @* {
-                .id != token_migration.from_account_id,
-                .id not in migrated_accounts @* {} ( .account_id )
-            } limit token_migration.batch_size;
+            .id not in migrated_accounts @* {} ( .account_id )
+        } limit token_migration.batch_size;
 
         if (accounts_to_migrate.size() > 0) {
 
@@ -153,12 +154,14 @@ function run_batch_migration() {
 
                     log("Transferring %s to account %s".format(account_balance, to_account.id));
 
-                    ft4.assets.Unsafe.transfer(
-                            from_account,
-                            to_account,
-                            to_asset,
-                            account_balance
-                        );
+                    if (to_account != from_account) {
+                        ft4.assets.Unsafe.transfer(
+                                from_account,
+                                to_account,
+                                to_asset,
+                                account_balance
+                            );
+                    }
 
                     ft4.assets.Unsafe.burn(to_account, from_asset, account_balance);
                 }
@@ -175,15 +178,20 @@ function run_batch_migration() {
     }
 }
 
-/**
- * When a migration is active this will disable transfers of the "from asset" token. This is to prevent changes during migration.
- * Consider also disabling minting and burning burning from the point you query for the original token total supply to make
- * sure it won't change until the migration starts.
- */
 @extend(ft4.assets.before_transfer)
-function before_transfer(from: ft4.accounts.account, to: ft4.accounts.account, ft4.assets.asset, amount: big_integer) {
+function before_transfer(from: ft4.accounts.account, to: ft4.accounts.account, ft4.assets.asset, amount: big_integer)
+    = require_migration_not_started_for_old_token(asset);
+
+@extend(ft4.assets.before_mint)
+function before_mint(ft4.accounts.account, ft4.assets.asset, amount: big_integer)
+    = require_migration_not_started_for_old_token(asset);
+
+/**
+ * This will disable transfer and minting for old token once the migration has started.
+ */
+function require_migration_not_started_for_old_token(ft4.assets.asset) {
     require(
         token_migration.migrating == false or asset.id != token_migration.from_asset_id,
-        "No transfers accepted during token migration"
+        "Transfer and minting is disabled for this token"
     );
 }
