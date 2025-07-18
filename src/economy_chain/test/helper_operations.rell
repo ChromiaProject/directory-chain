@@ -362,7 +362,7 @@ operation create_evm_account(evm_address: byte_array) {
 }
 
 operation create_account_link(ft4.accounts.account, address: byte_array) {
-    create eif.hbridge.evm_eoa_account_link ( account, address );
+    create eif.hbridge_core.evm_eoa_account_link ( account, address );
 }
 
 operation set_provider_multi_key_false() {
@@ -404,18 +404,18 @@ operation remove_delegation_states() {
 
 operation override_existing_bridge(network_id: integer, bridge_address: byte_array) {
     // Let's fake that we have a change of bridge contracts with some manual interference with entities
-    val existing_bridge_asset = eif.hbridge.erc20_asset @ {
+    val existing_bridge_asset = eif.hbridge_erc20.erc20_asset @ {
         get_asset(),
         .network_id == network_id
     };
-    val existing_bridge = eif.hbridge.bridge_erc20_asset @ {
+    val existing_bridge = eif.hbridge_erc20.bridge_erc20_asset @ {
         existing_bridge_asset
     };
     val existing_bridge_contract = existing_bridge.bridge_contract;
     delete existing_bridge;
     delete existing_bridge_contract;
 
-    eif.hbridge.register_bridge_with_erc20_assets(
+    eif.hbridge_erc20.register_bridge_with_erc20_assets(
         network_id,
         bridge_address, //BOGUS
         [existing_bridge_asset]
@@ -423,7 +423,7 @@ operation override_existing_bridge(network_id: integer, bridge_address: byte_arr
 }
 
 operation add_bridge(network_id: integer, bridge_address: byte_array, asset_address: byte_array) {
-    eif.hbridge.register_bridge_and_erc20_asset(
+    eif.hbridge_erc20.register_bridge_and_erc20_asset(
         network_id,
         asset_address,
         get_asset(),

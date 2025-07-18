@@ -33,13 +33,13 @@ function apply_token_bridge_create(proposal: common_proposal) {
     val dynamic_config_messages = map<integer, eif.dynamic_config.eif_event_receiver_dynamic_config_message_v2>();
     
     for (bridge_proposal_configuration in bridge_proposal_configurations) {
-        val erc20_asset = eif.hbridge.erc20_asset @? { 
+        val erc20_asset = eif.hbridge_erc20.erc20_asset @? { 
             .network_id == bridge_proposal_configuration.network_id, 
             .token_address == bridge_proposal_configuration.token_contract 
         };
 
         if (empty(erc20_asset)) {
-            eif.hbridge.register_bridge_and_erc20_asset(
+            eif.hbridge_erc20.register_bridge_and_erc20_asset(
                 bridge_proposal_configuration.network_id,
                 bridge_proposal_configuration.token_contract,
                 bridge_proposal.token.asset,
@@ -48,7 +48,7 @@ function apply_token_bridge_create(proposal: common_proposal) {
                 bridge_proposal_configuration.bridge_contract
             );
         } else {
-            eif.hbridge.register_bridge_with_erc20_assets(
+            eif.hbridge_erc20.register_bridge_with_erc20_assets(
                 bridge_proposal_configuration.network_id,
                 bridge_proposal_configuration.bridge_contract,
                 [erc20_asset]

@@ -7,13 +7,13 @@ struct evm_bridge {
 function register_and_link_bridge_and_erc20_asset(ft4.assets.asset) {
 	val bridges = list<evm_bridge>.from_gtv_pretty(chain_context.args.evm_bridges);
 	for (bridge in bridges) {
-		val existing_bridge_asset = eif.hbridge.erc20_asset @? {
+		val existing_bridge_asset = eif.hbridge_erc20.erc20_asset @? {
 			asset,
 			.network_id == bridge.network_id,
 			.token_address == bridge.asset_address
 		};
 		if (empty(existing_bridge_asset)) {
-			eif.hbridge.register_bridge_and_erc20_asset(
+			eif.hbridge_erc20.register_bridge_and_erc20_asset(
 					bridge.network_id,
 					bridge.asset_address,
 					asset,
@@ -21,12 +21,12 @@ function register_and_link_bridge_and_erc20_asset(ft4.assets.asset) {
 					bridge_address = bridge.bridge_address
 				);
 		} else {
-			val existing_bridge = eif.hbridge.bridge_erc20_asset @? {
+			val existing_bridge = eif.hbridge_erc20.bridge_erc20_asset @? {
 				existing_bridge_asset
 			};
 			if (exists(existing_bridge) and existing_bridge.bridge_contract.contract_address != bridge.bridge_address) {
 				log("New bridge contract detected for network id %s. Replacing existing contract.".format(bridge.network_id));
-				eif.hbridge.register_bridge_with_erc20_assets(
+				eif.hbridge_erc20.register_bridge_with_erc20_assets(
 					bridge.network_id,
 					bridge.bridge_address,
 					[existing_bridge_asset]
@@ -39,14 +39,14 @@ function register_and_link_bridge_and_erc20_asset(ft4.assets.asset) {
 			}
 		}
 
-		val obsolete_bridge_assets = eif.hbridge.erc20_asset @* {
+		val obsolete_bridge_assets = eif.hbridge_erc20.erc20_asset @* {
 			asset,
 			.network_id == bridge.network_id,
 			.token_address != bridge.asset_address
 		};
 		// It's not safe to delete obsolete assets but we can remove any bridges that are connected to it
 		for (obsolete_asset in obsolete_bridge_assets) {
-			val obsolete_bridge = eif.hbridge.bridge_erc20_asset @? {
+			val obsolete_bridge = eif.hbridge_erc20.bridge_erc20_asset @? {
 				obsolete_asset
 			};
 
@@ -55,7 +55,7 @@ function register_and_link_bridge_and_erc20_asset(ft4.assets.asset) {
                     eif.dynamic_config.eif_event_receiver_dynamic_remove_message([
                         eif.dynamic_config.network_contract_address(bridge.network_id,
                         obsolete_bridge.bridge_contract.contract_address)]).to_gtv());
-				eif.hbridge.unregister_bridge(
+				eif.hbridge_core.unregister_bridge(
                             obsolete_bridge.bridge_contract.network_id,
                             obsolete_bridge.bridge_contract.contract_address,
                         );
