@@ -35,7 +35,7 @@ This chapter will describe and illustrate how the migration works in a safe loca
 Start a local environment that is similar to real networks by running a Docker container:
 
 ```bash
- docker run --rm -it -p 7740:7740/tcp registry.gitlab.com/chromaway/example-projects/directory1-example/managed-single:latest --with-economy-chain --with-token-chain
+docker run --rm -it -p 7740:7740/tcp registry.gitlab.com/chromaway/example-projects/directory1-example/managed-single:latest --with-economy-chain --with-token-chain
 ```
 
 This will start a Postchain node and set up management chains, Economy chain, and Token chain just like a real network. When ready, you will see output similar to this:
@@ -267,7 +267,7 @@ chr query -brid $TC_BRID -f json ft4.get_assets_by_name "name=New Token" page_si
 
 Now we have a new token with the same supply of tokens as our original token.
 
-#### 6. Register the new Token on Token chain
+#### 6. Register the new Token on dApp chain
 
 Before we can transfer our new tokens we need to configure it in [my-dapp](./my-dapp) to accept the asset. This is done here in an operation, but would probably be more static in a real chain:
 
@@ -480,7 +480,7 @@ chr query --api-url $API_URL -brid $MD_BRID -f json ft4.get_asset_by_id asset_id
 We now have a new token with the same amount of tokens as our original token.
 
 
-#### 6. Register the new token on Token chain
+#### 6. Register the new token on dApp chain
 
 Before we can transfer our new tokens back to our chain, we need to register it with the same asset ID. In the example [my-dapp](./my-dapp), we used an operation to do so, but this might not be the case for your dApp:
 
