@@ -107,8 +107,8 @@ libs:
   iccf:
     registry: https://gitlab.com/chromaway/core/directory-chain
     path: src/lib/iccf
-    tagOrBranch: 1.81.0
-    rid: x"9C359787B75927733034EA1CEE74EEC8829D2907E4FC94790B5E9ABE4396575D"
+    tagOrBranch: 1.96.3
+    rid: x"92941B1BC195F288991DCDC9B0181627AC049B2E07AC2260B272A003B2716391"
 ```
 
 Then use `chr install` to install the iccf-library.
