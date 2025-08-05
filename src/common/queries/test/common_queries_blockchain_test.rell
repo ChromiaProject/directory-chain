@@ -1,0 +1,145 @@
+@test module;
+
+import ^^^.test.container_helpers.*;
+import ^^^.test.helper_operations.*;
+import ^^.*;
+import ^^^.test.setup.*;
+import ^^^.test.ops.*;
+import ^^^.test.util.*;
+import ^^^.test.util.constants.*;
+import direct_cluster.*;
+import direct_container.*;
+import proposal_container.*;
+
+function test_get_blockchain() {
+    setup_module();
+    
+    // Create a test blockchain
+    val blockchain_rid = x"0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
+    rell.test.tx().op(
+        create_blockchain(blockchain_rid, "test_blockchain")
+    ).sign(initial_provider).run();
+    
+    // Test get_blockchain query
+    val blockchain = get_blockchain(blockchain_rid);
+    assert_equals(blockchain.rid, blockchain_rid);
+    assert_equals(blockchain.name, "test_blockchain");
+    assert_equals(blockchain.state, blockchain_state.RUNNING);
+    assert_equals(blockchain.system, false);
+}
+
+function test_get_blockchains() {
+    setup_module();
+    
+    // Create test blockchains
+    val blockchain_rid1 = x"0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
+    val blockchain_rid2 = x"0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f21";
+    
+    rell.test.tx().op(
+        create_blockchain(blockchain_rid1, "test_blockchain1")
+    ).sign(initial_provider).run();
+    
+    rell.test.tx().op(
+        create_blockchain(blockchain_rid2, "test_blockchain2")
+    ).sign(initial_provider).run();
+    
+    // Set one blockchain to PAUSED state
+    rell.test.tx().op(
+        update_blockchain_state(blockchain_rid2, blockchain_state.PAUSED)
+    ).sign(initial_provider).run();
+    
+
+    // Test get_blockchains query with include_inactive=true
+    val all_blockchains = get_blockchains(include_inactive = true);
+    assert_equals(all_blockchains.size(), 3); // includes directory chain also
+
+    // Test get_blockchains query with include_inactive=false
+    val active_blockchains = get_blockchains(include_inactive = false);
+    assert_equals(active_blockchains.size(), 2);  // includes directory chain also
+    assert_equals(active_blockchains[1].rid, blockchain_rid1);
+    assert_equals(active_blockchains[1].name, "test_blockchain1");
+}
+
+function test_get_blockchain_info() {
+    setup_module();
+    
+    // Create a test blockchain
+    val blockchain_rid = x"0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
+    rell.test.tx().op(
+        create_blockchain(blockchain_rid, "test_blockchain")
+    ).sign(initial_provider).run();
+    
+    // Create a container and add the blockchain to it
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "test_container", voter_sets.system_p)
+    ).sign(initial_provider).run();
+    
+    rell.test.tx().op(
+        add_blockchain_to_container(blockchain_rid, "test_container")
+    ).sign(initial_provider).run();
+    
+    // Test get_blockchain_info query
+    val blockchain_info = get_blockchain_info(blockchain_rid);
+    assert_not_null(blockchain_info);
+    assert_equals(blockchain_info.rid, blockchain_rid);
+    assert_equals(blockchain_info.name, "test_blockchain");
+    assert_equals(blockchain_info.state, blockchain_state.RUNNING);
+    assert_equals(blockchain_info.container, "test_container");
+    assert_equals(blockchain_info.container_state, container_state.RUNNING);
+    assert_equals(blockchain_info.cluster, clusters.system);
+    assert_equals(blockchain_info.system, false);
+    assert_equals(blockchain_info.is_foreign_importing, false);
+    assert_equals(blockchain_info.is_moving, false);
+    assert_equals(blockchain_info.is_unarchiving, false);
+    
+    // Test with non-existent blockchain
+    val non_existent_rid = x"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+    val non_existent_info = get_blockchain_info(non_existent_rid);
+    assert_null(non_existent_info);
+}
+
+function test_get_blockchain_info_list() {
+    setup_module();
+    
+    // Create test blockchains
+    val blockchain_rid1 = x"0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
+    val blockchain_rid2 = x"0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f21";
+    
+    rell.test.tx().op(
+        create_blockchain(blockchain_rid1, "test_blockchain1")
+    ).sign(initial_provider).run();
+    
+    rell.test.tx().op(
+        create_blockchain(blockchain_rid2, "test_blockchain2")
+    ).sign(initial_provider).run();
+    
+    // Create a container and add the blockchains to it
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "test_container", voter_sets.system_p)
+    ).sign(initial_provider).run();
+    
+    rell.test.tx().op(
+        add_blockchain_to_container(blockchain_rid1, "test_container")
+    ).sign(initial_provider).run();
+    
+    rell.test.tx().op(
+        add_blockchain_to_container(blockchain_rid2, "test_container")
+    ).sign(initial_provider).run();
+    
+    // Set one blockchain to PAUSED state
+    rell.test.tx().op(
+        update_blockchain_state(blockchain_rid2, blockchain_state.PAUSED)
+    ).sign(initial_provider).run();
+    
+    // Test get_blockchain_info_list query with include_inactive=true
+    val all_blockchains = get_blockchain_info_list(include_inactive = true);
+    assert_equals(all_blockchains.size(), 3);  // includes directory chain also
+
+    // Test get_blockchain_info_list query with include_inactive=false
+    val active_blockchains = get_blockchain_info_list(include_inactive = false);
+    assert_equals(active_blockchains.size(), 2);  // includes directory chain also
+    assert_equals(active_blockchains[1].rid, blockchain_rid1);
+    assert_equals(active_blockchains[1].name, "test_blockchain1");
+    assert_equals(active_blockchains[1].container, "test_container");
+    assert_equals(active_blockchains[1].container_state, container_state.RUNNING);
+}
