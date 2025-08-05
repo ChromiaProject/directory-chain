@@ -11,6 +11,20 @@ operation create_blockchain(
     create blockchain(rid, name, system, state);
 }
 
+operation update_blockchain_state(
+    rid: byte_array,
+    state: blockchain_state,
+) {
+    update blockchain @ { rid } (.state = state);
+}
+
+operation add_blockchain_to_container(
+    rid: byte_array,
+    container_name: text,
+) {
+    create container_blockchain(container @ { .name == container_name }, blockchain @ { rid });
+}
+
 operation create_subnode_image(name, url: text, digest: text, subnode_image_type, provider_pubkey: pubkey,
         active: boolean, base_compute_requests: integer = 0) {
     create subnode_image(name, url, digest, subnode_image_type, require_provider(provider_pubkey), description = "",
