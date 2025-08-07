@@ -140,15 +140,14 @@ The project uses two facilities for communication between blockchains:
 
 ### Versioning
 
-The project follows semantic versioning with the format `a.b.c`:
-- `a`: Major version (1 for Directory 1)
-- `b`: Minor version / API version (queries and operations)
-- `c`: Patch version / internal changes
-
 When changing API (queries and operations), update the version in `version.rell`. For changes to `nm_api` or `cm_api`, update their respective versions as well.
 
 When changing API (queries and operations) in Economy Chain, update the version in `economy_chain/version.rell`.
 
+The project follows semantic versioning with the format `a.b.c`:
+- `a`: Major version (1 for now)
+- `b`: Minor version / Directory Chain API version, should match `version.rell`
+- `c`: Patch version / API changes in any other chain (e.g., Economy Chain)
 
 ### Dependencies on PMC Tool
 
