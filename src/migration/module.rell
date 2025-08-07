@@ -16,6 +16,7 @@ object migration_completed {
     mutable send_container_blockchain_messages: boolean = false;
     mutable remove_system_voter_set: boolean = false;
     mutable sync_provider_name_and_url_to_ec: boolean = false;
+    mutable pcu_cleanup_excluded_signers_for_removed_chains: boolean = false;
 }
 
 @extend(on_begin_block)
@@ -35,6 +36,12 @@ function begin_block_migration(height: integer) {
     if (not migration_completed.sync_provider_name_and_url_to_ec) {
         if (not try_call(sync_provider_name_and_url_to_ec(*))) {
             log("Failed to sync provider name and url to EC");
+        }
+    }
+
+    if (not migration_completed.pcu_cleanup_excluded_signers_for_removed_chains) {
+        if (not try_call(pcu_cleanup_excluded_signers_for_removed_chains(*))) {
+            log("Failed to cleanup excluded signers for removed chains");
         }
     }
 }
@@ -72,4 +79,12 @@ function sync_provider_name_and_url_to_ec() {
     }
 
     migration_completed.sync_provider_name_and_url_to_ec = true;
+}
+
+function pcu_cleanup_excluded_signers_for_removed_chains() {
+    log("Cleaning up excluded signers for removed chains...");
+
+    delete signer_excluded_from_pending_configuration @* { .blockchain.state == blockchain_state.REMOVED };
+    
+    migration_completed.pcu_cleanup_excluded_signers_for_removed_chains = true;
 }

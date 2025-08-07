@@ -10,6 +10,7 @@ import proposal_container.*;
 import direct_container.*;
 import delay.test.helper_operations.*;
 import ^.utils.*;
+import ^.helper_operations.*;
 
 function setup() {
     setup_module();
@@ -61,12 +62,18 @@ function test_propose_blockchain_action() {
     // 4. Proposing blockchain remove
     val brid = foo_chain.rid;
     alice_proposes_action(foo_chain, blockchain_action.remove);
+    // Suppose blockchain has signers excluded from pending configuration
+    rell.test.tx().op(
+        create_signer_excluded_from_pending_configuration_op(foo_chain, config_hash = x"00", node_pubkey = bob.pubkey)
+    ).run();
+    assert_true(exists(signer_excluded_from_pending_configuration @? { foo_chain }));
     assert_action_proposed(blockchain_action.remove);
     bob_votes();
     assert_not_null( blockchain @? { .rid == brid } );
     assert_equals(foo_chain.state, blockchain_state.REMOVED);
     assert_false(empty(blockchain_configuration @* { foo_chain }));
     assert_false(empty(blockchain_configuration_signers @* { foo_chain }));
+    assert_false(exists(signer_excluded_from_pending_configuration @? { foo_chain }));
 
     // 5. Can't pause/resume/archive/unarchive/remove already removed blockchain
     bob_proposes_failing_action(foo_chain, blockchain_action.pause, "Removed blockchain can't be paused");
