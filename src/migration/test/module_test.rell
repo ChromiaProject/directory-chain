@@ -7,6 +7,7 @@ import common.test.setup.*;
 import roles.test.ops.*;
 import common.test.helper_operations.*;
 import publish_directory_chain.test.helpers.*;
+import housekeeping.test.helper_operations.*;
 
 function test_send_container_blockchain_messages() {
     val BLOCKCHAIN_RID_1 = byte_array.from_hex("F435688B2F74933C71F8AA1952E1CFBCDAA421EF378A441EFF4EC5900896F1FA");
@@ -19,8 +20,8 @@ function test_send_container_blockchain_messages() {
     rell.test.tx().op(
         create_container_from_container_name_op("container1", pubkey1),
         create_container_from_container_name_op("container2", pubkey2),
-        create_blockchain_op(BLOCKCHAIN_RID_1," blockchain1"),
-        create_blockchain_op(BLOCKCHAIN_RID_2," blockchain2"),
+        create_blockchain_op(BLOCKCHAIN_RID_1,"blockchain1"),
+        create_blockchain_op(BLOCKCHAIN_RID_2,"blockchain2"),
     ).run();
 
     val container1 = container @ { "container1" };
@@ -82,4 +83,52 @@ function test_begin_block_migration_remove_system_voter_set() {
     assert_true(empty(voter_set @? { "SYSTEM" }));
     assert_true(empty(voter_set_governance @? { .voter_set.name == "SYSTEM" }));
     assert_true(migration_completed.remove_system_voter_set);
+}
+
+function test_pcu_cleanup_excluded_signers_for_removed_chains() {
+    val BLOCKCHAIN_RID_1 = byte_array.from_hex("1111111111111111111111111111111111111111111111111111111111111111");
+    val BLOCKCHAIN_RID_2 = byte_array.from_hex("2222222222222222222222222222222222222222222222222222222222222222");
+    val pubkey1 = rell.test.pubkeys.alice;
+    val node0 = rell.test.pubkeys.bob;
+    val node1 = rell.test.pubkeys.charlie;
+
+    // Setup environment
+    rell.test.block().run();
+    rell.test.tx().op(
+        create_container_from_container_name_op("container1", pubkey1),
+        set_container_latest_deleted_bc_time_op("container1"),
+        create_blockchain_op(BLOCKCHAIN_RID_1,"blockchain1"),
+        create_blockchain_op(BLOCKCHAIN_RID_2,"blockchain2"),
+    ).run();
+
+    val container1 = container @ { "container1" };
+    val blockchain1 = blockchain @ { BLOCKCHAIN_RID_1};
+    val blockchain2 = blockchain @ { BLOCKCHAIN_RID_2};
+
+    rell.test.tx().op(
+        create_container_blockchain_op(container1, blockchain1),
+        create_container_blockchain_op(container1, blockchain2),
+    ).run();
+    
+    // Setup test case data
+    rell.test.tx().op(
+        set_pcu_cleanup_excluded_signers_for_removed_chains_false(),
+        setup_signer_excluded_from_pending_configuration_op(blockchain1, x"00", node0),
+        setup_signer_excluded_from_pending_configuration_op(blockchain2, x"01", node1),
+        // Remove blockchain1
+        set_blockchain_state_op(blockchain1, blockchain_state.REMOVED),
+    ).nop().run();
+
+    // Verify test case data
+    assert_false(migration_completed.pcu_cleanup_excluded_signers_for_removed_chains);
+    assert_true(exists(signer_excluded_from_pending_configuration @? { .blockchain == blockchain1, .pubkey == node0 }));
+    assert_true(exists(signer_excluded_from_pending_configuration @? { .blockchain == blockchain2, .pubkey == node1 }));
+
+    // Run migration
+    rell.test.block().run();
+
+    // Verify migration result
+    assert_true(migration_completed.pcu_cleanup_excluded_signers_for_removed_chains);
+    assert_false(exists(signer_excluded_from_pending_configuration @? { .blockchain == blockchain1, .pubkey == node0 }));
+    assert_true(exists(signer_excluded_from_pending_configuration @? { .blockchain == blockchain2, .pubkey == node1 }));
 }
