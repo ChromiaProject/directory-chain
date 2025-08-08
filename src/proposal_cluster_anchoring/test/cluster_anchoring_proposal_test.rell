@@ -22,7 +22,7 @@ function test_cluster_anchoring_proposal() {
     // do proposal
     rell.test.tx().op(
         propose_cluster_anchoring_configuration(initial_provider.pub, new_conf.to_gtv().to_bytes())
-    ).sign(initial_provider).run();
+    ).nop().sign(initial_provider).run();
 
     // verify proposal
     val prop = last_proposal();
@@ -30,6 +30,11 @@ function test_cluster_anchoring_proposal() {
     assert_not_null(config_proposal);
     assert_equals(config_proposal.current_conf, original_conf.to_gtv().to_bytes());
     assert_equals(config_proposal.proposed_conf, new_conf.to_gtv().to_bytes());
+
+    // do proposal again
+    rell.test.tx().op(
+        propose_cluster_anchoring_configuration(initial_provider.pub, new_conf.to_gtv().to_bytes())
+    ).nop().sign(initial_provider).run_must_fail("This configuration has already been proposed");
 
     // verify config before
     val config_map_old = map<text,gtv>.from_gtv(gtv.from_bytes(cluster_anchoring_config.raw_config));
