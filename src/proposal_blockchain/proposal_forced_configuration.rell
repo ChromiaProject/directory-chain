@@ -92,9 +92,16 @@ function apply_proposed_forced_configuration(proposal) {
 
     val blockchain = validate_proposed_forced_configuration(pfc.blockchain.rid);
 
-    log("Force_configuration proposal %d for blockchain %s approved, waiting to get additional approval from a node provider"
-        .format(proposal.rowid, blockchain.rid));
-    create proposed_forced_configuration_stage2(blockchain, pfc.height, pfc.config_data, pfc.resume_chain);
+    if (pfc.proposal.voter_set == system_p_voter_set()) {
+        val cluster = container_blockchain @ { blockchain } ( .container ) .cluster;
+        val cluster_nodes = cluster_node @* { cluster } (.node);
+
+        apply_forced_configuration(blockchain, cluster_nodes, pfc.config_data, pfc.height, pfc.resume_chain);
+    } else {
+        log("Force_configuration proposal %d for blockchain %s approved, waiting to get additional approval from a node provider"
+            .format(proposal.rowid, blockchain.rid));
+        create proposed_forced_configuration_stage2(blockchain, pfc.height, pfc.config_data, pfc.resume_chain);
+    }
 }
 
 /**
@@ -119,37 +126,41 @@ operation approve_proposed_forced_configuration(my_pubkey: pubkey, blockchain_ri
 
     validate_proposed_forced_configuration(pfc.blockchain.rid);
 
-    log("Applying forced configuration for blockchain %s".format(blockchain_rid));
-
     val cluster = container_blockchain @ { blockchain } ( .container ) .cluster;
     val cluster_nodes = cluster_node @* { cluster } (.node);
 
     require(exists(cluster_nodes @* { provider }),
         "Transaction must be signed by node provider running this blockchain");
 
+    apply_forced_configuration(blockchain, cluster_nodes, pfc.config_data, pfc.height, pfc.resume_chain);
+
+    delete pfc;
+}
+
+function apply_forced_configuration(blockchain, cluster_nodes: list<node>, config_data: byte_array, height: integer, resume_chain: boolean) {
+    log("Applying forced configuration for blockchain %s".format(blockchain.rid));
+
     val cluster_signers = cluster_nodes @* {} (@sort .pubkey);
     val signers = cluster_signers.to_gtv().to_bytes();
 
-    val config_data = make_config_unique(pfc.config_data);
-    compress_and_store_configuration(blockchain, pfc.height, config_data, true);
+    val unique_config_data = make_config_unique(config_data);
+    compress_and_store_configuration(blockchain, height, unique_config_data, true);
 
-    val blockchain_configuration_signers = blockchain_configuration_signers @? { blockchain, pfc.height};
+    val blockchain_configuration_signers = blockchain_configuration_signers @? { blockchain, height};
     if (blockchain_configuration_signers == null) {
-        create blockchain_configuration_signers(blockchain, pfc.height, signers);
+        create blockchain_configuration_signers(blockchain, height, signers);
     } else {
         blockchain_configuration_signers.signers = signers;
     }
-    create forced_configuration(blockchain, pfc.height, calculate_configuration_hash(config_data, cluster_signers));
+    create forced_configuration(blockchain, height, calculate_configuration_hash(unique_config_data, cluster_signers));
     delete pending_blockchain_configuration @* {blockchain};
     delete signer_excluded_from_pending_configuration @* {blockchain};
 
-    add_dependencies(config_data, blockchain.rid, pfc.height);
+    add_dependencies(unique_config_data, blockchain.rid, height);
 
-    if (pfc.resume_chain) {
+    if (resume_chain) {
         blockchain.state = blockchain_state.RUNNING;
     }
-
-    delete pfc;
 }
 
 function validate_proposed_forced_configuration(blockchain_rid: byte_array): blockchain {

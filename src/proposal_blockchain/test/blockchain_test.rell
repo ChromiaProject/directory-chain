@@ -395,6 +395,22 @@ function test_forced_configuration_resume() {
     forced_configuration(true);
 }
 
+function test_no_approval_required_for_system_chains() {
+    setup_module(system_anchoring_config = ["any": "value".to_gtv()], cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val sac = blockchain @ { .rid == system_anchoring_chain.rid };
+
+    var updated_conf = apply_required_configuration_properties();
+    updated_conf["name"] = "testConf".to_gtv();
+
+    alice_proposes_action(blockchain @ { .rid == system_anchoring_chain.rid }, blockchain_action.pause);
+    force_config(system_anchoring_chain.rid, updated_conf, 10, true).run();
+
+    // Assert config applied immediately without approval
+    val actual_config_bytes = blockchain_configuration @ { sac, 10 } (.data);
+    val actual_config = map<text, gtv>.from_gtv(gtv.from_bytes(actual_config_bytes));
+    assert_equals(actual_config["name"], "testConf".to_gtv());
+}
+
 function forced_configuration(resume_chain: boolean = false) {
     setup();
 
