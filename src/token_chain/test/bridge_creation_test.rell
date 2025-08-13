@@ -99,8 +99,7 @@ function test_bridge_creation_success() {
                 0
             )],
             events = list<eif.dynamic_config.event_def>()
-        )
-    ].to_gtv()
+        )].to_gtv()
     ).to_gtv_pretty()));
 }
 
@@ -295,10 +294,17 @@ function test_bridge_proposal_get_query() {
     // Verify the token bridge proposal query result
     assert_equals(
         get_latest_common_proposal(proposer.id).description, 
-        "Propose token bridge for token %s. See get_token_bridge_proposal(id) for more details.".format(test_token.asset.symbol)
+        "Propose token bridge for token %s. See get_token_bridge_proposal(id) for pending proposals.".format(test_token.asset.symbol)
     );
+
+    // Proposal is not a token bridge proposal
+    val wrong_proposal_id = common_proposal @ {} (.rowid) limit 1;
+    assert_fails("Proposal %d is not a token bridge proposal".format(wrong_proposal_id), get_token_bridge_proposal(wrong_proposal_id, *));
+
+    // Verify pending proposal details
+    val proposal_id = get_latest_common_proposal_id();
     assert_equals(
-        get_token_bridge_proposal(get_latest_common_proposal_id()), 
+        get_token_bridge_proposal(proposal_id), 
         token_bridge_proposal_data(
             asset_id = test_token.asset.id,
             configurations = [bridge_configuration(
@@ -311,4 +317,10 @@ function test_bridge_proposal_get_query() {
             )]
         )
     );
+
+    // Approve proposal
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    // Can't get pending proposal details after approval
+    assert_fails("Proposal %d is APPROVED. Details can only be retrieved for pending proposals".format(proposal_id), get_token_bridge_proposal(proposal_id, *));
 }

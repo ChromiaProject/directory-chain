@@ -40,7 +40,7 @@ operation propose_update_token(asset_id: byte_array, icon_url: text? = null) {
         common_proposal_type.tc_update_token,
         account.id,
         require_governance_voter_set(),
-        description = "Propose updating token with name '%s' and asset id '%s'.".format(asset.name, asset.id)
+        description = "Propose updating token with name '%s' and asset id '%s'. See get_update_token_proposal(id) for pending proposals.".format(asset.name, asset.id)
     );
 
     val update_proposal = create pending_update_token_proposal(
@@ -92,7 +92,7 @@ function cleanup_pending_update_token(proposal: common_proposal) {
 }
 
 /**
- * Retrieves detailed information about an update token proposal by its ID.
+ * Retrieves detailed information about a pending update token proposal by its ID.
  *
  * @param id Proposal ID
  * @return A struct with token attributes to be updated, such as icon_url.
@@ -100,7 +100,9 @@ function cleanup_pending_update_token(proposal: common_proposal) {
  */
 query get_update_token_proposal(id: rowid) {
     val proposal = require_common_proposal(id);
-    val pending_proposal = require(pending_update_token_proposal @? { proposal }, "Proposal %s is not of type update token".format(id));
+    require(proposal.proposal_type == common_proposal_type.tc_update_token, "Proposal %s is not an update token proposal".format(id));
+    require_pending_proposal_for_details(proposal);
 
+    val pending_proposal = require(pending_update_token_proposal @? { proposal }, "Cannot find pending update token proposal %s".format(id));
     return update_token_proposal_data(pending_proposal.icon_url);
 }
