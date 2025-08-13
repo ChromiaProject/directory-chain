@@ -143,3 +143,103 @@ function test_get_blockchain_info_list() {
     assert_equals(active_blockchains[1].container, "test_container");
     assert_equals(active_blockchains[1].container_state, container_state.RUNNING);
 }
+
+function test_get_blockchain_signers_and_replicas_and_api_urls() {
+    setup_module();
+
+    // Create blockchain and container assignment so cluster can be inferred
+    val brid = x"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    rell.test.tx().op(create_blockchain(brid, "bc_signers")).sign(initial_provider).run();
+
+    // Use system container; ensure an extra container exists too
+    rell.test.tx().op(propose_container(initial_provider.pub, clusters.system, "sig_container", voter_sets.system_p)).sign(initial_provider).run();
+    rell.test.tx().op(add_blockchain_to_container(brid, "sig_container")).sign(initial_provider).run();
+
+    // By default setup_module registered one node in the system cluster with an api_url from constants
+    val signers = get_blockchain_signers(brid);
+    assert_equals(signers.size(), 1);
+    // Tuple returned has fields (pubkey, host, port, active, last_updated). We only verify count here.
+
+    // Replicas: add same node as replica and verify query
+    rell.test.tx().op(_create_blockchain_replica_node_op(brid, initial_signer.pub)).run();
+    val replicas = get_blockchain_replicas(brid);
+    assert_equals(replicas.size(), 1);
+
+    // API URLs
+    val api_urls = get_blockchain_api_urls(brid);
+    assert_true(api_urls.contains("http://localhost:7740"));
+}
+
+function test_get_blockchain_cluster() {
+    setup_module();
+
+    val brid = x"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    rell.test.tx().op(create_blockchain(brid, "bc_cluster")).sign(initial_provider).run();
+    rell.test.tx().op(propose_container(initial_provider.pub, clusters.system, "cl_container", voter_sets.system_p)).sign(initial_provider).run();
+    rell.test.tx().op(add_blockchain_to_container(brid, "cl_container")).sign(initial_provider).run();
+
+    val cluster_name = get_blockchain_cluster(brid);
+    assert_equals(cluster_name, clusters.system);
+}
+
+function test_get_blockchain_signer_updates_and_compressed_parts() {
+    setup_module();
+
+    val brid = x"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+    rell.test.tx().op(create_blockchain(brid, "bc_updates")).sign(initial_provider).run();
+
+    // Create signer updates at different heights
+    val signer1 = initial_signer.pub;
+    val signer2 = rell.test.keypairs.bob.pub;
+    rell.test.tx().op(_create_blockchain_configuration_signers_op(brid, 5, [signer1])).run();
+    rell.test.tx().op(_create_blockchain_configuration_signers_op(brid, 10, [signer1, signer2])).run();
+
+    val updates = get_blockchain_signer_updates(brid, 6);
+    assert_equals(updates.size(), 1);
+    assert_equals(updates[0].height, 10);
+    assert_equals(set(updates[0].signers), set([signer1, signer2]));
+
+    // Compressed config parts
+    val h1 = x"01"; val d1 = x"aa";
+    val h2 = x"02"; val d2 = x"bb";
+    rell.test.tx().op(_create_compressed_configuration_part_op(h1, d1)).run();
+    rell.test.tx().op(_create_compressed_configuration_part_op(h2, d2)).run();
+
+    val parts = get_compressed_configuration_parts(set([h1, h2]));
+    assert_equals(set(parts), set([h1, h2]));
+}
+
+function test_importing_moving_unarchiving_info() {
+    setup_module(provider_quota_max_containers = 3);
+
+    val brid = x"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+    rell.test.tx().op(create_blockchain(brid, "bc_state")).sign(initial_provider).run();
+
+    // Prepare containers
+    rell.test.tx().op(propose_container(initial_provider.pub, clusters.system, "src_container", voter_sets.system_p)).sign(initial_provider).run();
+    rell.test.tx().op(propose_container(initial_provider.pub, clusters.system, "dst_container", voter_sets.system_p)).sign(initial_provider).run();
+
+    // Importing foreign blockchain info
+    val chain0_rid = chain_context.blockchain_rid; // any value is fine in test
+    rell.test.tx().op(_create_importing_foreign_blockchain_op(brid, initial_signer.pub, "h", 1, "u", chain0_rid, final_height = 123)).run();
+    val imp = get_importing_foreign_blockchain_info(brid);
+    assert_not_null(imp);
+    assert_equals(imp.blockchain_rid, brid);
+    assert_equals(imp.final_height, 123);
+
+    // Moving info
+    rell.test.tx().op(_create_moving_blockchain_op(brid, "src_container", "dst_container", 50)).run();
+    val moving = get_moving_blockchain_info(brid);
+    assert_not_null(moving);
+    assert_equals(moving.source_container, "src_container");
+    assert_equals(moving.destination_container, "dst_container");
+    assert_equals(moving.final_height, 50);
+
+    // Unarchiving info
+    rell.test.tx().op(_create_unarchiving_blockchain_op(brid, "src_container", "dst_container", 60)).run();
+    val unarch = get_unarchiving_blockchain_info(brid);
+    assert_not_null(unarch);
+    assert_equals(unarch.source_container, "src_container");
+    assert_equals(unarch.destination_container, "dst_container");
+    assert_equals(unarch.final_height, 60);
+}

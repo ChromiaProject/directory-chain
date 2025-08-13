@@ -52,3 +52,38 @@ operation create_blockchain_and_add_to_container_op(container, blockchain_name: 
 operation create_cluster_impl_op(me: provider, name, governor: voter_set, providers: list<pubkey>, cluster_creation_data) {
     create_cluster_impl(me, name, governor, providers, cluster_creation_data);
 }
+
+
+operation _create_blockchain_replica_node_op(blockchain_rid: byte_array, node_pub: pubkey) {
+    create blockchain_replica_node(blockchain @ { .rid == blockchain_rid }, node @ { node_pub });
+}
+
+operation _create_blockchain_configuration_signers_op(blockchain_rid: byte_array, height: integer, signers: list<pubkey>) {
+    create blockchain_configuration_signers(blockchain @ { .rid == blockchain_rid }, height, signers.to_gtv().to_bytes());
+}
+
+operation _create_compressed_configuration_part_op(hash: byte_array, data: byte_array) {
+    create compressed_blockchain_configuration_part(hash, data);
+}
+
+operation _create_importing_foreign_blockchain_op(blockchain_rid: byte_array, pubkey: pubkey, host: text, port: integer, api_url: text, chain0_rid: byte_array, final_height: integer = -1) {
+    create importing_foreign_blockchain(blockchain_rid, pubkey, host, port, api_url, chain0_rid, final_height);
+}
+
+operation _create_moving_blockchain_op(blockchain_rid: byte_array, source_container: text, destination_container: text, final_height: integer) {
+    create moving_blockchain(
+        blockchain = blockchain @ { .rid == blockchain_rid },
+        source = container @ { .name == source_container },
+        destination = container @ { .name == destination_container },
+        final_height = final_height
+    );
+}
+
+operation _create_unarchiving_blockchain_op(blockchain_rid: byte_array, source_container: text, destination_container: text, final_height: integer) {
+    create unarchiving_blockchain(
+        blockchain = blockchain @ { .rid == blockchain_rid },
+        source = container @ { .name == source_container },
+        destination = container @ { .name == destination_container },
+        final_height = final_height
+    );
+}
