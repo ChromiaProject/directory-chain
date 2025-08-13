@@ -145,3 +145,38 @@ function test_delete_token_fail_due_to_bridge() {
 
     assert_not_null(token @? {});
 }
+
+function test_get_delete_token_proposal() {
+    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val token = token @ {};
+    assert_equals(token.owner, proposer);
+    assert_equals(token.asset.name, "Test");
+
+    val propose_op = propose_delete_token(token.asset.id);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op),
+        propose_op
+    ).run();
+
+    // Verify the delete token proposal query result
+    assert_equals(
+        get_latest_common_proposal(proposer.id).description, 
+        "Propose deleting token with name '%s' and asset id '%s'. See get_delete_token_proposal(id) for pending proposals.".format(token.asset.name, token.asset.id)
+    );
+
+    // Verify pending proposal details
+    val proposal_id = get_latest_common_proposal_id();
+    assert_equals(get_delete_token_proposal(proposal_id), delete_token_proposal_data(token.asset.id));
+
+    // Approve proposal
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    // Can't get pending proposal details after approval
+    assert_fails("Proposal %d is APPROVED. Details can only be retrieved for pending proposals".format(proposal_id), get_delete_token_proposal(proposal_id, *));
+
+    // Proposal is not a delete token proposal
+    val wrong_proposal_id = common_proposal @ {} (.rowid) limit 1;
+    assert_fails("Proposal %d is not a delete token proposal".format(wrong_proposal_id), get_delete_token_proposal(wrong_proposal_id, *));
+}

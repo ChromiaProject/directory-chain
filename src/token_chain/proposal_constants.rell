@@ -31,7 +31,7 @@ operation propose_constants(
         common_proposal_type.tc_propose_constants,
         proposed_by,
         require_governance_voter_set(),
-        description = "Propose token chain constants: %s. See get_constants_proposal(id) for more details.".format(
+        description = "Propose token chain constants: %s. See get_constants_proposal(id) for pending proposals.".format(
             [
                 (listing_fee, "listing fee %s".format(listing_fee)), 
                 (bridge_fee, "bridge fee %s".format(bridge_fee))
@@ -81,8 +81,10 @@ function cleanup_pending_tc_constants(proposal: common_proposal) {
  */
 query get_constants_proposal(id: rowid) {
     val proposal = require_common_proposal(id);
-    val proposal_details = require(pending_tc_constants @? { proposal }, "Proposal %s is not of type token chain constants".format(id));
+    require(proposal.proposal_type == common_proposal_type.tc_propose_constants, "Proposal %s is not a token chain constants proposal".format(id));
+    require_pending_proposal_for_details(proposal);
 
+    val proposal_details = require(pending_tc_constants @? { proposal }, "Cannot find pending token chain constants proposal %s".format(id));
     return pending_tc_constants_data(
         listing_fee = get_optional_proposal_int(proposal_details.listing_fee),
         bridge_fee = get_optional_proposal_int(proposal_details.bridge_fee),

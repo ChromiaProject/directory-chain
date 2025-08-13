@@ -116,7 +116,7 @@ operation propose_token_bridge(asset_id: byte_array, bridge_configurations: list
         common_proposal_type.tc_propose_token_bridge, 
         account.id,
         require_governance_voter_set(),
-        description = "Propose token bridge for token %s. See get_token_bridge_proposal(id) for more details.".format(token.asset.symbol)
+        description = "Propose token bridge for token %s. See get_token_bridge_proposal(id) for pending proposals.".format(token.asset.symbol)
     );
 
     val bridge_proposal = create pending_bridge_proposal(proposal, token, fee);
@@ -161,7 +161,7 @@ struct token_bridge_proposal_data {
 }
 
 /**
- * Retrieves detailed information about a token bridge proposal by its ID.
+ * Retrieves detailed information about a pending token bridge proposal by its ID.
  * 
  * @param id Proposal ID
  * @return Information about a specific token bridge proposal including the asset ID and bridge configurations
@@ -169,8 +169,10 @@ struct token_bridge_proposal_data {
  */
 query get_token_bridge_proposal(id: rowid) {
     val proposal = require_common_proposal(id);
-    val pending_bridge_proposal = require(pending_bridge_proposal @? { proposal }, "Proposal %s is not of type token bridge".format(id));
+    require(proposal.proposal_type == common_proposal_type.tc_propose_token_bridge, "Proposal %s is not a token bridge proposal".format(id));
+    require_pending_proposal_for_details(proposal);
 
+    val pending_bridge_proposal = require(pending_bridge_proposal @? { proposal }, "Cannot find pending token bridge proposal %s".format(id));
     return token_bridge_proposal_data(
         asset_id = pending_bridge_proposal.token.asset.id,
         configurations = pending_bridge_proposal_configuration @* { pending_bridge_proposal } (bridge_configuration(

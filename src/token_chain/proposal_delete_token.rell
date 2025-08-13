@@ -37,7 +37,7 @@ operation propose_delete_token(asset_id: byte_array) {
         common_proposal_type.tc_delete_token,
         account.id,
         require_governance_voter_set(),
-        description = "Propose deleting token with name '%s' and asset id '%s'.".format(asset.name, asset.id)
+        description = "Propose deleting token with name '%s' and asset id '%s'. See get_delete_token_proposal(id) for pending proposals.".format(asset.name, asset.id)
     );
 
     val pending_proposal = create pending_delete_token_proposal(
@@ -101,7 +101,7 @@ function cleanup_pending_delete_token(proposal: common_proposal) {
 }
 
 /**
- * Retrieves detailed information about a delete token proposal by its ID.
+ * Retrieves detailed information about a pending delete token proposal by its ID.
  *
  * @param id Proposal ID
  * @return A struct with token name of the specific delete token proposal including name.
@@ -109,7 +109,9 @@ function cleanup_pending_delete_token(proposal: common_proposal) {
  */
 query get_delete_token_proposal(id: rowid) {
     val proposal = require_common_proposal(id);
-    val pending_proposal = require(pending_delete_token_proposal @? { proposal }, "Proposal %s is not of type delete token".format(id));
+    require(proposal.proposal_type == common_proposal_type.tc_delete_token, "Proposal %s is not a delete token proposal".format(id));
+    require_pending_proposal_for_details(proposal);
 
+    val pending_proposal = require(pending_delete_token_proposal @? { proposal }, "Cannot find pending delete token proposal %s".format(id));
     return delete_token_proposal_data(pending_proposal.token.asset.id);
 }

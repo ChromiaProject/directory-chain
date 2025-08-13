@@ -69,7 +69,7 @@ operation propose_token(
         common_proposal_type.tc_propose_token, 
         account.id,
         require_governance_voter_set(),
-        description = "Propose token with name '%s', symbol '%s', and decimals %s. See get_token_proposal(id) for more details.".format(name, symbol, decimals)
+        description = "Propose token with name '%s', symbol '%s', and decimals %s. See get_token_proposal(id) for pending proposals.".format(name, symbol, decimals)
     );
 
     val pending_token_proposal = create pending_token_proposal(
@@ -202,7 +202,7 @@ struct token_proposal_data {
 }
 
 /**
- * Retrieves detailed information about a token proposal by its ID.
+ * Retrieves detailed information about a pending token proposal by its ID.
  * 
  * @param id Proposal ID
  * @return Information about a specific token proposal including name, symbol, decimals, icon, 
@@ -211,8 +211,10 @@ struct token_proposal_data {
  */
 query get_token_proposal(id: rowid) {
     val proposal = require_common_proposal(id);
-    val pending_token_proposal = require(pending_token_proposal @? { proposal }, "Proposal %s is not of type token".format(id));
+    require(proposal.proposal_type == common_proposal_type.tc_propose_token, "Proposal %s is not a token proposal".format(id));
+    require_pending_proposal_for_details(proposal);
 
+    val pending_token_proposal = require(pending_token_proposal @? { proposal }, "Cannot find pending token proposal %s".format(id));
     val minting_policies = list<minting_policy>();
     for (minting_policy in pending_token_proposal_minting_policy @* { pending_token_proposal }) {
         minting_policies.add(

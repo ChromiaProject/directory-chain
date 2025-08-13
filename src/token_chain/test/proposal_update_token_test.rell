@@ -13,8 +13,7 @@ namespace ft4 {
 function test_update_token_success() {
     val new_icon_url = "https://best.icon";
 
-    setup(x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6",
-        token_chain_constants.listing_fee);
+    val proposer = setup(x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6", token_chain_constants.listing_fee);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
     do_create_account(rell.test.keypairs.charlie, x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6", 1);
 
@@ -44,35 +43,45 @@ function test_update_token_success() {
 
     // Update with valid icon url
     propose_op = propose_update_token(token.asset.id, new_icon_url);
-        rell.test.tx().op(
-            ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op),
-            propose_op
-        ).run();
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op),
+        propose_op
+    ).run();
 
-    val proposal_query = get_update_token_proposal(get_latest_common_proposal_id());
-    assert_equals(proposal_query.icon_url, new_icon_url);
-
+    // Verify pending proposal details
+    assert_equals(
+        get_latest_common_proposal(proposer.id).description, 
+        "Propose updating token with name '%s' and asset id '%s'. See get_update_token_proposal(id) for pending proposals.".format(token.asset.name, token.asset.id)
+    );
+    val proposal_id = get_latest_common_proposal_id();
+    val proposal_query = get_update_token_proposal(proposal_id);
+    assert_equals(proposal_query, update_token_proposal_data(new_icon_url));
+    
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
-
     assert_equals(token.asset.icon_url, new_icon_url);
-}
 
+    // Can't get pending proposal details after approval
+    assert_fails("Proposal %d is APPROVED. Details can only be retrieved for pending proposals".format(proposal_id), get_update_token_proposal(proposal_id, *));
+
+    // Proposal is not a update token proposal
+    val wrong_proposal_id = common_proposal @ {} (.rowid) limit 1;
+    assert_fails("Proposal %d is not an update token proposal".format(wrong_proposal_id), get_update_token_proposal(wrong_proposal_id, *));
+}
 
 function test_revoke_update_token_success() {
     val new_icon_url = "https://best.icon";
 
-    setup(x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6",
-        token_chain_constants.listing_fee);
+    setup(x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6", token_chain_constants.listing_fee);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
     do_create_account(rell.test.keypairs.charlie, x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6", 1);
 
     val token = token @ {};
 
     val propose_op = propose_update_token(token.asset.id, new_icon_url);
-        rell.test.tx().op(
-            ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op),
-            propose_op
-        ).run();
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op),
+        propose_op
+    ).run();
 
     // Fail to revoke due to not owner
     var revoke_op = revoke_update_token_proposal(get_latest_common_proposal_id());
@@ -83,10 +92,10 @@ function test_revoke_update_token_success() {
 
     // Owner can revoke
     revoke_op = revoke_update_token_proposal(get_latest_common_proposal_id());
-        rell.test.tx().op(
-            ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, revoke_op),
-            revoke_op
-        ).run();
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, revoke_op),
+        revoke_op
+    ).run();
 
     assert_true(exists(common_proposal @? { get_latest_common_proposal_id(), common_proposal_state.REVOKED }));
     assert_null(pending_update_token_proposal @? { .proposal.rowid == get_latest_common_proposal_id() });

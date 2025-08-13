@@ -59,7 +59,7 @@ operation propose_minting_policy(
         common_proposal_type.tc_propose_minting_policy, 
         account.id,
         require_governance_voter_set(),
-        description = "Propose minting policy for token %s. See get_minting_policy_proposal(id) for more details.".format(token.asset.symbol)
+        description = "Propose minting policy for token %s. See get_minting_policy_proposal(id) for pending proposals.".format(token.asset.symbol)
     );
 
     create pending_minting_policy_proposal(
@@ -119,7 +119,7 @@ function cleanup_pending_minting_policy_create(proposal: common_proposal) {
 }
 
 /**
- * Retrieves detailed information about a token minting policy proposal by its ID.
+ * Retrieves detailed information about a pending token minting policy proposal by its ID.
  * 
  * @param id Proposal ID
  * @return Information about a specific token minting policy proposal including minters, max supply, minting interval, minting amount, and accumulating amount
@@ -127,8 +127,10 @@ function cleanup_pending_minting_policy_create(proposal: common_proposal) {
  */
 query get_minting_policy_proposal(id: rowid): minting_policy {
     val proposal = require_common_proposal(id);
-    val pmp = require(pending_minting_policy_proposal @? { proposal }, "Proposal %s is not of type minting policy".format(id));
+    require(proposal.proposal_type == common_proposal_type.tc_propose_minting_policy, "Proposal %s is not a minting policy proposal".format(id));
+    require_pending_proposal_for_details(proposal);
 
+    val pmp = require(pending_minting_policy_proposal @? { proposal }, "Cannot find pending minting policy proposal %s".format(id));
     return minting_policy(
         minters = pmp.minters.split(",") @ {} ( @set byte_array.from_hex($) ),
         max_supply = pmp.max_supply,

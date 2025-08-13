@@ -212,6 +212,7 @@ function test_apply_token_create_validation() {
 
 function test_get_token_proposal() {
 
+    maybe_init_token_chain();
     val minting_policy_account1 = do_create_account(rell.test.keypairs.dave, chain_context.args.auth_privkey, token_chain_constants.listing_fee);
     val minting_policy_account2 = do_create_account(rell.test.keypairs.eve, chain_context.args.auth_privkey, token_chain_constants.listing_fee);
     val minting_policy_account3 = do_create_account(rell.test.keypairs.frank, chain_context.args.auth_privkey, token_chain_constants.listing_fee);
@@ -242,9 +243,12 @@ function test_get_token_proposal() {
     // Verify the token proposal query result
     assert_equals(
         get_latest_common_proposal(bob.id).description, 
-        "Propose token with name 'Test', symbol 'TST', and decimals 6. See get_token_proposal(id) for more details."
+        "Propose token with name 'Test', symbol 'TST', and decimals 6. See get_token_proposal(id) for pending proposals."
     );
-    assert_equals(get_token_proposal(get_latest_common_proposal_id()),
+
+    // Verify pending proposal details
+    val proposal_id = get_latest_common_proposal_id();
+    assert_equals(get_token_proposal(proposal_id),
         token_proposal_data(
             name = "Test",
             symbol = "TST",
@@ -254,4 +258,17 @@ function test_get_token_proposal() {
             account_creation_brids = [account_creation_brid1]
         )
     );
+
+    // Approve proposal
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    // Can't get pending proposal details after approval
+    assert_fails("Proposal %d is APPROVED. Details can only be retrieved for pending proposals".format(proposal_id), get_token_proposal(proposal_id, *));
+
+    // Proposal is not a token proposal
+    rell.test.tx().op(
+        propose_update_voter_set(rell.test.keypairs.alice.pub, token_chain_governance_voter_set, 1, [], [])
+    ).sign(rell.test.keypairs.alice).run();
+    val wrong_proposal_id = get_latest_common_proposal_id();
+    assert_fails("Proposal %d is not a token proposal".format(wrong_proposal_id), get_token_proposal(wrong_proposal_id, *));
 }

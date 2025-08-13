@@ -335,9 +335,11 @@ function test_get_minting_policy_proposal() {
     // Verify the minting policy proposal query result
     assert_equals(
         get_latest_common_proposal(bob.id).description, 
-        "Propose minting policy for token %s. See get_minting_policy_proposal(id) for more details.".format(token.asset.symbol)
+        "Propose minting policy for token %s. See get_minting_policy_proposal(id) for pending proposals.".format(token.asset.symbol)
     );
-    val proposal = get_minting_policy_proposal(get_latest_common_proposal_id());
+
+    val proposal_id = get_latest_common_proposal_id();
+    val proposal = get_minting_policy_proposal(proposal_id);
     assert_equals(proposal, minting_policy(
         minters = set([bob.id, dave.id]),
         max_supply = 10000L,
@@ -345,4 +347,14 @@ function test_get_minting_policy_proposal() {
         minting_amount = 1000L,
         accumulating_amount = false
     ));
+
+    // Approve proposal
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    // Can't get pending proposal details after approval
+    assert_fails("Proposal %d is APPROVED. Details can only be retrieved for pending proposals".format(proposal_id), get_minting_policy_proposal(proposal_id, *));
+
+    // Proposal is not a minting policy proposal
+    val wrong_proposal_id = common_proposal @ {} (.rowid) limit 1;
+    assert_fails("Proposal %d is not a minting policy proposal".format(wrong_proposal_id), get_minting_policy_proposal(wrong_proposal_id, *));
 }
