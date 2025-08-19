@@ -1,0 +1,303 @@
+@test module;
+
+import ^^.*;
+import ^^^.*;
+import ^^^.operations.*;
+import ^^^.test.ops.*;
+import ^^^.test.setup.*;
+import ^^^.test.util.*;
+import model.*;
+import proposal_voter_set.*;
+
+val test_voter_set_name = "TEST_VOTER_SET";
+val test_voter_set_name_2 = "TEST_VOTER_SET_2";
+
+// Query wrapper functions for assert_fails()
+function _query_in_fun__get_voter_set_info(name: text) {
+    get_voter_set_info(name);
+}
+
+function _query_in_fun__get_voter_set(name: text) {
+    get_voter_set(name);
+}
+
+function _query_in_fun__get_voter_set_governor(name: text) {
+    get_voter_set_governor(name);
+}
+
+function _query_in_fun__get_voter_set_members(name: text) {
+    get_voter_set_members(name);
+}
+
+function test_list_voter_sets_empty() {
+    setup_module();
+    
+    val result = list_voter_sets();
+    assert_true(result.size() >= 1);
+    
+    var system_p_found = false;
+    for (vs in result) {
+        if (vs.name == voter_sets.system_p) {
+            system_p_found = true;
+        }
+    }
+    assert_true(system_p_found);
+}
+
+function test_list_voter_sets_with_custom_sets() {
+    setup_module();
+    
+    // Create a test voter set
+    rell.test.tx().op(
+        create_voter_set(initial_provider().pubkey, test_voter_set_name, 2, null, voter_sets.system_p)
+    ).sign(rell.test.keypairs.alice).run();
+    
+    val result = list_voter_sets();
+    assert_true(result.size() >= 2);
+    
+    var test_set_found = false;
+    for (vs in result) {
+        if (vs.name == test_voter_set_name) {
+            test_set_found = true;
+        }
+    }
+    assert_true(test_set_found);
+}
+
+function test_get_voter_set_info_system_p() {
+    setup_module();
+    
+    val result = get_voter_set_info(voter_sets.system_p);
+    
+    assert_equals(result.name, voter_sets.system_p);
+    assert_equals(result.threshold, 0); // Super-majority threshold
+    assert_equals(result.governor, voter_sets.system_p); // Self-governed
+    assert_true(result.members.size() >= 1); // Should have initial provider
+    assert_true(result.members.contains(initial_provider().pubkey));
+}
+
+function test_get_voter_set_info_custom_set() {
+    setup_module();
+    
+    // Create a test voter set with specific threshold
+    val threshold = 3;
+    rell.test.tx().op(
+        create_voter_set(initial_provider().pubkey, test_voter_set_name, threshold, null, voter_sets.system_p)
+    ).sign(rell.test.keypairs.alice).run();
+    
+    val result = get_voter_set_info(test_voter_set_name);
+    
+    assert_equals(result.name, test_voter_set_name);
+    assert_equals(result.threshold, threshold);
+    assert_equals(result.governor, voter_sets.system_p);
+    assert_equals(result.members.size(), 0); // No members added yet
+}
+
+function test_get_voter_set_info_with_members() {
+    setup_module();
+    
+    // Create additional providers
+    rell.test.tx().op(create_test_provider("bob", rell.test.pubkeys.bob, provider_tier.DAPP_PROVIDER)).run();
+    rell.test.tx().op(create_test_provider("charlie", rell.test.pubkeys.charlie, provider_tier.DAPP_PROVIDER)).run();
+    
+    val add_providers = [rell.test.pubkeys.bob, rell.test.pubkeys.charlie];
+    
+    // Create voter set and add members
+    rell.test.tx().op(
+        create_voter_set(initial_provider().pubkey, test_voter_set_name, 2, add_providers, voter_sets.system_p)
+    ).sign(rell.test.keypairs.alice).run();
+    
+    val result = get_voter_set_info(test_voter_set_name);
+    
+    assert_equals(result.name, test_voter_set_name);
+    assert_equals(result.threshold, 2);
+    assert_equals(result.governor, voter_sets.system_p);
+    assert_equals(result.members.size(), 2);
+    assert_true(result.members.contains(rell.test.pubkeys.bob));
+    assert_true(result.members.contains(rell.test.pubkeys.charlie));
+}
+
+function test_get_voter_set_info_nonexistent() {
+    setup_module();
+    
+    assert_fails("Voter set NONEXISTENT not found", _query_in_fun__get_voter_set_info("NONEXISTENT", *));
+}
+
+function test_get_voter_set_success() {
+    setup_module();
+    
+    val result = get_voter_set(voter_sets.system_p);
+    
+    assert_equals(result.name, voter_sets.system_p);
+    assert_equals(result.threshold, 0);
+}
+
+function test_get_voter_set_nonexistent() {
+    setup_module();
+    
+    assert_fails("", _query_in_fun__get_voter_set("NONEXISTENT", *));
+}
+
+function test_get_voter_set_governor_system_p() {
+    setup_module();
+    
+    val result = get_voter_set_governor(voter_sets.system_p);
+    
+    assert_equals(result, voter_sets.system_p);
+}
+
+function test_get_voter_set_governor_custom_set() {
+    setup_module();
+    
+    // Create a test voter set with system_p as governor
+    rell.test.tx().op(
+        create_voter_set(initial_provider().pubkey, test_voter_set_name, 1, null, voter_sets.system_p)
+    ).sign(rell.test.keypairs.alice).run();
+    
+    val result = get_voter_set_governor(test_voter_set_name);
+    
+    assert_equals(result, voter_sets.system_p);
+}
+
+function test_get_voter_set_governor_nonexistent() {
+    setup_module();
+    
+    assert_fails("", _query_in_fun__get_voter_set_governor("NONEXISTENT", *));
+}
+
+function test_get_voter_set_members_system_p() {
+    setup_module();
+    
+    val result = get_voter_set_members(voter_sets.system_p);
+    
+    assert_true(result.size() >= 1);
+    assert_true(result.contains(initial_provider().pubkey));
+}
+
+function test_get_voter_set_members_empty_set() {
+    setup_module();
+    
+    // Create empty voter set
+    rell.test.tx().op(
+        create_voter_set(initial_provider().pubkey, test_voter_set_name, 1, null, voter_sets.system_p)
+    ).sign(rell.test.keypairs.alice).run();
+    
+    val result = get_voter_set_members(test_voter_set_name);
+    
+    assert_equals(result.size(), 0);
+}
+
+function test_get_voter_set_members_with_members() {
+    setup_module();
+    
+    // Create additional providers
+    rell.test.tx().op(create_test_provider("bob", rell.test.pubkeys.bob, provider_tier.DAPP_PROVIDER)).run();
+    rell.test.tx().op(create_test_provider("charlie", rell.test.pubkeys.charlie, provider_tier.DAPP_PROVIDER)).run();
+    
+    val add_providers = [rell.test.pubkeys.bob, rell.test.pubkeys.charlie];
+    
+    // Create voter set with members
+    rell.test.tx().op(
+        create_voter_set(initial_provider().pubkey, test_voter_set_name, 2, add_providers, voter_sets.system_p)
+    ).sign(rell.test.keypairs.alice).run();
+    
+    val result = get_voter_set_members(test_voter_set_name);
+    
+    assert_equals(result.size(), 2);
+    assert_true(result.contains(rell.test.pubkeys.bob));
+    assert_true(result.contains(rell.test.pubkeys.charlie));
+}
+
+function test_get_voter_set_members_nonexistent() {
+    setup_module();
+    
+    assert_fails("", _query_in_fun__get_voter_set_members("NONEXISTENT", *));
+}
+
+function test_get_voter_sets() {
+    setup_module();
+    
+    // Create additional voter sets
+    rell.test.tx().op(
+        create_voter_set(initial_provider().pubkey, test_voter_set_name, 1, null, voter_sets.system_p)
+    ).sign(rell.test.keypairs.alice).run();
+    
+    rell.test.tx().op(
+        create_voter_set(initial_provider().pubkey, test_voter_set_name_2, 2, null, voter_sets.system_p)
+    ).sign(rell.test.keypairs.alice).run();
+    
+    val result = get_voter_sets();
+    
+    assert_true(result.size() >= 3); // system_p + 2 test sets
+    
+    // Check all expected sets are present
+    var system_p_found = false;
+    var test_set_1_found = false;
+    var test_set_2_found = false;
+    
+    for (vs in result) {
+        if (vs.name == voter_sets.system_p) {
+            assert_equals(vs.name, voter_sets.system_p);
+            assert_equals(vs.threshold, 0);
+            assert_equals(vs.gorvernor, voter_sets.system_p); // Note: typo in original query
+            system_p_found = true;
+        } else if (vs.name == test_voter_set_name) {
+            assert_equals(vs.name, test_voter_set_name);
+            assert_equals(vs.threshold, 1);
+            assert_equals(vs.gorvernor, voter_sets.system_p);
+            test_set_1_found = true;
+        } else if (vs.name == test_voter_set_name_2) {
+            assert_equals(vs.name, test_voter_set_name_2);
+            assert_equals(vs.threshold, 2);
+            assert_equals(vs.gorvernor, voter_sets.system_p);
+            test_set_2_found = true;
+        }
+    }
+    
+    assert_true(system_p_found);
+    assert_true(test_set_1_found);
+    assert_true(test_set_2_found);
+}
+
+function test_get_voter_sets_empty() {
+    setup_module();
+    
+    val result = get_voter_sets();
+    
+    assert_true(result.size() >= 1);
+    
+    var system_p_found = false;
+    for (vs in result) {
+        if (vs.name == voter_sets.system_p) {
+            system_p_found = true;
+        }
+    }
+    assert_true(system_p_found);
+}
+
+function test_threshold_values() {
+    setup_module();
+    
+    // Test different threshold values
+    val super_majority_threshold = 0;
+    val simple_majority_threshold = -1;
+    val specific_threshold = 5;
+    
+    // Create voter sets with different thresholds
+    rell.test.tx().op(
+        create_voter_set(initial_provider().pubkey, "SUPER_MAJORITY", super_majority_threshold, null, voter_sets.system_p)
+    ).sign(rell.test.keypairs.alice).run();
+    
+    rell.test.tx().op(
+        create_voter_set(initial_provider().pubkey, "SIMPLE_MAJORITY", simple_majority_threshold, null, voter_sets.system_p)
+    ).sign(rell.test.keypairs.alice).run();
+    
+    rell.test.tx().op(
+        create_voter_set(initial_provider().pubkey, "SPECIFIC_COUNT", specific_threshold, null, voter_sets.system_p)
+    ).sign(rell.test.keypairs.alice).run();
+    
+    // Verify thresholds are correctly stored and returned
+    assert_equals(get_voter_set_info("SUPER_MAJORITY").threshold, super_majority_threshold);
+    assert_equals(get_voter_set_info("SIMPLE_MAJORITY").threshold, simple_majority_threshold);
+    assert_equals(get_voter_set_info("SPECIFIC_COUNT").threshold, specific_threshold);
+}
