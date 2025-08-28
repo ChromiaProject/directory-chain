@@ -15,6 +15,7 @@ function create_cluster_impl(me: provider, name, governor: voter_set, providers:
         container_unit_io_write = cluster_creation_data.container_unit_io_write ?: standard_container_unit.io_write,
         container_unit_storage = cluster_creation_data.container_unit_storage ?: standard_container_unit.storage,
         system_container_units = cluster_creation_data.system_container_units ?: system_container_defaults.container_units,
+        max_nodes = cluster_creation_data.max_nodes,
     );
 
     require(c.system_container_units >= 0, "System container units must not be negative");
@@ -151,6 +152,8 @@ function add_node_to_cluster_internal(provider, node, cluster) {
     }
 
     if (exists(cluster_provider @* { cluster, provider })) {
+        require(cluster_node @ { cluster } (@sum 1) < cluster.max_nodes,
+            "Cluster %s is full, no more than %d nodes allowed".format(cluster.name, cluster.max_nodes));
         val provider_cluster_nodes = cluster_node @* { cluster, .node in node @* { provider } };
         require(empty(provider_cluster_nodes), "A provider can only provide one node to each cluster");
         _remove_replica_node_from_cluster_internal(cluster, node);

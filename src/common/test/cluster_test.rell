@@ -264,3 +264,44 @@ function test_propose_cluster_limits__units_limits() {
         propose_cluster_limits(rell.test.pubkeys.alice, "cluster1", cluster_units = 1), // decrease from 2 must fail
     ).sign(rell.test.keypairs.alice).nop().run_must_fail("Minimum cluster_units is 2");
 }
+
+function test_max_nodes_per_cluster() {
+    setup_module();
+
+    rell.test.tx().op(
+        create_cluster_with_cluster_data(initial_provider.pub, "cluster1", voter_sets.system_p, list(), cluster_creation_data(max_nodes = 2))
+    ).sign(initial_provider).run();
+    val cluster1 = cluster @ { .name == "cluster1" };
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.bob, active = true),
+        propose_cluster_provider(initial_provider.pub, "cluster1", rell.test.pubkeys.bob, add = true)
+    ).sign(initial_provider).run();
+    rell.test.tx().op(
+        register_node_with_node_data(rell.test.pubkeys.bob, register_node_data(rell.test.pubkeys.eve, host = "node1", port = 7777, api_url = "http://host/api_url")),
+        add_node_to_cluster(rell.test.pubkeys.bob, rell.test.pubkeys.eve, "cluster1")
+    ).sign(rell.test.keypairs.bob).run();
+    assert_equals((cluster_node @* { cluster1 } .node).size(), 1);
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.charlie, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.charlie, active = true),
+        propose_cluster_provider(initial_provider.pub, "cluster1", rell.test.pubkeys.charlie, add = true)
+    ).sign(initial_provider).run();
+    rell.test.tx().op(
+        register_node_with_node_data(rell.test.pubkeys.charlie, register_node_data(rell.test.pubkeys.frank, host = "node2", port = 7777, api_url = "http://host/api_url")),
+        add_node_to_cluster(rell.test.pubkeys.charlie, rell.test.pubkeys.frank, "cluster1")
+    ).sign(rell.test.keypairs.charlie).run();
+    assert_equals((cluster_node @* { cluster1 } .node).size(), 2);
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.dave, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, rell.test.pubkeys.dave, active = true),
+        propose_cluster_provider(initial_provider.pub, "cluster1", rell.test.pubkeys.dave, add = true)
+    ).sign(initial_provider).run();
+    rell.test.tx().op(
+        register_node_with_node_data(rell.test.pubkeys.dave, register_node_data(rell.test.pubkeys.grace, host = "node3", port = 7777, api_url = "http://host/api_url")),
+        add_node_to_cluster(rell.test.pubkeys.dave, rell.test.pubkeys.grace, "cluster1")
+    ).sign(rell.test.keypairs.dave).run_must_fail("Cluster cluster1 is full, no more than 2 nodes allowed");
+}
