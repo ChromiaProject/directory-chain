@@ -51,12 +51,9 @@ function dc_priority_check(
         val op_index = integer.from_gtv(op.args[2]);
         require_provider_iccf_auth_from_operations(tx_body.operations, tx_to_prove, op_index, op.name, 0, provider, should_update_state = false);
     } else {
-        require(empty(provider_auth_blockchain @* { provider }),
-            "Blockchain authentication is enabled for provider %s".format(provider.pubkey));
-        require(provider_is_signer_of_signers(provider.pubkey, tx_body.signers @* {} (byte_array.from_gtv($))),
-            "Operation must be signed by provider key(s)");
+        val tx_signers = tx_body.signers @* {} (byte_array.from_gtv($));
+        require_provider_auth(provider, tx_signers);
     }
-    require(provider.active, "Provider is not enabled");
     val (current_points, max_points, _) = current_provider_rate_limit(provider, current_timestamp);
 
     val priority = current_points.to_decimal() / max_points;
