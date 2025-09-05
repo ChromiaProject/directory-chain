@@ -51,15 +51,15 @@ operation propose_forced_configuration(my_pubkey: pubkey, blockchain_rid: byte_a
  * @param op_index     index of the relevant operation in tx_to_prove
  */
 operation propose_forced_configuration_iccf(my_pubkey: pubkey, tx_to_prove: gtx_transaction, op_index: integer) {
-    val provider = require_provider(my_pubkey);
-    val args = require_provider_with_iccf_proof_and_rate_limit(tx_to_prove, op_index,
-        op_context.get_current_operation().name, 3, provider);
+    val me = require_provider(my_pubkey);
+    val args = require_provider_iccf_auth_with_rate_limit(tx_to_prove, op_index,
+        op_context.get_current_operation().name, 3, me);
     val blockchain_rid = byte_array.from_gtv(args[0]);
     val config_data = byte_array.from_gtv(args[1]);
     val height = integer.from_gtv(args[2]);
     val resume_chain = if (args.size() > 3) boolean.from_gtv(args[3]) else false;
 
-    val proposal = create_forced_configuration_proposal(provider, blockchain_rid, config_data, height, resume_chain, iccf_description);
+    val proposal = create_forced_configuration_proposal(me, blockchain_rid, config_data, height, resume_chain, iccf_description);
     apply_iccf_proposal(proposal);
 }
 

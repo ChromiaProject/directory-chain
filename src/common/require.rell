@@ -99,7 +99,7 @@ function require_provider_auth_with_rate_limit(
     provider_key_roles: list<provider_key_role> = [provider_key_role.main],
     cost: integer = 1
 ) {
-    require_provider_auth(provider, provider_key_roles);
+    require_provider_auth(provider, provider_key_roles = provider_key_roles);
     provider_rate_limit(provider, cost);
     return provider;
 }
@@ -111,13 +111,13 @@ function require_provider_auth_with_rate_limit(
  * @param op_index     index of the relevant operation in tx_to_prove
  * @param op_name      expected operation name
  * @param op_arg_count expected operation argument count
- * @param provider     the provider that must sign this transaction
+ * @param provider     the provider
+ * @param cost         the number of points this operation costs.
  */
-function require_provider_with_iccf_proof_and_rate_limit(tx_to_prove: gtx_transaction, op_index: integer,
-        op_name: text, op_arg_count: integer, provider): list<gtv> {
+function require_provider_iccf_auth_with_rate_limit(tx_to_prove: gtx_transaction, op_index: integer,
+        op_name: text, op_arg_count: integer, provider, cost: integer = 1): list<gtv> {
     val args = require_provider_iccf_auth(tx_to_prove, op_index, op_name, op_arg_count, provider);
-    require(provider.active, "Provider is not enabled");
-    provider_rate_limit(provider);
+    provider_rate_limit(provider, cost);
     return args;
 }
 
@@ -128,7 +128,7 @@ function require_provider_with_iccf_proof_and_rate_limit(tx_to_prove: gtx_transa
  * @param op_index     index of the relevant operation in tx_to_prove
  * @param op_name      expected operation name
  * @param op_arg_count expected operation argument count
- * @param provider     the provider that must sign this transaction.
+ * @param provider     the provider
  */
 function require_provider_iccf_auth(tx_to_prove: gtx_transaction, op_index: integer,
         op_name: text, op_arg_count: integer, provider): list<gtv> =
@@ -149,7 +149,7 @@ function require_provider_iccf_auth(tx_to_prove: gtx_transaction, op_index: inte
  * @param op_index     index of the relevant operation in tx_to_prove
  * @param op_name      expected operation name
  * @param op_arg_count expected operation argument count
- * @param provider     the provider that must sign this transaction.
+ * @param provider     the provider
  * @param should_update_state if state should be updated (set to false if this is done without op_context, e.g. in a query)
  */
 function require_provider_iccf_auth_from_operations(
@@ -187,18 +187,21 @@ function require_provider_iccf_auth_from_operations(
     val op = tx_to_prove.body.operations[op_index];
     require(op.name == op_name, "Wrong operation name <%s>, expected <%s>".format(op.name, op_name));
     require(op.args.size() >= op_arg_count, "Wrong number of operation arguments <%s>, expected <%s>".format(op.args.size(), op_arg_count));
+    require(provider.active, "Provider is not enabled");
     return op.args;
 }
 
 /**
  * Requires given pubkey is an active provider which is signing the transaction.
  *
- * @param provider The provider key that must sign this transaction.
+ * @param provider The provider that must sign this transaction.
+ * @param tx_signers The signers of the transaction
  * @param provider_key_roles The type of auth keys to use for this authentication. Main is default.
  */
-function require_provider_auth(provider, provider_key_roles: list<provider_key_role> = [provider_key_role.main]) {
+function require_provider_auth(provider, tx_signers: list<pubkey> = op_context.get_signers(), provider_key_roles: list<provider_key_role> = [provider_key_role.main]) {
     require(empty(provider_auth_blockchain @* { provider }), "Blockchain authentication is enabled for provider %s".format(provider.pubkey));
-    require(provider_is_signer(provider.pubkey, provider_key_roles), "Operation must be signed by provider key(s)");
+    require(provider_is_signer_of_signers(provider.pubkey, tx_signers, provider_key_roles),
+        "Operation must be signed by provider key(s)");
     require(provider.active, "Provider is not enabled");
     return provider;
 }
