@@ -1,4 +1,4 @@
-image: registry.gitlab.com/chromaway/core-tools/chromia-cli/chr:0.27.7
+image: registry.gitlab.com/chromaway/core-tools/chromia-cli/chr:0.27.10
 
 .git_template: &git_setup |
   git remote set-url --push origin "https://oauth2:${BUILD_USER_GITLAB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
@@ -8,7 +8,7 @@ image: registry.gitlab.com/chromaway/core-tools/chromia-cli/chr:0.27.7
 .release:
   stage: release
   when: manual
-  image: maven:3.8.4-jdk-11
+  image: maven:3.9.9-eclipse-temurin-21@sha256:887820a8941cc4e1bf011ec758e50acd8073bfe6046e8d9489e29ed38914e795
   before_script:
     - set -eu
     - *git_setup
@@ -24,14 +24,16 @@ stages:
   - release
 
 deploy:
-  image: maven:3.8.4-jdk-11
+  image: maven:3.9.9-eclipse-temurin-21@sha256:887820a8941cc4e1bf011ec758e50acd8073bfe6046e8d9489e29ed38914e795
   stage: deploy
   rules:
     - if: $CI_COMMIT_TAG =~ /^[0-9]+\.[0-9]+\.[0-9]+$/
   script:
     - mvn
       $MAVEN_CLI_OPTS
+      -s ci/gitlab-settings.xml
       -Drevision=$CI_COMMIT_TAG
+      --file ci/pom.xml
       deploy
 
 test:
@@ -48,6 +50,40 @@ test:
     reports:
       junit:
         - "build/reports/*-tests.xml"
+    expire_in: 1 week
+
+integration-test:
+  image: maven:3.9.9-eclipse-temurin-21@sha256:887820a8941cc4e1bf011ec758e50acd8073bfe6046e8d9489e29ed38914e795
+  services:
+    - postgres
+  stage: test
+  before_script:
+    - curl -fsSL https://apt.chromia.com/chromia.gpg | tee /usr/share/keyrings/chromia.gpg >/dev/null
+    - echo "deb [arch=amd64 signed-by=/usr/share/keyrings/chromia.gpg] https://apt.chromia.com stable main" | tee /etc/apt/sources.list.d/chromia.list
+    - apt-get update
+    - apt-get install -y --no-install-recommends chr=0.27.10 pmc=3.51.1
+  script:
+    - CASC_YAML_MAX_ALIASES=1000 chr install
+    - chr build --hide-lib-warnings --settings chromia-it.yml
+    - chr node start --settings chromia-it.yml --name manager_it --hide-lib-warnings --managed-mode --wipe > node.log 2>&1 &
+    - echo "Waiting for node to be ready..."
+    - timeout 60 grep -q "Node is initialized" <(tail -f node.log)
+    - echo "Node is ready, continuing with tests..."
+    - cd it
+    - pmc network initialize -cac ../build/cluster_anchoring_it.xml -sac ../build/system_anchoring_it.xml -ecc ../build/economy_chain_it.xml -tcc ../build/token_chain_it.xml --lookup-brid
+    - pmc economy add-tag --name tag --scu-price 1 --extra-storage-price 1
+    - pmc economy add-cluster --tag tag --name dappCluster --cluster-units 1 --voter-set SYSTEM_P --governor SYSTEM_P
+    - sleep 1
+    - while ! pmc cluster info --name dappCluster; do sleep 1; done
+    - pmc node update --cluster-units 2 --cluster dappCluster --pubkey 0324653EAC434488002CC06BBFB7F10FE18991E35F9FE4302DBEA6D2353DC0AB1C
+    - mvn $MAVEN_CLI_OPTS test
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - "it/target/surefire-reports/*.xml"
+    paths:
+      - node.log
     expire_in: 1 week
 
 compatibility:
@@ -104,7 +140,7 @@ pages:
       - public
 
 prepare_release:
-  image: registry.gitlab.com/chromaway/core-tools/chromia-images/maven-docker:1.1.4
+  image: maven:3.9.9-eclipse-temurin-21@sha256:887820a8941cc4e1bf011ec758e50acd8073bfe6046e8d9489e29ed38914e795
   stage: prepare_release
   rules:
     - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+$/'
@@ -131,7 +167,7 @@ gitlab-release:
 
 variables:
   GIT_DEPTH: 0
-  MAVEN_CLI_OPTS: "--batch-mode --errors --fail-at-end --show-version -DinstallAtEnd=true -DdeployAtEnd=true -s ci/gitlab-settings.xml -U --file ci/pom.xml"
+  MAVEN_CLI_OPTS: "--batch-mode --errors --fail-at-end --show-version -DinstallAtEnd=true -DdeployAtEnd=true -U"
   POSTGRES_INITDB_ARGS: --lc-collate=C.UTF-8 --lc-ctype=C.UTF-8 --encoding=UTF-8
   POSTGRES_DB: postchain
   POSTGRES_USER: postchain
