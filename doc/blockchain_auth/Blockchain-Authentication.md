@@ -20,7 +20,7 @@ be able to use sign transactions normally after this operation, be careful to no
 
 ## Disabling Blockchain-Based Provider Authentication
 
-The `remove_provider_blockchain_auth` operation revokes a provider's ability to use a blockchain-based operation for
+The `remove_provider_blockchain_auth_iccf` operation revokes a provider's ability to use a blockchain-based operation for
 authentication, and re-enabling normal signing.
 
 ## General Workflow
@@ -45,13 +45,13 @@ These operations are available for blockchain authentication in directory chain:
 
 They have the same parameters:
 
+- **`my_pubkey` (pubkey)**: The public key of the provider.
 - **`tx_to_prove` (gtx_transaction)**: The transaction from the external blockchain proving authentication.
 - **`op_index` (integer)**: The index of the relevant operation within the external transaction.
-- **`my_pubkey` (pubkey)**: The public key of the provider.
 
 And require an ICCF proof of `tx_to_prove` to be included in the transaction.
 
-The transaction from the external blockchain needs to include an operation with the same name, but different parameters.
+The transaction from the external blockchain needs to include an operation with the same name but different parameters.
 The operations in the external blockchain have parameters like the corresponding non-ICCF operation in directory chain 
 (excluding `my_pubkey` and `description`):
 
