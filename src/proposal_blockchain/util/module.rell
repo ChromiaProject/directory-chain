@@ -86,6 +86,7 @@ function validate_blockchain_configuration(blockchain?, container, config_data: 
     }
 
     validate_compression(config_map);
+    validate_icmf(config_map);
     validate_eif(blockchain, config_map);
 }
 
@@ -212,6 +213,32 @@ function validate_compression(config_map: map<text, gtv>) {
         total_config_size <= chain_context.args.max_config_size,
         "Configuration exceeds maximum allowed size %d".format(chain_context.args.max_config_size)
     );
+}
+
+function validate_icmf(config_map: map<text, gtv>) {
+    // Validate ICMF receiver configuration (ICMF sender only requires gtx module)
+
+    val modules = extract_config_path(config_map, ["gtx"])?.get_or_null("modules");
+    val has_module = modules?? and list<text>.from_gtv(modules).contains("net.postchain.d1.icmf.IcmfReceiverGTXModule");
+
+    val sync_exts = config_map.get_or_null("sync_ext");
+    val has_sync_ext = sync_exts?? and list<text>.from_gtv(sync_exts).contains("net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension");
+
+    val icmf_receiver = extract_config_path(config_map, ["icmf", "receiver"]);
+    val has_icmf_receiver = icmf_receiver?? and not icmf_receiver.empty();
+
+    // Ensure that both module and sync extension are present or absent
+    require(has_module == has_sync_ext, "ICMF receiver module and sync extension must both be present");
+
+    // Ensure that icmf.receiver is present and not empty if module and sync extension are present
+    if (has_module) {
+        require(has_icmf_receiver, "ICMF receiver must be set");
+    }
+
+    // Ensure that icmf.receiver is absent if module and sync extension are absent
+    if (not has_module) {
+        require(not has_icmf_receiver, "ICMF receiver module and sync extension must both be present if ICMF receiver is present");
+    }
 }
 
 function validate_eif(blockchain?, config_map: map<text, gtv>) {

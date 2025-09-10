@@ -114,6 +114,74 @@ function test_blockchain_configuration_gtx_validation() {
         .run_must_fail("Some of the configured synchronization infrastructure extensions are not in the allowed set");
 }
 
+function test_blockchain_configuration_icmf_validation() {
+    val (container, alice, bob) = setup_blockchain_configuration_validation();
+
+    // ICMF receiver module is present, but sync extension is absent, tx fails
+    var conf0 = apply_required_configuration_properties();
+    conf0["gtx"] = ["modules": ["net.postchain.d1.icmf.IcmfReceiverGTXModule"]].to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf0.to_gtv().to_bytes(), "foo_chain", container)
+    ).sign(rell.test.keypairs.alice)
+        .run_must_fail("ICMF receiver module and sync extension must both be present");
+
+    // ICMF receiver module is absent, but sync extension is present, tx fails
+    var conf1 = apply_required_configuration_properties();
+    conf1["sync_ext"] = ["net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"].to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf1.to_gtv().to_bytes(), "foo_chain", container)
+    ).sign(rell.test.keypairs.alice)
+        .run_must_fail("ICMF receiver module and sync extension must both be present");
+
+    // Both module and sync extension are present, but `icmf.receiver` is absent, tx fails
+    var conf2 = apply_required_configuration_properties();
+    conf2["gtx"] = ["modules": ["net.postchain.d1.icmf.IcmfReceiverGTXModule"]].to_gtv();
+    conf2["sync_ext"] = ["net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"].to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf2.to_gtv().to_bytes(), "foo_chain", container)
+    ).sign(rell.test.keypairs.alice)
+        .run_must_fail("ICMF receiver must be set");
+    
+    // Both module and sync extension are present, but `icmf.receiver` is present and empty, tx fails
+    var conf3 = apply_required_configuration_properties();
+    conf3["gtx"] = ["modules": ["net.postchain.d1.icmf.IcmfReceiverGTXModule"]].to_gtv();
+    conf3["sync_ext"] = ["net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"].to_gtv();
+    conf3["icmf"] = ["receiver": map<text, gtv>().to_gtv()].to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf3.to_gtv().to_bytes(), "foo_chain", container)
+    ).sign(rell.test.keypairs.alice)
+        .run_must_fail("ICMF receiver must be set");
+
+    // Both module and sync extension are absent, but receiver is present and not empty, tx fails
+    var conf4 = apply_required_configuration_properties();
+    conf4["icmf"] = ["receiver": ["local": [
+        ["topic": "L_evm_block_events", "bc-rid": "x0000000000000000000000000000000000000000000000000000000000000000"]
+    ]].to_gtv()].to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf4.to_gtv().to_bytes(), "foo_chain", container)
+    ).sign(rell.test.keypairs.alice)
+        .run_must_fail("ICMF receiver module and sync extension must both be present if ICMF receiver is present");
+
+    // Both module and sync extension are present, and `icmf.receiver` is present, tx succeeds
+    var conf5 = apply_required_configuration_properties();
+    conf5["gtx"] = ["modules": ["net.postchain.d1.icmf.IcmfReceiverGTXModule"]].to_gtv();
+    conf5["sync_ext"] = ["net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"].to_gtv();
+    conf5["icmf"] = ["receiver": ["local": [
+        ["topic": "L_evm_block_events", "bc-rid": "x0000000000000000000000000000000000000000000000000000000000000000"]
+    ]].to_gtv()].to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf5.to_gtv().to_bytes(), "foo_chain", container)
+    ).sign(rell.test.keypairs.alice)
+        .run();
+
+    // No module, extension, or receiver are set, tx succeeds
+    var conf6 = apply_required_configuration_properties();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf6.to_gtv().to_bytes(), "foo_chain", container)
+    ).sign(rell.test.keypairs.alice)
+        .run();
+}
+
 function test_blockchain_configuration_eif_skip_to_height_validation() {
     val (container, alice, bob) = setup_blockchain_configuration_validation();
 
