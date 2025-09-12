@@ -74,6 +74,37 @@ query get_nodes_with_provider() {
     );
 }
 
+/**
+ * @param pubkey The node
+ * @param cluster_name Cluster to check
+ * @param blockchain_states Filter on blockchain states to include
+ * @param container_states Filter on container states to include
+ * @return All chains where node is signer according to blockchain configuration.
+ * This ignores any pending configurations that might be in use.
+ */
+query get_node_signer_cluster_blockchains(
+    pubkey,
+    cluster_name: text,
+    blockchain_states: list<blockchain_state> = [blockchain_state.RUNNING],
+    container_states: list<container_state> = [container_state.RUNNING]
+): list<byte_array> {
+    val blockchains_in_cluster = (container_blockchain) @* {
+        container_states.empty() or .container.state in container_states,
+        .container.cluster.name == cluster_name,
+        blockchain_states.empty() or .blockchain.state in blockchain_states,
+    }.blockchain;
+
+    val signer_chains = list<byte_array>();
+    for (blockchain in blockchains_in_cluster) {
+        val latest_config = blockchain_configuration_signers @? { blockchain } (@omit @sort_desc .height, $) limit 1;
+        if (latest_config != null and pubkey in list<byte_array>.from_gtv(gtv.from_bytes(latest_config.signers))) {
+            signer_chains.add(latest_config.blockchain.rid);
+        }
+    }
+
+    return signer_chains;
+}
+
 struct node_info {
     pubkey;
     host: text;

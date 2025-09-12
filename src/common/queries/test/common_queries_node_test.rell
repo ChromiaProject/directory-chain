@@ -1,0 +1,160 @@
+@test module;
+
+import ^^^.test.container_helpers.*;
+import ^^^.test.helper_operations.*;
+import ^^.*;
+import ^^^.test.setup.*;
+import ^^^.test.ops.*;
+import ^^^.test.util.*;
+import ^^^.test.util.constants.*;
+import direct_cluster.*;
+import direct_container.*;
+import proposal_container.*;
+
+function test_get_node_signer_cluster_blockchains_basic_defaults() {
+    setup_module();
+
+    // Arrange: create a blockchain and put it into a container in system cluster
+    val chain0_brid = blockchain @ { blockchains.directory_chain } (.rid);
+    val brid = x"1111111111111111111111111111111111111111111111111111111111111111";
+    rell.test.tx().op(create_blockchain(brid, "bc1")).sign(initial_provider).run();
+    rell.test.tx().op(propose_container(initial_provider.pub, clusters.system, "sys_cont", voter_sets.system_p)).sign(initial_provider).run();
+    rell.test.tx().op(add_blockchain_to_container(brid, "sys_cont")).sign(initial_provider).run();
+
+    // Ensure signer config contains the initial_signer.pub
+    rell.test.tx().op(_create_blockchain_configuration_signers_op(brid, 1, [initial_signer.pub])).run();
+
+    // Act: query defaults filter to RUNNING for both blockchain and container
+    val rids = get_node_signer_cluster_blockchains(initial_signer.pub, clusters.system);
+
+    // Assert: returns the brid
+    assert_equals(set(rids), set([brid, chain0_brid]));
+}
+
+function test_get_node_signer_cluster_blockchains_respects_cluster_and_states() {
+    setup_module(provider_quota_max_containers = 2);
+
+    // Create two clusters and containers
+    rell.test.tx().op(create_cluster_with_cluster_data(rell.test.pubkeys.alice, "other_cluster", voter_sets.system_p, [rell.test.pubkeys.alice], cluster_creation_data())).sign(rell.test.keypairs.alice).run();
+    rell.test.tx().op(propose_container(initial_provider.pub, clusters.system, "cont_sys", voter_sets.system_p)).sign(initial_provider).run();
+    rell.test.tx().op(propose_container(initial_provider.pub, "other_cluster", "cont_other", voter_sets.system_p)).sign(initial_provider).run();
+
+    // Create two blockchains and add to containers
+    val chain0_brid = blockchain @ { blockchains.directory_chain } (.rid);
+    val brid_sys_run = x"2222222222222222222222222222222222222222222222222222222222222222";
+    val brid_other_paused = x"3333333333333333333333333333333333333333333333333333333333333333";
+    rell.test.tx().op(create_blockchain(brid_sys_run, "bc_sys_run")).sign(initial_provider).run();
+    rell.test.tx().op(create_blockchain(brid_other_paused, "bc_other_paused")).sign(initial_provider).run();
+    rell.test.tx().op(add_blockchain_to_container(brid_sys_run, "cont_sys")).sign(initial_provider).run();
+    rell.test.tx().op(add_blockchain_to_container(brid_other_paused, "cont_other")).sign(initial_provider).run();
+
+    // Update one blockchain to PAUSED
+    rell.test.tx().op(update_blockchain_state(brid_other_paused, blockchain_state.PAUSED)).sign(initial_provider).run();
+
+    // Signer config for initial_signer on both blockchains
+    rell.test.tx().op(_create_blockchain_configuration_signers_op(brid_sys_run, 1, [initial_signer.pub])).run();
+    rell.test.tx().op(_create_blockchain_configuration_signers_op(brid_other_paused, 1, [initial_signer.pub])).run();
+
+    // 1) Default filter (RUNNING) and cluster=system => only brid_sys_run
+    val def_rids = get_node_signer_cluster_blockchains(initial_signer.pub, clusters.system);
+    assert_equals(set(def_rids), set([brid_sys_run, chain0_brid]));
+
+    // 2) Include PAUSED via blockchain_states parameter, still cluster scoped to other_cluster
+    val paused_in_other = get_node_signer_cluster_blockchains(initial_signer.pub, "other_cluster", [blockchain_state.PAUSED], [container_state.RUNNING]);
+    assert_equals(set(paused_in_other), set([brid_other_paused]));
+
+    // 3) Empty blockchain_states and container_states => no filtering by state, cluster=system
+    val no_filters = get_node_signer_cluster_blockchains(initial_signer.pub, clusters.system, [], []);
+    assert_true(no_filters.contains(brid_sys_run));
+    assert_false(no_filters.contains(brid_other_paused)); // different cluster
+}
+
+function test_get_node_signer_cluster_blockchains_container_state_filter() {
+    setup_module(provider_quota_max_containers = 2);
+
+    // Prepare: container in system cluster and one set to PAUSED
+    rell.test.tx().op(propose_container(initial_provider.pub, clusters.system, "cont_run", voter_sets.system_p)).sign(initial_provider).run();
+    rell.test.tx().op(propose_container(initial_provider.pub, clusters.system, "cont_paused", voter_sets.system_p)).sign(initial_provider).run();
+
+    // Pause one container
+    rell.test.tx().op(propose_container_action(initial_provider.pub, "cont_paused", container_action.pause)).sign(initial_provider).run();
+
+    // Blockchains
+    val chain0_brid = blockchain @ { blockchains.directory_chain } (.rid);
+    val brid_run = x"4444444444444444444444444444444444444444444444444444444444444444";
+    val brid_pausedcont = x"5555555555555555555555555555555555555555555555555555555555555555";
+    rell.test.tx().op(create_blockchain(brid_run, "bc_run")).sign(initial_provider).run();
+    rell.test.tx().op(create_blockchain(brid_pausedcont, "bc_pausedcont")).sign(initial_provider).run();
+    rell.test.tx().op(add_blockchain_to_container(brid_run, "cont_run")).sign(initial_provider).run();
+    rell.test.tx().op(add_blockchain_to_container(brid_pausedcont, "cont_paused")).sign(initial_provider).run();
+
+    // Signer configs
+    rell.test.tx().op(_create_blockchain_configuration_signers_op(brid_run, 1, [initial_signer.pub])).run();
+    rell.test.tx().op(_create_blockchain_configuration_signers_op(brid_pausedcont, 1, [initial_signer.pub])).run();
+
+    // Default call (container RUNNING only) returns only brid_run
+    val only_running = get_node_signer_cluster_blockchains(initial_signer.pub, clusters.system);
+    assert_equals(set(only_running), set([brid_run, chain0_brid]));
+
+    // Include PAUSED container state explicitly
+    val include_paused_container = get_node_signer_cluster_blockchains(initial_signer.pub, clusters.system, [blockchain_state.RUNNING], [container_state.RUNNING, container_state.PAUSED]);
+    assert_equals(set(include_paused_container), set([brid_run, brid_pausedcont, chain0_brid]));
+}
+
+function test_get_node_signer_cluster_blockchains_no_signer_matches() {
+    setup_module();
+
+    // Create system container and blockchain
+    val chain0_brid = blockchain @ { blockchains.directory_chain } (.rid);
+    rell.test.tx().op(propose_container(initial_provider.pub, clusters.system, "cont_x", voter_sets.system_p)).sign(initial_provider).run();
+    val brid = x"6666666666666666666666666666666666666666666666666666666666666666";
+    rell.test.tx().op(create_blockchain(brid, "bc_x")).sign(initial_provider).run();
+    rell.test.tx().op(add_blockchain_to_container(brid, "cont_x")).sign(initial_provider).run();
+
+    // Signers contain someone else (bob), not initial_signer
+    rell.test.tx().op(_create_blockchain_configuration_signers_op(brid, 1, [rell.test.keypairs.bob.pub])).run();
+
+    val res = get_node_signer_cluster_blockchains(initial_signer.pub, clusters.system);
+    assert_equals(set(res), set([chain0_brid]));
+}
+
+
+function test_get_node_signer_cluster_blockchains_uses_latest_config_excludes_if_removed() {
+    setup_module();
+
+    // Setup blockchain and container in system cluster
+    val chain0_brid = blockchain @ { blockchains.directory_chain } (.rid);
+    val brid = x"7777777777777777777777777777777777777777777777777777777777777777";
+    rell.test.tx().op(create_blockchain(brid, "bc_latest_exclude")).sign(initial_provider).run();
+    rell.test.tx().op(propose_container(initial_provider.pub, clusters.system, "cont_latest1", voter_sets.system_p)).sign(initial_provider).run();
+    rell.test.tx().op(add_blockchain_to_container(brid, "cont_latest1")).sign(initial_provider).run();
+
+    // Older config includes the node, latest config removes it
+    rell.test.tx().op(_create_blockchain_configuration_signers_op(brid, 1, [initial_signer.pub])).run();
+    rell.test.tx().op(_create_blockchain_configuration_signers_op(brid, 2, [rell.test.keypairs.bob.pub])).run();
+
+    val rids = get_node_signer_cluster_blockchains(initial_signer.pub, clusters.system);
+    // Should not include brid because latest (height=2) does not include the node
+    assert_false(rids.contains(brid));
+    // Directory chain may still be present depending on initial test setup
+    assert_true(rids.contains(chain0_brid));
+}
+
+function test_get_node_signer_cluster_blockchains_uses_latest_config() {
+    setup_module();
+
+    // Setup blockchain and container in system cluster
+    val brid = x"8888888888888888888888888888888888888888888888888888888888888888";
+    rell.test.tx().op(create_blockchain(brid, "bc_latest_include")).sign(initial_provider).run();
+    rell.test.tx().op(propose_container(initial_provider.pub, clusters.system, "cont_latest2", voter_sets.system_p)).sign(initial_provider).run();
+    rell.test.tx().op(add_blockchain_to_container(brid, "cont_latest2")).sign(initial_provider).run();
+
+    // Older config excludes the node, latest config adds it
+    rell.test.tx().op(_create_blockchain_configuration_signers_op(brid, 3, [rell.test.keypairs.bob.pub])).run();
+    rell.test.tx().op(_create_blockchain_configuration_signers_op(brid, 5, [rell.test.keypairs.bob.pub, initial_signer.pub])).run();
+
+    // We don't have any duplicates
+    val rids = get_node_signer_cluster_blockchains(rell.test.keypairs.bob.pub, clusters.system);
+    assert_equals(rids.size(), 1);
+    assert_true(rids.contains(brid));
+}
