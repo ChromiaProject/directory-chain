@@ -41,6 +41,8 @@ function validate_blockchain_configuration(blockchain?, container, config_data: 
         for (required_feature in required_blockchain_features) {
             require(required_feature in blockchain_features.keys(), "Missing required feature: %s".format(required_feature));
         }
+
+        validate_snapshot(blockchain, blockchain_features, config_map);
     } else {
         require(required_blockchain_features.empty(), "Missing required features: %s".format(required_blockchain_features));
     }
@@ -87,6 +89,20 @@ function validate_blockchain_configuration(blockchain?, container, config_data: 
 
     validate_compression(config_map);
     validate_eif(blockchain, config_map);
+}
+
+function validate_snapshot(blockchain?, blockchain_features: map<text, gtv>, config_map: map<text, gtv>) {
+    if (
+        "snapshot_enabled" in blockchain_features and
+        boolean.from_gtv(blockchain_features["snapshot_enabled"]) == true and
+        blockchain != null
+    ) {
+        val latest_config_map = map<text, gtv>.from_gtv(gtv.from_bytes(get_latest_blockchain_configuration_data(blockchain).config));
+        require("features" in latest_config_map, "Snapshot can't be enabled retroactively");
+        val latest_blockchain_features = map<text, gtv>.from_gtv(latest_config_map["features"]);
+        require("snapshot_enabled" in latest_blockchain_features and integer.from_gtv(latest_blockchain_features["snapshot_enabled"]) == 1,
+            "Snapshot can't be enabled retroactively");
+    }
 }
 
 function validate_block_strategy_config(block_strategy_config: map<text, gtv>) {

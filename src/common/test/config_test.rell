@@ -773,6 +773,54 @@ function test_precise_configuration_update_config_failed() {
     assert_equals(update_attempt.state, blockchain_configuration_update_state.FAILED);
 }
 
+function test_feature_snapshot_on_new_blockchain() {
+    setup_module(cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val config = apply_required_configuration_properties(["features": ["snapshot_enabled": (1).to_gtv()].to_gtv()]);
+    rell.test.tx().op(
+        create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
+        propose_blockchain(initial_provider.pub, config.to_gtv_pretty().to_bytes(), "foo_chain", "container", "")
+    ).sign(initial_provider).run();
+}
+
+function test_feature_snapshot_enabled_invalid_value() {
+    setup_module(cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val config = apply_required_configuration_properties(["features": ["snapshot_enabled": (2).to_gtv()].to_gtv()]);
+    rell.test.tx().op(
+        create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
+        propose_blockchain(initial_provider.pub, config.to_gtv_pretty().to_bytes(), "foo_chain", "container", "")
+    ).sign(initial_provider).run_must_fail("Decoding type 'boolean': expected 0 or 1, actual 2");
+}
+
+function test_feature_snapshot_reject_retroactively_activation() {
+    setup_module(cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val config = apply_required_configuration_properties();
+    rell.test.tx().op(
+        create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
+        propose_blockchain(initial_provider.pub, config.to_gtv_pretty().to_bytes(), "foo_chain", "container", "")
+    ).sign(initial_provider).run();
+    val bc_rid = blockchain @ { "foo_chain" } (.rid);
+
+    val new_config = apply_required_configuration_properties(["features": ["snapshot_enabled": (1).to_gtv()].to_gtv()]);
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, new_config.to_gtv_pretty().to_bytes(), "")
+    ).sign(initial_provider).run_must_fail("Snapshot can't be enabled retroactively");
+}
+
+function test_feature_snapshot_valid_new_config() {
+    setup_module(cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val config = apply_required_configuration_properties(["features": ["snapshot_enabled": (1).to_gtv()].to_gtv()]);
+    rell.test.tx().op(
+        create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
+        propose_blockchain(initial_provider.pub, config.to_gtv_pretty().to_bytes(), "foo_chain", "container", "")
+    ).sign(initial_provider).run();
+    val bc_rid = blockchain @ { "foo_chain" } (.rid);
+
+    val new_config = apply_required_configuration_properties(["features": ["snapshot_enabled": (1).to_gtv()].to_gtv()]);
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, new_config.to_gtv_pretty().to_bytes(), "")
+    ).sign(initial_provider).run();
+}
+
 function setup(): (anchor_chain: blockchain, bc_rid: byte_array) {
     setup_module(cluster_anchoring_config = ["any": "value".to_gtv()]);
 
