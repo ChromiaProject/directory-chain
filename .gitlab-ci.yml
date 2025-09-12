@@ -1,20 +1,10 @@
 image: registry.gitlab.com/chromaway/core-tools/chromia-cli/chr:0.27.10
 
-.git_template: &git_setup |
-  git remote set-url --push origin "https://oauth2:${BUILD_USER_GITLAB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-  git config user.name "build-user core-dev"
-  git config user.email build_user@chromaway.com
-
-.release:
-  stage: release
-  when: manual
-  image: maven:3.9.9-eclipse-temurin-21@sha256:887820a8941cc4e1bf011ec758e50acd8073bfe6046e8d9489e29ed38914e795
-  before_script:
-    - set -eu
-    - *git_setup
-    - git checkout $CI_COMMIT_REF_NAME
-    - CURRENT_VERSION=$(git describe --tags --abbrev=0)
-    - IFS=. read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+include:
+  - project: "chromaway/core-infra/gitlab-automation"
+    ref: 1.3.0
+    file:
+      - templates/release.yml
 
 stages:
   - test
@@ -111,23 +101,6 @@ build:
     paths:
       - build/*.xml
 
-release-minor:
-  extends: .release
-  script:
-    - git tag $MAJOR.$((MINOR + 1)).0
-    - git push --tags
-  only:
-    - dev
-
-release-patch:
-  extends: .release
-  script:
-    - git tag $MAJOR.$MINOR.$((PATCH + 1))
-    - git push --tags
-  only:
-    - dev
-    - /^support\/.*$/
-
 pages:
   stage: deploy
   rules:
@@ -139,27 +112,10 @@ pages:
     paths:
       - public
 
-prepare_release:
-  image: maven:3.9.9-eclipse-temurin-21@sha256:887820a8941cc4e1bf011ec758e50acd8073bfe6046e8d9489e29ed38914e795
-  stage: prepare_release
-  rules:
-    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+$/'
-  script:
-    - 'curl -H "PRIVATE-TOKEN: $CI_API_TOKEN" "$CI_API_V4_URL/projects/$CI_PROJECT_ID/repository/changelog?version=$CI_COMMIT_TAG" | jq -r .notes > release_notes.md'
-  artifacts:
-    paths:
-      - release_notes.md
-
 gitlab-release:
-  stage: release
-  image: registry.gitlab.com/gitlab-org/release-cli:latest
-  needs:
-    - job: prepare_release
-      artifacts: true
-  rules:
-    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+$/'
+  extends: .gitlab-release-with-notes
   script:
-    - echo "Release $CI_COMMIT_TAG"
+    - echo "Running the release job."
   release:
     name: 'Directory chain $CI_COMMIT_TAG'
     description: release_notes.md
