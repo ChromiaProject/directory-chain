@@ -34,7 +34,9 @@ Please follow the guide [setup-price-oracle](setup-price-oracle.md).
 
 Start by deploying the CHR bridge(s). There is
 a [general guide](https://gitlab.com/chromaway/core/postchain-eif/-/blob/dev/doc/contract/deployment.md?ref_type=heads).
-This guide gives you some alternatives, you should go for the following options:
+This guide describes how to set up a bridge on Chromia network generally. What is referred to as the "bridge chain" in
+the guide is economy chain in this context. The guide also gives you some set-up alternatives,
+you should go for the following options:
 
 - *Chromia token bridge* contract, since CHR is a _native_ token
 - *Managed* validator contract
@@ -59,8 +61,8 @@ are set properly. You can omit the topic for transaction submitter chain until y
 
 ## Token chain
 
-The first step is to set up an event receiver chain. Since bridges are added dynamically to token chain you need to
-also deploy a dynamic event receiver. See docs [event receiver](https://gitlab.com/chromaway/core/postchain-eif/-/blob/dev/doc/event-receiver-chain-configuration.md?ref_type=heads#dynamic-receiver).
+The first step is to set up a new dedicated event receiver chain for token chain. Since bridges are added dynamically to
+token chain you need to deploy a dynamic event receiver. See docs [event receiver](https://gitlab.com/chromaway/core/postchain-eif/-/blob/dev/doc/event-receiver-chain-configuration.md?ref_type=heads#dynamic-receiver).
 Set module arg `configuration_chain` to `token_chain`.
 
 Ensure that the nodes in the network have RPC urls configured for the network(s) you want to support. See 
@@ -88,7 +90,7 @@ at least one of the nodes has enough balance in its configured wallet on EVM.
 
 Ensure that blockchain RIDs for directory chain, system anchoring chain and economy chain are set correctly.
 
-Ensure that economy chain bridge is added to the "system_bridges" section of the transaction submitter configuration as
+Ensure that economy chain bridge is added to the "system_chain_bridges" section of the transaction submitter configuration as
 well as token chain (address can be left empty for token chain).
 
 Update economy chain ICMF configuration to listen to transaction submitter topic
