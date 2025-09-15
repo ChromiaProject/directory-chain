@@ -42,11 +42,12 @@ function validate_blockchain_configuration(blockchain?, container, config_data: 
             require(required_feature in blockchain_features.keys(), "Missing required feature: %s".format(required_feature));
         }
 
-        validate_merkle_hash_version(blockchain, blockchain_features);
         validate_snapshot(blockchain, config_map);
     } else {
         require(required_blockchain_features.empty(), "Missing required features: %s".format(required_blockchain_features));
     }
+
+    validate_merkle_hash_version(blockchain, config_map);
 
     if (header_hash) {
         require("config_consensus_strategy" in config_map,
@@ -93,11 +94,11 @@ function validate_blockchain_configuration(blockchain?, container, config_data: 
     validate_eif(blockchain, config_map);
 }
 
-function validate_merkle_hash_version(blockchain?, blockchain_features: map<text, gtv>) {
+function validate_merkle_hash_version(blockchain?, config_map: map<text, gtv>) {
     if (blockchain != null) {
         val latest_config_map = map<text, gtv>.from_gtv(gtv.from_bytes(get_latest_blockchain_configuration_data(blockchain).config));
         val latest_version = extract_config_path_int_value(latest_config_map, ["features", "merkle_hash_version"]) ?: 1;
-        val new_version = extract_config_path_int_value(blockchain_features, ["merkle_hash_version"]) ?: 1;
+        val new_version = extract_config_path_int_value(config_map, ["features", "merkle_hash_version"]) ?: 1;
 
         require(new_version >= latest_version, "Merkle hash version can't be downgraded from version %s to %s".format(
             latest_version, new_version
