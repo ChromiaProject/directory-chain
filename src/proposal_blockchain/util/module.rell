@@ -42,7 +42,8 @@ function validate_blockchain_configuration(blockchain?, container, config_data: 
             require(required_feature in blockchain_features.keys(), "Missing required feature: %s".format(required_feature));
         }
 
-        validate_snapshot(blockchain, blockchain_features, config_map);
+        validate_merkle_hash_version(blockchain, blockchain_features);
+        validate_snapshot(blockchain, config_map);
     } else {
         require(required_blockchain_features.empty(), "Missing required features: %s".format(required_blockchain_features));
     }
@@ -92,17 +93,29 @@ function validate_blockchain_configuration(blockchain?, container, config_data: 
     validate_eif(blockchain, config_map);
 }
 
-function validate_snapshot(blockchain?, blockchain_features: map<text, gtv>, config_map: map<text, gtv>) {
-    if (
-        "snapshot_enabled" in blockchain_features and
-        boolean.from_gtv(blockchain_features["snapshot_enabled"]) == true and
-        blockchain != null
-    ) {
+function validate_merkle_hash_version(blockchain?, blockchain_features: map<text, gtv>) {
+    if (blockchain != null) {
         val latest_config_map = map<text, gtv>.from_gtv(gtv.from_bytes(get_latest_blockchain_configuration_data(blockchain).config));
-        require("features" in latest_config_map, "Snapshot can't be enabled retroactively");
-        val latest_blockchain_features = map<text, gtv>.from_gtv(latest_config_map["features"]);
-        require("snapshot_enabled" in latest_blockchain_features and integer.from_gtv(latest_blockchain_features["snapshot_enabled"]) == 1,
-            "Snapshot can't be enabled retroactively");
+        val latest_version = extract_config_path_int_value(latest_config_map, ["features", "merkle_hash_version"]) ?: 1;
+        val new_version = extract_config_path_int_value(blockchain_features, ["merkle_hash_version"]) ?: 1;
+
+        require(new_version >= latest_version, "Merkle hash version can't be downgraded from version %s to %s".format(
+            latest_version, new_version
+        ));
+    }
+}
+
+function validate_snapshot(blockchain?, config_map: map<text, gtv>) {
+    val snapshot_enabled = extract_config_path_value(config_map, ["features", "snapshot_enabled"]);
+    if (
+        blockchain != null and
+        snapshot_enabled != null and
+        boolean.from_gtv(snapshot_enabled)
+    ) {
+        val latest_config_map = map<text, gtv>.from_gtv(gtv.from_bytes(get_latest_blockchain_configuration_data(blockchain).config));   
+        val last_snapshot_enabled = extract_config_path_value(latest_config_map, ["features", "snapshot_enabled"]);
+
+        require(last_snapshot_enabled != null and boolean.from_gtv(last_snapshot_enabled), "Snapshot can't be enabled retroactively");
     }
 }
 
@@ -314,4 +327,18 @@ function extract_config_path(config_map: map<text, gtv>, path: list<text>): map<
         }
     }
     return config_path;
+}
+
+function extract_config_path_value(config_map: map<text, gtv>, path: list<text>): gtv? {
+    val last = path.remove_at(path.size() - 1);
+    return extract_config_path(config_map, path)?.get_or_null(last);
+}
+
+function extract_config_path_int_value(config_map: map<text, gtv>, path: list<text>): integer? {
+    val last = path.remove_at(path.size() - 1);
+    val value = extract_config_path(config_map, path)?.get_or_null(last);
+    if (value != null) {
+        return integer.from_gtv(value);
+    }
+    return null;
 }
