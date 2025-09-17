@@ -2,7 +2,7 @@
  * Returns NM API Version
  * NM API Version: 1
  */
-query nm_api_version() = 24;
+query nm_api_version() = 25;
 
 /**
  * Returns peer info list
@@ -574,4 +574,23 @@ query nm_get_container_rate_limits(name): map<text, container_rate_limit> {
             period_length_millis = millis_per_week,
             rate_limit = base_compute_requests + extra_compute_requests,
     ) ];
+}
+
+/**
+ * Returns the active configuration height for a given blockchain and a historic height.
+ *
+ * @param blockchain_rid blockchain RID
+ * @param height historic height
+ * @return historical configuration height or null if no configuration exists before or at the given height
+ *
+ * NM API Version: 25
+ */
+query nm_get_historic_configuration_height(blockchain_rid: byte_array, height: integer): integer? {
+    val bc = blockchain @? { blockchain_rid };
+    if (bc == null) return null;
+    val conf_h = blockchain_configuration @? { bc, .height <= height } (@sort_desc .height) limit 1;
+    val sign_h = blockchain_configuration_signers @? { bc, .height <= height } (@sort_desc .height) limit 1;
+    if (conf_h == null) return sign_h;
+    if (sign_h == null) return conf_h;
+    return max(conf_h, sign_h);
 }
