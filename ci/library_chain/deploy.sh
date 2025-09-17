@@ -1,11 +1,11 @@
-#!/bin/bash
+#!/bin/sh
 
 LIBRARY_NAME=$1
 
 BRID_EXISTING=`curl -sS "$LIBRARY_CHAIN_API_URL/query/$LIBRARY_CHAIN_BRID?type=library_chain_versioning.get_latest_library_version&lib_id=com.chromia.$LIBRARY_NAME" | jq -r '.rid'`
 BRID_NEW=`xmllint --xpath 'string(/dict/entry[@key="rid"]/bytea)' build/$LIBRARY_NAME.xml`
 
-if [[ "$BRID_EXISTING" == "$BRID_NEW" ]]; then
+if [ "$BRID_EXISTING" = "$BRID_NEW" ]; then
    echo "Skipping deployment of $LIBRARY_NAME, because the BRID has not changed: $BRID_EXISTING."
 else
    echo "Deploying $LIBRARY_NAME..."
