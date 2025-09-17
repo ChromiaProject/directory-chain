@@ -79,6 +79,9 @@ function test_node() {
     assert_equals(node.cluster_units, 1);
     assert_equals(node.extra_storage, 1024);
 
+    ensure_cluster("pink", false, true, 20, 20);
+    add_cluster_node("pink", node_pubkey, false);
+
     // Update node
     val updated_node = ensure_node(provider_pubkey, node_pubkey, false, "", 10, 42, false);
     assert_false(updated_node.active);
@@ -99,6 +102,7 @@ function test_node() {
         )
     ).run();
     assert_null(node @? { node_pubkey });
+    assert_not_null(reward_provider_deleted_node @? { node_pubkey, .cluster.name == "pink" });
 }
 
 function test_cluster_node() {
