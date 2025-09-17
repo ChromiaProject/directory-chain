@@ -26,6 +26,20 @@ deploy:
       --file ci/pom.xml
       deploy
 
+deploy_library_chain:
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^[0-9]+\.[0-9]+\.[0-9]+$/
+  variables:
+    POSTCHAIN_CLIENT_PUBKEY: "${LIBRARY_CHAIN_PUBLIC_KEY}"
+    POSTCHAIN_CLIENT_PRIVKEY: ${LIBRARY_CHAIN_PRIVATE_KEY}
+  script:
+    - chr install
+    - chr build
+    - bash ci/library_chain/deploy.sh begin_block
+    - bash ci/library_chain/deploy.sh iccf
+    - bash ci/library_chain/deploy.sh icmf
+
 test:
   services:
     - postgres
