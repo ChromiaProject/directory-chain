@@ -2,7 +2,7 @@
  * Returns NM API Version
  * NM API Version: 1
  */
-query nm_api_version() = 25;
+query nm_api_version() = 26;
 
 /**
  * Returns peer info list
@@ -593,4 +593,26 @@ query nm_get_historic_configuration_height(blockchain_rid: byte_array, height: i
     if (conf_h == null) return sign_h;
     if (sign_h == null) return conf_h;
     return max(conf_h, sign_h);
+}
+
+struct nm_container_configuration {
+    slow_db_statement_log_ms: integer;
+}
+
+/**
+ * Returns any container specific configuration
+ *
+ * @param name Name of the container
+ * @return container configuration
+ *
+ * NM API Version: 26
+ */
+query nm_get_container_configuration(name): nm_container_configuration? {
+    return container_configuration @? {
+        .container.name == name
+    } (
+        nm_container_configuration (
+            .slow_db_statement_log_ms
+        )
+    );
 }

@@ -1,0 +1,126 @@
+@test module;
+
+import common.operations.*;
+import common.queries.*;
+import common.test.setup.*;
+import common.test.util.*;
+import model.*;
+import proposal_blockchain.*;
+import proposal_container.*;
+import proposal_provider.*;
+
+function test_propose_container_configuration_create_and_update() {
+    setup_module();
+
+    // Setup governance and a container
+    val dp = rell.test.keypairs.bob;
+    val sp = rell.test.keypairs.trudy;
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, dp.pub, provider_tier.DAPP_PROVIDER),
+        register_provider(initial_provider.pub, sp.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, sp.pub, true)
+    ).sign(initial_provider).run();
+
+    // Create container by initial provider
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p)
+    ).sign(initial_provider).run();
+    _make_vote(sp);
+
+    // Propose configuration with explicit slow_db_statement_log_ms
+    val conf1 = container_configuration_data(slow_db_statement_log_ms = 500);
+    rell.test.tx().op(
+        propose_container_configuration(initial_provider.pub, "container1", conf1)
+    ).sign(initial_provider).run();
+    _make_vote(sp);
+
+    // Assert configuration is created with value 500
+    val c = container @ { "container1" };
+    val cfg1 = container_configuration @? { c };
+    assert_not_null(cfg1);
+    assert_equals(cfg1.slow_db_statement_log_ms, 500);
+
+    // Update configuration to a new value
+    val conf2 = container_configuration_data(slow_db_statement_log_ms = 600);
+    rell.test.tx().op(
+        propose_container_configuration(initial_provider.pub, "container1", conf2)
+    ).sign(initial_provider).run();
+    _make_vote(sp);
+
+    val cfg2 = container_configuration @ { c };
+    assert_equals(cfg2.slow_db_statement_log_ms, 600);
+}
+
+function test_propose_container_configuration_only_one_pending() {
+    setup_module();
+
+    val dp = rell.test.keypairs.bob;
+    val sp = rell.test.keypairs.trudy;
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, dp.pub, provider_tier.DAPP_PROVIDER),
+        register_provider(initial_provider.pub, sp.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, sp.pub, true)
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p)
+    ).sign(initial_provider).run();
+    _make_vote(sp);
+
+    // First proposal created but not yet voted by SP to keep it pending
+    val conf1 = container_configuration_data(slow_db_statement_log_ms = 1000);
+    rell.test.tx().op(
+        propose_container_configuration(initial_provider.pub, "container1", conf1)
+    ).sign(initial_provider).run();
+
+    // Second proposal must fail because one is already pending
+    val conf2 = container_configuration_data(slow_db_statement_log_ms = 1100);
+    rell.test.tx().op(
+        propose_container_configuration(initial_provider.pub, "container1", conf2)
+    ).nop().sign(initial_provider).run_must_fail("Only one container configuration proposal at a time is allowed");
+}
+
+function test_propose_container_configuration_min_threshold() {
+    setup_module();
+
+    val dp = rell.test.keypairs.bob;
+    val sp = rell.test.keypairs.trudy;
+
+    // module args: min slow query log = 300
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, dp.pub, provider_tier.DAPP_PROVIDER),
+        register_provider(initial_provider.pub, sp.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, sp.pub, true)
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p)
+    ).sign(initial_provider).run();
+    _make_vote(sp);
+
+    // Propose too low value should fail
+    val bad_conf = container_configuration_data(slow_db_statement_log_ms = 100);
+    rell.test.tx().op(
+        propose_container_configuration(initial_provider.pub, "container1", bad_conf)
+    ).sign(initial_provider).run_must_fail("Slow query log ms must be above or equal to minimum allowed value 300");
+
+    // Propose acceptable value and apply
+    val good_conf = container_configuration_data(slow_db_statement_log_ms = 500);
+    rell.test.tx().op(
+        propose_container_configuration(initial_provider.pub, "container1", good_conf)
+    ).sign(initial_provider).run();
+    _make_vote(sp);
+
+    val c = container @ { "container1" };
+    val cfg = container_configuration @? { c };
+    assert_not_null(cfg);
+    assert_equals(cfg.slow_db_statement_log_ms, 500);
+}
+
+function _make_vote(voter: rell.test.keypair) {
+    rell.test.tx().op(
+        make_vote(voter.pub, last_proposal().rowid.to_integer(), true)
+    ).sign(voter).run();
+}
