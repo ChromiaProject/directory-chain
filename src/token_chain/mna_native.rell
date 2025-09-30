@@ -14,8 +14,11 @@ function __bridge_mode_begin_block() {
 
 function convert_mna_bridge_mode() {
     val supplies = list<mna_evm_supply>.from_gtv_pretty(chain_context.args.mna_evm_supply);
-	val erc20_assets = eif.hbridge_erc20.erc20_asset @* { .asset.id == chain_context.args.mna_asset_id };
-    log("Found %d MNA asset(s) to convert".format(erc20_assets.size()));
+	val erc20_assets = eif.hbridge_erc20.erc20_asset @* {
+	    .asset.id == chain_context.args.mna_asset_id,
+	    .token_address in supplies @* {} (.token_address),
+	};
+    log("Found %d MNA asset(s) to convert: %s".format(erc20_assets.size(), erc20_assets));
 
     for (erc20_asset in erc20_assets) {
         // Make sure the bridge contract is not operational before converting
