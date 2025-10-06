@@ -405,18 +405,27 @@ function test_get_provider_payed_rewards() {
 
     val provider_payed_rewards = get_provider_payed_rewards(provider, 1500);
 
-    val provider_payed_reward1 = provider_payed_reward(
-        time = 2000,
-        value = 650
+    assert_equals(
+        provider_payed_rewards,
+        [
+            provider_payed_reward(
+                time = 2000,
+                value = 300
+            ),
+            provider_payed_reward(
+                time = 2000,
+                value = 350
+            ),
+            provider_payed_reward(
+                time = 3000,
+                value = 400
+            ),
+            provider_payed_reward(
+                time = 3000,
+                value = 450
+            ),
+        ]
     );
-
-    val provider_payed_reward2 = provider_payed_reward(
-        time = 3000,
-        value = 850
-    );
-
-    assert_equals(provider_payed_rewards[0], provider_payed_reward1);
-    assert_equals(provider_payed_rewards[1], provider_payed_reward2);
 }
 
 function test_get_provider_performance_metrics() {
@@ -442,9 +451,6 @@ function test_get_provider_performance_metrics() {
         .sign(provider_key)
         .run();
 
-    log("JJJ get_provider_cluster_nodes: %s".format(get_all_provider_nodes_by_cluster(provider)));
-    log("JJJ get_provider_availabilities: %s".format(get_provider_availabilities(provider, 1000)));
-
     val provider_performance_metrics = get_provider_performance_metrics(provider_pubkey, 1000);
 
     val expected = provider_performance_metrics([
@@ -454,7 +460,10 @@ function test_get_provider_performance_metrics() {
         end_time = 86400999
     )],[provider_payed_reward(
         time = 1000,
-        value = 500
+        value = 200
+    ),provider_payed_reward(
+        time = 1000,
+        value = 300
     )]);
 
     assert_equals(provider_performance_metrics, expected);
@@ -488,9 +497,6 @@ function test_get_provider_performance_metrics_multiple_days() {
         .sign(provider_key)
         .run();
 
-    log("JJJ get_provider_cluster_nodes: %s".format(get_all_provider_nodes_by_cluster(provider1)));
-    log("JJJ get_provider_availabilities: %s".format(get_provider_availabilities(provider1, 1000)));
-
     val provider_performance_metrics = get_provider_performance_metrics(provider_pubkey, 1000);
 
     val expected_availabilities = [
@@ -505,7 +511,10 @@ function test_get_provider_performance_metrics_multiple_days() {
     )];
     val expected_rewards = [provider_payed_reward(
         time = day1_end + 1000,
-        value = 400
+        value = 200
+    ),provider_payed_reward(
+        time = day1_end + 1000,
+        value = 200
     ),provider_payed_reward(
         time = day2_end + 1000,
         value = 200

@@ -247,11 +247,6 @@ function get_provider_payed_rewards(provider, start: timestamp): list<provider_p
 }
 
 function get_nodes_payed_rewards(nodes: list<pubkey>, start: timestamp): list<provider_payed_reward> {
-    val result = list<provider_payed_reward>();
-    val provider_payed_rewards = node_payed_reward @* { .node in nodes and .time >= start }
-        ( @group .time, @sum total_reward = .value );
-    for (provider_payed_reward in provider_payed_rewards) {
-        result.add(provider_payed_reward(provider_payed_reward.time, provider_payed_reward.total_reward));
-    }
-    return result;
+    return node_payed_reward @* { .node in nodes and .time >= start }
+        ( @omit @sort .time, provider_payed_reward(.time, .value) );
 }
