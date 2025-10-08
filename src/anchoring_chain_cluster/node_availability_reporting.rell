@@ -96,28 +96,37 @@ function fetch_blocks_and_calculate_and_store_node_availability(start_time: inte
 function fetch_blocks_and_calculate_node_availability(start_time: integer, end_time: integer, block_range_size: integer): map<byte_array, decimal> {
     log("Calculating node availability, between timestamps %d and %d".format(start_time, end_time));
     val anchored_blocks = anchor_block @* { .timestamp >= start_time, .timestamp < end_time, .blockchain_rid not in get_excluded_blockchains() }
-        (@sort @omit .timestamp, .blockchain_rid, .witness,
-            primary_extra_header = block_header.from_gtv(gtv.from_bytes(.block_header)).extra.get_or_null(PRIMARY_HEADER_KEY)
-        );
+        (@sort @omit .timestamp, .blockchain_rid, .transaction, .anchoring_tx_op_index);
     log("Fetched %d blocks from DB for availability calculation".format(anchored_blocks.size()));
-    val report = calculate_node_availability(anchored_blocks, block_range_size);
+    val report = calculate_node_availability(
+        anchored_blocks @* {} (extract_block_info(.blockchain_rid, .transaction, .anchoring_tx_op_index)),
+        block_range_size
+    );
     log("Node availability calculation completed");
     return report;
 }
 
-function calculate_node_availability(anchored_blocks: list<(blockchain_rid: byte_array, witness: byte_array, primary_extra_header: gtv?)>,
+function extract_block_info(blockchain_rid: byte_array, transaction: transaction, anchoring_tx_op_index: integer):
+    (blockchain_rid: byte_array, signers: list<byte_array>, primary_extra_header: gtv?) {
+        val anchored_block = extract_anchored_block(transaction, anchoring_tx_op_index);
+        val signers = extract_signers_from_witness(anchored_block.witness);
+        val primary_extra_header = anchored_block.block_header.extra.get_or_null(PRIMARY_HEADER_KEY);
+        return (blockchain_rid = blockchain_rid, signers = signers, primary_extra_header = primary_extra_header);
+}
+
+function calculate_node_availability(anchored_blocks: list<(blockchain_rid: byte_array, signers: list<byte_array>, primary_extra_header: gtv?)>,
         block_range_size: integer): map<byte_array, decimal> {
     val range_statistics = map<byte_array, range_statistic>();
     val current_ranges = map<byte_array, current_range>();
 
     // Any overflowing unfinished range will be calculated but not considered for node availability
     // Maybe there is a way to avoid the calculation?
-    for ((blockchain_rid, witness, primary_extra_header) in anchored_blocks) {
+    for ((blockchain_rid, signers, primary_extra_header) in anchored_blocks) {
         val current_range = current_ranges.get_or_default(blockchain_rid, current_range());
 
         // Add primary header field + witness
         if (exists(primary_extra_header)) current_range.active_signers.add(byte_array.from_gtv(primary_extra_header));
-        current_range.active_signers.add_all(extract_signers_from_witness(witness));
+        current_range.active_signers.add_all(signers);
 
         current_range.block_offset++;
         current_ranges[blockchain_rid] = current_range;

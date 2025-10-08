@@ -37,7 +37,8 @@ val query_limit = if (chain_context.args.imcf_headers_with_messages_query_limit 
 query icmf_get_headers_with_messages_after_height(topic: text, from_anchor_height: integer): list<signed_block_header_with_anchor_height> {
     val headers_with_messages_after_height = (m: icmf_messages_height, a: anchor_block) @*
         { a.blockchain_rid == m.sender, a.block_height == m.sender_height, topic, .anchor_height > from_anchor_height }
-        (signed_block_header_with_anchor_height(block_header = a.block_header, witness = a.witness, anchor_height = m.anchor_height), @sort m.rowid)
+        (build_signed_block_header_with_anchor_height(a.transaction, a.anchoring_tx_op_index,m.anchor_height),
+            @sort m.rowid)
         limit query_limit;
 
     // For ICMF to work this query must return everything for each anchoring height so we need to add anything that
@@ -47,9 +48,19 @@ query icmf_get_headers_with_messages_after_height(topic: text, from_anchor_heigh
         headers_with_messages_after_height.add_all(
             (m: icmf_messages_height, a: anchor_block) @*
             { a.blockchain_rid == m.sender, a.block_height == m.sender_height, topic, .anchor_height == last_retrieved_header_with_message.anchor_height, m.rowid > last_retreived_rowid }
-            (signed_block_header_with_anchor_height(block_header = a.block_header, witness = a.witness, anchor_height = m.anchor_height), @sort m.rowid)
+            (build_signed_block_header_with_anchor_height(a.transaction, a.anchoring_tx_op_index, m.anchor_height),
+                @sort m.rowid)
         );
     }
 
     return headers_with_messages_after_height @* { }($[0]);
+}
+
+function build_signed_block_header_with_anchor_height(transaction, tx_index: integer, anchor_height: integer): signed_block_header_with_anchor_height {
+    val anchored_block = extract_anchored_block(transaction, tx_index);
+    return signed_block_header_with_anchor_height(
+        block_header = anchored_block.block_header.to_bytes(),
+        witness = anchored_block.witness,
+        anchor_height = anchor_height,
+    );
 }
