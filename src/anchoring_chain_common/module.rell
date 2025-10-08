@@ -7,8 +7,8 @@ import messaging.configuration_update_message.*;
     index timestamp: integer;
     block_rid: byte_array;
     index blockchain_rid, block_rid;
-    block_header: byte_array;
-    witness: byte_array;
+    block_header: byte_array; // not used any longer, will be empty
+    witness: byte_array; // not used any longer, will be empty
     anchoring_tx_op_index: integer; // For batch anchoring it's the index in the array of blocks
 }
 
@@ -35,19 +35,15 @@ struct block_to_anchor {
 }
 
 operation __anchor_block_header(block_rid: byte_array, header: gtv, witness: byte_array) {
-    anchor_block_header(block_rid, header, witness);
-}
-
-function anchor_block_header(block_rid: byte_array, header: gtv, witness: byte_array) {
     val decoded_header = block_header.from_gtv(header);
     create anchor_block(
         blockchain_rid = decoded_header.blockchain_rid,
         block_height = decoded_header.height,
         timestamp = decoded_header.timestamp,
         block_rid = block_rid,
-        block_header = header.to_bytes(),
-        witness = witness,
-        anchoring_tx_op_index = op_context.op_index
+        block_header = x"",
+        witness = x"",
+        anchoring_tx_op_index = op_context.op_index,
     );
 
     after_anchoring_block(block_rid, decoded_header);
@@ -68,10 +64,10 @@ function map_block_to_anchor_to_entity(block_to_anchor, batch_index: integer): s
         block_height = block_to_anchor.block_header.height,
         timestamp = block_to_anchor.block_header.timestamp,
         block_rid = block_to_anchor.block_rid,
-        block_header = block_to_anchor.block_header.to_gtv().to_bytes(),
-        witness = block_to_anchor.witness,
+        block_header = x"",
+        witness = x"",
         anchoring_tx_op_index = batch_index,
-        transaction = op_context.transaction
+        transaction = op_context.transaction,
     );
 }
 
@@ -100,3 +96,19 @@ query is_block_anchored(blockchain_rid: byte_array, block_rid: byte_array): bool
 }
 
 @extendable function after_anchoring_block(block_rid: byte_array, decoded_header: block_header) {}
+
+function extract_anchored_block(transaction, tx_index: integer): block_to_anchor {
+    val gtx = gtx_transaction.from_bytes(transaction.tx_data);
+    if (gtx.body.operations[tx_index].name == rell.meta(__anchor_block_header).mount_name) {
+        return block_to_anchor(
+            block_rid = byte_array.from_gtv(gtx.body.operations[tx_index].args[0]),
+            block_header = block_header.from_gtv(gtx.body.operations[tx_index].args[1]),
+            witness = byte_array.from_gtv(gtx.body.operations[tx_index].args[2])
+        );
+    } else if (gtx.body.operations[0].name == rell.meta(__batch_anchor_block_header).mount_name)
+        return list<block_to_anchor>.from_gtv(gtx.body.operations[0].args[0])[tx_index];
+    else {
+        require(false, "Unrecognized anchoring operation: %s".format(gtx.body.operations[0].name));
+        return block_to_anchor.from_bytes(x""); // unreachable
+    }
+}
