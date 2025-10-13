@@ -102,6 +102,12 @@ struct bridge_configuration {
 }
 ```
 
+You can also revoke a bridge proposal by calling the operation below:
+
+```shell
+chr tx --evm-auth EVM_WALLET_ADDRESS --blockchain-rid ${TOKEN_CHAIN_RID} revoke_token_bridge_proposal ${PROPOSAL_ID}
+```
+
 You can use the same query as listed above to see the status of your proposal.
 
 ## Minting
