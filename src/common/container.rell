@@ -115,7 +115,12 @@ function upgrade_container(container, container_units: integer, extra_storage: i
     update container_resource_limit @ { container, container_resource_limit_type.container_units } ( container_units );
     update container_resource_limit @ { container, container_resource_limit_type.max_blockchains } ( max_blockchains );
     update container_resource_limit @ { container, container_resource_limit_type.extra_storage } ( extra_storage );
-    update container_resource_limit @ { container, container_resource_limit_type.extra_compute_requests } ( extra_compute_requests );
+    val extra_compute_request_limit = container_resource_limit @? { container, container_resource_limit_type.extra_compute_requests };
+    if (exists(extra_compute_request_limit)) {
+        extra_compute_request_limit.value = extra_compute_requests;
+    } else {
+        create container_resource_limit(container, container_resource_limit_type.extra_compute_requests, extra_compute_requests);
+    }
 }
 
 function require_container_units(container, new_container_units: integer) {
