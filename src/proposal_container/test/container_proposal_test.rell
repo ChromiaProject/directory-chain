@@ -1,5 +1,7 @@
 @test module;
 
+import ^.helper_operations.*;
+
 import common.operations.*;
 import common.queries.*;
 import common.test.setup.*;
@@ -223,6 +225,24 @@ function test_pause_and_resume_container() {
             state = blockchain_state.RUNNING,
         ),
     ]);
+}
+
+function test_propose_limits_on_container_without_extra_compute() {
+    setup_module();
+
+    rell.test.tx().op(
+        create_container_without_extra_compute(initial_provider.pub, clusters.system, "container1", voter_sets.system_p)
+    ).sign(initial_provider).run();
+
+    // Proposing container limits
+    val limits = map<container_resource_limit_type, integer>();
+    rell.test.tx().op(
+        propose_container_limits(initial_provider.pub, "container1", limits),
+    ).sign(initial_provider).run();
+
+    // Check that proposal passed
+    val latest_proposal = proposal @ {} (@omit @sort_desc .rowid, $) limit 1;
+    assert_equals(latest_proposal.state, proposal_state.APPROVED);
 }
 
 function _make_vote(voter: rell.test.keypair) {
