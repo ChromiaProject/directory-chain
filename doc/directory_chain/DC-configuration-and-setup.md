@@ -161,8 +161,10 @@ From economy-chain:
           - "net.postchain.eif.EifSynchronizationInfrastructureExtension"
         allowed_blockchain_features:
           - "merkle_hash_version"
-        required_blockchain_features: []
+        required_blockchain_features:
+          - "merkle_hash_version"
         require_eif_snapshot_version: 2
+        require_min_merkle_hash_version: 2
       node_software_version:
         node_image:
           url: registry.gitlab.com/chromaway/postchain-chromia/chromaway/chromia-server

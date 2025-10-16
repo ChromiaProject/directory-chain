@@ -14,6 +14,7 @@ struct module_args {
     allowed_dapp_chain_sync_exts: gtv;
     allowed_blockchain_features: gtv;
     required_blockchain_features: gtv;
+    require_min_merkle_hash_version: integer;
     require_revolt_when_should_build_block: boolean = true;
     require_add_primary_key_to_header: boolean = true;
 
@@ -97,7 +98,8 @@ function validate_blockchain_configuration(blockchain?, container, config_data: 
 function validate_merkle_hash_version(blockchain?, config_map: map<text, gtv>) {
     val new_version = extract_config_path_int_value(config_map, ["features", "merkle_hash_version"]);
     require(new_version != null, "Merkle hash version must be set");
-    require(new_version >= 2, "Merkle hash version must be at least 2".format(new_version));
+    require(new_version >= chain_context.args.require_min_merkle_hash_version,
+     "Merkle hash version must be at least 2".format(new_version));
 
     if (blockchain != null) {
         val latest_config_map = map<text, gtv>.from_gtv(gtv.from_bytes(get_latest_blockchain_configuration_data(blockchain).config));

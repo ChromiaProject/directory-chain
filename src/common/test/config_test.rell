@@ -793,7 +793,7 @@ function test_feature_snapshot_reject_retroactively_activation() {
     val bc_rid = blockchain @ { "foo_chain" } (.rid);
 
     val new_config = apply_required_configuration_properties(
-        ["features": ["snapshot_enabled": (2).to_gtv()].to_gtv()]);
+        ["features": ["merkle_hash_version": (2).to_gtv(), "snapshot_enabled": (2).to_gtv()].to_gtv()]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, new_config.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run_must_fail("Decoding type 'boolean': expected 0 or 1, actual 2");
@@ -835,7 +835,7 @@ function test_feature_merkle_hash_version_validations() {
         ["features": build_features_configuration_properties(mhv = null)]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, new_config.to_gtv_pretty().to_bytes(), "")
-    ).sign(initial_provider).nop().run_must_fail("Merkle hash version must be set");
+    ).sign(initial_provider).nop().run_must_fail("Missing required feature: merkle_hash_version");
 
     // Reject config with unsupported version
     new_config = apply_required_configuration_properties(
