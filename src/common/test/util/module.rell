@@ -14,8 +14,20 @@ function apply_required_configuration_properties(original_config: map<text, gtv>
         "add_primary_key_to_header": true.to_gtv(),
         "config_consensus_strategy": "HEADER_HASH".to_gtv(),
         "blockstrategy": ["mininterblockinterval": (1000).to_gtv()].to_gtv(),
-        "revolt": ["revolt_when_should_build_block": (true).to_gtv()].to_gtv()
+        "revolt": ["revolt_when_should_build_block": (true).to_gtv()].to_gtv(),
+        "features": build_features_configuration_properties(2, null),
     ];
     config_with_required_defaults.put_all(original_config); // Original config has precedence
     return config_with_required_defaults;
+}
+
+function build_features_configuration_properties(mhv: integer? = 2, snapshot: boolean? = null) {
+    val features = map<text, gtv>();
+    if (mhv != null) {
+        features["merkle_hash_version"] = mhv.to_gtv();
+    }
+    if (snapshot != null) {
+        features["snapshot_enabled"] = snapshot.to_gtv();
+    }
+    return features.to_gtv();
 }
