@@ -95,10 +95,13 @@ function validate_blockchain_configuration(blockchain?, container, config_data: 
 }
 
 function validate_merkle_hash_version(blockchain?, config_map: map<text, gtv>) {
+    val new_version = extract_config_path_int_value(config_map, ["features", "merkle_hash_version"]);
+    require(new_version != null, "Merkle hash version must be set");
+    require(new_version >= 2, "Merkle hash version must be at least 2".format(new_version));
+
     if (blockchain != null) {
         val latest_config_map = map<text, gtv>.from_gtv(gtv.from_bytes(get_latest_blockchain_configuration_data(blockchain).config));
         val latest_version = extract_config_path_int_value(latest_config_map, ["features", "merkle_hash_version"]) ?: 1;
-        val new_version = extract_config_path_int_value(config_map, ["features", "merkle_hash_version"]) ?: 1;
 
         require(new_version >= latest_version, "Merkle hash version can't be downgraded from version %s to %s".format(
             latest_version, new_version

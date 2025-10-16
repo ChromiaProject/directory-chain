@@ -327,7 +327,7 @@ function test_precise_configuration_update_config_multiple_pending() {
 function test_precise_configuration_update_rejected_invalid_config_no_config_consensus_strategy() {
     val (anchor_chain, bc_rid) = setup();
 
-    val config1 = ["number": (1).to_gtv()];
+    val config1 = ["number": (1).to_gtv(), "features": ["merkle_hash_version": (2).to_gtv()].to_gtv()];
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run_must_fail("Configuration must contain \"config_consensus_strategy\"=\"HEADER_HASH\"");
@@ -356,7 +356,7 @@ function test_precise_configuration_update_happy_recognized_feature() {
 
     val config1 = apply_required_configuration_properties([
         "number": (1).to_gtv(),
-        "features": ["merkle_hash_version": (1).to_gtv()].to_gtv(),
+        "features": ["merkle_hash_version": (2).to_gtv()].to_gtv(),
     ]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, config1.to_gtv_pretty().to_bytes(), "")
@@ -775,7 +775,8 @@ function test_precise_configuration_update_config_failed() {
 
 function test_feature_snapshot_on_new_blockchain() {
     setup_module(cluster_anchoring_config = ["any": "value".to_gtv()]);
-    val config = apply_required_configuration_properties(["features": ["snapshot_enabled": (1).to_gtv()].to_gtv()]);
+    val config = apply_required_configuration_properties(["features":
+        build_features_configuration_properties(snapshot = true)]);
     rell.test.tx().op(
         create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
         propose_blockchain(initial_provider.pub, config.to_gtv_pretty().to_bytes(), "foo_chain", "container", "")
@@ -791,12 +792,14 @@ function test_feature_snapshot_reject_retroactively_activation() {
     ).sign(initial_provider).run();
     val bc_rid = blockchain @ { "foo_chain" } (.rid);
 
-    val new_config = apply_required_configuration_properties(["features": ["snapshot_enabled": (2).to_gtv()].to_gtv()]);
+    val new_config = apply_required_configuration_properties(
+        ["features": ["snapshot_enabled": (2).to_gtv()].to_gtv()]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, new_config.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run_must_fail("Decoding type 'boolean': expected 0 or 1, actual 2");
 
-    val new_config2 = apply_required_configuration_properties(["features": ["snapshot_enabled": (1).to_gtv()].to_gtv()]);
+    val new_config2 = apply_required_configuration_properties(["features":
+        build_features_configuration_properties(snapshot = true)]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, new_config2.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run_must_fail("Snapshot can't be enabled retroactively");
@@ -804,79 +807,42 @@ function test_feature_snapshot_reject_retroactively_activation() {
 
 function test_feature_snapshot_valid_new_config() {
     setup_module(cluster_anchoring_config = ["any": "value".to_gtv()]);
-    val config = apply_required_configuration_properties(["features": ["snapshot_enabled": (1).to_gtv()].to_gtv()]);
+    val config = apply_required_configuration_properties(
+        ["features": build_features_configuration_properties(snapshot = true)]);
     rell.test.tx().op(
         create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
         propose_blockchain(initial_provider.pub, config.to_gtv_pretty().to_bytes(), "foo_chain", "container", "")
     ).sign(initial_provider).run();
     val bc_rid = blockchain @ { "foo_chain" } (.rid);
 
-    val new_config = apply_required_configuration_properties(["features": ["snapshot_enabled": (1).to_gtv()].to_gtv()]);
     rell.test.tx().op(
-        propose_configuration(initial_provider.pub, bc_rid, new_config.to_gtv_pretty().to_bytes(), "")
+        propose_configuration(initial_provider.pub, bc_rid, config.to_gtv_pretty().to_bytes(), "")
     ).sign(initial_provider).run();
 }
 
-function test_feature_merkle_hash_version_default() {
+function test_feature_merkle_hash_version_validations() {
     setup_module();
-    val config = apply_required_configuration_properties();
+    val config = apply_required_configuration_properties(
+        ["features": build_features_configuration_properties(mhv = 2)]);
     rell.test.tx().op(
         create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
         propose_blockchain(initial_provider.pub, config.to_gtv_pretty().to_bytes(), "foo_chain", "container", "")
     ).sign(initial_provider).run();
     val bc_rid = blockchain @ { "foo_chain" } (.rid);
 
-    // Reject version 0
-    var new_config = apply_required_configuration_properties(["features": ["merkle_hash_version": (0).to_gtv()].to_gtv()]);
+    // Reject config with no merkle hash version set
+    var new_config = apply_required_configuration_properties(
+        ["features": build_features_configuration_properties(mhv = null)]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, new_config.to_gtv_pretty().to_bytes(), "")
-    ).sign(initial_provider).run_must_fail("Merkle hash version can't be downgraded from version 1 to 0");
+    ).sign(initial_provider).nop().run_must_fail("Merkle hash version must be set");
 
-    // Accept version 1 (same)
-    new_config = apply_required_configuration_properties(["features": ["merkle_hash_version": (1).to_gtv()].to_gtv()]);
+    // Reject config with unsupported version
+    new_config = apply_required_configuration_properties(
+        ["features": build_features_configuration_properties(mhv = 1)]);
     rell.test.tx().op(
         propose_configuration(initial_provider.pub, bc_rid, new_config.to_gtv_pretty().to_bytes(), "")
-    ).sign(initial_provider).run();
-
-    // Accept version not set (defaults to 1, the same)
-    new_config = apply_required_configuration_properties(["features": ["merkle_hash_version": (1).to_gtv()].to_gtv()]);
-    rell.test.tx().op(
-        propose_configuration(initial_provider.pub, bc_rid, new_config.to_gtv_pretty().to_bytes(), "")
-    ).sign(initial_provider).nop().run();
-
-    // Accept version 2
-    new_config = apply_required_configuration_properties(["features": ["merkle_hash_version": (2).to_gtv()].to_gtv()]);
-    rell.test.tx().op(
-        propose_configuration(initial_provider.pub, bc_rid, new_config.to_gtv_pretty().to_bytes(), "")
-    ).sign(initial_provider).run();
-}
-
-function test_feature_merkle_hash_version_downgrade() {
-    setup_module();
-    val config = apply_required_configuration_properties(["features": ["merkle_hash_version": (2).to_gtv()].to_gtv()]);
-    rell.test.tx().op(
-        create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
-        propose_blockchain(initial_provider.pub, config.to_gtv_pretty().to_bytes(), "foo_chain", "container", "")
-    ).sign(initial_provider).run();
-    val bc_rid = blockchain @ { "foo_chain" } (.rid);
-
-    // Reject version 1
-    var new_config = apply_required_configuration_properties(["features": ["merkle_hash_version": (1).to_gtv()].to_gtv()]);
-    rell.test.tx().op(
-        propose_configuration(initial_provider.pub, bc_rid, new_config.to_gtv_pretty().to_bytes(), "")
-    ).sign(initial_provider).nop().run_must_fail("Merkle hash version can't be downgraded from version 2 to 1");
-
-    // Reject no version set in features block (same as version 1)
-    new_config = apply_required_configuration_properties(["features": map<text, gtv>().to_gtv()]);
-    rell.test.tx().op(
-        propose_configuration(initial_provider.pub, bc_rid, new_config.to_gtv_pretty().to_bytes(), "")
-    ).sign(initial_provider).nop().run_must_fail("Merkle hash version can't be downgraded from version 2 to 1");
-
-    // Reject no version set due to missing features block (same as version 1)
-    new_config = apply_required_configuration_properties();
-    rell.test.tx().op(
-        propose_configuration(initial_provider.pub, bc_rid, new_config.to_gtv_pretty().to_bytes(), "")
-    ).sign(initial_provider).nop().run_must_fail("Merkle hash version can't be downgraded from version 2 to 1");
+    ).sign(initial_provider).nop().run_must_fail("Merkle hash version must be at least 2");
 }
 
 function setup(): (anchor_chain: blockchain, bc_rid: byte_array) {
