@@ -58,8 +58,8 @@ operation __batch_anchor_block_header(blocks_to_anchor: list<block_to_anchor>) {
     }
 }
 
-function map_block_to_anchor_to_entity(block_to_anchor, batch_index: integer): struct<anchor_block> {
-    return struct<anchor_block>(
+function map_block_to_anchor_to_entity(block_to_anchor, batch_index: integer): struct<anchor_block> =
+    struct<anchor_block>(
         blockchain_rid = block_to_anchor.block_header.blockchain_rid,
         block_height = block_to_anchor.block_header.height,
         timestamp = block_to_anchor.block_header.timestamp,
@@ -69,33 +69,58 @@ function map_block_to_anchor_to_entity(block_to_anchor, batch_index: integer): s
         anchoring_tx_op_index = batch_index,
         transaction = op_context.transaction,
     );
+
+struct anchor_block_data {
+    anchoring_tx_rid: byte_array;
+    anchoring_tx_op_index: integer;
+    blockchain_rid: byte_array;
+    block_height: integer;
+    block_rid: byte_array;
+    timestamp: integer;
+    block_header: byte_array;
+    witness: byte_array;
+
+    /** anchoring transaction rowid */
+    transaction: rowid;
 }
 
-query get_last_anchored_block(blockchain_rid: byte_array): struct<anchor_block>? {
-    return anchor_block @? { blockchain_rid } (@omit @sort_desc .block_height, $.to_struct()) limit 1;
-}
+query get_last_anchored_block_height(blockchain_rid: byte_array): integer? =
+    anchor_block @? { blockchain_rid } (@sort_desc .block_height) limit 1;
 
-query get_anchored_block_at_height(blockchain_rid: byte_array, height: integer): struct<anchor_block>? {
-    return anchor_block @? { blockchain_rid, .block_height == height } ($.to_struct());
-}
+query get_last_anchored_block(blockchain_rid: byte_array): anchor_block_data? =
+    build_anchor_block_data(anchor_block @? { blockchain_rid } (@omit @sort_desc .block_height, $) limit 1);
 
-query get_anchoring_transaction_for_block_rid(blockchain_rid: byte_array, block_rid: byte_array): anchoring_tx_with_op_index? {
-    return anchor_block @? { blockchain_rid, block_rid } (anchoring_tx_with_op_index(
+query get_anchored_block_at_height(blockchain_rid: byte_array, height: integer): anchor_block_data? =
+    build_anchor_block_data(anchor_block @? { blockchain_rid, .block_height == height });
+
+query get_anchoring_transaction_for_block_rid(blockchain_rid: byte_array, block_rid: byte_array): anchoring_tx_with_op_index? =
+    anchor_block @? { blockchain_rid, block_rid } (anchoring_tx_with_op_index(
         tx_rid = .transaction.tx_rid,
         tx_data = .transaction.tx_data,
         tx_op_index = .anchoring_tx_op_index
     ));
-}
 
-query get_anchor_block_by_transaction_block_height(blockchain_rid: byte_array, transaction_block_height: integer): struct<anchor_block>? {
-    return anchor_block @? {blockchain_rid, .transaction.block.block_height <= transaction_block_height} (@omit @sort_desc .block_height, $.to_struct()) limit 1;
-}
+query get_anchor_block_by_transaction_block_height(blockchain_rid: byte_array, transaction_block_height: integer): anchor_block_data? =
+    build_anchor_block_data(anchor_block @? {blockchain_rid, .transaction.block.block_height <= transaction_block_height} (@omit @sort_desc .block_height, $) limit 1);
 
-query is_block_anchored(blockchain_rid: byte_array, block_rid: byte_array): boolean {
-    return exists(anchor_block @? { blockchain_rid, block_rid });
-}
+query is_block_anchored(blockchain_rid: byte_array, block_rid: byte_array): boolean =
+    exists(anchor_block @? { blockchain_rid, block_rid });
 
-@extendable function after_anchoring_block(block_rid: byte_array, decoded_header: block_header) {}
+function build_anchor_block_data(anchor_block?): anchor_block_data? {
+    if (anchor_block == null) return null;
+    val block_to_anchor = extract_anchored_block(anchor_block.transaction, anchor_block.anchoring_tx_op_index);
+    return anchor_block_data(
+        anchoring_tx_rid = anchor_block.transaction.tx_rid,
+        anchoring_tx_op_index = anchor_block.anchoring_tx_op_index,
+        blockchain_rid = anchor_block.blockchain_rid,
+        block_height = anchor_block.block_height,
+        block_rid = anchor_block.block_rid,
+        timestamp = anchor_block.timestamp,
+        transaction = anchor_block.transaction.rowid,
+        block_header = block_to_anchor.block_header.to_bytes(),
+        witness = block_to_anchor.witness,
+    );
+}
 
 function extract_anchored_block(transaction, tx_index: integer): block_to_anchor {
     val gtx = gtx_transaction.from_bytes(transaction.tx_data);
@@ -112,3 +137,5 @@ function extract_anchored_block(transaction, tx_index: integer): block_to_anchor
         return block_to_anchor.from_bytes(x""); // unreachable
     }
 }
+
+@extendable function after_anchoring_block(block_rid: byte_array, decoded_header: block_header) {}

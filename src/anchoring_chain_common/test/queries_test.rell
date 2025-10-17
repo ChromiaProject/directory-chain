@@ -2,28 +2,56 @@
 
 import ^^.*;
 
-function test_get_anchor_block_by_transaction_block_height() {
-    val blockchain_rid = x"1111";
-    val block_rid = x"2222";
+function test_anchor_queries() {
+    val blockchain_rid = "blockchain_rid".hash();
+    val block_rid = "block_rid".hash();
     val block_witness = x"abcd";
+
+    assert_null(get_last_anchored_block_height(blockchain_rid));
+    assert_null(get_last_anchored_block(blockchain_rid));
+    assert_null(get_anchor_block_by_transaction_block_height(blockchain_rid, 0));
 
     val block_header0 = block_header(
         blockchain_rid = blockchain_rid,
         previous_block_rid = block_rid,
         merkle_root_hash = ["foo": "zero".to_gtv()].to_gtv().hash(),
-        timestamp = 10,
         height = 3,
+        timestamp = 10,
         dependencies = null.to_gtv(),
         extra = map<text,gtv>()
     ).to_gtv();
     rell.test.tx().op(
-        __anchor_block_header(block_rid, block_header0, x"abcd")
+        __anchor_block_header(block_rid, block_header0, block_witness)
     ).run();
 
-    val result = get_anchor_block_by_transaction_block_height(blockchain_rid, 0);
+    val anchoring_tx = transaction @ {} (@sort_desc .rowid) limit 1;
+    val anchoring_tx_rid = transaction @ {} (@sort_desc @omit .rowid, .tx_rid) limit 1;
 
-    assert_equals(result?.block_height, 3);
-    assert_equals(result?.blockchain_rid, x"1111");
-    assert_equals(result?.block_rid, x"2222");
+    val expected = anchor_block_data(
+        anchoring_tx_rid = anchoring_tx_rid,
+        anchoring_tx_op_index = 0,
+        blockchain_rid = blockchain_rid,
+        block_height = 3,
+        block_rid = block_rid,
+        timestamp = 10,
+        block_header = block_header0.to_bytes(),
+        witness = block_witness,
+        transaction = anchoring_tx,
+    );
 
+    assert_equals(get_last_anchored_block_height(blockchain_rid), 3);
+
+    assert_equals(get_last_anchored_block(blockchain_rid), expected);
+
+    assert_equals(get_anchoring_transaction_for_block_rid(blockchain_rid, block_rid)?.tx_rid, anchoring_tx_rid);
+    assert_equals(get_anchoring_transaction_for_block_rid(blockchain_rid, block_rid)?.tx_op_index, 0);
+    assert_null(get_anchoring_transaction_for_block_rid(blockchain_rid, "bogus".hash()));
+
+    assert_equals(get_anchored_block_at_height(blockchain_rid, 3), expected);
+    assert_null(get_anchored_block_at_height(blockchain_rid, 17));
+
+    assert_equals(get_anchor_block_by_transaction_block_height(blockchain_rid, 0), expected);
+
+    assert_true(is_block_anchored(blockchain_rid, block_rid));
+    assert_false(is_block_anchored(blockchain_rid, "bogus".hash()));
 }
