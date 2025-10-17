@@ -439,16 +439,13 @@ function _staking_pay_reward(last_known_time: timestamp, pool: ft4.accounts.acco
 
 // Shared rewards (triggered by a hook in the rewards logic)
 
-function _staking_shared_rewards(pay_reward_result, delegation_share: decimal) {
+function _staking_shared_rewards(pay_reward_result, delegation_amount: big_integer) {
     val last_known_time = _staking_last_known_time();
 
     // Do nothing if the start date has not passed
     if (last_known_time < staking_get_rewards_start()) {
         return;
     }
-
-    // We ignore reward debt here as it will flow through the reward term after the pool is refreshed
-    val total_shared_reward = delegation_share * pay_reward_result.payed_reward;
 
     // Find provider
     val provider_data = provider_account @? { pay_reward_result.payed_to } (provider = .provider, pubkey = .provider.pubkey);
@@ -479,7 +476,7 @@ function _staking_shared_rewards(pay_reward_result, delegation_share: decimal) {
         struct<pending_shared_payment> (
             .account,
             // @dev The decimal is important
-            amount = integer(total_shared_reward * (.balance / decimal(total_delegation))),
+            amount = integer(delegation_amount * (.balance / decimal(total_delegation))),
             provider_data.pubkey,
         )
     );

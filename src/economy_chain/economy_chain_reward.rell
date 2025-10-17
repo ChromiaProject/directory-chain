@@ -81,7 +81,7 @@ function calculate_dapp_cluster_rewards(cluster: cluster, node_availability_repo
                 1 else get_aggregated_node_availability(node_availability_report.node_availability, cluster_node, cluster);
             val availability_factor = adjusted_availability_factor(reported_availability);
             val dapp_provider_reward_per_node = max_dapp_provider_reward_per_node * availability_factor;
-            log("Reward calculated for node %s in cluster %s based on max_dapp_provider_reward_per_node: %s CHR, occupancy_rate: %s, dapp_cluster_value: %s, number_of_nodes_per_dapp_cluster: %s, dapp_provider_risk_share: %s, availability_factor: %s, chr_per_usd: %s, units_per_asset: %s, system_provider_fee_share: %s, staking_reward_fee_share: %s, chromia_foundation_fee_share: %s, resource_pool_margin_fee_share: %s, dapp_provider_reward_per_node: %s"
+            log("Reward calculated for node %s in cluster %s based on max_dapp_provider_reward_per_node: %s CHR, occupancy_rate: %s, dapp_cluster_value: %s, number_of_nodes_per_dapp_cluster: %s, dapp_provider_risk_share: %s, availability_factor: %s, chr_per_usd: %s, units_per_asset: %s, system_provider_fee_share: %s, chromia_foundation_fee_share: %s, resource_pool_margin_fee_share: %s, dapp_provider_reward_per_node: %s"
                 .format(
                 cluster_node.pubkey,
                     cluster.name,
@@ -94,7 +94,6 @@ function calculate_dapp_cluster_rewards(cluster: cluster, node_availability_repo
                     economy_constants.chr_per_usd,
                     units_per_asset,
                     economy_constants.system_provider_fee_share,
-                    economy_constants.staking_reward_fee_share,
                     economy_constants.chromia_foundation_fee_share,
                     economy_constants.resource_pool_margin_fee_share,
                     (dapp_provider_reward_per_node.to_big_integer() * 1.0 / units_per_asset)));
@@ -143,32 +142,36 @@ function pay_reward(pool: ft4.accounts.account, account: ft4.accounts.account, r
     var pool_balance = get_account_balance(pool);
     var total_reward_debt = reward + reward_debt;
 
-    var amount_to_transfer = 0L;
+    var provider_amount = 0L;
+    var delegation_amount = 0L;
     if (total_reward_debt > 0) {
-        if (pool_balance < total_reward_debt + total_reward_debt * delegation_share) {
+        if (pool_balance < total_reward_debt) {
             pool_balance = refill_pool_account_if_possible();
         }
-        if (pool_balance >= total_reward_debt + total_reward_debt * delegation_share) {
-            amount_to_transfer = total_reward_debt;
+        if (pool_balance >= total_reward_debt) {
+            delegation_amount = (total_reward_debt * delegation_share).round().to_big_integer();
+            provider_amount = total_reward_debt - delegation_amount;
         } else if (pool_balance <= 0) { // No funds to pay reward
             log("Reward pool is empty!");
-            amount_to_transfer = 0;
         } else { // Missing funds to pay full reward
             log("Reward pool does not have enough funds to transfer full reward.");
-            amount_to_transfer = (pool_balance / (delegation_share + 1)).to_big_integer(); //Ensure delegation share is covered in the pool
+            delegation_amount = (pool_balance * delegation_share).round().to_big_integer();
+            provider_amount = pool_balance - delegation_amount;
         }
-        if (amount_to_transfer > 0) {
-            log("Transfer reward %s to %s".format(amount_to_transfer, identity));
-            if (transfer_reward(pool, account, amount_to_transfer)) {
-                total_reward_debt -= amount_to_transfer;
-                pool_balance -= amount_to_transfer;
+        if (provider_amount > 0) {
+            log("Transfer reward %s to %s".format(provider_amount, identity));
+            if (transfer_reward(pool, account, provider_amount)) {
+                // We subtract delegation amount as well from debt here since we know it will be payed in the below hook
+                total_reward_debt -= (provider_amount + delegation_amount);
+                // Only subtracting provider pay out here for the log below
+                pool_balance -= provider_amount;
             } else {
                 log("Unable to transfer reward to %s".format(identity));
             }
         }
     }
 
-    val pay_reward_result = pay_reward_result(payed_reward = amount_to_transfer, payed_to = account, reward_debt = total_reward_debt);
+    val pay_reward_result = pay_reward_result(payed_reward = provider_amount, payed_to = account, reward_debt = total_reward_debt);
 
     log("Pay reward result for %s: payed_reward = %s, reward_debt = %s, payed_to = %s, pool_balance = %s".format(
         identity,
@@ -178,11 +181,11 @@ function pay_reward(pool: ft4.accounts.account, account: ft4.accounts.account, r
         pool_balance
     ));
 
-    after_pay_reward(pay_reward_result, delegation_share);
+    after_pay_reward(pay_reward_result, delegation_amount);
     return pay_reward_result;
 }
 
-@extendable function after_pay_reward(pay_reward_result: pay_reward_result, delegation_share: decimal) {}
+@extendable function after_pay_reward(pay_reward_result: pay_reward_result, delegation_amount: big_integer) {}
 
 function sum_total_max_revenue_per_dapp_cluster(): decimal {
     var sum_total_max_revenue_per_dapp_cluster = 0.0;
@@ -201,7 +204,7 @@ function total_max_revenue_per_dapp_cluster(cluster: cluster): decimal {
 
 function dapp_provider_fee_share(): decimal = 1 - economy_constants.chromia_foundation_fee_share - economy_constants.resource_pool_margin_fee_share - economy_constants.system_provider_fee_share;
 
-function dapp_cluster_value(cluster: cluster): decimal = total_max_revenue_per_dapp_cluster(cluster) * dapp_provider_fee_share() / (1 + economy_constants.staking_reward_fee_share);
+function dapp_cluster_value(cluster: cluster): decimal = total_max_revenue_per_dapp_cluster(cluster) * dapp_provider_fee_share();
 
 function occupied_scus(cluster: cluster): integer = lease @ { cluster, not .expired } ( @sum .container_units );
 
