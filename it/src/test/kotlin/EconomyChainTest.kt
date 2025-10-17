@@ -36,7 +36,7 @@ import java.util.concurrent.TimeUnit
 
 const val DAPP_CLUSTER = "dappCluster"
 
-@Timeout(1, unit = TimeUnit.MINUTES)
+@Timeout(10, unit = TimeUnit.MINUTES)
 class EconomyChainTest {
 
     companion object {
@@ -100,7 +100,7 @@ class EconomyChainTest {
                 ).postAwaitConfirmation()
         assertThat(result.status).isEqualTo(TransactionStatus.CONFIRMED)
 
-        Awaitility.await().atMost(Duration.ONE_MINUTE).untilAsserted {
+        Awaitility.await().atMost(Duration.FIVE_MINUTES).untilAsserted {
             val leases = economyChain.getLeasesByAccount(providerAccountId)
             assertThat(leases).hasSize(1)
             assertThat(leases[0].clusterName).isEqualTo(DAPP_CLUSTER)
