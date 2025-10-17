@@ -3,7 +3,7 @@ entity pending_economy_constants {
     min_lease_time_weeks: integer;
     max_lease_time_weeks: integer;
     staking_reward_rate: decimal;
-    staking_reward_fee_share: decimal;
+    staking_reward_fee_share: decimal = 0.1; // Deprecated
     chromia_foundation_fee_share: decimal;
     resource_pool_margin_fee_share: decimal;
     dapp_provider_risk_share: decimal;
@@ -17,12 +17,12 @@ operation update_economy_constants(
     min_lease_time_weeks: integer?,
     max_lease_time_weeks: integer?,
     staking_reward_rate: decimal?,
-    staking_reward_fee_share: decimal?,
     chromia_foundation_fee_share: decimal?,
     resource_pool_margin_fee_share: decimal?,
     dapp_provider_risk_share: decimal?,
     scheduled_at: timestamp? = null,
 ) {
+
     val provider = require_is_system_provider_and_signer(my_pubkey);
 
     val proposal = create_system_p_proposal(common_proposal_type.ec_constants_update, provider, "Update economy constants");
@@ -31,7 +31,6 @@ operation update_economy_constants(
         min_lease_time_weeks = min_lease_time_weeks ?: -1,
         max_lease_time_weeks = max_lease_time_weeks ?: -1,
         staking_reward_rate = staking_reward_rate ?: -1.0,
-        staking_reward_fee_share = staking_reward_fee_share ?: -1.0,
         chromia_foundation_fee_share = chromia_foundation_fee_share ?: -1.0,
         resource_pool_margin_fee_share = resource_pool_margin_fee_share ?: -1.0,
         dapp_provider_risk_share = dapp_provider_risk_share?: -1.0
@@ -56,9 +55,6 @@ function apply_economy_constants(proposal: common_proposal) {
     }
     if (pending_economy_constants.max_lease_time_weeks >= 0) {
         economy_constants.max_lease_time_weeks = pending_economy_constants.max_lease_time_weeks;
-    }
-    if (pending_economy_constants.staking_reward_fee_share >= 0) {
-        economy_constants.staking_reward_fee_share = pending_economy_constants.staking_reward_fee_share;
     }
     if (pending_economy_constants.staking_reward_rate >= 0) {
         economy_constants.staking_reward_rate = pending_economy_constants.staking_reward_rate;
@@ -96,7 +92,6 @@ query get_economy_constants_proposal(proposal_id: rowid) {
         min_lease_time_weeks = get_optional_proposal_int(pending_economy_constants.min_lease_time_weeks),
         max_lease_time_weeks = get_optional_proposal_int(pending_economy_constants.max_lease_time_weeks),
         staking_reward_rate = get_optional_proposal_decimal(pending_economy_constants.staking_reward_rate),
-        staking_reward_fee_share = get_optional_proposal_decimal(pending_economy_constants.staking_reward_fee_share),
         chromia_foundation_fee_share = get_optional_proposal_decimal(pending_economy_constants.chromia_foundation_fee_share),
         resource_pool_margin_fee_share = get_optional_proposal_decimal(pending_economy_constants.resource_pool_margin_fee_share),
         dapp_provider_risk_share = get_optional_proposal_decimal(pending_economy_constants.dapp_provider_risk_share)
@@ -120,7 +115,6 @@ function validate_economy_constants_proposal(proposal_details: pending_economy_c
     require_ec_constant_share_value(proposal_details.dapp_provider_risk_share, "Dapp provider risk fee share");
 
     require_valid_ec_total_share(
-        staking_reward_fee_share = get_optional_proposal_decimal(proposal_details.staking_reward_fee_share) ?: economy_constants.staking_reward_fee_share,
         chromia_foundation_fee_share = get_optional_proposal_decimal(proposal_details.chromia_foundation_fee_share) ?: economy_constants.chromia_foundation_fee_share,
         resource_pool_margin_fee_share = get_optional_proposal_decimal(proposal_details.resource_pool_margin_fee_share) ?: economy_constants.resource_pool_margin_fee_share,
         dapp_provider_risk_share = get_optional_proposal_decimal(proposal_details.dapp_provider_risk_share) ?: economy_constants.dapp_provider_risk_share
@@ -147,14 +141,12 @@ function require_ec_constant_share_value(value: decimal, name: text) {
 
 function require_valid_ec_total_share(
     system_provider_fee_share: decimal = economy_constants.system_provider_fee_share,
-    staking_reward_fee_share: decimal = economy_constants.staking_reward_fee_share,
     chromia_foundation_fee_share: decimal = economy_constants.chromia_foundation_fee_share,
     resource_pool_margin_fee_share: decimal = economy_constants.resource_pool_margin_fee_share,
     system_provider_risk_share: decimal = economy_constants.system_provider_risk_share,
     dapp_provider_risk_share: decimal = economy_constants.dapp_provider_risk_share,
 ) {
     val sum = system_provider_fee_share +
-        staking_reward_fee_share +
         chromia_foundation_fee_share +
         resource_pool_margin_fee_share +
         system_provider_risk_share +
@@ -173,7 +165,6 @@ query get_economy_constants(): economy_constants_data = economy_constants_data(
     total_cost_system_providers = economy_constants.total_cost_system_providers,
     system_provider_fee_share = economy_constants.system_provider_fee_share,
     staking_reward_rate = economy_constants.staking_reward_rate,
-    staking_reward_fee_share = economy_constants.staking_reward_fee_share,
     chromia_foundation_fee_share = economy_constants.chromia_foundation_fee_share,
     resource_pool_margin_fee_share = economy_constants.resource_pool_margin_fee_share,
     system_provider_risk_share = economy_constants.system_provider_risk_share,

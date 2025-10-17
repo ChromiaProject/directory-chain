@@ -82,7 +82,7 @@ Occupancy rate ia a value between 0 and 1. Where 0 is no occupancy and 1 is full
 `Reduction = Chromia foundation fee share + Resource pool margin fee share + system provider fee share`
 
 #### Dapp cluster value
-`Dapp cluster value = (Total available number of SCUs in cluster - Total System chain SCUs in cluster) * Price per SCU + Total price per GB of extra storage * Total GB of extra storage)*(1-Reduction)/(1+Staking reward fee share)`
+`Dapp cluster value = (Total available number of SCUs in cluster - Total System chain SCUs in cluster) * Price per SCU + Total price per GB of extra storage * Total GB of extra storage)*(1-Reduction)`
 
 #### Total max revenue per dapp cluster (node value)
 `Total max revenue per dapp cluster = (Total available number of SCUs in cluster - Total system chain SCUs in cluster) * Price per SCU + Total price per GB of extra storage * Total GB of extra storage`
@@ -91,7 +91,7 @@ Occupancy rate ia a value between 0 and 1. Where 0 is no occupancy and 1 is full
 `System Provider Cost share per node = (Sum(Total max revenue per dapp cluster) * System provider fee share)/ Number of nodes in system cluster`
 
 #### System provider reward per node
-`System provider reward per node = Max(Total cost system providers* (1- system provider risk share) + System Provider Cost Share per node * System provider risk share, System Provider Cost Share)*Availability factor
+`System provider reward per node = Max(Total cost system providers* (1- system provider risk share) + System Provider Cost Share per node * System provider risk share, System Provider Cost Share)*Availability factor*(1-Provider staking reward fee share)`
 
 ### Dapp provider reward per node
-`Dapp provider reward per node ((Dapp cluster value * (1 - Dapp provider risk share) + Dapp cluster value* Occupancy rate * Dapp Provider Risk Share)/Number of nodes per dapp cluster)*Availability factor`
+`Dapp provider reward per node ((Dapp cluster value * (1 - Dapp provider risk share) + Dapp cluster value* Occupancy rate * Dapp Provider Risk Share)/Number of nodes per dapp cluster)*Availability factor*(1-Provider staking reward fee share)`

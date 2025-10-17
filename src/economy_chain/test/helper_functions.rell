@@ -42,13 +42,14 @@ function do_create_account(
 }
 
 function add_provider(pubkey: pubkey, system: boolean = false, tier: provider_tier = provider_tier.NODE_PROVIDER,
-        name: text = "", url: text = ""): provider {
+        name: text = "", url: text = "", staking_rewards_share: decimal = 0.1): provider {
     val existing = provider @? { pubkey };
     if (exists(existing)) { return existing; }
     rell.test.tx().op(
         icmf_message_op(pubkey, provider_update_topic, body = provider_update_message(
             pubkey, system, tier = tier.name, active = true, name = name, url = url).to_gtv()
-        )
+        ),
+        set_provider_staking_reward_share(pubkey, staking_rewards_share)
     ).run();
     return require(provider @? { pubkey });
 }

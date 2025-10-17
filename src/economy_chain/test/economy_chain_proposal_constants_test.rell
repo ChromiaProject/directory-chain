@@ -9,11 +9,11 @@ function test_update_economy_constants_validate_input() {
     add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
 
     rell.test.tx().op(
-        update_economy_constants(rell.test.keypairs.alice.pub, 0, null, null, null, null, null, null)
+        update_economy_constants(rell.test.keypairs.alice.pub, 0, null, null, null, null, null)
     ).sign(rell.test.keypairs.alice).run_must_fail("Min lease time weeks must be greater or equal to 1");
 
     rell.test.tx().op(
-        update_economy_constants(rell.test.keypairs.alice.pub, 1, 0, null, null, null, null, null)
+        update_economy_constants(rell.test.keypairs.alice.pub, 1, 0, null, null, null, null)
     ).sign(rell.test.keypairs.alice).run_must_fail("Max lease time weeks must be greater or equal to 1");
 
     rell.test.tx().op(
@@ -25,30 +25,26 @@ function test_update_economy_constants_validate_input() {
     ).sign(rell.test.keypairs.alice).run_must_fail("Staking reward rate must be greater or equal to 0");
 
     rell.test.tx().op(
-        update_economy_constants(rell.test.keypairs.alice.pub, 1, 2, 3, 1.01, null, null, null)
-    ).sign(rell.test.keypairs.alice).run_must_fail("Staking reward fee share must be between 0 and 1");
-
-    rell.test.tx().op(
-        update_economy_constants(rell.test.keypairs.alice.pub, 1, 2, 3, 0.1, 2, null, null)
+        update_economy_constants(rell.test.keypairs.alice.pub, 1, 2, 3, 2, null, null)
     ).sign(rell.test.keypairs.alice).run_must_fail("Chromia foundation fee share must be between 0 and 1");
 
     rell.test.tx().op(
-        update_economy_constants(rell.test.keypairs.alice.pub, 1, 2, 3, 0.1, 0.2, -5, null)
+        update_economy_constants(rell.test.keypairs.alice.pub, 1, 2, 3, 0.2, -5, null)
     ).sign(rell.test.keypairs.alice).run_must_fail("Resource pool margin fee share must be between 0 and 1");
 
     rell.test.tx().op(
-        update_economy_constants(rell.test.keypairs.alice.pub, 1, 2, 3, 0.1, 0.2, 0.3, 10000)
+        update_economy_constants(rell.test.keypairs.alice.pub, 1, 2, 3, 0.2, 0.3, 10000)
     ).sign(rell.test.keypairs.alice).run_must_fail("Dapp provider risk fee share must be between 0 and 1");
 
     // Total sum of "share" values exceeds 1.0
     rell.test.tx().op(
-        update_economy_constants(rell.test.keypairs.alice.pub, 1, 2, 3, 0.5, 0.5, 0.5, 0.5)
-    ).sign(rell.test.keypairs.alice).run_must_fail("The sum (2.200000) of all economy chain share values must be between 0 and 1.0 inclusive");
+        update_economy_constants(rell.test.keypairs.alice.pub, 1, 2, 3, 0.5, 0.5, 0.5)
+    ).sign(rell.test.keypairs.alice).run_must_fail("The sum (1.700000) of all economy chain share values must be between 0 and 1.0 inclusive");
 
     // Invalid time
     rell.test.set_next_block_time_delta(1000);
     rell.test.tx().op(
-        update_economy_constants(rell.test.keypairs.alice.pub, 1, null, null, null, null, null, null, get_last_blocktime())
+        update_economy_constants(rell.test.keypairs.alice.pub, 1, null, null, null, null, null, get_last_blocktime())
     ).sign(rell.test.keypairs.alice).run_must_fail("Scheduled time must be later than last block time");
 }
 
@@ -60,7 +56,6 @@ function test_update_economy_constants() {
     assert_equals(constants.total_cost_system_providers, 828 * units_per_usd);
     assert_equals(constants.system_provider_fee_share, 0.1);
     assert_equals(constants.staking_reward_rate, 0.1);
-    assert_equals(constants.staking_reward_fee_share, 0.1);
     assert_equals(constants.chromia_foundation_fee_share, 0.1);
     assert_equals(constants.resource_pool_margin_fee_share, 0.1);
     assert_equals(constants.system_provider_risk_share, 0.1);
@@ -68,13 +63,13 @@ function test_update_economy_constants() {
 
     // Update constants
     rell.test.tx().op(
-        update_economy_constants(rell.test.keypairs.alice.pub, 1, 2, 3, 4, 5, 6, 7)
+        update_economy_constants(rell.test.keypairs.alice.pub, 1, 2, 3, 5, 6, 7)
     ).run_must_fail("Expected system provider signature");
 
     add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
 
     rell.test.tx().op(
-        update_economy_constants(rell.test.keypairs.alice.pub, 1, 2, 3, 0.04, 0.05, 0.06, 0.07)
+        update_economy_constants(rell.test.keypairs.alice.pub, 1, 2, 3, 0.05, 0.06, 0.07)
     ).sign(rell.test.keypairs.alice).run();
 
     val updated_constants: economy_constants_data = get_economy_constants();
@@ -84,7 +79,6 @@ function test_update_economy_constants() {
     assert_equals(updated_constants.total_cost_system_providers, 828 * units_per_usd); // Unchanged
     assert_equals(updated_constants.system_provider_fee_share, 0.1); // Unchanged
     assert_equals(updated_constants.staking_reward_rate, 3);
-    assert_equals(updated_constants.staking_reward_fee_share, 0.04);
     assert_equals(updated_constants.chromia_foundation_fee_share, 0.05);
     assert_equals(updated_constants.resource_pool_margin_fee_share, 0.06);
     assert_equals(updated_constants.system_provider_risk_share, 0.1); // Unchanged
@@ -100,7 +94,7 @@ function test_update_economy_constants_scheduld_at() {
     rell.test.set_next_block_time_delta(1000);
     rell.test.tx().op(
         init(),
-        update_economy_constants(rell.test.keypairs.alice.pub, original_min_lease_time_weeks + 1, null, null, null, null, null, null, get_last_blocktime() + 5000)
+        update_economy_constants(rell.test.keypairs.alice.pub, original_min_lease_time_weeks + 1, null, null, null, null, null, get_last_blocktime() + 5000)
     ).sign(rell.test.keypairs.alice).run();
 
     // Pending
