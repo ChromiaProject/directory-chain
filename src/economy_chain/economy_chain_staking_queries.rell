@@ -5,6 +5,20 @@
 */
 query staking_get_current_rate(): decimal = economy_constants.staking_reward_rate;
 
+/** Current annualised reward rate for EVM stakers
+ *  @return as a decimal fraction, eg. 0.1 is 10%
+*/
+query staking_get_current_evm_rate(): decimal {
+    val current_time = _staking_last_known_time();
+    return if (current_time < 1764633600000) // Tue Dec 02 2025 00:00:00 GMT
+        economy_constants.staking_reward_rate
+    else if (current_time < 1770076800000) // Tue Feb 03 2026 00:00:00 GMT+0000
+        0.02
+    else if (current_time < 1775001600000) // Wed Apr 01 2026 00:00:00 GMT+0000
+        0.01
+    else 0;
+}
+
 /** Starting instant of rewards
  *  @return As a Unix timestamp
 */
@@ -207,14 +221,16 @@ query staking_get_withdrawal_time(account_id: byte_array, network = network.CHR)
  * @dev If this is changed so should `_update_pending_token_time` and the query `_update_pending_token_time_all`.
 */
 query staking_rewards_claimable_for(account_id: byte_array) {
-    val rate = staking_get_current_rate() / millis_per_year;
+    val native_rate = staking_get_current_rate() / millis_per_year;
+    val evm_rate = staking_get_current_evm_rate() / millis_per_year;
     val staker = ft4.accounts.Account(account_id);
     val last_known_time = _staking_last_known_time();
     val null_provider = provider @ { .pubkey == get_null_account() };
     
     // Get all staker states for this account
     val staker_states = staker_state @* { .account == staker };
-    var total_pending_token_time = 0;
+
+    var total_amount = 0.0;
     
     for (ss in staker_states) {
         var current_provider = null_provider;
@@ -253,11 +269,11 @@ query staking_rewards_claimable_for(account_id: byte_array) {
         );
         
         val balance_in_units = ss.balance / units_per_asset;
-        total_pending_token_time += ss.pending_token_time + (balance_in_units * elapsed_time);
+        total_amount += (ss.pending_token_time + (balance_in_units * elapsed_time)) * (if (ss.network == network.CHR) native_rate else evm_rate);
     }
 
     // Operand ordering to prevent overflow
-    return integer((total_pending_token_time * rate) * units_per_asset);
+    return integer(total_amount * units_per_asset);
 }
 
 /**
