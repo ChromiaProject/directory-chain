@@ -359,8 +359,9 @@ function _get_current_provider(ds: delegation_state) {
 
 // default to -1, meaning batching is not used
 function _staking_distribute_rewards(using_batches: boolean = false, update_pending_token_times: boolean = true) {
-    val rate = staking_get_current_rate() / millis_per_year;
-    
+    val native_rate = staking_get_current_rate() / millis_per_year;
+    val evm_rate = staking_get_current_evm_rate() / millis_per_year;
+
     // Get a list of payouts
     if (update_pending_token_times or not using_batches) {
         _update_pending_token_time_all();
@@ -373,7 +374,7 @@ function _staking_distribute_rewards(using_batches: boolean = false, update_pend
         @sum amount = integer (
             (
             .pending_token_time
-        ) * rate * units_per_asset
+        ) * (if (.network == network.CHR) native_rate else evm_rate) * units_per_asset
         )
     ) limit (
         if (using_batches) chain_context.args.staking_rewards_payout_batch_size else integer.MAX_VALUE
@@ -429,6 +430,11 @@ function _staking_distribute_rewards(using_batches: boolean = false, update_pend
 
 function _staking_pay_reward(last_known_time: timestamp, pool: ft4.accounts.account, ft4.assets.asset, account: ft4.accounts.account, amount: integer, shared_amount: integer, providers: list<byte_array>) {
     val total_amount = amount + shared_amount;
+    if (total_amount == 0) {
+        log("Total staking reward for %s was 0. Nothing to pay out.".format(account.id));
+        return;
+    }
+
     val provider = if (empty(providers)) x'' else providers[0];
     ft4.assets.Unsafe.transfer(pool, account, asset, total_amount);
     update staker_state @* { account } ( .pending_token_time = 0 );
@@ -456,9 +462,11 @@ function _staking_shared_rewards(pay_reward_result, delegation_amount: big_integ
         return;
     }
 
+    val evm_staking_enabled = staking_get_current_evm_rate() > 0;
     val staker_delegations = delegation_state @* {
-        (.current_provider == provider_data.provider and (.next_change_at > _staking_last_known_time() or .next_change_at == 0)) or 
-        (.next_provider == provider_data.provider and .next_change_at <= _staking_last_known_time())
+        (evm_staking_enabled or .staker_state.network == network.CHR) and
+        ((.current_provider == provider_data.provider and (.next_change_at > _staking_last_known_time() or .next_change_at == 0)) or
+        (.next_provider == provider_data.provider and .next_change_at <= _staking_last_known_time()))
     } (
         @group account = .staker_state.account,
         @sum balance = .staker_state.balance

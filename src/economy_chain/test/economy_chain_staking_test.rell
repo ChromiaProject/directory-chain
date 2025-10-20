@@ -2019,3 +2019,232 @@ function test_withdrawal_with_remaining_states() {
     do_evm_stake_update_bsc(dave_evm_address, 0);
     assert_equals(staking_get_current_delegate(test_account_dave.id), rell.test.keypairs.bob.pub);
 }
+
+function test_evm_reward_after_2nd_december_2025() {
+    rell.test.tx().op(init()).run();
+
+    // Fast forward to after 2nd December, now reward should be 2% annually
+    rell.test.set_next_block_time(1764633600000);
+    rell.test.block().run();
+
+    // Add EVM staker alice of 12000 CHR
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
+    do_evm_stake_update_bsc(alice_evm_address, 12000 * units_per_asset);
+    val test_account_alice = require(do_create_account_using_ras_staking(rell.test.keypairs.alice));
+    assert_equals(staking_get_balance(test_account_alice.id), 12000 * units_per_asset);
+
+    // Add provider and delegate
+    val dave_provider = add_provider(rell.test.keypairs.dave.pub);
+    val dave_account = provider_account @ { dave_provider }.account;
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.dave.pub), 0);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.dave.pub);
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.dave.pub), 1);
+
+    // Fast forward 1 month + delegation delay
+    rell.test.set_next_block_time_delta(millis_per_year / 12 + staking_delegation_delay_ms);
+    rell.test.block().run();
+
+    // Check that we now have 20 reward in total (2% of 12000 divided by 12)
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id) / units_per_asset, 20);
+
+    // Assert we still get shared rewards
+    rell.test.tx().op(
+        pay_reward_op(get_pool_account(), dave_account, 0, 100 * units_per_asset, "test", dave_provider.staking_rewards_share)
+    ).run();
+
+    // Do staking payout
+    rell.test.tx().op(staking_claim_rewards()).sign(admin_privkey).run();
+
+    // Double check we got the expected payout
+    assert_equals(integer(staking_get_rewards_paid(test_account_alice.id) / units_per_asset), 20);
+
+    //Alice has 100% of all delegation to Dave and gets the full 10%
+    assert_equals(staking_get_shared_rewards_paid(test_account_alice.id), 10 * units_per_asset);
+}
+
+function test_evm_reward_after_3rd_february_2026() {
+    rell.test.tx().op(init()).run();
+
+    // Fast forward to after 3rd February, now reward should be 1% annually
+    rell.test.set_next_block_time(1770076800000);
+    rell.test.block().run();
+
+    // Add EVM staker alice of 12000 CHR
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
+    do_evm_stake_update_bsc(alice_evm_address, 12000 * units_per_asset);
+    val test_account_alice = require(do_create_account_using_ras_staking(rell.test.keypairs.alice));
+    assert_equals(staking_get_balance(test_account_alice.id), 12000 * units_per_asset);
+
+    // Add provider and delegate
+    val dave_provider = add_provider(rell.test.keypairs.dave.pub);
+    val dave_account = provider_account @ { dave_provider }.account;
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.dave.pub), 0);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.dave.pub);
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.dave.pub), 1);
+
+    // Fast forward 1 month + delegation delay
+    rell.test.set_next_block_time_delta(millis_per_year / 12 + staking_delegation_delay_ms);
+    rell.test.block().run();
+
+    // Check that we now have 10 reward in total (1% of 12000 divided by 12)
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id) / units_per_asset, 10);
+
+    // Assert we still get shared rewards
+    rell.test.tx().op(
+        pay_reward_op(get_pool_account(), dave_account, 0, 100 * units_per_asset, "test", dave_provider.staking_rewards_share)
+    ).run();
+
+    // Do staking payout
+    rell.test.tx().op(staking_claim_rewards()).sign(admin_privkey).run();
+
+    // Double check we got the expected payout
+    assert_equals(integer(staking_get_rewards_paid(test_account_alice.id) / units_per_asset), 10);
+
+    //Alice has 100% of all delegation to Dave and gets the full 10%
+    assert_equals(staking_get_shared_rewards_paid(test_account_alice.id), 10 * units_per_asset);
+}
+
+function test_evm_reward_after_1st_april_2026() {
+    rell.test.tx().op(init()).run();
+
+    // Fast forward to after 1st April, now reward should be 0
+    rell.test.set_next_block_time(1775001600000);
+    rell.test.block().run();
+
+    // Add EVM staker alice of 12000 CHR
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
+    do_evm_stake_update_bsc(alice_evm_address, 12000 * units_per_asset);
+    val test_account_alice = require(do_create_account_using_ras_staking(rell.test.keypairs.alice));
+    assert_equals(staking_get_balance(test_account_alice.id), 12000 * units_per_asset);
+
+    // Add provider and delegate
+    val dave_provider = add_provider(rell.test.keypairs.dave.pub);
+    val dave_account = provider_account @ { dave_provider }.account;
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.dave.pub), 0);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.dave.pub);
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.dave.pub), 1);
+
+    // Fast forward 1 month + delegation delay
+    rell.test.set_next_block_time_delta(millis_per_year / 12 + staking_delegation_delay_ms);
+    rell.test.block().run();
+
+    // Check that we now have 0 reward
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id) / units_per_asset, 0);
+
+    // Assert we get no shared rewards
+    rell.test.tx().op(
+        pay_reward_op(get_pool_account(), dave_account, 0, 100 * units_per_asset, "test", dave_provider.staking_rewards_share)
+    ).run();
+
+    // Do staking payout
+    rell.test.tx().op(staking_claim_rewards()).sign(admin_privkey).run();
+
+    // Double check we got nothing
+    assert_equals(integer(staking_get_rewards_paid(test_account_alice.id) / units_per_asset), 0);
+
+    // Assert we got nothing
+    assert_equals(staking_get_shared_rewards_paid(test_account_alice.id), 0);
+}
+
+function test_evm_stakers_still_get_some_evm_and_full_native_reward_after_2nd_december_2025() {
+    rell.test.tx().op(init()).run();
+
+    // Fast forward to after 2nd December, now reward should be 2% annually for EVM stake
+    rell.test.set_next_block_time(1764633600000);
+    rell.test.block().run();
+
+    // Add EVM staker alice of 12000 CHR on each of BSC, ETH and native
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
+    do_evm_stake_update_bsc(alice_evm_address, 12000 * units_per_asset);
+    val test_account_alice = require(do_create_account_using_ras_staking(rell.test.keypairs.alice));
+
+    do_evm_stake_update_eth(alice_evm_address, 12000 * units_per_asset);
+
+    rell.test.tx()
+        .op(mint_to(test_account_alice, 12000 * units_per_asset))
+    .sign(admin_privkey).run();
+    do_staking_deposit_native(rell.test.keypairs.alice, 12000 * units_per_asset);
+
+    assert_equals(staking_get_balance(test_account_alice.id), 36000 * units_per_asset);
+
+    // Add provider and delegate
+    val dave_provider = add_provider(rell.test.keypairs.dave.pub);
+    val dave_account = provider_account @ { dave_provider }.account;
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.dave.pub), 0);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.dave.pub);
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.dave.pub), 1);
+
+    // Fast forward 1 month + delegation delay
+    rell.test.set_next_block_time_delta(millis_per_year / 12 + staking_delegation_delay_ms);
+    rell.test.block().run();
+
+    // Check that we now have 100 reward in total from native staking (10% of 12000 divided by 12)
+    // + 20 reward in total from ETH staking (2% of 12000 divided by 12)
+    // + 20 reward in total from BSC staking (2% of 12000 divided by 12)
+    // 140 in total
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id) / units_per_asset, 140);
+
+    // Assert we get shared rewards
+    rell.test.tx().op(
+        pay_reward_op(get_pool_account(), dave_account, 0, 100 * units_per_asset, "test", dave_provider.staking_rewards_share)
+    ).run();
+
+    // Do staking payout
+    rell.test.tx().op(staking_claim_rewards()).sign(admin_privkey).run();
+
+    // Double check we got the expected payout
+    assert_equals(integer(staking_get_rewards_paid(test_account_alice.id) / units_per_asset), 140);
+
+    //Alice has 100% of all delegation to Dave and gets the full 10%
+    assert_equals(staking_get_shared_rewards_paid(test_account_alice.id), 10 * units_per_asset);
+}
+
+function test_evm_stakers_still_get_any_native_reward_after_1st_april_2026() {
+    rell.test.tx().op(init()).run();
+
+    // Fast forward to after 1st April, now reward should be 0
+    rell.test.set_next_block_time(1775001600000);
+    rell.test.block().run();
+
+    // Add EVM staker alice of 12000 CHR on each of BSC, ETH and native
+    val alice_evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.alice.priv);
+    do_evm_stake_update_bsc(alice_evm_address, 12000 * units_per_asset);
+    val test_account_alice = require(do_create_account_using_ras_staking(rell.test.keypairs.alice));
+
+    do_evm_stake_update_eth(alice_evm_address, 12000 * units_per_asset);
+
+    rell.test.tx()
+        .op(mint_to(test_account_alice, 12000 * units_per_asset))
+    .sign(admin_privkey).run();
+    do_staking_deposit_native(rell.test.keypairs.alice, 12000 * units_per_asset);
+
+    assert_equals(staking_get_balance(test_account_alice.id), 36000 * units_per_asset);
+
+    // Add provider and delegate
+    val dave_provider = add_provider(rell.test.keypairs.dave.pub);
+    val dave_account = provider_account @ { dave_provider }.account;
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.dave.pub), 0);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.dave.pub);
+    assert_equals(staking_get_number_of_delegates_to(rell.test.keypairs.dave.pub), 1);
+
+    // Fast forward 1 month + delegation delay
+    rell.test.set_next_block_time_delta(millis_per_year / 12 + staking_delegation_delay_ms);
+    rell.test.block().run();
+
+    // Check that we now have 100 reward in total from native staking only (10% of 12000 divided by 12)
+    assert_equals(staking_rewards_claimable_for(test_account_alice.id) / units_per_asset, 100);
+
+    // Assert we get shared rewards from native stake
+    rell.test.tx().op(
+        pay_reward_op(get_pool_account(), dave_account, 0, 100 * units_per_asset, "test", dave_provider.staking_rewards_share)
+    ).run();
+
+    // Do staking payout
+    rell.test.tx().op(staking_claim_rewards()).sign(admin_privkey).run();
+
+    // Double check we got the expected payout
+    assert_equals(integer(staking_get_rewards_paid(test_account_alice.id) / units_per_asset), 100);
+
+    //Alice has 100% of all delegation to Dave and gets the full 10%
+    assert_equals(staking_get_shared_rewards_paid(test_account_alice.id), 10 * units_per_asset);
+}
