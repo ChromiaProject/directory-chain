@@ -477,6 +477,35 @@ function test_renew_expired_container() {
     ).to_gtv_pretty()));
 }
 
+function test_renew_non_expired_container_beyond_max_lease_time() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val container_name = do_create_container(alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init);
+
+    val alice_balance = get_account_balance(alice);
+    val pool_balance = get_pool_balance();
+
+    // Renew by more than allowed
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, renew_container(container_name, 13))
+    ).op(
+        renew_container(container_name, 13)
+    ).run_must_fail("lease duration can be max 12 weeks");
+
+    // Asser limit can not be circumvented by doing multiple renewals
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, renew_container(container_name, 7))
+    ).op(
+        renew_container(container_name, 7)
+    ).run();
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, renew_container(container_name, 7))
+    ).op(
+        renew_container(container_name, 7)
+    ).run_must_fail("lease duration can be max 12 weeks");
+}
+
 function test_auto_renew_expired_container() {
     rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
     val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));

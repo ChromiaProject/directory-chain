@@ -515,11 +515,15 @@ function renew_container_auth_message(gtv): text {
  */
 operation renew_container(container_name: text, duration_weeks: integer) {
     require_initialized();
-    require_lease_duration(duration_weeks);
 
     val account = ft4.auth.authenticate();
 
     val lease = require_lease(container_name);
+    val extended_lease_duration_weeks = if (lease.expired)
+        duration_weeks
+    else integer(calculate_remaining_lease_weeks(lease, op_context.last_block_time).ceil()) + duration_weeks;
+
+    require_lease_duration(extended_lease_duration_weeks);
 
     renew_container_lease(account, lease, duration_weeks);
 }
@@ -655,10 +659,14 @@ function calculate_container_cost(duration_weeks: integer, container_units: inte
 function calculate_remaining_lease_value(lease, current_time: integer): integer {
     val tag = lease.cluster.tag;
     val lease_weekly_cost = calculate_container_cost(1, lease.container_units, lease.extra_storage_gib, tag, lease.extra_compute_requests);
-    val remaining_lease_time = lease.start_time + lease.duration_millis - current_time;
-    val remaining_weeks = decimal(remaining_lease_time) / decimal(millis_per_week);
+    val remaining_weeks = calculate_remaining_lease_weeks(lease, current_time);
     val remaining_value = remaining_weeks * lease_weekly_cost;
     return remaining_value.round().to_integer();
+}
+
+function calculate_remaining_lease_weeks(lease, current_time: integer): decimal {
+    val remaining_lease_time = lease.start_time + lease.duration_millis - current_time;
+    return decimal(remaining_lease_time) / decimal(millis_per_week);
 }
 
 function refund_lease(lease: lease) {
