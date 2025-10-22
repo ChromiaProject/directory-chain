@@ -7,8 +7,10 @@ import ^.constants.*;
  */
 struct icmf_receiver_topic_event {
     /** True will replace existing topics (except the ones defined in the blockchain configuration) while false
-     * will add new topics */
+     * will add/delete new topics */
     replace: boolean = true;
+    /** True will remove the provided topics/senders, rather than add them */
+    remove: boolean = false;
     topics: list<icmf_receiver_topic>;
 }
 
@@ -35,11 +37,13 @@ struct icmf_receiver_topic {
  *
  * @param topics A list of receiver topic configurations.
  * @param replace If true it will replace all existing topics (except the ones defined in the block configuration).
-                  If false it will add the topics to existing configuration.
+ *                If false it will add/delete the topics to/from existing configuration.
+ * @param remove If true will remove the provided topics/senders,
+ *               if false will add them.
  */
-function receiver_icmf_update_topics(topics: list<icmf_receiver_topic>, replace: boolean = true) {
+function receiver_icmf_update_topics(topics: list<icmf_receiver_topic>, replace: boolean = true, remove: boolean = false) {
     for (topic in topics) {
         require_valid_icmf_topic_name(topic.topic);
     }
-    op_context.emit_event("icmf_receiver_topics", icmf_receiver_topic_event(topics, replace).to_gtv_pretty());
+    op_context.emit_event("icmf_receiver_topics", icmf_receiver_topic_event(topics, replace, remove).to_gtv_pretty());
 }
