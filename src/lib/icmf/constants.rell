@@ -1,10 +1,14 @@
 module;
 
 val ICMF_MESSAGE_MAX_SIZE = 16 * 1024 * 1024; // 16 MiB
+
+val ICMF_TOPIC_MAX_SIZE = 250;
 val ICMF_TOPIC_GLOBAL_PREFIX = "G_";
 val ICMF_TOPIC_LOCAL_PREFIX = "L_";
 
 function require_valid_icmf_topic_name(topic: text) {
+    require(topic.size() <= ICMF_TOPIC_MAX_SIZE,
+        "Topic cannot be longer than %d".format(ICMF_TOPIC_MAX_SIZE));
     require(topic.starts_with(ICMF_TOPIC_GLOBAL_PREFIX) or topic.starts_with(ICMF_TOPIC_LOCAL_PREFIX),
         "Topic must start with " + ICMF_TOPIC_GLOBAL_PREFIX + " or " + ICMF_TOPIC_LOCAL_PREFIX);
 }
