@@ -124,18 +124,21 @@ function build_anchor_block_data(anchor_block?): anchor_block_data? {
 
 function extract_anchored_block(transaction, tx_index: integer): block_to_anchor {
     val gtx = gtx_transaction.from_bytes(transaction.tx_data);
-    if (gtx.body.operations[tx_index].name == rell.meta(__anchor_block_header).mount_name) {
+
+    if (tx_index < gtx.body.operations.size() and gtx.body.operations[tx_index].name == rell.meta(__anchor_block_header).mount_name) {
         return block_to_anchor(
             block_rid = byte_array.from_gtv(gtx.body.operations[tx_index].args[0]),
             block_header = block_header.from_gtv(gtx.body.operations[tx_index].args[1]),
             witness = byte_array.from_gtv(gtx.body.operations[tx_index].args[2])
         );
-    } else if (gtx.body.operations[0].name == rell.meta(__batch_anchor_block_header).mount_name)
-        return list<block_to_anchor>.from_gtv(gtx.body.operations[0].args[0])[tx_index];
-    else {
-        require(false, "Unrecognized anchoring operation: %s".format(gtx.body.operations[0].name));
-        return block_to_anchor.from_bytes(x""); // unreachable
     }
+
+    val batch_anchor_ops = gtx.body.operations @* { .name == rell.meta(__batch_anchor_block_header).mount_name };
+    if (empty(batch_anchor_ops)) {
+        require(false, "No anchoring operation found");
+    }
+    require(batch_anchor_ops.size() == 1, "Multiple batch anchoring operations found: %d".format(batch_anchor_ops.size()));
+    return list<block_to_anchor>.from_gtv(batch_anchor_ops[0].args[0])[tx_index];
 }
 
 @extendable function after_anchoring_block(block_rid: byte_array, decoded_header: block_header) {}
