@@ -1,0 +1,196 @@
+@test module;
+
+import ^^.*;
+import ^.helper_operations.*;
+import ^.helper_functions.*;
+
+namespace ft4 {
+    import lib.ft4.admin;
+    import lib.ft4.accounts;
+    import test_utils: lib.ft4.test.core;
+    import lib.ft4.assets;
+    import lib.ft4.auth;
+}
+
+namespace eif {
+    import lib.hbridge;
+    import hbridge_erc20: lib.hbridge.erc20;
+}
+
+struct module_args {
+    auth_privkey: byte_array = x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6";
+}
+
+val token_contract1 = x"01".repeat(20);
+val token_contract2 = x"02".repeat(20);
+val bridge_contract1 = x"03".repeat(20);
+val bridge_contract2 = x"04".repeat(20);
+val units_per_asset = (10).pow(6);
+
+val admin_pubkey = x"02C4049F9550DCFF6003347BB3944DF2AA2D6EF5202C22834284B085C56DE8C6DD";
+val admin_priv_key = x"00CED79962D1150BF844CACB76310D4746C4426558A7FD9C827B30203DACC4CE";
+
+function test_convert_bridge_mode() {
+    val alice_evm_address = crypto.eth_pubkey_to_address(rell.test.keypairs.alice.pub);
+    val bob_evm_address = crypto.eth_pubkey_to_address(rell.test.keypairs.bob.pub);
+
+    // Disable migration
+    rell.test.tx().op(
+        set_bridge_mode_conversion(false)
+    ).run();
+
+    // Create account and propose token
+    val proposer = setup(
+        chain_context.args.auth_privkey,
+        2 * (token_chain_constants.listing_fee + token_chain_constants.bridge_fee)
+    );
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+    val test_token = token @ { };
+
+    // Propose bridge1
+    val propose_bridge_op = propose_token_bridge(
+        test_token.asset.id,
+        [bridge_configuration(
+            network_id = 97,
+            bridge_contract = bridge_contract1,
+            token_contract = token_contract1,
+            eif.hbridge.bridge_mode.foreign,
+            false,
+            skip_to_height = 123
+        )]
+    );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_bridge_op),
+        propose_bridge_op
+    ).run();
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    // Propose bridge2
+    val propose_bridge_op2 = propose_token_bridge(
+        test_token.asset.id,
+        [bridge_configuration(
+            network_id = 11155111,
+            bridge_contract = bridge_contract2,
+            token_contract = token_contract2,
+            eif.hbridge.bridge_mode.foreign,
+            false,
+            skip_to_height = 456
+        )]
+    );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_bridge_op2),
+        propose_bridge_op2
+    ).run();
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    log(eif.hbridge_erc20.get_bridge_contracts(97));
+    /*
+         [
+           lib.hbridge.erc20:bridge_contract_info{
+             contract_address = 0x0303030303030303030303030303030303030303,
+             evm_read_offset = 10,
+             erc20_assets = [
+               lib.hbridge.erc20:erc20_asset_info{
+                 network_id = 97,
+                 token_address = 0x0101010101010101010101010101010101010101,
+                 bridge_mode = foreign,
+                 ft_asset_id = 0x9b313bab44f7c0b8301eb34e1ff10e54666c884cfeb04979fecf7280d73d7f39,
+                 virtual_blockchain_rid = 0x7b5b5ec9ef0834e3a6eec852de031e6c9c67e8701628b13fe8e5161100482746
+               }
+             ]
+           }
+         ]
+     */
+
+    log(eif.hbridge_erc20.get_bridge_contracts(11155111));
+    /*
+        [
+          lib.hbridge.erc20:bridge_contract_info{
+            contract_address = 0x0404040404040404040404040404040404040404,
+            evm_read_offset = 0,
+            erc20_assets = [
+              lib.hbridge.erc20:erc20_asset_info{
+                network_id = 1,
+                token_address = 0x0202020202020202020202020202020202020202,
+                bridge_mode = foreign,
+                ft_asset_id = 0x9b313bab44f7c0b8301eb34e1ff10e54666c884cfeb04979fecf7280d73d7f39,
+                virtual_blockchain_rid = 0xddcf07b33aabe147e98542bfe5701fb9657c27cb9e8a021afad9e1e9e26da63b
+              }
+            ]
+          }
+        ]
+    */
+
+    // Link account
+    val evm_address = crypto.eth_privkey_to_address(rell.test.keypairs.bob.priv);
+    val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(evm_address, set(["A", "T"]));
+    val auth_descriptor_id = auth_descriptor.hash();
+    val account_id = evm_address.hash();
+    val op = eif.hbridge.core.link_evm_eoa_account(evm_address);
+    val message = ft4.test_utils.create_evm_auth_message(op)
+        .replace(ft4.auth.ACCOUNT_ID_PLACEHOLDER, account_id.to_hex().upper_case())
+        .replace(ft4.auth.AUTH_DESCRIPTOR_ID_PLACEHOLDER, auth_descriptor_id.to_hex().upper_case());
+    val signature = ft4.test_utils.evm_sign(message, rell.test.keypairs.bob.priv);
+    rell.test.tx()
+        .op(ft4.auth.evm_signatures([evm_address], [signature]))
+        .op(ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, op))
+        .op(op)
+        .nop().run();
+    // Mint
+    log("mint ----------------------------------------");
+    rell.test.tx().op(
+        mint_op(ft4.accounts.Account(account_id), ft4.assets.Asset(x"9b313bab44f7c0b8301eb34e1ff10e54666c884cfeb04979fecf7280d73d7f39"), 1000000000)
+    ).run();
+    log(ft4.assets.get_asset_balance(ft4.accounts.Account(account_id), ft4.assets.Asset(x"9b313bab44f7c0b8301eb34e1ff10e54666c884cfeb04979fecf7280d73d7f39")));
+
+    // Withdrawals
+	val hash1 = do_create_erc20_withdrawal(97, 500, rell.test.keypairs.bob, bob_evm_address);
+	val hash2 = do_create_erc20_withdrawal(11155111, 100, rell.test.keypairs.bob, bob_evm_address);
+    log(eif.hbridge.get_erc20_withdrawals(eif.hbridge.withdrawal_filter(), null, null));
+
+    // Remove bridges before migration
+    val remove_token_bridge_op = remove_token_bridge(
+        test_token.asset.id, [network_bridge(97, bridge_contract1)]
+    );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, remove_token_bridge_op),
+        remove_token_bridge_op
+    ).run();
+    val remove_token_bridge_op2 = remove_token_bridge(
+        test_token.asset.id, [network_bridge(11155111, bridge_contract2)]
+    );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, remove_token_bridge_op2),
+        remove_token_bridge_op2
+    ).run();
+    // Activate migration
+    rell.test.tx().op(
+        set_bridge_mode_conversion(true)
+    ).run();
+    rell.test.block().run();
+
+    // Verify
+    log(eif.hbridge_erc20.get_bridge_contracts(97));
+
+    // Retrigger migration
+    log("------ Retriggering migration ------");
+    assert_false(bridge_mode_conversion.active);
+    rell.test.tx().nop().op(
+        config_update_special_op()
+    ).run();
+    rell.test.block().run();
+}
+
+function do_create_erc20_withdrawal(
+    network_id: integer,
+    amount: integer,
+    keypair: rell.test.keypair,
+    evm_address: byte_array,
+    asset_id: byte_array = x"9b313bab44f7c0b8301eb34e1ff10e54666c884cfeb04979fecf7280d73d7f39"
+) {
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(keypair.priv, eif.hbridge.bridge_ft4_token_to_evm(network_id, asset_id, amount * units_per_asset, evm_address)),
+        eif.hbridge.bridge_ft4_token_to_evm(network_id, asset_id, amount * units_per_asset, evm_address)
+    ).run();
+    return eif.hbridge.erc20_withdrawal @ { .amount == amount * units_per_asset } ( .event_hash );
+}
