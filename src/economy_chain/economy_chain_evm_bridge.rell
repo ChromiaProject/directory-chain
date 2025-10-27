@@ -2,6 +2,7 @@ struct evm_bridge {
 	network_id: integer;
 	asset_address: byte_array;
 	bridge_address: byte_array;
+	skip_to_height: integer;
 }
 
 function register_and_link_bridge_and_erc20_asset(ft4.assets.asset) {
@@ -18,7 +19,8 @@ function register_and_link_bridge_and_erc20_asset(ft4.assets.asset) {
 					bridge.asset_address,
 					asset,
 					eif.hbridge.bridge_mode.native,
-					bridge_address = bridge.bridge_address
+					bridge_address = bridge.bridge_address,
+					skip_to_height = bridge.skip_to_height
 				);
 		} else {
 			val existing_bridge = eif.hbridge_erc20.bridge_erc20_asset @? {
@@ -29,6 +31,7 @@ function register_and_link_bridge_and_erc20_asset(ft4.assets.asset) {
 				eif.hbridge_erc20.register_bridge_with_erc20_assets(
 					bridge.network_id,
 					bridge.bridge_address,
+					bridge.skip_to_height,
 					[existing_bridge_asset]
 				);
 
