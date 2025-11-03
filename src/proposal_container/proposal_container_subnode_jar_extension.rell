@@ -1,0 +1,67 @@
+entity pending_container_subnode_jar_extension {
+    key proposal;
+    key container;
+    subnode_jar_extension_name: text;
+}
+
+@extend(is_container_available_for_removal) function(container) = 
+if (exists(pending_container_subnode_jar_extension @* { container }))
+    "Container %s has pending proposals and can't be deleted. Resolve proposals first".format(container.name) 
+else null;
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.container_subnode_jar_extension.name: apply_container_subnode_jar_extension(*)];
+
+function apply_container_subnode_jar_extension(proposal) {
+    val pcsje = pending_container_subnode_jar_extension @? { proposal };
+    if (pcsje == null) return;
+    val subnode_jar_extension = validate_container_subnode_jar_extension_proposal(pcsje);
+    create container_subnode_jar_extension(pcsje.container, subnode_jar_extension);
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.container_subnode_jar_extension.name: delete_pending_container_subnode_jar_extension(*)];
+
+function delete_pending_container_subnode_jar_extension(proposal) {
+    delete pending_container_subnode_jar_extension @? { proposal };
+}
+
+operation propose_container_subnode_jar_extension(my_pubkey: pubkey, container_name: text, subnode_jar_extension: text, description: text = "") {
+    // check that provider authority and that it is cluster's deployer
+    val me = require_is_provider_with_rate_limit(my_pubkey);
+    val container = require_container(container_name);
+    require_cluster_governor(container.cluster, me);
+    
+    val prop = create_proposal(proposal_type.container_subnode_jar_extension, me, container.cluster.governance, description);
+    val pcsje = create pending_container_subnode_jar_extension(
+        prop,
+        container,
+        subnode_jar_extension,
+    );
+    validate_container_subnode_jar_extension_proposal(pcsje);
+    internal_vote(me, prop, true);
+}
+
+query get_container_subnode_jar_extension_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.container_subnode_jar_extension);
+    if (proposal == null) return null;
+    val pcsje = pending_container_subnode_jar_extension @ { proposal };
+    return (
+        container = pcsje.container.name,
+        subnode_jar_extension = pcsje.subnode_jar_extension_name,
+    );
+}
+
+@extend(before_remove_container) function(container) {
+    val pcsjes = pending_container_subnode_jar_extension @* { container };
+    for (pcsje in pcsjes) {
+        pcsje.proposal.state = proposal_state.REVOKED;
+        delete pcsje;
+    }
+}
+
+function validate_container_subnode_jar_extension_proposal(proposal_details: pending_container_subnode_jar_extension): subnode_jar_extension {
+    val subnode_jar_extension = require_cluster_compatible_subnode_jar_extension(proposal_details.subnode_jar_extension_name, proposal_details.container.cluster);
+
+    require(empty(container_subnode_jar_extension @? { proposal_details.container, subnode_jar_extension }), "Container already has this JAR extension");
+
+    return subnode_jar_extension;
+}

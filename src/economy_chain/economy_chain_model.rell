@@ -8,7 +8,7 @@ enum ticket_state {
 }
 
 enum ticket_type {
-    CREATE_CONTAINER, UPGRADE_CONTAINER, ASSIGN_SUBNODE_IMAGE_TO_CONTAINER, REMOVE_CONTAINER
+    CREATE_CONTAINER, UPGRADE_CONTAINER, ASSIGN_SUBNODE_IMAGE_TO_CONTAINER, REMOVE_CONTAINER, ADD_SUBNODE_JAR_EXTENSIONS_TO_CONTAINER
 }
 
 enum cluster_creation_status {
@@ -164,6 +164,10 @@ entity lease_subnode_image {
     subnode_image;
 }
 
+entity lease_subnode_jar_extension {
+    key lease, subnode_jar_extension;
+}
+
 @log
 entity lease_purchase {
     index ft4.accounts.account;
@@ -239,6 +243,7 @@ entity create_container_ticket {
     cluster_name: text;
     subnode_image_name: text = "";
     extra_compute_requests: integer = 0;
+    subnode_jar_extension_names: text = "";
 }
 
 entity upgrade_container_ticket {
@@ -256,6 +261,12 @@ entity assign_subnode_image_to_container_ticket {
     key ticket;
     container_name: text;
     subnode_image_name: text;
+}
+
+entity add_subnode_jar_extensions_to_container_ticket {
+    key ticket;
+    container_name: text;
+    subnode_jar_extension_names: text;
 }
 
 entity remove_container_ticket {
@@ -280,6 +291,7 @@ struct lease_data {
     expired: boolean;
     auto_renew: boolean;
     subnode_image_name: text;
+    subnode_jar_extension_names: list<text>;
     bridge_leases: list<bridge_lease_data>;
     lease_owner_account_id: byte_array? = null;
     extra_compute_requests: integer? = null;
@@ -295,12 +307,19 @@ struct cluster_data {
     extra_storage: integer?;
     subnode_images: list<text>?;
     number_of_nodes: integer?;
+    subnode_jar_extensions: list<text>?;
 }
 
 struct subnode_image_data {
     name;
     url: text;
     digest: text;
+    owner: pubkey;
+    description: text;
+}
+
+struct subnode_jar_extension_data {
+    name;
     owner: pubkey;
     description: text;
 }
@@ -511,8 +530,24 @@ entity subnode_image {
     mutable active: boolean;
 }
 
+enum subnode_jar_extension_type {
+    COMMON, SPECIAL
+}
+
+entity subnode_jar_extension {
+    key name;
+    subnode_jar_extension_type;
+    owner: provider;
+    mutable description: text;
+    mutable active: boolean;
+}
+
 entity cluster_subnode_image {
     key cluster, subnode_image;
+}
+
+entity cluster_subnode_jar_extension {
+    key cluster, subnode_jar_extension;
 }
 
 //////////////////////////////////

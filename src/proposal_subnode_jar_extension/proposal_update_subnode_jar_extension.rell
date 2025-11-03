@@ -1,0 +1,147 @@
+entity pending_update_subnode_jar_extension {
+    key proposal;
+    key subnode_jar_extension;
+    jar: byte_array;
+    hash: byte_array;
+    description: text = "";
+    /** GTX modules exposed by this Subnode JAR extension (comma separated list of FQCNs) */
+    gtx_modules: text = "";
+    gtx_modules_provided: boolean = false;
+    /** Synchronization infrastructure extensions exposed by this Subnode JAR extension (comma separated list of FQCNs) */
+    sync_exts: text = "";
+    sync_exts_provided: boolean = false;
+}
+
+struct pending_subnode_jar_extension_update_data {
+    name;
+    hash: byte_array? = null;
+    description: text? = null;
+    /** GTX modules exposed by this Subnode JAR extension (comma separated list of FQCNs) */
+    mutable gtx_modules: text? = null;
+    /** Synchronization infrastructure extensions exposed by this Subnode JAR extension (comma separated list of FQCNs) */
+    mutable sync_exts: text? = null;
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.update_subnode_jar_extension.name: apply_update_subnode_jar_extension(*)];
+function apply_update_subnode_jar_extension(proposal) {
+    val pusje = pending_update_subnode_jar_extension @? { proposal };
+    if (pusje == null) return;
+    validate_update_subnode_jar_extension_proposal(pusje);
+    if (not pusje.jar.empty()) {
+        pusje.subnode_jar_extension.jar = pusje.jar;
+        pusje.subnode_jar_extension.hash = pusje.hash;
+    }
+    if (not pusje.description.empty()) {
+        pusje.subnode_jar_extension.description = pusje.description;
+    }
+    if (pusje.gtx_modules_provided) {
+        pusje.subnode_jar_extension.gtx_modules = pusje.gtx_modules;
+    }
+    if (pusje.sync_exts_provided) {
+        pusje.subnode_jar_extension.sync_exts = pusje.sync_exts;
+    }
+    after_subnode_jar_extension_updated(pusje.subnode_jar_extension);
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.update_subnode_jar_extension.name: delete_pending_update_subnode_jar_extension(*)];
+function delete_pending_update_subnode_jar_extension(proposal) {
+    delete pending_update_subnode_jar_extension @? { proposal };
+}
+
+@extend(scheduled_proposal_delay_time_handlers) function() = [proposal_type.update_subnode_jar_extension.name: scheduled_update_subnode_jar_extension_proposal_delay_time_handler(*)];
+function scheduled_update_subnode_jar_extension_proposal_delay_time_handler(proposal): (blockchain: blockchain?, delay: integer) {
+    val scheduled_at_delay = get_scheduled_event_delay(delay_type.PROPOSAL, proposal.rowid.to_integer());
+    if (scheduled_at_delay != null) {
+        return (blockchain = null, delay = scheduled_at_delay);
+    }
+    return (blockchain = null, delay = 0);
+}
+
+/**
+ * Propose update Subnode JAR extension.
+ * 
+ * Permission: system provider
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey Pubkey of the provider creating this proposal
+ * @param jar Raw JAR file content for the extension in bytes
+ * @param extension_description Description of the extension
+ * @param gtx_modules GTX modules exposed by this Subnode JAR extension (comma separated list of FQCNs)
+ * @param sync_exts Synchronization infrastructure extensions exposed by this Subnode JAR extension (comma separated list of FQCNs)
+ * @param proposal_description Description of the proposal
+ * @param scheduled_at The time to apply this proposal when approved. If the proposal is approved after the time has passed the proposal is applied right away.
+ */
+operation propose_update_subnode_jar_extension(my_pubkey: pubkey, name, jar: byte_array? = null,
+    extension_description: text? = null, gtx_modules: text? = null, sync_exts: text? = null, proposal_description: text = "",
+    scheduled_at: timestamp? = null)
+{
+    val me = require_is_provider_with_rate_limit(my_pubkey);
+    require_system_access(me);
+
+    val subnode_jar_extension = require_subnode_jar_extension(name);
+    if (extension_description != null) {
+        validate_metadata_text("extension_description", extension_description);
+    }
+    if (gtx_modules != null) {
+        validate_list_of_classes("gtx_modules", gtx_modules);
+    }
+    if (sync_exts != null) {
+        validate_list_of_classes("sync_exts", sync_exts);
+    }
+
+    val prop = create_proposal(proposal_type.update_subnode_jar_extension, me, system_p_voter_set(), proposal_description);
+    if (scheduled_at != null) {
+        add_scheduled_event(delay_type.PROPOSAL, prop.rowid.to_integer(), scheduled_at);
+    }
+    val pusje = create pending_update_subnode_jar_extension (
+        prop,
+        subnode_jar_extension,
+        jar = jar ?: x"",
+        hash = if (jar != null) crypto.sha256(jar) else x"",
+        description = extension_description ?: "",
+        gtx_modules_provided = gtx_modules != null,
+        gtx_modules = gtx_modules ?: "",
+        sync_exts_provided = sync_exts != null,
+        sync_exts = sync_exts ?: "",
+    );
+    validate_update_subnode_jar_extension_proposal(pusje);
+    internal_vote(me, prop, true);
+}
+
+/**
+ * Returns update Subnode JAR extension proposal.
+ */
+query get_update_subnode_jar_extension_proposal(rowid): pending_subnode_jar_extension_update_data? {
+    val proposal = get_latest_proposal(rowid, proposal_type.update_subnode_jar_extension);
+    if (proposal == null) return null;
+    val pusje = pending_update_subnode_jar_extension @ { proposal };
+    return pending_subnode_jar_extension_update_data(
+        name = pusje.subnode_jar_extension.name,
+        hash = if (not pusje.hash.empty()) pusje.hash else null,
+        description = if (not pusje.description.empty()) pusje.description else null,
+        gtx_modules = if (pusje.gtx_modules_provided) pusje.gtx_modules else null,
+        sync_exts = if (pusje.sync_exts_provided) pusje.sync_exts else null,
+    );
+}
+
+/**
+ * Returns update of JAR file for Subnode JAR extension proposal (if any).
+ */
+query get_update_subnode_jar_extension_proposal_jar_file(rowid): byte_array? {
+    val proposal = get_latest_proposal(rowid, proposal_type.update_subnode_jar_extension);
+    if (proposal == null) return null;
+    val pusje = pending_update_subnode_jar_extension @ { proposal };
+    return pusje.jar;
+}
+
+
+function validate_update_subnode_jar_extension_proposal(pusje: pending_update_subnode_jar_extension) {
+    require(
+        (pusje.jar.empty() or pusje.jar != pusje.subnode_jar_extension.jar) and
+        (pusje.description.empty() or pusje.description != pusje.subnode_jar_extension.description) and
+        (pusje.gtx_modules.empty() or pusje.gtx_modules != pusje.subnode_jar_extension.gtx_modules) and
+        (pusje.sync_exts.empty() or pusje.sync_exts != pusje.subnode_jar_extension.sync_exts),
+        "Subnode JAR extension update does not contain any changes"
+    );
+}

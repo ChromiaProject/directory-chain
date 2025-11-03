@@ -2,7 +2,7 @@
  * Returns NM API Version
  * NM API Version: 1
  */
-query nm_api_version() = 26;
+query nm_api_version() = 27;
 
 /**
  * Returns peer info list
@@ -616,3 +616,36 @@ query nm_get_container_configuration(name): nm_container_configuration? {
         )
     );
 }
+
+struct nm_container_jar_extension {
+    name;
+    hash: byte_array;
+}
+
+/**
+ * Returns any custom JAR extensions for a given container,
+ *
+ * @param name container name
+ * @return Returns a list of the names of custom JAR extensions and their hashes for the container, if any,
+ * @throws if container does not exist
+ *
+ * NM API Version: 27
+ */
+query nm_get_container_jar_extensions(name): list<nm_container_jar_extension> {
+    val container = require_container(name);
+    return container_subnode_jar_extension @* { container } (nm_container_jar_extension(
+        .subnode_jar_extension.name,
+        .subnode_jar_extension.hash,
+    ));
+}
+
+/**
+ * Returns a JAR extension,
+ *
+ * @param name extension name
+ * @return  Returns raw JAR file in bytes for a JAR extension
+ * @throws if the JAR extension does not exist
+ *
+ * NM API Version: 27
+ */
+query nm_get_jar_extension(name): byte_array = require_subnode_jar_extension(name).jar;

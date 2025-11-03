@@ -227,3 +227,13 @@ function require_blockchain_rid(blockchain_rid: byte_array) {
 
 
 function require_subnode_image(name) = require(subnode_image @? { name }, "Subnode image %s not found".format(name));
+
+function require_subnode_jar_extension(name) = require(subnode_jar_extension @? { name }, "Subnode JAR extension %s not found".format(name));
+
+function require_cluster_compatible_subnode_jar_extension(name, cluster): subnode_jar_extension {
+    val subnode_jar_extension = require_subnode_jar_extension(name);
+    require(subnode_jar_extension.active, "Subnode JAR extension %s is not active".format(name));
+    require(subnode_jar_extension.subnode_jar_extension_type == subnode_jar_extension_type.COMMON or not empty(cluster_subnode_jar_extension @? { cluster, subnode_jar_extension }),
+        "Subnode JAR extension %s is not compatible with cluster %s".format(name, cluster.name));
+    return subnode_jar_extension;
+}

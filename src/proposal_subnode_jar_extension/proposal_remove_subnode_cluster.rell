@@ -1,0 +1,74 @@
+entity pending_remove_cluster_subnode_jar_extension {
+    key proposal;
+    key cluster, subnode_jar_extension;
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.remove_cluster_subnode_jar_extension.name: apply_remove_cluster_subnode_jar_extension(*)];
+function apply_remove_cluster_subnode_jar_extension(proposal) {
+    val prcsje = pending_remove_cluster_subnode_jar_extension @? { proposal };
+    if (prcsje == null) return;
+    val cluster_subnode_jar_extension = validate_remove_cluster_subnode_jar_extension_proposal(prcsje);
+    delete cluster_subnode_jar_extension;
+    after_cluster_subnode_jar_extension_removed(prcsje.cluster, prcsje.subnode_jar_extension);
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.remove_cluster_subnode_jar_extension.name: delete_pending_remove_cluster_subnode_jar_extension(*)];
+function delete_pending_remove_cluster_subnode_jar_extension(proposal) {
+    delete pending_remove_cluster_subnode_jar_extension @? { proposal };
+}
+
+@extend(scheduled_proposal_delay_time_handlers) function() = [proposal_type.remove_cluster_subnode_jar_extension.name: scheduled_remove_cluster_subnode_jar_extension_proposal_delay_time_handler(*)];
+function scheduled_remove_cluster_subnode_jar_extension_proposal_delay_time_handler(proposal): (blockchain: blockchain?, delay: integer) {
+    val scheduled_at_delay = get_scheduled_event_delay(delay_type.PROPOSAL, proposal.rowid.to_integer());
+    if (scheduled_at_delay != null) {
+        return (blockchain = null, delay = scheduled_at_delay);
+    }
+    return (blockchain = null, delay = 0);
+}
+
+/**
+ * Propose remove Subnode JAR extension from cluster.
+ * 
+ * Permission: cluster governor
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ * @param scheduled_at The time to apply this proposal when approved. If the proposal is approved after the time has passed the proposal is applied right away.
+ */
+operation propose_remove_cluster_subnode_jar_extension(my_pubkey: pubkey, cluster_name: text, subnode_jar_extension_name: text, description: text = "", scheduled_at: timestamp? = null) {
+    // check that provider authority and that it is a cluster governor
+    val me = require_is_provider_with_rate_limit(my_pubkey);
+    val cluster = require_cluster(cluster_name);
+    require_cluster_governor(cluster, me);
+    val subnode_jar_extension = require_subnode_jar_extension(subnode_jar_extension_name);
+    val prop = create_proposal(proposal_type.remove_cluster_subnode_jar_extension, me, cluster.governance, description);
+    if (scheduled_at != null) {
+        add_scheduled_event(delay_type.PROPOSAL, prop.rowid.to_integer(), scheduled_at);
+    }
+    val prcsi = create pending_remove_cluster_subnode_jar_extension(
+        prop,
+        cluster,
+        subnode_jar_extension,
+    );
+    validate_remove_cluster_subnode_jar_extension_proposal(prcsi);
+    internal_vote(me, prop, true);
+}
+
+/**
+ * Returns remove Subnode JAR extension from cluster proposal.
+ */
+query get_remove_cluster_subnode_jar_extension_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.remove_cluster_subnode_jar_extension);
+    if (proposal == null) return null;
+    val prcsje = pending_remove_cluster_subnode_jar_extension @ { proposal };
+    return (
+        cluster = prcsje.cluster.name,
+        subnode_jar_extension = prcsje.subnode_jar_extension.name,
+    );
+}
+
+function validate_remove_cluster_subnode_jar_extension_proposal(prcsi: pending_remove_cluster_subnode_jar_extension): cluster_subnode_jar_extension = require(
+    cluster_subnode_jar_extension @? { prcsi.cluster, prcsi.subnode_jar_extension },
+    "Subnode JAR extension %s is not allowed by cluster %s".format(prcsi.subnode_jar_extension.name, prcsi.cluster.name)
+);

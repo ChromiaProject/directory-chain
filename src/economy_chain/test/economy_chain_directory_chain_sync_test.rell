@@ -528,6 +528,61 @@ function test_subnode_image() {
     assert_true(empty(cluster_subnode_image @? { .cluster == cluster, .subnode_image.name == "subnode_image1" }));
 }
 
+function test_subnode_jar_extension() {
+    rell.test.tx().op(init()).run();
+
+    val cluster = ensure_cluster(cluster_name, false, false, 1, 1024);
+    val provider = add_provider(rell.test.pubkeys.alice, true, provider_tier.NODE_PROVIDER);
+
+    rell.test.tx().op(
+        icmf_message_op(x"", subnode_jar_extension_update_topic, body = subnode_jar_extension_update_message(
+            name = "subnode_jar_extension1",
+            subnode_jar_extension_type = subnode_jar_extension_type.SPECIAL.name,
+            owner = rell.test.pubkeys.alice,
+            description = "one",
+            active = true).to_gtv())
+    ).run();
+    assert_equals(subnode_jar_extension @ { .name == "subnode_jar_extension1" } ($.to_struct()), struct<subnode_jar_extension>(
+        name = "subnode_jar_extension1",
+        subnode_jar_extension_type = subnode_jar_extension_type.SPECIAL,
+        owner = provider,
+        description = "one",
+        active = true)
+    );
+
+    rell.test.tx().op(
+        icmf_message_op(x"", subnode_jar_extension_update_topic, body = subnode_jar_extension_update_message(
+            name = "subnode_jar_extension1",
+            subnode_jar_extension_type = subnode_jar_extension_type.SPECIAL.name,
+            owner = rell.test.pubkeys.alice,
+            description = "one",
+            active = false).to_gtv())
+    ).run();
+    assert_equals(subnode_jar_extension @ { .name == "subnode_jar_extension1" } ($.to_struct()), struct<subnode_jar_extension>(
+        name = "subnode_jar_extension1",
+        subnode_jar_extension_type = subnode_jar_extension_type.SPECIAL,
+        owner = provider,
+        description = "one",
+        active = false)
+    );
+
+    rell.test.tx().op(
+        icmf_message_op(x"", cluster_subnode_jar_extension_update_topic, body = cluster_subnode_jar_extension_update_message(
+            cluster = cluster.name,
+            subnode_jar_extension = "subnode_jar_extension1",
+            deleted = false).to_gtv())
+    ).run();
+    assert_false(empty(cluster_subnode_jar_extension @? { .cluster == cluster, .subnode_jar_extension.name == "subnode_jar_extension1" }));
+
+    rell.test.tx().op(
+        icmf_message_op(x"", cluster_subnode_jar_extension_update_topic, body = cluster_subnode_jar_extension_update_message(
+            cluster = cluster.name,
+            subnode_jar_extension = "subnode_jar_extension1",
+            deleted = true).to_gtv())
+    ).run();
+    assert_true(empty(cluster_subnode_jar_extension @? { .cluster == cluster, .subnode_jar_extension.name == "subnode_jar_extension1" }));
+}
+
 function test_receive_cluster_node_update_message_delete_node() {
 
     val provider_pubkey = rell.test.keypairs.bob.pub;

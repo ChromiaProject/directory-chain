@@ -1,0 +1,298 @@
+@test module;
+
+import common.operations.*;
+import common.queries.*;
+import common.test.setup.*;
+import common.test.util.*;
+import model.*;
+import proposal_subnode_jar_extension.*;
+import proposal_container.*;
+import proposal_provider.*;
+import direct_cluster.*;
+
+function test_propose_subnode_jar_extension() {
+    setup_module();
+
+    // 0. governance
+    val sp1 = rell.test.keypairs.bob;
+    val sp2 = rell.test.keypairs.trudy;
+    val np = rell.test.keypairs.eve;
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, sp1.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, sp2.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, np.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, sp1.pub, true),
+        propose_provider_is_system(initial_provider.pub, sp2.pub, true),
+        propose_provider_state(initial_provider.pub, np.pub, true),
+        create_cluster(initial_provider.pub, "cluster1", voter_sets.system_p, list()),
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp1);
+    
+    val cluster1 = require_cluster("cluster1");
+
+    rell.test.tx().op(
+        propose_subnode_jar_extension(np.pub, "subnode_jar_extension1", x"00", subnode_jar_extension_type.COMMON, "", "", "")
+    ).sign(np)
+        .run_must_fail("must have system privileges");
+
+    rell.test.tx().op(
+        propose_subnode_jar_extension(initial_provider.pub, "subnode_jar_extension@1", x"00", subnode_jar_extension_type.COMMON, "", "", "")
+    ).sign(initial_provider)
+        .run_must_fail(invalid_entity_message);
+
+    rell.test.tx().op(
+        propose_subnode_jar_extension(initial_provider.pub, "subnode_jar_extension1", x"00", subnode_jar_extension_type.COMMON, "Initial description", "", "")
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
+
+    val subnode_jar_extension1 = get_subnode_jar_extension("subnode_jar_extension1");
+    assert_true(subnode_jar_extension1.active);
+
+    rell.test.tx().op(
+        propose_subnode_jar_extension(initial_provider.pub, "subnode_jar_extension1", x"00", subnode_jar_extension_type.COMMON, "Initial description", "", "")
+    ).nop()
+        .sign(initial_provider)
+        .run_must_fail("Subnode JAR extension subnode_jar_extension1 already exists");
+
+    rell.test.tx().op(
+        propose_subnode_jar_extension(initial_provider.pub, "subnode_jar_extension2", x"01", subnode_jar_extension_type.SPECIAL, "Initial description", "", "",
+            scheduled_at = get_last_blocktime() + 10000000)
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
+
+    assert_null(subnode_jar_extension @? { .name == "subnode_jar_extension2" });
+
+    // Wait for scheduled
+    rell.test.set_next_block_time_delta(10000000);
+    rell.test.block().run();
+    rell.test.block().run();
+
+    val subnode_jar_extension2 = get_subnode_jar_extension("subnode_jar_extension2");
+
+    rell.test.tx().op(
+        propose_subnode_jar_extension_state(initial_provider.pub, "subnode_jar_extension1", true)
+    ).nop()
+        .sign(initial_provider)
+        .run_must_fail("Subnode JAR extension subnode_jar_extension1 already active");
+
+    rell.test.tx().op(
+        propose_subnode_jar_extension_state(initial_provider.pub, "subnode_jar_extension1", false)
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
+
+    val subnode_jar_extension1_2 = get_subnode_jar_extension("subnode_jar_extension1");
+    assert_false(subnode_jar_extension1_2.active);
+
+    rell.test.tx().op(
+        propose_subnode_jar_extension_state(initial_provider.pub, "bogus", false)
+    ).nop()
+        .sign(initial_provider)
+        .run_must_fail("Subnode JAR extension bogus not found");
+
+    rell.test.tx().op(
+        propose_subnode_jar_extension_state(initial_provider.pub, "subnode_jar_extension1", false)
+    ).nop()
+        .sign(initial_provider)
+        .run_must_fail("Subnode JAR extension subnode_jar_extension1 already inactive");
+
+    assert_true(get_cluster_subnode_jar_extensions(cluster1.name).empty());
+
+    rell.test.tx().op(
+        propose_add_cluster_subnode_jar_extension(initial_provider.pub, "cluster1", "subnode_jar_extension2")
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
+
+    assert_equals(get_cluster_subnode_jar_extensions(cluster1.name), ["subnode_jar_extension2"]);
+
+    rell.test.tx().op(
+        propose_remove_cluster_subnode_jar_extension(initial_provider.pub, "cluster1", "subnode_jar_extension2",
+            scheduled_at = get_last_blocktime() + 10000000)
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
+    assert_false(get_cluster_subnode_jar_extensions(cluster1.name).empty());
+
+    // Wait for scheduled
+    rell.test.set_next_block_time_delta(10000000);
+    rell.test.block().run();
+    rell.test.block().run();
+    assert_true(get_cluster_subnode_jar_extensions(cluster1.name).empty());
+
+    rell.test.tx().op(
+        propose_remove_cluster_subnode_jar_extension(initial_provider.pub, "cluster1", "subnode_jar_extension2")
+    ).nop().sign(initial_provider).run_must_fail("Subnode JAR extension subnode_jar_extension2 is not allowed by cluster cluster1");
+
+    rell.test.tx().op(
+        propose_update_subnode_jar_extension(initial_provider.pub, "subnode_jar_extension1", jar = x"00")
+    ).sign(initial_provider).run_must_fail("Subnode JAR extension update does not contain any changes");
+
+    rell.test.tx().op(
+        propose_update_subnode_jar_extension(initial_provider.pub, "subnode_jar_extension1", extension_description = "Updated description"
+        , scheduled_at = get_last_blocktime() + 10000000)
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
+    assert_equals(get_subnode_jar_extension("subnode_jar_extension1").description, "Initial description");
+
+    // Wait for scheduled
+    rell.test.set_next_block_time_delta(10000000);
+    rell.test.block().run();
+    rell.test.block().run();
+    assert_equals(get_subnode_jar_extension("subnode_jar_extension1").description, "Updated description");
+
+    assert_equals(get_subnode_jar_extensions(), [
+        subnode_jar_extension_data(
+            name = "subnode_jar_extension1",
+            subnode_jar_extension_type = subnode_jar_extension_type.COMMON,
+            owner = initial_provider.pub,
+            active = false,
+            description = "Updated description",
+        ),
+        subnode_jar_extension_data(
+            name = "subnode_jar_extension2",
+            subnode_jar_extension_type = subnode_jar_extension_type.SPECIAL,
+            owner = initial_provider.pub,
+            active = true,
+            description = "Initial description",
+        )
+    ]);
+}
+
+function test_propose_container_with_subnode_jar_extension() {
+    setup_module();
+
+    // 0. governance
+    val sp1 = rell.test.keypairs.bob;
+    val sp2 = rell.test.keypairs.trudy;
+    val np = rell.test.keypairs.eve;
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, sp1.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, sp2.pub, provider_tier.NODE_PROVIDER),
+        register_provider(initial_provider.pub, np.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, sp1.pub, true),
+        propose_provider_quota(initial_provider.pub, provider_tier.NODE_PROVIDER, provider_quota_type.max_containers, 10),
+        propose_provider_is_system(initial_provider.pub, sp2.pub, true),
+        propose_provider_state(initial_provider.pub, np.pub, true),
+        create_cluster(initial_provider.pub, "cluster1", voter_sets.system_p, list()),
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
+
+    rell.test.tx().op(
+        propose_subnode_jar_extension(initial_provider.pub, "subnode_jar_extension1", x"00", subnode_jar_extension_type.COMMON, "one", "gtx_module1,gtx_module2", "ext1,ext2")
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
+
+    rell.test.tx().op(
+        propose_subnode_jar_extension(initial_provider.pub, "subnode_jar_extension2", x"00", subnode_jar_extension_type.SPECIAL, "two", "", "")
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
+
+    rell.test.tx().op(
+        propose_subnode_jar_extension(initial_provider.pub, "subnode_jar_extension3", x"00", subnode_jar_extension_type.COMMON, "three", "", "")
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
+
+    rell.test.tx().op(
+        propose_subnode_jar_extension_state(initial_provider.pub, "subnode_jar_extension3", false, scheduled_at = get_last_blocktime() + 10000000)
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
+    assert_true(get_subnode_jar_extension("subnode_jar_extension3").active);
+
+    // Wait for scheduled
+    rell.test.set_next_block_time_delta(10000000);
+    rell.test.block().run();
+    rell.test.block().run();
+    assert_false(get_subnode_jar_extension("subnode_jar_extension3").active);
+
+    rell.test.tx().op(
+        propose_container_with_subnode_jar_extensions(initial_provider.pub, "cluster1", "container1", voter_sets.system_p, ["subnode_jar_extension1"])
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
+
+    assert_equals(get_container_data("container1").jar_extensions, ["subnode_jar_extension1"]);
+
+    rell.test.tx().op(
+        propose_container_with_subnode_jar_extensions(initial_provider.pub, "cluster1", "container2", voter_sets.system_p, ["subnode_jar_extension2"])
+    ).sign(initial_provider).run_must_fail("Subnode JAR extension subnode_jar_extension2 is not compatible with cluster cluster1");
+
+    rell.test.tx().op(
+        propose_add_cluster_subnode_jar_extension(initial_provider.pub, "cluster1", "subnode_jar_extension2", scheduled_at = get_last_blocktime() + 10000000)
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
+    // Wait for scheduled
+    rell.test.set_next_block_time_delta(10000000);
+    rell.test.block().run();
+    rell.test.block().run();
+
+    rell.test.tx().op(
+        propose_container_with_subnode_jar_extensions(initial_provider.pub, "cluster1", "container2", voter_sets.system_p, ["subnode_jar_extension2"])
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
+
+    assert_equals(get_container_data("container2").jar_extensions, ["subnode_jar_extension2"]);
+
+    rell.test.tx().op(
+        propose_container_with_subnode_jar_extensions(initial_provider.pub, "cluster1", "container3", voter_sets.system_p, ["subnode_jar_extension3"])
+    ).sign(initial_provider).run_must_fail("Subnode JAR extension subnode_jar_extension3 is not active");
+
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, "cluster1", "container3", voter_sets.system_p, "subnode_jar_extension1")
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
+
+    assert_equals(get_container_data("container3").jar_extensions, list<text>());
+
+    rell.test.tx().op(
+        propose_container_subnode_jar_extension(initial_provider.pub, "container3", "subnode_jar_extension1")
+    ).sign(initial_provider).run();
+    vote_for_last_proposal(sp1);
+    vote_for_last_proposal(sp2);
+
+    assert_equals(get_container_data("container3").jar_extensions, ["subnode_jar_extension1"]);
+}
+
+function test_get_subnode_jar_extension_proposal() {
+    setup_module();
+
+    val sp2 = rell.test.keypairs.bob;
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, sp2.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, sp2.pub, true),
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        propose_subnode_jar_extension(initial_provider.pub,
+            "subnode_jar_extension1", x"00", subnode_jar_extension_type.COMMON, "one",
+            "gtx_module1,gtx_module2", "ext1,ext2")
+    ).sign(initial_provider).run();
+
+    val subnode_jar_ext = get_subnode_jar_extension_proposal(last_proposal().rowid);
+
+    assert_equals(subnode_jar_ext?.name, "subnode_jar_extension1");
+    assert_equals(subnode_jar_ext?.subnode_jar_extension_type, subnode_jar_extension_type.COMMON);
+    assert_equals(subnode_jar_ext?.gtx_modules, "gtx_module1,gtx_module2");
+    assert_equals(subnode_jar_ext?.sync_exts, "ext1,ext2");
+
+    val raw_jar = get_subnode_jar_extension_proposal_jar_file(last_proposal().rowid);
+
+    assert_equals(raw_jar, x"00");
+}

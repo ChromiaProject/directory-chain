@@ -10,6 +10,7 @@ import ^^^.model.*;
 import ^.helpers.*;
 import proposal_provider.*;
 import proposal_subnode_image.*;
+import proposal_subnode_jar_extension.*;
 
 function test_init_events() {
     setup_module();
@@ -402,6 +403,105 @@ function test_subnode_image() {
                 subnode_image_type = subnode_image_type.SPECIAL.name,
                 owner = initial_provider.pub,
                 description = "one",
+                active = false,
+            ).to_gtv()
+        ).to_gtv_pretty())
+    );
+}
+
+function test_subnode_jar_extension() {
+    setup_module();
+
+    val cluster_name = "bob_cluster";
+    val cluster_creation_data = cluster_creation_data(cluster_units = 1, extra_storage = 1024);
+    rell.test.tx().op(
+        create_cluster_with_cluster_data(initial_provider.pub, cluster_name, system_p_voter_set().name, [initial_provider.pub], cluster_creation_data)
+    ).sign(initial_provider).run();
+    val bob_cluster = cluster @ { .name == cluster_name };
+
+    assert_events(
+        ("icmf_message", (
+            topic = cluster_update_topic,
+            body = cluster_update_message(name = cluster_name, deleted = false, operational = false, cluster_units = 1, extra_storage = 1024, anchoring_chain = null).to_gtv()
+        ).to_gtv_pretty())
+    );
+
+    rell.test.tx().op(
+        propose_subnode_jar_extension(initial_provider.pub, "subnode_jar_extension1", x"00", subnode_jar_extension_type.SPECIAL, "one", "", "")
+    ).sign(initial_provider).run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = subnode_jar_extension_update_topic,
+            body = subnode_jar_extension_update_message(
+                name = "subnode_jar_extension1",
+                subnode_jar_extension_type = subnode_jar_extension_type.SPECIAL.name,
+                owner = initial_provider.pub,
+                description = "one",
+                active = true,
+            ).to_gtv()
+        ).to_gtv_pretty())
+    );
+
+    rell.test.tx().op(
+        propose_update_subnode_jar_extension(initial_provider.pub, "subnode_jar_extension1", extension_description = "updated")
+    ).sign(initial_provider).run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = subnode_jar_extension_update_topic,
+            body = subnode_jar_extension_update_message(
+                name = "subnode_jar_extension1",
+                subnode_jar_extension_type = subnode_jar_extension_type.SPECIAL.name,
+                owner = initial_provider.pub,
+                description = "updated",
+                active = true,
+            ).to_gtv()
+        ).to_gtv_pretty())
+    );
+
+    rell.test.tx().op(
+        propose_add_cluster_subnode_jar_extension(initial_provider.pub, cluster_name, "subnode_jar_extension1")
+    ).sign(initial_provider).run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = cluster_subnode_jar_extension_update_topic,
+            body = cluster_subnode_jar_extension_update_message(
+                cluster = cluster_name,
+                subnode_jar_extension = "subnode_jar_extension1",
+                deleted = false,
+            ).to_gtv()
+        ).to_gtv_pretty())
+    );
+
+    rell.test.tx().op(
+        propose_remove_cluster_subnode_jar_extension(initial_provider.pub, cluster_name, "subnode_jar_extension1")
+    ).sign(initial_provider).run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = cluster_subnode_jar_extension_update_topic,
+            body = cluster_subnode_jar_extension_update_message(
+                cluster = cluster_name,
+                subnode_jar_extension = "subnode_jar_extension1",
+                deleted = true,
+            ).to_gtv()
+        ).to_gtv_pretty())
+    );
+
+    rell.test.tx().op(
+        propose_subnode_jar_extension_state(initial_provider.pub, "subnode_jar_extension1", false)
+    ).sign(initial_provider).run();
+
+    assert_events(
+        ("icmf_message", (
+            topic = subnode_jar_extension_update_topic,
+            body = subnode_jar_extension_update_message(
+                name = "subnode_jar_extension1",
+                subnode_jar_extension_type = subnode_jar_extension_type.SPECIAL.name,
+                owner = initial_provider.pub,
+                description = "updated",
                 active = false,
             ).to_gtv()
         ).to_gtv_pretty())

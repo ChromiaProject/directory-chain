@@ -1,0 +1,46 @@
+@extend(receive_icmf_message) function receive_add_subnode_jar_extensions_to_container(sender: byte_array, topic: text, body: gtv) {
+    if (topic != add_subnode_jar_extensions_to_container_topic) return;
+
+    if (sender != economy_chain.rid) {
+        log("Sender %s is not the economy chain, ignoring".format(sender));
+        return;
+    }
+
+    receive_add_subnode_jar_extensions_to_container_impl(body);
+}
+
+function receive_add_subnode_jar_extensions_to_container_impl(body: gtv) {
+    val message = add_subnode_jar_extensions_to_container_message.from_gtv(body);
+
+    val container = container @? { .name == message.container_name };
+    if (empty(container)) {
+        send_response(message.ticket_id, "Container %s not found".format(message.container_name));
+        return;
+    }
+
+    for (subnode_jar_extension_name in message.subnode_jar_extension_names) {
+        val subnode_jar_extension = subnode_jar_extension @? { .name == subnode_jar_extension_name };
+        if (empty(subnode_jar_extension)) {
+            send_response(message.ticket_id, "Subnode JAR extension %s not found".format(subnode_jar_extension_name));
+            return;
+        }
+
+        if (not subnode_jar_extension.active) {
+            send_response(message.ticket_id, "Subnode JAR extension %s is not active".format(subnode_jar_extension_name));
+            return;
+        }
+
+        if (not (subnode_jar_extension.subnode_jar_extension_type == subnode_jar_extension_type.COMMON or not empty(cluster_subnode_jar_extension @? { container.cluster, subnode_jar_extension }))) {
+            send_response(message.ticket_id, "Subnode JAR extension %s is not compatible with cluster %s".format(subnode_jar_extension_name, container.cluster.name));
+            return;
+        }
+
+        if (not empty(container_subnode_jar_extension @? { container, subnode_jar_extension })) {
+            send_response(message.ticket_id, "Container %s already has subnode JAR extension %s".format(message.container_name, subnode_jar_extension_name));
+            return;
+        }
+
+        create container_subnode_jar_extension(container, subnode_jar_extension);
+    }
+    send_response(message.ticket_id, null);
+}

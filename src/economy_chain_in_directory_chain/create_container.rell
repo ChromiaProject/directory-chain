@@ -21,9 +21,23 @@ function decode_create_container_message(gtv): create_container_message {
                 cluster_name = v1.cluster_name,
                 subnode_image_name = v1.subnode_image_name,
                 extra_compute_requests = 0,
+                subnode_jar_extension_names = [],
             );
         }
         7 -> {
+            val v2 = create_container_message_v2.from_gtv(gtv);
+            return create_container_message(
+                ticket_id = v2.ticket_id,
+                provider_pubkey = v2.provider_pubkey,
+                container_units = v2.container_units,
+                extra_storage = v2.extra_storage,
+                cluster_name = v2.cluster_name,
+                subnode_image_name = v2.subnode_image_name,
+                extra_compute_requests = v2.extra_compute_requests,
+                subnode_jar_extension_names = [],
+            );
+        }
+        8 -> {
             return create_container_message.from_gtv(gtv);
         }
         else -> {
@@ -43,6 +57,7 @@ function receive_create_container_impl(body: gtv) {
         cluster_name = message.cluster_name,
         subnode_image_name = message.subnode_image_name,
         extra_compute_requests = message.extra_compute_requests,
+        subnode_jar_extension_names = message.subnode_jar_extension_names,
         *));
 
     val error_message = if (container_cluster_names == null)
@@ -65,6 +80,7 @@ function create_container_from_ticket(
     cluster_name: text,
     subnode_image_name: text,
     extra_compute_requests: integer,
+    subnode_jar_extension_names: list<text>
 ): (container_name: text, cluster_name: text) {
 
     require_pubkey(provider_pubkey);
@@ -86,10 +102,20 @@ function create_container_from_ticket(
                 "Subnode image %s is not compatible with cluster %s".format(maybe_subnode_image.name, cluster.name));
         }
 
+        val maybe_subnode_jar_extensions = list<subnode_jar_extension>();
+        for (subnode_jar_extension_name in subnode_jar_extension_names) {
+            val subnode_jar_extension = require_cluster_compatible_subnode_jar_extension(subnode_jar_extension_name, cluster);
+            maybe_subnode_jar_extensions.add(subnode_jar_extension);
+        }
+
         val container = create_container_in_cluster(provider, cluster, container_units, extra_storage, extra_compute_requests);
 
         if (maybe_subnode_image != null) {
             create container_subnode_image(container, maybe_subnode_image);
+        }
+
+        for (subnode_jar_extension in maybe_subnode_jar_extensions) {
+            create container_subnode_jar_extension(container, subnode_jar_extension);
         }
 
         return (container_name = container.name, cluster_name = cluster.name);

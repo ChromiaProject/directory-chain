@@ -13,6 +13,7 @@ val restart_container_topic = ICMF_TOPIC_GLOBAL_PREFIX + "restart_container";
 val upgrade_container_topic = ICMF_TOPIC_GLOBAL_PREFIX + "upgrade_container";
 val remove_container_topic = ICMF_TOPIC_GLOBAL_PREFIX + "remove_container";
 val assign_subnode_image_to_container_topic = ICMF_TOPIC_GLOBAL_PREFIX + "assign_subnode_image_to_container";
+val add_subnode_jar_extensions_to_container_topic = ICMF_TOPIC_GLOBAL_PREFIX + "add_subnode_jar_extensions_to_container";
 
 val register_dapp_provider_topic = ICMF_TOPIC_GLOBAL_PREFIX + "register_dapp_provider";
 val change_dapp_providers_state_topic = ICMF_TOPIC_GLOBAL_PREFIX + "change_dapp_providers_state";
@@ -25,6 +26,8 @@ val provider_auth_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "provider_auth_update
 val node_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "node_update";
 val subnode_image_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "subnode_image_update";
 val cluster_subnode_image_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "cluster_subnode_image_update";
+val subnode_jar_extension_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "subnode_jar_extension_update";
+val cluster_subnode_jar_extension_update_topic = ICMF_TOPIC_LOCAL_PREFIX + "cluster_subnode_jar_extension_update";
 
 struct create_cluster_message {
     name: text;
@@ -66,6 +69,16 @@ struct create_container_message_v1 {
     subnode_image_name: text;
 }
 
+struct create_container_message_v2 {
+    ticket_id: integer;
+    provider_pubkey: pubkey;
+    container_units: integer;
+    extra_storage: integer;
+    cluster_name: text;
+    subnode_image_name: text;
+    extra_compute_requests: integer = 0;
+}
+
 struct create_container_message {
     ticket_id: integer;
     provider_pubkey: pubkey;
@@ -74,6 +87,7 @@ struct create_container_message {
     cluster_name: text;
     subnode_image_name: text;
     extra_compute_requests: integer = 0;
+    subnode_jar_extension_names: list<text>;
 }
 
 struct upgrade_container_message_v1 {
@@ -97,6 +111,12 @@ struct assign_subnode_image_to_container_message {
     ticket_id: integer;
     container_name: text;
     subnode_image_name: text;
+}
+
+struct add_subnode_jar_extensions_to_container_message {
+    ticket_id: integer;
+    container_name: text;
+    subnode_jar_extension_names: list<text>;
 }
 
 struct stop_container_message {
@@ -207,5 +227,19 @@ struct subnode_image_update_message {
 struct cluster_subnode_image_update_message {
     cluster: text;
     subnode_image: text;
+    deleted: boolean;
+}
+
+struct subnode_jar_extension_update_message {
+    name;
+    subnode_jar_extension_type: text;
+    owner: pubkey;
+    description: text;
+    active: boolean;
+}
+
+struct cluster_subnode_jar_extension_update_message {
+    cluster: text;
+    subnode_jar_extension: text;
     deleted: boolean;
 }

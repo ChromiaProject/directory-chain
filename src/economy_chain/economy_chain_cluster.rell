@@ -3,22 +3,15 @@
  */
 query get_clusters(): list<cluster_data> {
     val counts = map(cluster_node @* {} (@group .cluster, @sum 1));
-    return (cluster, @outer cluster_subnode_image @* { .cluster == cluster, .subnode_image.active }) @* {} (
-        @group name = .name,
-        @group is_operational = .operational,
-        @group cluster_units = .cluster_units,
-        @group extra_storage = .extra_storage,
-        @group tag_name = .tag.name,
-        @list subnode_images = cluster_subnode_image?.subnode_image?.name,
-        @group number_of_nodes = counts.get_or_default(cluster, 0),
-    ) @* {} (cluster_data(
+    return cluster @* {} (cluster_data(
         name = .name,
-        is_operational = .is_operational,
+        is_operational = .operational,
         cluster_units = .cluster_units,
         extra_storage = .extra_storage,
-        tag_name = .tag_name,
-        subnode_images = .subnode_images @* { $ != null },
-        number_of_nodes = .number_of_nodes,
+        tag_name = .tag.name,
+        subnode_images = get_cluster_subnode_images($),
+        subnode_jar_extensions = get_cluster_subnode_jar_extensions($),
+        number_of_nodes = get_number_of_nodes($),
    ));
 }
 
@@ -34,10 +27,15 @@ query get_cluster_by_name(name): cluster_data? {
         cluster_units = cluster.cluster_units,
         extra_storage = cluster.extra_storage,
         tag_name = cluster.tag.name,
-        subnode_images = cluster_subnode_image @* { cluster, .subnode_image.active } (.subnode_image.name),
-        number_of_nodes = cluster_node @ { cluster } ( @sum 1 ),
+        subnode_images = get_cluster_subnode_images(cluster),
+        subnode_jar_extensions = get_cluster_subnode_jar_extensions(cluster),
+        number_of_nodes = get_number_of_nodes(cluster),
     );
 }
+
+function get_cluster_subnode_images(cluster) = cluster_subnode_image @* { cluster, .subnode_image.active } (.subnode_image.name);
+function get_cluster_subnode_jar_extensions(cluster) = cluster_subnode_jar_extension @* { cluster, .subnode_jar_extension.active } (.subnode_jar_extension.name);
+function get_number_of_nodes(cluster) = cluster_node @ { cluster } ( @sum 1 );
 
 /**
  * See if the cluster was created successfully, is still pending, or failed to be created.

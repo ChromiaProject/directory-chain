@@ -83,7 +83,7 @@ function create_container_auth_message(gtv): text {
  */
 operation create_container(provider_pubkey: pubkey, container_units: integer,
         duration_weeks: integer, extra_storage_gib: integer, cluster_name: text, auto_renew: boolean) {
-    create_container_impl(provider_pubkey, container_units, duration_weeks, extra_storage_gib, cluster_name, auto_renew, "", 0);
+    create_container_impl(provider_pubkey, container_units, duration_weeks, extra_storage_gib, cluster_name, auto_renew, "", [], 0);
 }
 
 @extend(ft4.auth.auth_handler)
@@ -127,7 +127,53 @@ operation create_container_with_subnode_image(provider_pubkey: pubkey, container
         duration_weeks: integer, extra_storage_gib: integer, cluster_name: text, auto_renew: boolean,
         subnode_image_name: text, extra_compute_requests: integer = 0) {
     create_container_impl(provider_pubkey, container_units, duration_weeks, extra_storage_gib, cluster_name, auto_renew,
-        subnode_image_name, extra_compute_requests);
+        subnode_image_name, [], extra_compute_requests);
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(create_container_with_subnode_image_and_jar_extensions).mount_name,
+    flags = ["T"],
+    message = create_container_with_subnode_image_and_jar_extensions_auth_message(*)
+);
+
+function create_container_with_subnode_image_and_jar_extensions_auth_message(gtv): text {
+    val args = struct<create_container_with_subnode_image_and_jar_extensions>.from_gtv(gtv);
+    val tag = require_cluster(args.cluster_name).tag;
+    val cost = calculate_container_cost(args.duration_weeks, args.container_units, args.extra_storage_gib, tag, args.extra_compute_requests);
+    return "Please sign the message\nto lease container with %s SCUs and %s GiB extra storage and %s extra compute requests%s\nin cluster %s\nfor %s weeks\ncosting %s %s\n%son account {account_id}".format(
+        args.container_units,
+        args.extra_storage_gib,
+        args.extra_compute_requests,
+        if (args.subnode_image_name.empty()) "" else " and subnode image " + args.subnode_image_name,
+        if (args.subnode_jar_extension_names.empty()) "" else " and subnode JAR extensions " + args.subnode_jar_extension_names,
+        args.cluster_name,
+        args.duration_weeks,
+        ft4.assets.format_amount_with_decimals(cost, chain_context.args.asset_decimals),
+        chain_context.args.asset_symbol,
+        if (args.auto_renew) "with auto-renewal\n" else "");
+}
+
+/**
+ * Request creation of a container with custom subnode image.
+ *
+ * If enough tokens are available on the users account an ICMF message will be sent to DC for creation of the container.
+ * A lease is setup for the request amount of weeks and the cost is deducted from the users account.
+ *
+ * @param provider_pubkey  pubkey of provider
+ * @param container_units  number of container units
+ * @param duration_weeks  lease duration in weeks
+ * @param extra_storage_gib  extra storage in GiB
+ * @param cluster_name  cluster name
+ * @param subnode_image_name  subnode image to use, or "" to use default subnode image
+ * @param subnode_jar_extension_names  subnode JAR extensions to use
+ * @param extra_compute_requests  number of extra compute requests per week
+ */
+operation create_container_with_subnode_image_and_jar_extensions(provider_pubkey: pubkey, container_units: integer,
+        duration_weeks: integer, extra_storage_gib: integer, cluster_name: text, auto_renew: boolean,
+        subnode_image_name: text, subnode_jar_extension_names: list<text>, extra_compute_requests: integer = 0) {
+    create_container_impl(provider_pubkey, container_units, duration_weeks, extra_storage_gib, cluster_name, auto_renew,
+        subnode_image_name, subnode_jar_extension_names, extra_compute_requests);
 }
 
 function create_container_impl(
@@ -138,6 +184,7 @@ function create_container_impl(
         cluster_name: text,
         auto_renew: boolean,
         subnode_image_name: text,
+        subnode_jar_extension_names: list<text>,
         extra_compute_requests: integer) {
 
     require_initialized();
@@ -157,6 +204,13 @@ function create_container_impl(
             "Subnode image %s is not compatible with cluster %s".format(subnode_image_name, cluster.name));
     }
 
+    for (subnode_jar_extension_name in subnode_jar_extension_names) {
+        val subnode_jar_extension = require(subnode_jar_extension @? { .name == subnode_jar_extension_name }, "Subnode JAR extension %s not found".format(subnode_jar_extension_name));
+        require(subnode_jar_extension.active, "Subnode JAR extension %s is not active".format(subnode_jar_extension_name));
+        require(subnode_jar_extension.subnode_jar_extension_type == subnode_jar_extension_type.COMMON or not empty(cluster_subnode_jar_extension @? { cluster, subnode_jar_extension }),
+            "Subnode JAR extension %s is not compatible with cluster %s".format(subnode_jar_extension_name, cluster.name));
+    }
+
     val account = ft4.auth.authenticate();
     require_non_memo_account(account);
 
@@ -173,6 +227,7 @@ function create_container_impl(
         cluster_name = cluster.name,
         subnode_image_name = subnode_image_name,
         extra_compute_requests = extra_compute_requests,
+        subnode_jar_extension_names = subnode_jar_extension_names.join_to_text(","),
     );
     send_message(create_container_topic, create_container_message(
         ticket_id = ticket.rowid.to_integer(),
@@ -182,6 +237,7 @@ function create_container_impl(
         cluster_name = cluster_name,
         subnode_image_name = subnode_image_name,
         extra_compute_requests = extra_compute_requests,
+        subnode_jar_extension_names = subnode_jar_extension_names
     ).to_gtv());
 
     create lease_purchase(account, duration_millis = duration_weeks * millis_per_week, container_units, extra_storage_gib,
@@ -252,6 +308,59 @@ operation assign_subnode_image_to_container(container_name: text, subnode_image_
         ticket_id = ticket.rowid.to_integer(),
         container_name = container_name,
         subnode_image_name = subnode_image_name,
+    ).to_gtv());
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(add_subnode_jar_extensions_to_container).mount_name,
+    flags = ["T"],
+    message = assign_subnode_jar_extension_to_container_auth_message(*)
+);
+
+function assign_subnode_jar_extension_to_container_auth_message(gtv): text {
+    val args = struct<add_subnode_jar_extensions_to_container>.from_gtv(gtv);
+    return "Please sign the message\nto add subnode JAR extensions %s\nto container %s\non account {account_id}".format(
+        args.subnode_jar_extension_names,
+        args.container_name,
+    );
+}
+
+/**
+ * Request to add custom subnode JAR extensions to an existing container.
+ *
+ * An ICMF message will be sent to DC for updating of the container.
+ *
+ * @param container_name  container name
+ * @param subnode_jar_extension_names  subnode JAR extensions to use
+ */
+operation add_subnode_jar_extensions_to_container(container_name: text, subnode_jar_extension_names: list<text>) {
+    require_initialized();
+    val lease = require_lease(container_name);
+
+    require(not subnode_jar_extension_names.empty(), "Subnode JAR extension names cannot be empty");
+
+    for (subnode_jar_extension_name in subnode_jar_extension_names) {
+        val subnode_jar_extension = require(subnode_jar_extension @? { .name == subnode_jar_extension_name }, "Subnode JAR extension %s not found".format(subnode_jar_extension_name));
+        require(subnode_jar_extension.active, "Subnode JAR extension %s is not active".format(subnode_jar_extension_name));
+        require(subnode_jar_extension.subnode_jar_extension_type == subnode_jar_extension_type.COMMON or not empty(cluster_subnode_jar_extension @? { lease.cluster, subnode_jar_extension }),
+            "Subnode JAR extension %s is not compatible with cluster %s".format(subnode_jar_extension_name, lease.cluster.name));
+    }
+
+    require(not has_pending_subnode_jar_extensions_assignment(container_name), "Container %s already has a pending subnode JAR extensions assignment".format(container_name));
+
+    val account = ft4.auth.authenticate();
+    require(lease.account == account, "Lease for container %s was not created by you".format(container_name));
+
+    val ticket = create ticket(type = ticket_type.ADD_SUBNODE_JAR_EXTENSIONS_TO_CONTAINER, account);
+    create add_subnode_jar_extensions_to_container_ticket(ticket,
+        container_name = container_name,
+        subnode_jar_extension_names = subnode_jar_extension_names.join_to_text(","),
+    );
+    send_message(add_subnode_jar_extensions_to_container_topic, add_subnode_jar_extensions_to_container_message(
+        ticket_id = ticket.rowid.to_integer(),
+        container_name = container_name,
+        subnode_jar_extension_names = subnode_jar_extension_names,
     ).to_gtv());
 }
 
@@ -764,6 +873,24 @@ query get_assign_subnode_image_to_container_ticket_by_id(ticket_id: integer): co
             (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
 
 /**
+ * Returns ticket information for adding subnode JAR extensions to container ticket by transaction RID.
+ *
+ * @param tx_rid  transaction RID
+ */
+query get_add_subnode_jar_extensions_to_container_ticket_by_transaction(tx_rid: byte_array): container_ticket_data? =
+        add_subnode_jar_extensions_to_container_ticket @? { .ticket.transaction.tx_rid == tx_rid }
+            (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
+
+/**
+ * Returns ticket information for adding subnode JAR extensions to container ticket by ticket ID.
+ *
+ * @param ticket_id  ticket ID
+ */
+query get_add_subnode_jar_extensions_to_container_ticket_by_id(ticket_id: integer): container_ticket_data? =
+        add_subnode_jar_extensions_to_container_ticket @? { .ticket.rowid == rowid(ticket_id) }
+            (container_ticket_data(.ticket.rowid.to_integer(), .ticket.type, .ticket.state, error_message = .ticket.error_message, container_name = .container_name));
+
+/**
  * Get leases for an account.
  */
 query get_leases_by_account(account_id: byte_array): list<lease_data> =
@@ -777,6 +904,7 @@ query get_leases_by_account(account_id: byte_array): list<lease_data> =
                 .expired,
                 .auto_renew,
                 subnode_image_name = .subnode_image?.name ?: "",
+                subnode_jar_extension_names = get_lease_subnode_jar_extensions(lease),
                 bridge_leases = get_bridge_leases_for_lease(lease),
                 lease_owner_account_id = .account.id,
                 extra_compute_requests = .extra_compute_requests,
@@ -797,11 +925,14 @@ query get_lease_by_container_name(container_name: text): lease_data? =
                 expire_time_millis = .start_time + .duration_millis,
                 .expired,
                 .auto_renew,
-                 subnode_image_name = .subnode_image?.name ?: "",
+                subnode_image_name = .subnode_image?.name ?: "",
+                subnode_jar_extension_names = get_lease_subnode_jar_extensions(lease),
                 bridge_leases = get_bridge_leases_for_lease(lease),
                 lease_owner_account_id = .account.id,
                 extra_compute_requests = .extra_compute_requests,
         ));
+
+function get_lease_subnode_jar_extensions(lease) = lease_subnode_jar_extension @* { lease } (.subnode_jar_extension.name);
 
 /**
  * Get minimum lease time in weeks.
