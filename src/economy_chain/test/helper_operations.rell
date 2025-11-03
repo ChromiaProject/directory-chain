@@ -125,6 +125,20 @@ operation create_test_subnode_image(
     }
 }
 
+operation create_test_subnode_jar_extension(
+    name: text,
+    subnode_jar_extension_type = subnode_jar_extension_type.COMMON,
+    owner: provider,
+    description: text = "description",
+    active: boolean = true,
+    cluster_name: text = "",
+) {
+    val s = create subnode_jar_extension(name, subnode_jar_extension_type, owner, description, active);
+    if (not cluster_name.empty()) {
+        create cluster_subnode_jar_extension(cluster @ { .name == cluster_name }, s);
+    }
+}
+
 operation create_lease(container_name: text, container_units: integer, account: ft4.accounts.account, cluster: cluster, expired: boolean) {
     create lease(
         container_name = container_name,

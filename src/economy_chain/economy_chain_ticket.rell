@@ -4,6 +4,9 @@ function has_pending_upgrade(container_name: text): boolean =
 function has_pending_subnode_image_assignment(container_name: text): boolean =
     not empty(assign_subnode_image_to_container_ticket @* { container_name, .ticket.state == ticket_state.PENDING});
 
+function has_pending_subnode_jar_extensions_assignment(container_name: text): boolean =
+    not empty(add_subnode_jar_extensions_to_container_ticket @* { container_name, .ticket.state == ticket_state.PENDING});
+
 function receive_ticket_container_result_message(body: gtv) {
     val message = ticket_container_result_message.from_gtv(body);
     val ticket = ticket @? { .rowid == rowid(message.ticket_id) };
@@ -37,6 +40,11 @@ function receive_ticket_container_result_message(body: gtv) {
                     );
                     if (not specific_ticket.subnode_image_name.empty()) {
                         create lease_subnode_image(lease, subnode_image @ { .name == specific_ticket.subnode_image_name });
+                    }
+                    if (not specific_ticket.subnode_jar_extension_names.empty()) {
+                        for (subnode_jar_extension_name in specific_ticket.subnode_jar_extension_names.split(",")) {
+                            create lease_subnode_jar_extension(lease, subnode_jar_extension @ { .name == subnode_jar_extension_name });
+                        }
                     }
                 }
                 ticket_state.FAILURE -> {
@@ -111,6 +119,24 @@ function receive_ticket_container_result_message(body: gtv) {
                 ticket_state.FAILURE -> {
                     log("Failed to assign subnode image %s to container %s for ticket %d".format(
                         specific_ticket.subnode_image_name, specific_ticket.container_name, message.ticket_id));
+                }
+            }
+        }
+
+        ticket_type.ADD_SUBNODE_JAR_EXTENSIONS_TO_CONTAINER -> {
+            val specific_ticket = add_subnode_jar_extensions_to_container_ticket @ { ticket };
+            when (ticket.state) {
+                ticket_state.SUCCESS -> {
+                    log("Successfully added subnode JAR extension(s) %s to container %s for ticket %d".format(
+                        specific_ticket.subnode_jar_extension_names, specific_ticket.container_name, message.ticket_id));
+                    val lease = lease @ { .container_name == specific_ticket.container_name };
+                    for (subnode_jar_extension_name in specific_ticket.subnode_jar_extension_names.split(",")) {
+                        create lease_subnode_jar_extension(lease, subnode_jar_extension @ { .name == subnode_jar_extension_name });
+                    }
+                }
+                ticket_state.FAILURE -> {
+                    log("Failed to add subnode JAR extension(s) %s to container %s for ticket %d".format(
+                        specific_ticket.subnode_jar_extension_names, specific_ticket.container_name, message.ticket_id));
                 }
             }
         }

@@ -1,0 +1,78 @@
+entity pending_subnode_jar_extension_state {
+    key proposal;
+    key name;
+    active: boolean;
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.subnode_jar_extension_state.name: apply_subnode_jar_extension_state(*)];
+function apply_subnode_jar_extension_state(proposal) {
+    val psjes = pending_subnode_jar_extension_state @? { proposal };
+    if (psjes == null) return;
+    val subnode_jar_extension = subnode_jar_extension @ { .name == psjes.name };
+    subnode_jar_extension.active = psjes.active;
+    after_subnode_jar_extension_updated(subnode_jar_extension);
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.subnode_jar_extension_state.name: delete_pending_subnode_jar_extension_state(*)];
+function delete_pending_subnode_jar_extension_state(proposal) {
+    delete pending_subnode_jar_extension_state @? { proposal };
+}
+
+@extend(scheduled_proposal_delay_time_handlers) function() = [proposal_type.subnode_jar_extension_state.name: scheduled_subnode_jar_extension_state_delay_time_handler(*)];
+function scheduled_subnode_jar_extension_state_delay_time_handler(proposal): (blockchain: blockchain?, delay: integer) {
+    val scheduled_at_delay = get_scheduled_event_delay(delay_type.PROPOSAL, proposal.rowid.to_integer());
+    if (scheduled_at_delay != null) {
+        return (blockchain = null, delay = scheduled_at_delay);
+    }
+    return (blockchain = null, delay = 0);
+}
+
+/**
+ * Propose enable or disable Subnode JAR extension.
+ * 
+ * Permission: system provider
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ * @param scheduled_at The time to apply this proposal when approved. If the proposal is approved after the time has passed the proposal is applied right away.
+ */
+operation propose_subnode_jar_extension_state(my_pubkey: pubkey, name, active: boolean, description: text = "", scheduled_at: timestamp? = null) {
+    val me = require_is_provider_with_rate_limit(my_pubkey);
+    require_system_access(me);
+
+    val prop = create_proposal(proposal_type.subnode_jar_extension_state, me, system_p_voter_set(), description);
+    if (scheduled_at != null) {
+        add_scheduled_event(delay_type.PROPOSAL, prop.rowid.to_integer(), scheduled_at);
+    }
+    val pending_subnode_jar_extension_state = create pending_subnode_jar_extension_state (
+        prop,
+        name,
+        active,
+    );
+    validate_subnode_jar_extension_state_proposal(pending_subnode_jar_extension_state);
+    internal_vote(me, prop, true);
+}
+
+/**
+ * Returns enable/disable Subnode JAR extension proposal.
+ */
+query get_subnode_jar_extension_state_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.subnode_jar_extension);
+    if (proposal == null) return null;
+    val psjes = pending_subnode_jar_extension_state @ { proposal };
+    return (
+        name = psjes.name,
+        active = psjes.active,
+    );
+}
+
+function validate_subnode_jar_extension_state_proposal(pending_subnode_jar_extension_state) {
+    val subnode_jar_extension = require(
+        subnode_jar_extension @? { .name == pending_subnode_jar_extension_state.name },
+        "Subnode JAR extension %s not found".format(pending_subnode_jar_extension_state.name)
+    );
+    require(subnode_jar_extension.active != pending_subnode_jar_extension_state.active,
+        "Subnode JAR extension %s already ".format(pending_subnode_jar_extension_state.name) + if (pending_subnode_jar_extension_state.active) "active" else "inactive"
+    );
+}

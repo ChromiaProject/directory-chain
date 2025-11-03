@@ -1,0 +1,32 @@
+
+/**
+ * Returns subnode JAR extension data.
+ */
+query get_subnode_jar_extension(name): subnode_jar_extension_data = get_subnode_jar_extension_data(require_subnode_jar_extension(name));
+
+/**
+ * Returns all subnode JAR extensions.
+ */
+query get_subnode_jar_extensions(): list<subnode_jar_extension_data> = subnode_jar_extension @* {} (get_subnode_jar_extension_data($));
+
+struct subnode_jar_extension_data {
+    name;
+    subnode_jar_extension_type;
+    owner: pubkey;
+    active: boolean;
+    description: text;
+    /** GTX modules exposed by this subnode JAR extension (comma separated list of FQCNs) */
+    gtx_modules: text = "";
+    /** Synchronization infrastructure extensions exposed by this subnode JAR extension (comma separated list of FQCNs) */
+    sync_exts: text = "";
+}
+
+function get_subnode_jar_extension_data(subnode_jar_extension) = subnode_jar_extension_data(
+    name = subnode_jar_extension.name,
+    subnode_jar_extension_type = subnode_jar_extension.subnode_jar_extension_type,
+    owner = subnode_jar_extension.owner.pubkey,
+    active = subnode_jar_extension.active,
+    description = subnode_jar_extension.description,
+    gtx_modules = subnode_jar_extension.gtx_modules,
+    sync_exts = subnode_jar_extension.sync_exts,
+);

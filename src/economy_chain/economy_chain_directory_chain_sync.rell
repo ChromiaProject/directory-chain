@@ -295,6 +295,40 @@ function receive_cluster_subnode_image_update_message(body: gtv) {
     }
 }
 
+function receive_subnode_jar_extension_update_message(body: gtv) {
+    val message = subnode_jar_extension_update_message.from_gtv(body);
+    val subnode_jar_extension = subnode_jar_extension @? { .name == message.name };
+    if (exists(subnode_jar_extension)) {
+        log("Updating subnode JAR extension %s".format(message.name));
+        update subnode_jar_extension @ { .name == message.name } (
+            active = message.active,
+            description = message.description,
+        );
+    } else {
+        log("Creating subnode JAR extension %s".format(message.name));
+        create subnode_jar_extension(
+            name = message.name,
+            subnode_jar_extension_type = subnode_jar_extension_type.value(message.subnode_jar_extension_type),
+            owner = provider @ { .pubkey == message.owner },
+            description = message.description,
+            active = message.active,
+        );
+    }
+}
+
+function receive_cluster_subnode_jar_extension_update_message(body: gtv) {
+    val message = cluster_subnode_jar_extension_update_message.from_gtv(body);
+    val subnode_jar_extension = subnode_jar_extension @ { .name == message.subnode_jar_extension };
+    val cluster = cluster @ { .name == message.cluster };
+    if (message.deleted) {
+        log("Removing subnode JAR extension %s from cluster %s".format(message.subnode_jar_extension, message.cluster));
+        delete cluster_subnode_jar_extension @ { subnode_jar_extension, cluster };
+    } else {
+        log("Adding subnode JAR extension %s to cluster %s".format(message.subnode_jar_extension, message.cluster));
+        create cluster_subnode_jar_extension(cluster, subnode_jar_extension);
+    }
+}
+
 function create_reward_provider_deleted_node(provider, node: pubkey, clusters: list<cluster>) {
     for (cluster in clusters) {
         if (not(exists(reward_provider_deleted_node @? { provider, node, cluster }))) {

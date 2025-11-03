@@ -173,3 +173,37 @@ function update_subnode_image(subnode_image) {
         deleted = true,
     ).to_gtv());
 }
+
+@extend(after_subnode_jar_extension_creation) function(subnode_jar_extension) {
+    update_subnode_jar_extension(subnode_jar_extension);
+}
+
+@extend(after_subnode_jar_extension_updated) function(subnode_jar_extension) {
+    update_subnode_jar_extension(subnode_jar_extension);
+}
+
+function update_subnode_jar_extension(subnode_jar_extension) {
+    send_message(subnode_jar_extension_update_topic, subnode_jar_extension_update_message(
+        name = subnode_jar_extension.name,
+        subnode_jar_extension_type = subnode_jar_extension.subnode_jar_extension_type.name,
+        owner = subnode_jar_extension.owner.pubkey,
+        description = subnode_jar_extension.description,
+        active = subnode_jar_extension.active,
+    ).to_gtv());
+}
+
+@extend(after_cluster_subnode_jar_extension_added) function(cluster, subnode_jar_extension) {
+    send_message(cluster_subnode_jar_extension_update_topic, cluster_subnode_jar_extension_update_message(
+        cluster = cluster.name,
+        subnode_jar_extension = subnode_jar_extension.name,
+        deleted = false,
+    ).to_gtv());
+}
+
+@extend(after_cluster_subnode_jar_extension_removed) function(cluster, subnode_jar_extension) {
+    send_message(cluster_subnode_jar_extension_update_topic, cluster_subnode_jar_extension_update_message(
+        cluster = cluster.name,
+        subnode_jar_extension = subnode_jar_extension.name,
+        deleted = true,
+    ).to_gtv());
+}

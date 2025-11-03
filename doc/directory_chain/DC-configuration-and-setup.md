@@ -79,11 +79,16 @@ From anchoring chain:
 From economy-chain:
 
 - `G_create_cluster`
+- `G_create_cluster_V2`
 - `G_create_container`
 - `G_upgrade_container`
 - `G_stop_container`
 - `G_restart_container`
 - `G_remove_container`
+- `G_register_dapp_provider`
+- `G_change_dapp_providers_state`
+- `G_assign_subnode_image_to_container`
+- `G_add_subnode_jar_extensions_to_container`
 
 ### Configuration example:
 ```yaml
@@ -116,6 +121,7 @@ From economy-chain:
               - G_create_container
               - G_upgrade_container
               - G_assign_subnode_image_to_container
+              - G_add_subnode_jar_extensions_to_container
               - G_stop_container
               - G_restart_container
               - G_remove_container
@@ -184,10 +190,10 @@ This is disabled by default but can be enabled by setting `config_delay` to the 
 
 ```yaml
 blockchains:
-    name_of_blockchain:
-        config:
-            directory_chain:
-                config_delay: 0 # Delay in milliseconds
+  name_of_blockchain:
+    config:
+      directory_chain:
+        config_delay: 0 # Delay in milliseconds
 ```
 
 The `list_delayed_blockchain_configs` query can be used to retrieve existing delayed configuration proposals.

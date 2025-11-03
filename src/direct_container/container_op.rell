@@ -8,7 +8,7 @@
  * @param consensus_threshold  majority (-1), super majority (0) or custom (1, ...)
  */
 operation create_container(my_pubkey: pubkey, name, cluster_name: text, consensus_threshold: integer, deployers: list<pubkey>) {
-    create_container_with_resource_limits_impl(my_pubkey, name, cluster_name, consensus_threshold, deployers, empty_container_resource_limits(), "");
+    create_container_with_resource_limits_impl(my_pubkey, name, cluster_name, consensus_threshold, deployers, empty_container_resource_limits(), [], "");
 }
 
 /**
@@ -20,7 +20,7 @@ operation create_container(my_pubkey: pubkey, name, cluster_name: text, consensu
  */
 operation create_container_with_resource_limits(my_pubkey: pubkey, name, cluster_name: text, consensus_threshold: integer,
         deployers: list<pubkey>, resource_limits: map<container_resource_limit_type, integer>) {
-    create_container_with_resource_limits_impl(my_pubkey, name, cluster_name, consensus_threshold, deployers, resource_limits, "");
+    create_container_with_resource_limits_impl(my_pubkey, name, cluster_name, consensus_threshold, deployers, resource_limits, [], "");
 }
 
 /**
@@ -34,7 +34,22 @@ operation create_container_with_resource_limits(my_pubkey: pubkey, name, cluster
  */
 operation create_container_with_resource_limits_and_subnode_image(my_pubkey: pubkey, name, cluster_name: text, consensus_threshold: integer,
         deployers: list<pubkey>, resource_limits: map<container_resource_limit_type, integer>, subnode_image: text) {
-    create_container_with_resource_limits_impl(my_pubkey, name, cluster_name, consensus_threshold, deployers, resource_limits, subnode_image);
+    create_container_with_resource_limits_impl(my_pubkey, name, cluster_name, consensus_threshold, deployers, resource_limits, [], subnode_image);
+}
+
+/**
+ * Creates container with resource limits and JAR extensions.
+ *
+ * Permission: cluster governor
+ *
+ * Rate limit: actions
+ *
+ * @param jar_extensions subnode JAR extension names, or empty to not add any subnode JAR extensions
+ * @param subnode_image subnode image name, or null to not assign subnode image
+ */
+operation create_container_with_resource_limits_and_jar_extensions(my_pubkey: pubkey, name, cluster_name: text, consensus_threshold: integer,
+        deployers: list<pubkey>, resource_limits: map<container_resource_limit_type, integer>, jar_extensions: list<text>, subnode_image: text? = null) {
+    create_container_with_resource_limits_impl(my_pubkey, name, cluster_name, consensus_threshold, deployers, resource_limits, jar_extensions, subnode_image ?: "");
 }
 
 /**
@@ -47,7 +62,7 @@ operation create_container_with_resource_limits_and_subnode_image(my_pubkey: pub
  * @param  consensus_threshold  majority (-1), super majority (0) or custom (1, ...)
  */
 operation create_container_from(my_pubkey: pubkey, name, cluster_name: text, consensus_threshold: integer, voter_set_name: text) {
-    create_container_from_with_resource_limits_impl(my_pubkey, name, cluster_name, consensus_threshold, voter_set_name, empty_container_resource_limits(), "");
+    create_container_from_with_resource_limits_impl(my_pubkey, name, cluster_name, consensus_threshold, voter_set_name, empty_container_resource_limits(), [],  "");
 }
 
 /**
@@ -59,7 +74,7 @@ operation create_container_from(my_pubkey: pubkey, name, cluster_name: text, con
  */
 operation create_container_from_with_resource_limits(my_pubkey: pubkey, name, cluster_name: text, consensus_threshold: integer,
         voter_set_name: text, resource_limits: map<container_resource_limit_type, integer>) {
-    create_container_from_with_resource_limits_impl(my_pubkey, name, cluster_name, consensus_threshold, voter_set_name, resource_limits, "");
+    create_container_from_with_resource_limits_impl(my_pubkey, name, cluster_name, consensus_threshold, voter_set_name, resource_limits, [],  "");
 }
 
 /**
@@ -73,7 +88,22 @@ operation create_container_from_with_resource_limits(my_pubkey: pubkey, name, cl
  */
 operation create_container_from_with_resource_limits_and_subnode_image(my_pubkey: pubkey, name, cluster_name: text, consensus_threshold: integer,
         voter_set_name: text, resource_limits: map<container_resource_limit_type, integer>, subnode_image: text) {
-    create_container_from_with_resource_limits_impl(my_pubkey, name, cluster_name, consensus_threshold, voter_set_name, resource_limits, subnode_image);
+    create_container_from_with_resource_limits_impl(my_pubkey, name, cluster_name, consensus_threshold, voter_set_name, resource_limits, [], subnode_image);
+}
+
+/**
+ * Creates container with voters set, resource limits and JAR extensions.
+ *
+ * Permission: cluster governor
+ *
+ * Rate limit: actions
+ *
+ * @param jar_extensions subnode JAR extension names, or empty to not add any subnode JAR extensions
+ * @param subnode_image subnode image name, or null to not assign subnode image
+ */
+operation create_container_from_with_resource_limits_and_jar_extensions(my_pubkey: pubkey, name, cluster_name: text, consensus_threshold: integer,
+        voter_set_name: text, resource_limits: map<container_resource_limit_type, integer>, jar_extensions: list<text>, subnode_image: text? = null) {
+    create_container_from_with_resource_limits_impl(my_pubkey, name, cluster_name, consensus_threshold, voter_set_name, resource_limits, jar_extensions, subnode_image ?: "");
 }
 
 /**
@@ -107,7 +137,7 @@ operation remove_container_deployer(my_pubkey: pubkey, container_name: text, dep
 }
 
 function create_container_with_resource_limits_impl(me: pubkey, name, cluster_name: text, consensus_threshold: integer,
-        deployers: list<pubkey>, resource_limits: map<container_resource_limit_type, integer>, subnode_image_name: text) {
+        deployers: list<pubkey>, resource_limits: map<container_resource_limit_type, integer>, jar_extension_names: list<text>, subnode_image_name: text) {
     val provider = require_is_provider_with_rate_limit(me);
     val cluster = require_cluster(cluster_name);
     require_cluster_governor(cluster, provider);
@@ -117,10 +147,11 @@ function create_container_with_resource_limits_impl(me: pubkey, name, cluster_na
     val container = create_container_impl(provider, name, cluster, consensus_threshold, deployers, container_units,
         max_blockchains, extra_storage, extra_compute_requests = extra_compute_requests);
     assign_subnode_image(container, subnode_image_name);
+    assign_jar_extensions(container, jar_extension_names);
 }
 
 function create_container_from_with_resource_limits_impl(me: pubkey, name, cluster_name: text, consensus_threshold: integer,
-        voter_set_name: text, resource_limits: map<container_resource_limit_type, integer>, subnode_image_name: text) {
+        voter_set_name: text, resource_limits: map<container_resource_limit_type, integer>, jar_extension_names: list<text>, subnode_image_name: text) {
     val provider = require_is_provider_with_rate_limit(me);
     val cluster = require_cluster(cluster_name);
     require_cluster_governor(cluster, provider);
@@ -131,6 +162,7 @@ function create_container_from_with_resource_limits_impl(me: pubkey, name, clust
     val container = create_container_with_limits(provider, name, cluster, vs, container_units, max_blockchains,
         extra_storage, extra_compute_requests = extra_compute_requests);
     assign_subnode_image(container, subnode_image_name);
+    assign_jar_extensions(container, jar_extension_names);
 }
 
 function get_resource_limits_or_defaults(resource_limits: map<container_resource_limit_type, integer>) = (
@@ -148,6 +180,13 @@ function assign_subnode_image(container, subnode_image_name: text) {
                 or not empty(cluster_subnode_image @? { container.cluster, subnode_image }),
             "Subnode image %s is not compatible with cluster %s".format(subnode_image_name, container.cluster.name));
         create container_subnode_image(container, subnode_image);
+    }
+}
+
+function assign_jar_extensions(container, jar_extensions: list<text>) {
+    for (jar_extension_name in jar_extensions) {
+        val jar_extension = require_cluster_compatible_subnode_jar_extension(jar_extension_name, container.cluster);
+        create container_subnode_jar_extension(container, jar_extension);
     }
 }
 

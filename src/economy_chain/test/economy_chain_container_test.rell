@@ -43,6 +43,7 @@ function test_create_container_and_assign_subnode_image_later_success() {
         expired = false,
         auto_renew = false,
         subnode_image_name = "",
+        subnode_jar_extension_names = [],
         bridge_leases = [],
         lease_owner_account_id = alice.id,
         extra_compute_requests = 0,
@@ -67,6 +68,7 @@ function test_create_container_and_assign_subnode_image_later_success() {
         expired = false,
         auto_renew = false,
         subnode_image_name = "subnode_image1",
+        subnode_jar_extension_names = [],
         bridge_leases = [],
         lease_owner_account_id = alice.id,
         extra_compute_requests = 0,
@@ -169,6 +171,7 @@ function test_create_container_with_subnode_image() {
         expired = false,
         auto_renew = false,
         subnode_image_name = "subnode_image1",
+        subnode_jar_extension_names = [],
         bridge_leases = [],
         lease_owner_account_id = alice.id,
         extra_compute_requests = 0,
@@ -191,6 +194,7 @@ function test_create_container_with_subnode_image() {
         expired = false,
         auto_renew = false,
         subnode_image_name = "subnode_image2",
+        subnode_jar_extension_names = [],
         bridge_leases = [],
         lease_owner_account_id = alice.id,
         extra_compute_requests = 5,
@@ -243,6 +247,224 @@ function test_create_container_with_subnode_image_fail_when_not_active() {
 }
 
 
+function test_create_container_and_assign_subnode_jar_extension_later_success() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val bob = add_provider(rell.test.pubkeys.bob);
+    rell.test.tx().op(create_test_subnode_jar_extension(name = "subnode_jar_extension1", owner = bob)).run();
+    val container_name = do_create_container(
+        alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 13, cluster_name = cluster_name, container_units = 2);
+
+    val lease = lease @ { container_name };
+    assert_false(lease.auto_renew);
+
+    val expected_lease = lease_data(
+        container_name = container_name,
+        cluster_name = cluster_name,
+        container_units = 2,
+        extra_storage_gib = 0,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*4 + millis_per_week,
+        expired = false,
+        auto_renew = false,
+        subnode_image_name = "",
+        subnode_jar_extension_names = [],
+        bridge_leases = [],
+        lease_owner_account_id = alice.id,
+        extra_compute_requests = 0,
+    );
+
+    val leases = get_leases_by_account(alice.id);
+    assert_equals(leases.size(), 1);
+    assert_equals(leases[0], expected_lease);
+
+    val lease_data = require(get_lease_by_container_name(container_name));
+    assert_equals(lease_data, expected_lease);
+
+    do_add_subnode_jar_extensions_to_container(
+        rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 17, current_lease = lease, subnode_jar_extension_names = ["subnode_jar_extension1"]);
+
+    val expected_lease2 = lease_data(
+        container_name = container_name,
+        cluster_name = cluster_name,
+        container_units = 2,
+        extra_storage_gib = 0,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*4 + millis_per_week,
+        expired = false,
+        auto_renew = false,
+        subnode_image_name = "",
+        subnode_jar_extension_names = ["subnode_jar_extension1"],
+        bridge_leases = [],
+        lease_owner_account_id = alice.id,
+        extra_compute_requests = 0,
+    );
+    val lease_data2 = require(get_lease_by_container_name(container_name));
+    assert_equals(lease_data2, expected_lease2);
+}
+
+function test_create_container_and_assign_subnode_jar_extension_later_fail_when_not_exist() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val bob = add_provider(rell.test.pubkeys.bob);
+    rell.test.tx().op(create_test_subnode_jar_extension(name = "subnode_jar_extension1", owner = bob)).run();
+    val container_name = do_create_container(
+        alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 13, cluster_name = cluster_name, container_units = 2);
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, add_subnode_jar_extensions_to_container(container_name, ["subnode_jar_extension2"]))
+    ).op(
+        add_subnode_jar_extensions_to_container(container_name, ["subnode_jar_extension2"])
+    ).run_must_fail("Subnode JAR extension subnode_jar_extension2 not found");
+}
+
+function test_create_container_and_assign_subnode_jar_extension_later_fail_when_not_active() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val bob = add_provider(rell.test.pubkeys.bob);
+    rell.test.tx().op(create_test_subnode_jar_extension(name = "subnode_jar_extension1", owner = bob, active = false)).run();
+    val container_name = do_create_container(
+        alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 13, cluster_name = cluster_name, container_units = 2);
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, add_subnode_jar_extensions_to_container(container_name, ["subnode_jar_extension1"]))
+    ).op(
+        add_subnode_jar_extensions_to_container(container_name, ["subnode_jar_extension1"])
+    ).run_must_fail("Subnode JAR extension subnode_jar_extension1 is not active");
+}
+
+function test_create_container_and_assign_subnode_jar_extension_later_fail_when_pending() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val bob = add_provider(rell.test.pubkeys.bob);
+    rell.test.tx().op(create_test_subnode_jar_extension(name = "subnode_jar_extension1", owner = bob)).run();
+    val container_name = do_create_container(
+        alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 13, cluster_name = cluster_name, container_units = 2);
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, add_subnode_jar_extensions_to_container(container_name, ["subnode_jar_extension1"]))
+    ).op(
+        add_subnode_jar_extensions_to_container(container_name, ["subnode_jar_extension1"])
+    ).run();
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, add_subnode_jar_extensions_to_container(container_name, ["subnode_jar_extension1"]))
+    ).op(
+        add_subnode_jar_extensions_to_container(container_name, ["subnode_jar_extension1"])
+    ).run_must_fail("Container %s already has a pending subnode JAR extensions assignment".format(container_name));
+}
+
+function test_create_container_and_assign_subnode_jar_extension_later_when_failed() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val bob = add_provider(rell.test.pubkeys.bob);
+    rell.test.tx().op(create_test_subnode_jar_extension(name = "subnode_jar_extension1", owner = bob)).run();
+    val container_name = do_create_container(
+        alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 13, cluster_name = cluster_name, container_units = 2);
+
+    val lease = lease @ { container_name };
+
+    do_add_subnode_jar_extensions_to_container(
+        rell.test.keypairs.alice, success = false, ticket_id = ticket_id_after_init + 17, current_lease = lease, subnode_jar_extension_names = ["subnode_jar_extension1"]);
+
+    do_add_subnode_jar_extensions_to_container(
+        rell.test.keypairs.alice, success = false, ticket_id = ticket_id_after_init + 19, current_lease = lease, subnode_jar_extension_names = ["subnode_jar_extension1"]);
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, add_subnode_jar_extensions_to_container(container_name, ["subnode_jar_extension1"]))
+    ).op(
+        add_subnode_jar_extensions_to_container(lease.container_name, ["subnode_jar_extension1"])
+    ).run();
+}
+
+function test_create_container_with_subnode_jar_extension() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val bob = add_provider(rell.test.pubkeys.bob);
+    rell.test.tx().op(create_test_subnode_jar_extension(name = "subnode_jar_extension1", owner = bob)).run();
+    rell.test.tx().op(create_test_subnode_jar_extension(name = "subnode_jar_extension2", owner = bob)).run();
+    val container_name = do_create_container(
+        alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 14, cluster_name = cluster_name, container_units = 2, subnode_jar_extension_names = ["subnode_jar_extension1"]);
+
+    val lease = lease @ { container_name };
+
+    val expected_lease = lease_data(
+        container_name = container_name,
+        cluster_name = cluster_name,
+        container_units = 2,
+        extra_storage_gib = 0,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*5 + millis_per_week,
+        expired = false,
+        auto_renew = false,
+        subnode_image_name = "",
+        subnode_jar_extension_names = ["subnode_jar_extension1"],
+        bridge_leases = [],
+        lease_owner_account_id = alice.id,
+        extra_compute_requests = 0,
+    );
+
+    val leases = get_leases_by_account(alice.id);
+    assert_equals(leases.size(), 1);
+    assert_equals(leases[0], expected_lease);
+
+    val container_name2 = do_create_container(
+        alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 21, cluster_name = cluster_name, container_units = 2,
+            subnode_jar_extension_names = ["subnode_jar_extension2"], container_name = "container2", extra_compute_requests = 5);
+
+    val expected_lease2 = lease_data(
+        container_name = "container2",
+        cluster_name = cluster_name,
+        container_units = 2,
+        extra_storage_gib = 0,
+        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*7 + millis_per_week,
+        expired = false,
+        auto_renew = false,
+        subnode_image_name = "",
+        subnode_jar_extension_names = ["subnode_jar_extension2"],
+        bridge_leases = [],
+        lease_owner_account_id = alice.id,
+        extra_compute_requests = 5,
+    );
+
+    val leases2 = get_leases_by_account(alice.id);
+    assert_equals(leases2.size(), 2);
+    assert_equals(leases2[0], expected_lease);
+    assert_equals(leases2[1], expected_lease2);
+
+    val lease_data = require(get_lease_by_container_name(container_name));
+    assert_equals(lease_data, expected_lease);
+
+    val lease_data2 = require(get_lease_by_container_name(container_name2));
+    assert_equals(lease_data2, expected_lease2);
+}
+
+function test_create_container_with_subnode_jar_extension_fail_when_not_exist() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val bob = add_provider(rell.test.pubkeys.bob);
+    rell.test.tx().op(create_test_subnode_jar_extension(name = "subnode_jar_extension1", owner = bob)).run();
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice,
+            create_container_with_subnode_image_and_jar_extensions(rell.test.pubkeys.alice, 2, 1, 0, cluster_name, false, "", ["subnode_jar_extension2"]))
+    ).op(
+        create_container_with_subnode_image_and_jar_extensions(rell.test.pubkeys.alice, 2, 1, 0, cluster_name, false, "", ["subnode_jar_extension2"])
+    ).run_must_fail("Subnode JAR extension subnode_jar_extension2 not found");
+}
+
+function test_create_container_with_subnode_jar_extension_fail_when_not_active() {
+    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
+    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+    val bob = add_provider(rell.test.pubkeys.bob);
+    rell.test.tx().op(create_test_subnode_jar_extension(name = "subnode_jar_extension1", owner = bob, active = false)).run();
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice,
+            create_container_with_subnode_image_and_jar_extensions(rell.test.pubkeys.alice, 2, 1, 0, cluster_name, false, "", ["subnode_jar_extension1"]))
+    ).op(
+        create_container_with_subnode_image_and_jar_extensions(rell.test.pubkeys.alice, 2, 1, 0, cluster_name, false, "", ["subnode_jar_extension1"])
+    ).run_must_fail("Subnode JAR extension subnode_jar_extension1 is not active");
+}
+
+
 function test_create_container_with_auto_renew() {
     rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
     val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
@@ -259,6 +481,7 @@ function test_create_container_with_auto_renew() {
         expired = false,
         auto_renew = true,
         subnode_image_name = "",
+        subnode_jar_extension_names = [],
         bridge_leases = [],
         lease_owner_account_id = alice.id,
         extra_compute_requests = 0,
@@ -594,6 +817,7 @@ function test_upgrade_container_success() {
         expired = false,
         auto_renew = false,
         subnode_image_name = "",
+        subnode_jar_extension_names = [],
         bridge_leases = [],
         lease_owner_account_id = alice.id,
         extra_compute_requests = 5,
@@ -647,6 +871,7 @@ function test_upgrade_container_with_subnode_image() {
         expired = false,
         auto_renew = false,
         subnode_image_name = "subnode_image1",
+        subnode_jar_extension_names = [],
         bridge_leases = [],
         lease_owner_account_id = alice.id,
         extra_compute_requests = 0,
@@ -677,6 +902,7 @@ function test_upgrade_container_failure() {
         expired = false,
         auto_renew = false,
         subnode_image_name = "",
+        subnode_jar_extension_names = [],
         bridge_leases = [],
         lease_owner_account_id = alice.id,
         extra_compute_requests = 0,
@@ -996,6 +1222,7 @@ function test_downgrade_container_and_reduce_cost() {
         expired = false,
         auto_renew = false,
         subnode_image_name = "",
+        subnode_jar_extension_names = [],
         bridge_leases = [],
         lease_owner_account_id = alice.id,
         extra_compute_requests = 0,
@@ -1052,6 +1279,7 @@ function test_container_lease_ownership_transfer() {
         expired = false,
         auto_renew = false,
         subnode_image_name = "",
+        subnode_jar_extension_names = [],
         bridge_leases = [],
         lease_owner_account_id = bob.id,
         extra_compute_requests = 0,

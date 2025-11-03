@@ -8,6 +8,7 @@ entity pending_container {
     extra_storage: integer;
     proposed_by: provider;
     subnode_image_name: text = "";
+    jar_extensions: text = ""; // Comma separated list
     extra_compute_requests: integer = 0;
 }
 
@@ -16,7 +17,7 @@ entity pending_container {
 function apply_container(proposal) {
     val pps = pending_container @? { proposal };
     if (pps == null) return;
-    val maybe_subnode_image = validate_container_proposal(pps);
+    val (maybe_subnode_image, maybe_jar_extensions) = validate_container_proposal(pps);
     val c = create_container_with_limits(
         pps.proposed_by,
         pps.name,
@@ -30,6 +31,8 @@ function apply_container(proposal) {
     if (maybe_subnode_image != null) {
         create container_subnode_image(c, maybe_subnode_image);
     }
+
+    maybe_jar_extensions @* {} (create container_subnode_jar_extension(c, $));
 }
 
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.container.name: delete_pending_container(*)];
@@ -48,7 +51,7 @@ function delete_pending_container(proposal) {
  * @param my_pubkey pubkey of provider
  */
 operation propose_container(my_pubkey: pubkey, cluster_name: text, name, deployer_name: text, description: text = "") {
-    propose_container_impl(my_pubkey, cluster_name, name, deployer_name, null, description);
+    propose_container_impl(my_pubkey, cluster_name, name, deployer_name, null, null, description);
 }
 
 /**
@@ -61,11 +64,24 @@ operation propose_container(my_pubkey: pubkey, cluster_name: text, name, deploye
  * @param my_pubkey pubkey of provider
  */
 operation propose_container_with_subnode_image(my_pubkey: pubkey, cluster_name: text, name, deployer_name: text, subnode_image: text, description: text = "") {
-    propose_container_impl(my_pubkey, cluster_name, name, deployer_name, subnode_image, description);
+    propose_container_impl(my_pubkey, cluster_name, name, deployer_name, subnode_image, null, description);
+}
+
+/**
+ * Propose container creation with custom JAR extensions.
+ *
+ * Permission: cluster governor
+ *
+ * Rate limit: actions
+ *
+ * @param my_pubkey pubkey of provider
+ */
+operation propose_container_with_subnode_jar_extensions(my_pubkey: pubkey, cluster_name: text, name, deployer_name: text,  jar_extensions: list<text>, subnode_image: text? = null, description: text = "") {
+    propose_container_impl(my_pubkey, cluster_name, name, deployer_name, subnode_image, jar_extensions, description);
 }
 
 // Who can create a new container? Cluster deployers' voter set. (They can also update container limits.)
-function propose_container_impl(my_pubkey: pubkey, cluster_name: text, name, deployer_name: text, subnode_image: text?, description: text = "") {
+function propose_container_impl(my_pubkey: pubkey, cluster_name: text, name, deployer_name: text, subnode_image: text?, jar_extensions: list<text>?, description: text = "") {
     // check that provider authority and that it is cluster's deployer
     val me = require_is_provider_with_rate_limit(my_pubkey);
     val cluster = require_cluster(cluster_name);
@@ -82,7 +98,7 @@ function propose_container_impl(my_pubkey: pubkey, cluster_name: text, name, dep
     val prop = create_proposal(proposal_type.container, me, cluster.governance, description);
     val pending_container = create pending_container(
         prop, name, cluster, deployer, container_units, max_blockchains, extra_storage, me, subnode_image_name = subnode_image ?: "",
-        extra_compute_requests = extra_compute_requests,
+        jar_extensions = jar_extensions?.join_to_text(",") ?: "", extra_compute_requests = extra_compute_requests,
     );
     validate_container_proposal(pending_container);
     internal_vote(me, prop, true);
@@ -104,17 +120,23 @@ query get_container_proposal(rowid) {
     );
 }
 
-function validate_container_proposal(pending_container): subnode_image? {
+function validate_container_proposal(pending_container): (subnode_image?, list<subnode_jar_extension>) {
     require(empty(container @? { pending_container.name }), "Container with name %s already exists".format(pending_container.name));
     require_provider_quota(pending_container.proposed_by, provider_quota_type.max_containers);
     require_cluster_quotas(pending_container.cluster, pending_container.container_units, pending_container.extra_storage);
+
+    var maybe_subnode_image: subnode_image? = null;
     if (not pending_container.subnode_image_name.empty()) {
         val subnode_image = require_subnode_image(pending_container.subnode_image_name);
         require(subnode_image.active, "Subnode image %s is not active".format(pending_container.subnode_image_name));
         require(subnode_image.subnode_image_type == subnode_image_type.COMMON or not empty(cluster_subnode_image @? { pending_container.cluster, subnode_image }),
             "Subnode image %s is not compatible with cluster %s".format(pending_container.subnode_image_name, pending_container.cluster.name));
-        return subnode_image;
-    } else {
-        return null;
+        maybe_subnode_image = subnode_image;
     }
+    var subnode_jar_extensions: list<subnode_jar_extension> = [];
+    if (not pending_container.jar_extensions.empty()) {
+        subnode_jar_extensions = pending_container.jar_extensions.split(",") @* {} (require_cluster_compatible_subnode_jar_extension($, pending_container.cluster));
+    }
+
+    return (maybe_subnode_image, subnode_jar_extensions);
 }

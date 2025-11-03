@@ -60,6 +60,7 @@ function test_create_container_with_auto_create_provider() {
             extra_storage = 0,
             cluster_name = cluster_name,
             subnode_image_name = "",
+            subnode_jar_extension_names = [],
         ).to_gtv())).run();
     val container1 = container @ { bob_cluster, .system == false };
 
@@ -96,6 +97,7 @@ function test_create_container_with_auto_create_provider() {
             cluster_name = cluster_name,
             subnode_image_name = "",
             extra_compute_requests = 5,
+            subnode_jar_extension_names = [],
         ).to_gtv())).run();
     val container2 = container @ { bob_cluster, .system == false, .name != container1.name };
     assert_events(("icmf_message", (
@@ -115,12 +117,13 @@ function test_create_container_with_auto_create_provider() {
     assert_not_null(provider @? { test_provider.pub });
 }
 
-function test_create_container_with_subnode_image() {
+function test_create_container_with_subnode_image_and_jar_extensions() {
     setup_module();
 
     val test_provider = rell.test.keypairs.bob;
     val cluster_name = "bob_cluster";
     val subnode_image_name = "subnode_image1";
+    val subnode_jar_extension_name = "subnode_jar_extension1";
     val cluster_data = cluster_creation_data(cluster_units = 1, extra_storage = 1024);
     val register_node_data = register_node_data(
         rell.test.pubkeys.charlie, host = "host", port = 7777, api_url = "http://host/api_url", [cluster_name],
@@ -131,19 +134,21 @@ function test_create_container_with_subnode_image() {
         create_cluster_with_cluster_data(initial_provider.pub, cluster_name, system_p_voter_set().name, [initial_provider.pub], cluster_data),
         register_node_with_node_data(initial_provider.pub, register_node_data),
         create_subnode_image(subnode_image_name, "my/image", "digest", subnode_image_type.COMMON, initial_provider.pub, active = true),
+        create_subnode_jar_extension(subnode_jar_extension_name, x"00", subnode_jar_extension_type.COMMON, initial_provider.pub, active = true),
     ).sign(initial_provider).run();
     val bob_cluster = cluster @ { .name == cluster_name };
 
     assert_null(provider @? { test_provider.pub });
 
     rell.test.tx().op(
-        create_container_op(create_container_message_v1(
+        create_container_op(create_container_message(
             ticket_id = 1,
             provider_pubkey = test_provider.pub,
             container_units = 1,
             extra_storage = 0,
             cluster_name = cluster_name,
             subnode_image_name = subnode_image_name,
+            subnode_jar_extension_names = [subnode_jar_extension_name],
         ).to_gtv())).run();
     val container1 = container @ { bob_cluster, .system == false };
 
@@ -172,6 +177,7 @@ function test_create_container_with_subnode_image() {
     assert_not_null(provider @? { test_provider.pub });
 
     container_subnode_image @ { .container.name == container1.name, .subnode_image.name == subnode_image_name };
+    container_subnode_jar_extension @ { .container.name == container1.name, .subnode_jar_extension.name == subnode_jar_extension_name };
 }
 
 function test_create_container_fail() {
@@ -194,6 +200,7 @@ function test_create_container_fail() {
             extra_storage = 0,
             cluster_name = "bogus_cluster",
             subnode_image_name = "",
+            subnode_jar_extension_names = [],
         ).to_gtv())).run();
 
     val provider_auth_update_message = ("icmf_message", (
@@ -410,6 +417,83 @@ function test_assign_subnode_image_to_container_fail() {
         body = ticket_container_result_message(
             1,
             error_message = "Subnode image %s not found".format(subnode_image_name),
+            container_name = null,
+            cluster_name = null).to_gtv()
+        ).to_gtv_pretty()));
+}
+
+function test_assign_subnode_jar_extension_to_container() {
+    setup_module();
+
+    val test_provider = rell.test.keypairs.bob;
+    val cluster_name = "bob_cluster";
+    val container_name = "bob_container";
+    val subnode_jar_extension_name = "subnode_jar_extension1";
+    val cluster_creation_data = cluster_creation_data(cluster_units = 1, extra_storage = 1024);
+    val register_node_data = register_node_data(
+        rell.test.pubkeys.charlie, host = "host", port = 7777, api_url = "http://host/api_url", [cluster_name],
+        cluster_units = 1, extra_storage = 1024
+    );
+
+    rell.test.tx().op(
+        create_cluster_with_cluster_data(initial_provider.pub, cluster_name, voter_sets.system_p, [initial_provider.pub], cluster_creation_data),
+        register_node_with_node_data(initial_provider.pub, register_node_data),
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.DAPP_PROVIDER),
+        create_subnode_jar_extension(subnode_jar_extension_name, x"00", subnode_jar_extension_type.COMMON, test_provider.pub, active = true),
+        create_container_with_resource_limits(initial_provider.pub, container_name, cluster_name, 0, [test_provider.pub],
+            [container_resource_limit_type.container_units : 1])
+    ).sign(initial_provider).run();
+    val initial_limits = get_current_container_resource_limits(container_name);
+    assert_equals(initial_limits[container_resource_limit_type.container_units], 1);
+
+    rell.test.tx().op(
+        add_subnode_jar_extensions_to_container_op(add_subnode_jar_extensions_to_container_message(
+            ticket_id = 1,
+            container_name = container_name,
+            subnode_jar_extension_names = [subnode_jar_extension_name],
+        ).to_gtv())).run();
+    assert_events(("icmf_message", (
+        topic = ticket_container_result_topic,
+        body = ticket_container_result_message(1, error_message = null, container_name = null, cluster_name = null).to_gtv()
+    ).to_gtv_pretty()));
+
+    container_subnode_jar_extension @ { .container.name == container_name, .subnode_jar_extension.name == subnode_jar_extension_name };
+}
+
+function test_assign_subnode_jar_extension_to_container_fail() {
+    setup_module();
+
+    val test_provider = rell.test.keypairs.bob;
+    val cluster_name = "bob_cluster";
+    val container_name = "bob_container";
+    val subnode_jar_extension_name = "subnode_jar_extension1";
+    val cluster_creation_data = cluster_creation_data(cluster_units = 1, extra_storage = 1024);
+    val register_node_data = register_node_data(
+        rell.test.pubkeys.charlie, host = "host", port = 7777, api_url = "http://host/api_url", [cluster_name],
+        cluster_units = 1, extra_storage = 1024
+    );
+
+    rell.test.tx().op(
+        create_cluster_with_cluster_data(initial_provider.pub, cluster_name, voter_sets.system_p, [initial_provider.pub], cluster_creation_data),
+        register_node_with_node_data(initial_provider.pub, register_node_data),
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.DAPP_PROVIDER),
+        create_container_with_resource_limits(initial_provider.pub, container_name, cluster_name, 0, [test_provider.pub],
+            [container_resource_limit_type.container_units : 1])
+    ).sign(initial_provider).run();
+    val initial_limits = get_current_container_resource_limits(container_name);
+    assert_equals(initial_limits[container_resource_limit_type.container_units], 1);
+
+    rell.test.tx().op(
+        add_subnode_jar_extensions_to_container_op(add_subnode_jar_extensions_to_container_message(
+            ticket_id = 1,
+            container_name = container_name,
+            subnode_jar_extension_names = [subnode_jar_extension_name],
+        ).to_gtv())).run();
+    assert_events(("icmf_message", (
+        topic = ticket_container_result_topic,
+        body = ticket_container_result_message(
+            1,
+            error_message = "Subnode JAR extension %s not found".format(subnode_jar_extension_name),
             container_name = null,
             cluster_name = null).to_gtv()
         ).to_gtv_pretty()));

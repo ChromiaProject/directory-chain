@@ -60,6 +60,8 @@ From directory-chain:
 - `L_blockchain_rid_topic`
 - `L_subnode_image_update`
 - `L_cluster_subnode_image_update`
+- `L_subnode_jar_extension_update`
+- `L_cluster_subnode_jar_extension_update`
 From EVM Transaction Submitter chain:
 - `G_evm_transaction_submitter_cost_topic`
 From EIF EVM event receiver chain:
@@ -98,6 +100,8 @@ Example (mainnet config):
               - L_blockchain_rid_topic
               - L_subnode_image_update
               - L_cluster_subnode_image_update
+              - L_subnode_jar_extension_update
+              - L_cluster_subnode_jar_extension_update
           global:
             topics:
               - G_evm_transaction_submitter_cost_topic

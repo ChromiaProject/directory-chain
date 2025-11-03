@@ -1,0 +1,17 @@
+/**
+ * Get all common subnode JAR extensions which are available for all clusters.
+ */
+query get_available_subnode_jar_extensions_for_all_clusters(): list<subnode_jar_extension_data> =
+    (subnode_jar_extension) @*
+    { .active, .subnode_jar_extension_type == subnode_jar_extension_type.COMMON }
+    ( subnode_jar_extension_data(name = .name, owner = .owner.pubkey, description = .description) );
+
+/**
+ * Get all subnode JAR extensions which are available for a specific cluster (common and special for this cluster).
+ *
+ * @param cluster_name  name of cluster
+ */
+query get_available_subnode_jar_extensions_for_cluster(cluster_name: text): list<subnode_jar_extension_data> =
+    (subnode_jar_extension, @outer cluster_subnode_jar_extension @* { .subnode_jar_extension == subnode_jar_extension, .cluster.name == cluster_name }) @*
+    { .active, (.subnode_jar_extension_type == subnode_jar_extension_type.COMMON or .subnode_jar_extension == subnode_jar_extension) }
+    ( subnode_jar_extension_data(name = .name, owner = .owner.pubkey, description = .description) );

@@ -1,0 +1,80 @@
+entity pending_add_cluster_subnode_jar_extension {
+    key proposal;
+    key cluster, subnode_jar_extension;
+}
+
+@extend(apply_voting_result_handlers) function() = [proposal_type.add_cluster_subnode_jar_extension.name: apply_add_cluster_subnode_jar_extension(*)];
+function apply_add_cluster_subnode_jar_extension(proposal) {
+    val pacsje = pending_add_cluster_subnode_jar_extension @? { proposal };
+    if (pacsje == null) return;
+    validate_add_cluster_subnode_jar_extension_proposal(pacsje);
+    create cluster_subnode_jar_extension(pacsje.cluster, pacsje.subnode_jar_extension);
+    after_cluster_subnode_jar_extension_added(pacsje.cluster, pacsje.subnode_jar_extension);
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.add_cluster_subnode_jar_extension.name: delete_pending_add_cluster_subnode_jar_extension(*)];
+function delete_pending_add_cluster_subnode_jar_extension(proposal) {
+    delete pending_add_cluster_subnode_jar_extension @? { proposal };
+}
+
+@extend(scheduled_proposal_delay_time_handlers) function() = [proposal_type.add_cluster_subnode_jar_extension.name: scheduled_add_cluster_subnode_jar_extension_proposal_delay_time_handler(*)];
+function scheduled_add_cluster_subnode_jar_extension_proposal_delay_time_handler(proposal): (blockchain: blockchain?, delay: integer) {
+    val scheduled_at_delay = get_scheduled_event_delay(delay_type.PROPOSAL, proposal.rowid.to_integer());
+    if (scheduled_at_delay != null) {
+        return (blockchain = null, delay = scheduled_at_delay);
+    }
+    return (blockchain = null, delay = 0);
+}
+
+/**
+ * Propose add Subnode JAR extension to cluster.
+ * 
+ * Permission: cluster governor
+ * 
+ * Rate limit: actions
+ * 
+ * @param my_pubkey pubkey of provider
+ * @param scheduled_at The time to apply this proposal when approved. If the proposal is approved after the time has passed the proposal is applied right away.
+ */
+operation propose_add_cluster_subnode_jar_extension(my_pubkey: pubkey, cluster_name: text, subnode_jar_extension_name: text, description: text = "", scheduled_at: timestamp? = null) {
+    // check that provider authority and that it is a cluster governor
+    val me = require_is_provider_with_rate_limit(my_pubkey);
+    val cluster = require_cluster(cluster_name);
+    require_cluster_governor(cluster, me);
+    val subnode_jar_extension = require_subnode_jar_extension(subnode_jar_extension_name);
+    val prop = create_proposal(proposal_type.add_cluster_subnode_jar_extension, me, cluster.governance, description);
+    if (scheduled_at != null) {
+        add_scheduled_event(delay_type.PROPOSAL, prop.rowid.to_integer(), scheduled_at);
+    }
+    val pacsi = create pending_add_cluster_subnode_jar_extension(
+        prop,
+        cluster,
+        subnode_jar_extension,
+    );
+    validate_add_cluster_subnode_jar_extension_proposal(pacsi);
+    internal_vote(me, prop, true);
+}
+
+/**
+ * Returns add Subnode JAR extension to cluster proposal.
+ */
+query get_add_cluster_subnode_jar_extension_proposal(rowid) {
+    val proposal = get_latest_proposal(rowid, proposal_type.add_cluster_subnode_jar_extension);
+    if (proposal == null) return null;
+    val pacsje = pending_add_cluster_subnode_jar_extension @ { proposal };
+    return (
+        cluster = pacsje.cluster.name,
+        subnode_jar_extension = pacsje.subnode_jar_extension.name,
+    );
+}
+
+function validate_add_cluster_subnode_jar_extension_proposal(pacsi: pending_add_cluster_subnode_jar_extension) {
+    require(
+        empty(cluster_subnode_jar_extension @? { pacsi.cluster, pacsi.subnode_jar_extension }),
+        "Subnode JAR extension %s is already allowed by cluster %s".format(pacsi.subnode_jar_extension.name, pacsi.cluster.name)
+    );
+    require(pacsi.subnode_jar_extension.active,
+        "Subnode JAR extension %s is not active".format(pacsi.subnode_jar_extension.name));
+    require(pacsi.subnode_jar_extension.subnode_jar_extension_type == subnode_jar_extension_type.SPECIAL,
+        "Subnode JAR extension %s is not special".format(pacsi.subnode_jar_extension.name));
+}

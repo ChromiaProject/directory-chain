@@ -178,6 +178,7 @@ function do_create_container(
     container_units: integer = 2,
     auto_renew: boolean = false,
     subnode_image_name: text = "",
+    subnode_jar_extension_names: list<text> = [],
     container_name: text = "container name",
     extra_compute_requests: integer = 0,
 ): text {
@@ -193,16 +194,16 @@ function do_create_container(
     assert_equals(create_container_cost(container_units, 1, 0, cluster_name, subnode_image_name, extra_compute_requests), cost);
 
     rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(keypair.priv, create_container_with_subnode_image(keypair.pub, container_units, 1, 0, cluster_name, auto_renew, subnode_image_name, extra_compute_requests))
+        ft4.test_utils.evm_auth_operation_for(keypair.priv, create_container_with_subnode_image_and_jar_extensions(keypair.pub, container_units, 1, 0, cluster_name, auto_renew, subnode_image_name, subnode_jar_extension_names, extra_compute_requests))
     ).op(
-        create_container_with_subnode_image(keypair.pub, container_units, 1, 0, cluster_name, auto_renew, subnode_image_name, extra_compute_requests)
+        create_container_with_subnode_image_and_jar_extensions(keypair.pub, container_units, 1, 0, cluster_name, auto_renew, subnode_image_name, subnode_jar_extension_names, extra_compute_requests)
     ).run();
     val tx_rid = transaction @ {} (@sort_desc @omit .rowid, .tx_rid) limit 1;
 
     assert_events(("icmf_message", (
         topic = create_container_topic,
         body = create_container_message(ticket_id = ticket_id, keypair.pub, container_units = container_units,
-                extra_storage = 0, cluster_name = cluster_name, subnode_image_name = subnode_image_name, extra_compute_requests = extra_compute_requests).to_gtv()
+                extra_storage = 0, cluster_name = cluster_name, subnode_image_name = subnode_image_name, subnode_jar_extension_names = subnode_jar_extension_names, extra_compute_requests = extra_compute_requests).to_gtv()
     ).to_gtv_pretty()));
 
     val pending_ticket = container_ticket_data(ticket_id, ticket_type.CREATE_CONTAINER, ticket_state.PENDING, error_message = "", container_name = "");
@@ -387,6 +388,51 @@ function do_assign_subnode_image_to_container(
         require(lease_subnode_image @? { .lease == current_lease, .subnode_image.name == subnode_image_name });
     } else {
         require(empty(lease_subnode_image @? { .lease == current_lease, .subnode_image.name == subnode_image_name }));
+    }
+}
+
+function do_add_subnode_jar_extensions_to_container(
+    keypair: rell.test.keypair,
+    success: boolean,
+    ticket_id: integer,
+    current_lease: lease,
+    subnode_jar_extension_names: list<text>,
+) {
+    val container_name = current_lease.container_name;
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(keypair.priv, add_subnode_jar_extensions_to_container(container_name, subnode_jar_extension_names))
+    ).op(
+        add_subnode_jar_extensions_to_container(container_name, subnode_jar_extension_names)
+    ).run();
+    val tx_rid = transaction @ {} (@sort_desc @omit .rowid, .tx_rid) limit 1;
+
+    assert_events(("icmf_message", (
+        topic = add_subnode_jar_extensions_to_container_topic,
+        body = add_subnode_jar_extensions_to_container_message(ticket_id = ticket_id, container_name = container_name, subnode_jar_extension_names = subnode_jar_extension_names).to_gtv()
+    ).to_gtv_pretty()));
+
+    val pending_ticket = container_ticket_data(ticket_id, ticket_type.ADD_SUBNODE_JAR_EXTENSIONS_TO_CONTAINER, ticket_state.PENDING, error_message = "", container_name = container_name);
+    assert_equals(require(get_add_subnode_jar_extensions_to_container_ticket_by_id(ticket_id)), pending_ticket);
+    assert_equals(require(get_add_subnode_jar_extensions_to_container_ticket_by_transaction(tx_rid)), pending_ticket);
+
+    rell.test.tx().op(
+        icmf_message_op(x"", ticket_container_result_topic, ticket_container_result_message(ticket_id = ticket_id, error_message = if (success) null else "error").to_gtv())
+    ).run();
+    val done_ticket = container_ticket_data(
+        ticket_id = ticket_id,
+        type = ticket_type.ADD_SUBNODE_JAR_EXTENSIONS_TO_CONTAINER,
+        state = if (success) ticket_state.SUCCESS else ticket_state.FAILURE,
+        error_message = if (success) "" else "error",
+        container_name = container_name
+    );
+    assert_equals(require(get_add_subnode_jar_extensions_to_container_ticket_by_id(ticket_id)), done_ticket);
+    assert_equals(require(get_add_subnode_jar_extensions_to_container_ticket_by_transaction(tx_rid)), done_ticket);
+
+    if (success) {
+        require((lease_subnode_jar_extension @* { .lease == current_lease, .subnode_jar_extension.name in subnode_jar_extension_names }).size() == subnode_jar_extension_names.size());
+    } else {
+        require(empty(lease_subnode_jar_extension @? { .lease == current_lease, .subnode_jar_extension.name in subnode_jar_extension_names }));
     }
 }
 

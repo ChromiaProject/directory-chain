@@ -86,6 +86,8 @@ function test_get_clusters() {
         create_cluster_node_op(cluster @ { cluster_name + "1" }, node_bob),
         create_test_subnode_image(name = "special_active", owner = bob, subnode_image_type = subnode_image_type.SPECIAL, cluster_name = cluster_name + "1"),
         create_test_subnode_image(name = "special_inactive", owner = bob, subnode_image_type = subnode_image_type.SPECIAL, active = false, cluster_name = cluster_name + "1"),
+        create_test_subnode_jar_extension(name = "special_active", owner = bob, subnode_jar_extension_type = subnode_jar_extension_type.SPECIAL, cluster_name = cluster_name + "1"),
+        create_test_subnode_jar_extension(name = "special_inactive", owner = bob, subnode_jar_extension_type = subnode_jar_extension_type.SPECIAL, active = false, cluster_name = cluster_name + "1"),
     ).sign(provider_key).run();
 
     val clusters = get_clusters();
@@ -98,7 +100,8 @@ function test_get_clusters() {
             extra_storage = 11,
             tag_name = "tag-1",
             subnode_images = ["special_active"],
-            number_of_nodes = 1),
+            number_of_nodes = 1,
+            subnode_jar_extensions = ["special_active"]),
         cluster_data(
             name = cluster_name + "2",
             is_operational = true,
@@ -106,7 +109,8 @@ function test_get_clusters() {
             extra_storage = 22,
             tag_name = "tag-2",
             subnode_images = [],
-            number_of_nodes = 0),
+            number_of_nodes = 0,
+            subnode_jar_extensions = []),
     ];
     assert_equals(clusters, expected);
 }
@@ -123,6 +127,8 @@ function test_get_cluster() {
         create_cluster_node_op(cluster @ { cluster_name }, node_bob),
         create_test_subnode_image(name = "special_active", owner = bob, subnode_image_type = subnode_image_type.SPECIAL, cluster_name = cluster_name),
         create_test_subnode_image(name = "special_inactive", owner = bob, subnode_image_type = subnode_image_type.SPECIAL, active = false, cluster_name = cluster_name),
+        create_test_subnode_jar_extension(name = "special_active", owner = bob, subnode_jar_extension_type = subnode_jar_extension_type.SPECIAL, cluster_name = cluster_name),
+        create_test_subnode_jar_extension(name = "special_inactive", owner = bob, subnode_jar_extension_type = subnode_jar_extension_type.SPECIAL, active = false, cluster_name = cluster_name),
     ).sign(provider_key)
         .run();
 
@@ -137,7 +143,8 @@ function test_get_cluster() {
         extra_storage = 22,
         tag_name = "test-tag",
         subnode_images = ["special_active"],
-        number_of_nodes = 1);
+        number_of_nodes = 1,
+        subnode_jar_extensions = ["special_active"]);
     assert_equals(cluster, expected);
 }
 
@@ -236,6 +243,39 @@ function test_get_available_subnode_images_for_cluster() {
     assert_equals(get_available_subnode_images_for_cluster("cluster"), [
         subnode_image_data(name = "common_active", url = "url", digest = "digest", owner = bob.pubkey, description = "description"),
         subnode_image_data(name = "special_active", url = "url", digest = "digest", owner = bob.pubkey, description = "description"),
+    ]);
+}
+
+function test_get_available_subnode_jar_extensions_for_all_clusters() {
+    rell.test.tx().op(init()).run();
+    val bob = add_provider(rell.test.pubkeys.bob);
+    rell.test.tx().op(create_test_cluster("cluster")).run();
+    rell.test.tx()
+        .op(create_test_subnode_jar_extension(name = "common_active", owner = bob))
+        .op(create_test_subnode_jar_extension(name = "common_inactive", owner = bob, active = false))
+        .op(create_test_subnode_jar_extension(name = "special_active", owner = bob, subnode_jar_extension_type = subnode_jar_extension_type.SPECIAL, cluster_name = "cluster"))
+        .op(create_test_subnode_jar_extension(name = "special_inactive", owner = bob, subnode_jar_extension_type = subnode_jar_extension_type.SPECIAL, active = false, cluster_name = "cluster"))
+        .run();
+
+    assert_equals(get_available_subnode_jar_extensions_for_all_clusters(), [
+        subnode_jar_extension_data(name = "common_active", owner = bob.pubkey, description = "description"),
+    ]);
+}
+
+function test_get_available_subnode_jar_extensions_for_cluster() {
+    rell.test.tx().op(init()).run();
+    val bob = add_provider(rell.test.pubkeys.bob);
+    rell.test.tx().op(create_test_cluster("cluster")).run();
+    rell.test.tx()
+        .op(create_test_subnode_jar_extension(name = "common_active", owner = bob))
+        .op(create_test_subnode_jar_extension(name = "common_inactive", owner = bob, active = false))
+        .op(create_test_subnode_jar_extension(name = "special_active", owner = bob, subnode_jar_extension_type = subnode_jar_extension_type.SPECIAL, cluster_name = "cluster"))
+        .op(create_test_subnode_jar_extension(name = "special_inactive", owner = bob, subnode_jar_extension_type = subnode_jar_extension_type.SPECIAL, active = false, cluster_name = "cluster"))
+        .run();
+
+    assert_equals(get_available_subnode_jar_extensions_for_cluster("cluster"), [
+        subnode_jar_extension_data(name = "common_active", owner = bob.pubkey, description = "description"),
+        subnode_jar_extension_data(name = "special_active", owner = bob.pubkey, description = "description"),
     ]);
 }
 
