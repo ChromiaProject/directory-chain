@@ -6,20 +6,26 @@ import common.*;
 val iccf_description = "Proposed via ICCF";
 
 /**
- * Make it possible to use an operation from another blockchain to authenticate this provider.
- * The provider needs to sign this transaction (but not subsequent operations which are authenticated by the other blockchain).
+ * Make it possible to use an operation from another blockchain to authenticate this provider via ICCF.
+ * The provider needs to sign this transaction (but not subsequent operations which are authenticated by the other blockchain via ICCF).
  *
  * @param my_pubkey   pubkey of provider
  * @param blockchain_rid   the other blockchain
  */
 operation add_provider_blockchain_auth(my_pubkey: pubkey, blockchain_rid: byte_array) {
-    val allowed_states = blockchain_state.values();
-    allowed_states.remove(blockchain_state.REMOVED);
-    val bc = require_blockchain(blockchain_rid, allowed_states);
+    require(blockchain_rid != chain_context.blockchain_rid, "Can't use directory-chain itself for ICCF auth");
+    val bc = require_active_blockchain(blockchain_rid);
 
     val provider = require_is_provider_with_rate_limit(my_pubkey);
+    require(provider.tier == provider_tier.DAPP_PROVIDER and not provider.system,
+        "Only DAPP providers can enable blockchain auth");
 
-    create provider_auth_blockchain(provider, bc);
+    for (vs in voter_set_member @* { provider } (.voter_set)) {
+        require(voter_set_member @* { vs } (.provider) == [ provider ],
+            "provider %s must be the only member of all voter sets".format(provider.pubkey));
+    }
+
+    create provider_auth_blockchain(provider, bc, provider_auth_type.iccf);
 }
 
 /**
