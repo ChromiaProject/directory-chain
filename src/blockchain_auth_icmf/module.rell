@@ -1,0 +1,176 @@
+module;
+
+import model.*;
+import common.*;
+import lib.icmf.dynamic_topics.*;
+import proposal.*;
+
+struct module_args {
+    /** The average time between each messages received from a controlling blockchain, in milliseconds. */
+    icmf_rate_limit_ms: integer = 10000;
+}
+
+val icmf_description = "Proposed via ICMF";
+
+val blockchain_auth_topic = ICMF_TOPIC_LOCAL_PREFIX + "blockchain_auth";
+
+val action_remove_provider_blockchain_auth = "remove_provider_blockchain_auth";
+val action_propose_blockchain = "propose_blockchain";
+val action_propose_blockchain_action = "propose_blockchain_action";
+val action_propose_configuration = "propose_configuration";
+val action_propose_forced_configuration = "propose_forced_configuration";
+val action_propose_blockchain_rename = "propose_blockchain_rename";
+
+entity icmf_blockchain_auth {
+    key blockchain;
+    mutable last_used: integer;
+    mutable times_used_in_block: integer;
+}
+
+struct blockchain_auth_message {
+    /** pubkey of provider */
+    my_pubkey: pubkey;
+
+    /** the action */
+    action: text;
+
+    /** arguments to the action */
+    args: list<gtv>;
+}
+
+/**
+ * Make it possible to authenticate this provider from another blockchain via ICMF.
+ * The provider needs to sign this transaction (but not subsequent operations which are authenticated by the other blockchain).
+ *
+ * @param my_pubkey       pubkey of provider
+ * @param blockchain_rid  the other blockchain which will be sending ICMF messages on topic "L_blockchain_auth"
+ * @param skip_to_height  height on the other blockchain to start read messages from
+ */
+operation add_icmf_provider_blockchain_auth(my_pubkey: pubkey, blockchain_rid: byte_array, skip_to_height: integer) {
+    require(blockchain_rid != chain_context.blockchain_rid, "Can't use directory-chain itself for ICMF auth");
+    val bc = require_active_blockchain(blockchain_rid);
+
+    val provider = require_is_provider_with_rate_limit(my_pubkey);
+    require(provider.tier == provider_tier.DAPP_PROVIDER and not provider.system,
+        "Only DAPP providers can enable blockchain auth");
+
+    for (vs in voter_set_member @* { provider } (.voter_set)) {
+        require(voter_set_member @* { vs } (.provider) == [ provider ],
+            "provider %s must be the only member of all voter sets".format(provider.pubkey));
+    }
+
+    if (not exists(icmf_blockchain_auth @? { bc })) {
+        create icmf_blockchain_auth(bc, last_used = 0, times_used_in_block = 0);
+    }
+    create provider_auth_blockchain(provider, bc, provider_auth_type.icmf);
+
+    receiver_icmf_update_topics(
+        [icmf_receiver_topic(blockchain_auth_topic, blockchain_rid, skip_to_height)],
+        replace = false,
+        remove = false,
+    );
+}
+
+@extend(rate_limit_icmf) function rate_limit_blockchain_auth_icmf(sender: byte_array, topic: text){
+    if (topic != blockchain_auth_topic) return;
+
+    val bc = require(maybe_active_blockchain(sender),
+        "Got ICMF message from non-active blockchain %s".format(sender));
+    val icmf_blockchain_auth = require(icmf_blockchain_auth @? { bc },
+    "ICMF blockchain authentication from blockchain %s is not enabled".format(sender));
+
+    val time_delta = get_last_blocktime() - icmf_blockchain_auth.last_used;
+    require(time_delta > chain_context.args.icmf_rate_limit_ms * icmf_blockchain_auth.times_used_in_block,
+        "Rate limiting ICMF from blockchain %s".format(sender));
+}
+
+@extend(receive_icmf_message) function(sender: byte_array, topic: text, body: gtv) {
+    if (topic != blockchain_auth_topic) return;
+
+    val bc = maybe_active_blockchain(sender);
+    if (not exists(bc)) {
+        log("Got ICMF message from non-active blockchain %s".format(sender));
+        return;
+    }
+    val icmf_blockchain_auth = icmf_blockchain_auth @? { bc };
+    if (not exists(icmf_blockchain_auth)) {
+        log("ICMF blockchain authentication from blockchain %s is not enabled".format(sender));
+        return;
+    }
+
+    if (op_context.last_block_time > icmf_blockchain_auth.last_used) {
+        icmf_blockchain_auth.last_used = op_context.last_block_time;
+        icmf_blockchain_auth.times_used_in_block = 0;
+    }
+    icmf_blockchain_auth.times_used_in_block += 1;
+
+    try_call(receive_blockchain_auth_icmf(bc, body, *)); // TODO ICMF governance: error handling
+}
+
+function receive_blockchain_auth_icmf(sender: blockchain, body: gtv) {
+    val message = blockchain_auth_message.from_gtv(body);
+
+    val provider = require_provider(message.my_pubkey);
+    val provider_auth_blockchain = require(provider_auth_blockchain @? { provider, sender, provider_auth_type.icmf },
+        "ICMF blockchain authentication from blockchain %s is not enabled for provider %s".format(sender.rid, provider.pubkey));
+
+    when (message.action) {
+        action_remove_provider_blockchain_auth -> {
+            provider_rate_limit(provider, 1);
+            receiver_icmf_update_topics(
+                [icmf_receiver_topic(blockchain_auth_topic, provider_auth_blockchain.blockchain.rid, 0)],
+                replace = false,
+                remove = true,
+            );
+            delete provider_auth_blockchain;
+        }
+
+        action_propose_blockchain -> {
+            provider_rate_limit(provider, 1);
+            val config_data = byte_array.from_gtv(message.args[0]);
+            val bc_name = text.from_gtv(message.args[1]);
+            val container_name = text.from_gtv(message.args[2]);
+            val proposal = create_blockchain_proposal(provider, config_data, bc_name, container_name, icmf_description);
+            apply_icmf_proposal(proposal);
+        }
+
+        action_propose_blockchain_action -> {
+            provider_rate_limit(provider, 1);
+            val blockchain_rid = byte_array.from_gtv(message.args[0]);
+            val action = blockchain_action.from_gtv(message.args[1]);
+            require(action != blockchain_action.unarchive, "Unarchiving via ICMF is not supported");
+            val proposal = propose_blockchain_action_impl(provider, blockchain_rid, action, x"", icmf_description);
+            apply_icmf_proposal(proposal);
+        }
+
+        action_propose_configuration -> {
+            provider_rate_limit(provider, 1);
+            val blockchain_rid = byte_array.from_gtv(message.args[0]);
+            val config_data = byte_array.from_gtv(message.args[1]);
+            val proposal = create_configuration_proposal(provider, blockchain_rid, config_data, icmf_description);
+            apply_icmf_proposal(proposal);
+        }
+
+        action_propose_forced_configuration -> {
+            provider_rate_limit(provider, 1);
+            val blockchain_rid = byte_array.from_gtv(message.args[0]);
+            val config_data = byte_array.from_gtv(message.args[1]);
+            val height = integer.from_gtv(message.args[2]);
+            val resume_chain = if (message.args.size() > 3) boolean.from_gtv(message.args[3]) else false;
+            val proposal = create_forced_configuration_proposal(provider, blockchain_rid, config_data, height, resume_chain, icmf_description);
+            apply_icmf_proposal(proposal);
+        }
+
+        action_propose_blockchain_rename -> {
+            provider_rate_limit(provider, 1);
+            val blockchain_rid = byte_array.from_gtv(message.args[0]);
+            val name = text.from_gtv(message.args[1]);
+            val proposal = create_blockchain_rename_proposal(provider, blockchain_rid, name, icmf_description);
+            apply_icmf_proposal(proposal);
+        }
+
+        else -> {
+            require(false, "Unrecognized action %s".format(message.action));
+        }
+    }
+}

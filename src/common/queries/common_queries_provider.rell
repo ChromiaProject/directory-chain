@@ -74,6 +74,8 @@ query get_provider_quotas(): list<struct<provider_quota>> {
 struct provider_auth_blockchain_data {
     /** Controlling blockchain RID */
     blockchain_rid: byte_array;
+    /** Type of authentication */
+    provider_auth_type;
     /** Block height of latest transaction used from the controlling blockchain, or -1 if not used yet */
     latest_height: integer;
     /** Transaction index (within block) of latest transaction used from the controlling blockchain, or -1 if not used yet */
@@ -87,6 +89,7 @@ query get_provider_auth_blockchain(pubkey): provider_auth_blockchain_data? {
     val provider = require_provider(pubkey);
     return provider_auth_blockchain @? { provider } (provider_auth_blockchain_data(
         blockchain_rid = .blockchain.rid,
+        provider_auth_type = .provider_auth_type,
         latest_height = .latest_height,
         latest_tx_index = .latest_tx_index,
     ));
