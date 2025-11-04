@@ -3,10 +3,18 @@ module;
 import .constants.*;
 
 function send_message(topic: text, body: gtv) {
-    log("Sending message on topic " + topic);
     require_valid_icmf_topic_name(topic);
     val encoded_body = body.to_bytes();
     require(encoded_body.size() <= ICMF_MESSAGE_MAX_SIZE, "Message body too big, max size is %d bytes".format(ICMF_MESSAGE_MAX_SIZE));
 
     op_context.emit_event("icmf_message", (topic = topic, body = body).to_gtv_pretty());
+}
+
+function send_message_to(topic: text, body: gtv, receiver: byte_array) {
+    require_valid_icmf_topic_name(topic);
+    require(topic.starts_with(ICMF_TOPIC_LOCAL_PREFIX), "Message to specific receiver must have local topic");
+    val encoded_body = body.to_bytes();
+    require(encoded_body.size() <= ICMF_MESSAGE_MAX_SIZE, "Message body too big, max size is %d bytes".format(ICMF_MESSAGE_MAX_SIZE));
+
+    op_context.emit_event("icmf_message", (topic = topic, body = body, receiver = receiver).to_gtv_pretty());
 }
