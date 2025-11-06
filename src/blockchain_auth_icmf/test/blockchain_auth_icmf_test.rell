@@ -76,59 +76,111 @@ function test_blockchain_auth_via_icmf() {
         propose_configuration(bob.pubkey, bc.rid, conf.to_gtv().to_bytes())
     ).sign(rell.test.keypairs.bob).run_must_fail("Blockchain authentication is enabled for provider %s".format(bob.pubkey));
 
-    rate_limit_icmf(controlling_chain.rid, blockchain_auth_topic);
+    rate_limit_icmf(controlling_chain.rid, blockchain_auth_request_topic);
 
     rell.test.tx().op(
-        __icmf_message(controlling_chain.rid, blockchain_auth_topic, blockchain_auth_message(
-            bob.pubkey, action_propose_configuration, [bc.rid.to_gtv(), conf.to_gtv().to_bytes().to_gtv()]).to_gtv())
+        __icmf_message(controlling_chain.rid, blockchain_auth_request_topic, blockchain_auth_request_message(
+            1, bob.pubkey, action.propose_configuration, [bc.rid.to_gtv(), conf.to_gtv().to_bytes().to_gtv()]).to_gtv())
     ).run();
+    assert_events(("icmf_message", (
+        topic = blockchain_auth_response_topic,
+        body = blockchain_auth_response_message(id = 1, status = status.applied).to_gtv(),
+        receiver = controlling_chain.rid,
+    ).to_gtv_pretty()));
     verify_blockchain_config(bc, 1);
 
     assert_fails("Rate limiting ICMF from blockchain %s".format(controlling_chain.rid),
-        rate_limit_icmf(controlling_chain.rid, blockchain_auth_topic, *));
+        rate_limit_icmf(controlling_chain.rid, blockchain_auth_request_topic, *));
     rell.test.set_next_block_time_delta(millis_per_day / 1000);
     rell.test.block().run();
-    rate_limit_icmf(controlling_chain.rid, blockchain_auth_topic);
+    rate_limit_icmf(controlling_chain.rid, blockchain_auth_request_topic);
 
     conf["nonce"] = (10).to_gtv();
 
     rell.test.tx().op(
-        __icmf_message(controlling_chain.rid, blockchain_auth_topic, blockchain_auth_message(
-            bob.pubkey, action_propose_blockchain, [conf.to_gtv().to_bytes().to_gtv(), "bar_chain".to_gtv(), container2.to_gtv()]).to_gtv())
-    ).run(); // TODO ICMF governance: error handling _must_fail("Provider %s is not a deployer of container %s".format(bob.pubkey, container2));
+        __icmf_message(controlling_chain.rid, blockchain_auth_request_topic, blockchain_auth_request_message(
+            2, bob.pubkey, action.propose_blockchain, [conf.to_gtv().to_bytes().to_gtv(), "bar_chain".to_gtv(), container2.to_gtv()]).to_gtv())
+    ).run();
+    assert_events(("icmf_message", (
+        topic = blockchain_auth_response_topic,
+        body = blockchain_auth_response_message(id = 2, status = status.failed, error = "invalid proposal").to_gtv(),
+        receiver = controlling_chain.rid,
+    ).to_gtv_pretty()));
 
     rell.test.tx().op(
         create_container(initial_provider.pub, container3, clusters.system, 0, [bob.pubkey, charlie.pubkey])
     ).sign(initial_provider).run();
 
     rell.test.tx().op(
-        __icmf_message(controlling_chain.rid, blockchain_auth_topic, blockchain_auth_message(
-            bob.pubkey, action_propose_blockchain, [conf.to_gtv().to_bytes().to_gtv(), "bar_chain".to_gtv(), container3.to_gtv()]).to_gtv())
-    ).run(); // TODO ICMF governance: error handling _must_fail("provider %s must be the only member of the voter set".format(bob.pubkey));
+        __icmf_message(controlling_chain.rid, blockchain_auth_request_topic, blockchain_auth_request_message(
+            3, bob.pubkey, action.propose_blockchain, [conf.to_gtv().to_bytes().to_gtv(), "bar_chain".to_gtv(), container3.to_gtv()]).to_gtv())
+    ).run();
+    assert_events(("icmf_message", (
+        topic = blockchain_auth_response_topic,
+        body = blockchain_auth_response_message(id = 3, status = status.failed,
+            error = "provider %s must be the only member of the voter set".format(bob.pubkey)).to_gtv(),
+        receiver = controlling_chain.rid,
+    ).to_gtv_pretty()));
 
     rell.test.set_next_block_time_delta(2 * (millis_per_day / 1000) + 1);
     rell.test.tx().op(
-        __icmf_message(controlling_chain.rid, blockchain_auth_topic, blockchain_auth_message(
-            bob.pubkey, action_propose_blockchain_action, [bc.rid.to_gtv(), blockchain_action.pause.to_gtv()]).to_gtv()),
-        __icmf_message(controlling_chain.rid, blockchain_auth_topic, blockchain_auth_message(
-            bob.pubkey, action_propose_forced_configuration, [bc.rid.to_gtv(), conf.to_gtv().to_bytes().to_gtv(), (2).to_gtv(), true.to_gtv()]).to_gtv())
+        __icmf_message(controlling_chain.rid, blockchain_auth_request_topic, blockchain_auth_request_message(
+            4, bob.pubkey, action.propose_blockchain_action, [bc.rid.to_gtv(), blockchain_action.pause.to_gtv()]).to_gtv()),
+        __icmf_message(controlling_chain.rid, blockchain_auth_request_topic, blockchain_auth_request_message(
+            5, bob.pubkey, action.propose_forced_configuration, [bc.rid.to_gtv(), conf.to_gtv().to_bytes().to_gtv(), (2).to_gtv(), true.to_gtv()]).to_gtv())
     ).run();
+    assert_events(
+        ("icmf_message", (
+            topic = blockchain_auth_response_topic,
+            body = blockchain_auth_response_message(id = 4, status = status.applied).to_gtv(),
+            receiver = controlling_chain.rid,
+        ).to_gtv_pretty()),
+        ("icmf_message", (
+            topic = blockchain_auth_response_topic,
+            body = blockchain_auth_response_message(id = 5, status = status.applied).to_gtv(),
+            receiver = controlling_chain.rid,
+        ).to_gtv_pretty()),
+    );
     assert_equals(bc.state, blockchain_state.PAUSED);
 
-    rate_limit_icmf(controlling_chain.rid, blockchain_auth_topic);
+    rate_limit_icmf(controlling_chain.rid, blockchain_auth_request_topic);
 
     rell.test.tx().op(
-        __icmf_message(controlling_chain.rid, blockchain_auth_topic, blockchain_auth_message(
-            bob.pubkey, action_remove_provider_blockchain_auth, list<gtv>()).to_gtv())
+        __icmf_message(controlling_chain.rid, blockchain_auth_request_topic, blockchain_auth_request_message(
+            6, bob.pubkey, action.remove_provider_blockchain_auth, list<gtv>()).to_gtv())
     ).run();
+    assert_events(
+        ("icmf_receiver_topics", (
+            topics = [
+                (
+                    bc_rid = x"9B4CACD0E86D7D05C5914798ED6544895C55DE527FF783EAFC343CD45B6F9DF2",
+                    skip_to_height = 0,
+                    topic = blockchain_auth_request_topic,
+                ).to_gtv_pretty()
+            ],
+            replace = 0,
+            remove = 1,
+        ).to_gtv_pretty()),
+        ("icmf_message", (
+            topic = blockchain_auth_response_topic,
+            body = blockchain_auth_response_message(id = 6, status = status.applied).to_gtv(),
+            receiver = controlling_chain.rid,
+        ).to_gtv_pretty()),
+    );
     assert_null(get_provider_auth_blockchain(bob.pubkey));
 
     conf["nonce"] = (2).to_gtv();
 
     rell.test.tx().op(
-        __icmf_message(controlling_chain.rid, blockchain_auth_topic, blockchain_auth_message(
-            bob.pubkey, action_propose_configuration, [bc.rid.to_gtv(), conf.to_gtv().to_bytes().to_gtv()]).to_gtv())
-    ).run(); // TODO ICMF governance: error handling _must_fail("ICMF blockchain authentication is not enabled for provider %s".format(bob.pubkey));
+        __icmf_message(controlling_chain.rid, blockchain_auth_request_topic, blockchain_auth_request_message(
+            7, bob.pubkey, action.propose_configuration, [bc.rid.to_gtv(), conf.to_gtv().to_bytes().to_gtv()]).to_gtv())
+    ).run();
+    assert_events(("icmf_message", (
+        topic = blockchain_auth_response_topic,
+        body = blockchain_auth_response_message(id = 7, status = status.failed,
+            error = "ICMF blockchain authentication from blockchain %s is not enabled for provider %s".format(controlling_chain.rid, bob.pubkey)).to_gtv(),
+        receiver = controlling_chain.rid,
+    ).to_gtv_pretty()));
 
     rell.test.tx().op(
         propose_configuration(bob.pubkey, bc.rid, conf.to_gtv().to_bytes())
@@ -177,45 +229,63 @@ function test_blockchain_auth_in_container_via_icmf() {
 
     conf["nonce"] = (1).to_gtv();
     rell.test.tx().op(
-        __icmf_message(controlling_chain.rid, blockchain_auth_topic, blockchain_auth_message(
-            bob.pubkey, action_propose_blockchain, [conf.to_gtv().to_bytes().to_gtv(), "foo_chain".to_gtv(), container.to_gtv()]).to_gtv())
+        __icmf_message(controlling_chain.rid, blockchain_auth_request_topic, blockchain_auth_request_message(
+            8, bob.pubkey, action.propose_blockchain, [conf.to_gtv().to_bytes().to_gtv(), "foo_chain".to_gtv(), container.to_gtv()]).to_gtv())
     ).run();
+    assert_true(rell.test.get_events().contains(("icmf_message", (
+        topic = blockchain_auth_response_topic,
+        body = blockchain_auth_response_message(id = 8, status = status.applied).to_gtv(),
+        receiver = controlling_chain.rid,
+    ).to_gtv_pretty())));
     val foo_chain = blockchain @ { .name == "foo_chain" };
     assert_equals(foo_chain.state, blockchain_state.RUNNING);
     assert_equals(foo_chain.name, "foo_chain");
 
     conf["nonce"] = (2).to_gtv();
     rell.test.tx().op(
-        __icmf_message(controlling_chain.rid, blockchain_auth_topic, blockchain_auth_message(
-            bob.pubkey, action_propose_configuration, [controlling_chain.rid.to_gtv(), conf.to_gtv().to_bytes().to_gtv()]).to_gtv())
+        __icmf_message(controlling_chain.rid, blockchain_auth_request_topic, blockchain_auth_request_message(
+            9, bob.pubkey, action.propose_configuration, [controlling_chain.rid.to_gtv(), conf.to_gtv().to_bytes().to_gtv()]).to_gtv())
     ).run();
+    assert_events(("icmf_message", (
+        topic = blockchain_auth_response_topic,
+        body = blockchain_auth_response_message(id = 9, status = status.applied).to_gtv(),
+        receiver = controlling_chain.rid,
+    ).to_gtv_pretty()));
     verify_blockchain_config(controlling_chain, 2);
 
     conf["nonce"] = (3).to_gtv();
     rell.test.tx().op(
-        __icmf_message(controlling_chain.rid, blockchain_auth_topic, blockchain_auth_message(
-            bob.pubkey, action_propose_configuration, [foo_chain.rid.to_gtv(), conf.to_gtv().to_bytes().to_gtv()]).to_gtv())
+        __icmf_message(controlling_chain.rid, blockchain_auth_request_topic, blockchain_auth_request_message(
+            10, bob.pubkey, action.propose_configuration, [foo_chain.rid.to_gtv(), conf.to_gtv().to_bytes().to_gtv()]).to_gtv())
     ).run();
+    assert_events(("icmf_message", (
+        topic = blockchain_auth_response_topic,
+        body = blockchain_auth_response_message(id = 10, status = status.applied).to_gtv(),
+        receiver = controlling_chain.rid,
+    ).to_gtv_pretty()));
     verify_blockchain_config(foo_chain, 3);
 
     rell.test.tx().op(
-        __icmf_message(controlling_chain.rid, blockchain_auth_topic, blockchain_auth_message(
-            bob.pubkey, action_propose_blockchain_rename, [foo_chain.rid.to_gtv(), "foo_chain_renamed".to_gtv()]).to_gtv())
+        __icmf_message(controlling_chain.rid, blockchain_auth_request_topic, blockchain_auth_request_message(
+            11, bob.pubkey, action.propose_blockchain_rename, [foo_chain.rid.to_gtv(), "foo_chain_renamed".to_gtv()]).to_gtv())
     ).run();
+    assert_events(("icmf_message", (
+        topic = blockchain_auth_response_topic,
+        body = blockchain_auth_response_message(id = 11, status = status.applied).to_gtv(),
+        receiver = controlling_chain.rid,
+    ).to_gtv_pretty()));
     assert_equals(foo_chain.name, "foo_chain_renamed");
 
     rell.test.tx().op(
-        __icmf_message(controlling_chain.rid, blockchain_auth_topic, blockchain_auth_message(
-            bob.pubkey, action_propose_blockchain_action, [foo_chain.rid.to_gtv(), blockchain_action.pause.to_gtv()]).to_gtv())
+        __icmf_message(controlling_chain.rid, blockchain_auth_request_topic, blockchain_auth_request_message(
+            12, bob.pubkey, action.propose_blockchain_action, [foo_chain.rid.to_gtv(), blockchain_action.pause.to_gtv()]).to_gtv())
     ).run();
+    assert_events(("icmf_message", (
+        topic = blockchain_auth_response_topic,
+        body = blockchain_auth_response_message(id = 12, status = status.applied).to_gtv(),
+        receiver = controlling_chain.rid,
+    ).to_gtv_pretty()));
     assert_equals(foo_chain.state, blockchain_state.PAUSED);
-}
-
-function verify_blockchain_config(blockchain, nonce: integer) {
-    val (actual_config_height, actual_config_bytes, signers) = get_latest_pending_blockchain_configuration_data(blockchain)!!;
-    assert_true(actual_config_height > 0);
-    val actual_config = map<text, gtv>.from_gtv(gtv.from_bytes(actual_config_bytes));
-    assert_equals(actual_config["nonce"], (nonce).to_gtv());
 }
 
 function test_blockchain_auth_via_icmf_votersets() {
@@ -261,5 +331,73 @@ function test_blockchain_auth_via_icmf_votersets() {
 
     rell.test.tx().op(
         add_icmf_provider_blockchain_auth(bob.pubkey, controlling_chain.rid, 0)
-    ).sign(rell.test.keypairs.bob).run_must_fail("provider %s must be the only member of all voter sets".format(bob.pubkey));
+    ).sign(rell.test.keypairs.bob).run_must_fail("Provider %s must be the only member of all voter sets".format(bob.pubkey));
+}
+
+function test_blockchain_auth_via_icmf_with_delay() {
+    setup_module(provider_quota_max_containers = 3);
+    rell.test.tx().op(create_test_provider("bob", rell.test.pubkeys.bob, provider_tier.DAPP_PROVIDER)).run();
+    rell.test.tx().op(create_test_provider("charlie", rell.test.pubkeys.charlie, provider_tier.DAPP_PROVIDER)).run();
+
+    val cl = system_cluster();
+    val container = "container";
+    val container2 = "container2";
+    val bob = provider @ { rell.test.pubkeys.bob };
+    val charlie = provider @ { rell.test.pubkeys.charlie };
+
+    rell.test.tx().op(
+        create_container(initial_provider.pub, container, clusters.system, 0, [bob.pubkey])
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        create_container(initial_provider.pub, container2, clusters.system, 0, [charlie.pubkey])
+    ).sign(initial_provider).run();
+
+    val conf = apply_required_configuration_properties();
+
+    rell.test.tx().op(
+        propose_blockchain(charlie.pubkey, conf.to_gtv().to_bytes(), "controlling_chain", container2)
+    ).sign(rell.test.keypairs.charlie).run();
+    val controlling_chain = blockchain @ { .name == "controlling_chain" };
+
+    val delay = 10000;
+    conf["nonce"] = (0).to_gtv();
+    conf[DIRECTORY_CHAIN_CONFIG_KEY] = [DIRECTORY_CHAIN_CONFIG_DELAY_CONFIG_KEY: (delay).to_gtv()].to_gtv();
+
+    rell.test.tx().op(
+        propose_blockchain(bob.pubkey, conf.to_gtv().to_bytes(), "foo_chain", container)
+    ).sign(rell.test.keypairs.bob).run();
+    val bc = blockchain @ { .name == "foo_chain" };
+    assert_equals(bc.state, blockchain_state.RUNNING);
+
+    rell.test.tx().op(
+        add_icmf_provider_blockchain_auth(bob.pubkey, controlling_chain.rid, 0)
+    ).sign(rell.test.keypairs.bob).run();
+    assert_equals(get_provider_auth_blockchain(bob.pubkey),
+        provider_auth_blockchain_data(
+            blockchain_rid = controlling_chain.rid,
+            provider_auth_type.icmf,
+            latest_height = -1,
+            latest_tx_index = -1,
+    ));
+
+    conf["nonce"] = (1).to_gtv();
+
+    rell.test.tx().op(
+        __icmf_message(controlling_chain.rid, blockchain_auth_request_topic, blockchain_auth_request_message(
+            1, bob.pubkey, action.propose_configuration, [bc.rid.to_gtv(), conf.to_gtv().to_bytes().to_gtv()]).to_gtv())
+    ).run();
+    assert_events(("icmf_message", (
+        topic = blockchain_auth_response_topic,
+        body = blockchain_auth_response_message(id = 1, status = status.delayed, delay = delay).to_gtv(),
+        receiver = controlling_chain.rid,
+    ).to_gtv_pretty()));
+    assert_null(get_latest_pending_blockchain_configuration_data(bc));
+}
+
+function verify_blockchain_config(blockchain, nonce: integer) {
+    val (actual_config_height, actual_config_bytes, signers) = get_latest_pending_blockchain_configuration_data(blockchain)!!;
+    assert_true(actual_config_height > 0);
+    val actual_config = map<text, gtv>.from_gtv(gtv.from_bytes(actual_config_bytes));
+    assert_equals(actual_config["nonce"], (nonce).to_gtv());
 }
