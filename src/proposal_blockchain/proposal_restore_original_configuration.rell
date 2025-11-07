@@ -5,11 +5,19 @@ entity pending_restore_original_configuration {
     index proposal;
 }
 
+entity pending_restore_original_configuration_stage2 {
+    key blockchain, height: integer;
+    original_configuration: byte_array;
+    original_signers: byte_array;
+}
+
 struct pending_restore_original_configuration_data {
     blockchain_rid: byte_array;
     height: integer;
     original_configuration: byte_array;
     original_signers: list<byte_array>?;
+    current_configuration: byte_array?;
+    current_signers: list<byte_array>?;
 }
 
 @extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.restore_original_configuration.name: delete_pending_restore_original_configuration_proposal(*)];
@@ -40,6 +48,12 @@ operation propose_restore_original_configuration(my_pubkey: pubkey, blockchain_r
     val container = container_blockchain @ { blockchain }.container;
     require_container_deployer(container, proposed_by_provider);
 
+    require(not exists(pending_restore_original_configuration @? { blockchain }),
+        "Restoration proposal already exists for this blockchain");
+
+    require(not exists(pending_restore_original_configuration_stage2 @? { blockchain }),
+        "Restoration proposal already pending for this blockchain");
+
     val proposal = create_proposal(proposal_type.restore_original_configuration, proposed_by_provider, container.deployer, description);
     val proposal_details = create pending_restore_original_configuration(
         proposal,
@@ -61,17 +75,55 @@ function apply_restore_original_configuration_proposal(proposal) {
     if (proposal_details == null) return;
 
     validate_restore_original_configuration_proposal(proposal_details);
-    log("Restoring configuration for blockchain %s".format(proposal_details.blockchain.rid));
+
+    if (proposal_details.proposal.voter_set == system_p_voter_set()) {
+        apply_restore_original_configuration_internal(
+            proposal_details.blockchain,
+            proposal_details.height,
+            proposal_details.original_configuration,
+            proposal_details.original_signers
+        );
+    } else {
+        log("Restore_original_configuration proposal %d for blockchain %s at height %d approved, waiting for additional approval from a node provider"
+            .format(proposal.rowid, proposal_details.blockchain.rid, proposal_details.height));
+        create pending_restore_original_configuration_stage2(
+            proposal_details.blockchain,
+            proposal_details.height,
+            original_configuration = proposal_details.original_configuration,
+            original_signers = proposal_details.original_signers
+        );
+    }
+}
+
+operation approve_restore_original_configuration(my_pubkey: pubkey, blockchain_rid: byte_array) {
+    val provider = require_is_provider_with_rate_limit(my_pubkey);
+    require(provider.tier == provider_tier.NODE_PROVIDER, "Transaction must be signed by node provider");
+
+    val blockchain = require_active_blockchain(blockchain_rid);
+    val proc2 = require(pending_restore_original_configuration_stage2 @? { blockchain },
+        "No pending restore original configuration proposal for blockchain %s".format(blockchain_rid));
+
+    val cluster = container_blockchain @ { blockchain } ( .container ) .cluster;
+    val cluster_nodes = cluster_node @* { cluster } (.node);
+    require(exists(cluster_nodes @* { provider }),
+        "Transaction must be signed by node provider running this blockchain");
+
+    apply_restore_original_configuration_internal(blockchain, proc2.height, proc2.original_configuration, proc2.original_signers);
+    delete proc2;
+}
+
+function apply_restore_original_configuration_internal(blockchain, height: integer, original_configuration: byte_array, original_signers_raw: byte_array) {
+    log("Restoring configuration for blockchain %s".format(blockchain.rid));
 
     // We store configuration as-is with given uniqueness parameters
-    compress_and_store_configuration(proposal_details.blockchain, proposal_details.height, proposal_details.original_configuration, true);
+    compress_and_store_configuration(blockchain, height, original_configuration, true);
 
-    if (not proposal_details.original_signers.empty()) {
-        val blockchain_configuration_signers = blockchain_configuration_signers @? { proposal_details.blockchain, proposal_details.height};
+    if (not original_signers_raw.empty()) {
+        val blockchain_configuration_signers = blockchain_configuration_signers @? { blockchain, height};
         if (blockchain_configuration_signers == null) {
-            create blockchain_configuration_signers(proposal_details.blockchain, proposal_details.height, proposal_details.original_signers);
+            create blockchain_configuration_signers(blockchain, height, original_signers_raw);
         } else {
-            blockchain_configuration_signers.signers = proposal_details.original_signers;
+            blockchain_configuration_signers.signers = original_signers_raw;
         }
     }
 }
@@ -81,13 +133,20 @@ function apply_restore_original_configuration_proposal(proposal) {
  *
  * @param rowid The proposal id
  */
-query get_restore_original_configuration_proposal(rowid)= pending_restore_original_configuration @? { require_proposal(rowid) }
-    (pending_restore_original_configuration_data(
-        blockchain_rid = .blockchain.rid,
-        height = .height,
-        original_configuration = .original_configuration,
-        original_signers = extract_signers_from_raw(.original_signers)
-    ));
+query get_restore_original_configuration_proposal(rowid){
+    val proc = pending_restore_original_configuration @? { require_proposal(rowid) };
+    if (proc == null) return null;
+
+    val current_config = get_blockchain_configuration(proc.blockchain.rid, proc.height);
+    return pending_restore_original_configuration_data(
+        blockchain_rid = proc.blockchain.rid,
+        height = proc.height,
+        original_configuration = proc.original_configuration,
+        original_signers = extract_signers_from_raw(proc.original_signers),
+        current_configuration = current_config?.base_config,
+        current_signers = current_config?.signers
+    );
+}
 
 function extract_signers_from_raw(raw_signers: byte_array) = if (raw_signers.empty()) null else list<byte_array>.from_gtv(gtv.from_bytes(raw_signers));
 
@@ -102,13 +161,33 @@ function validate_restore_original_configuration_proposal(proposal_details: pend
     require(current_config == null or current_config.config_hash != proposed_config_hash, "Proposed configuration is already applied");
     require(exists(blockchain_configuration_update_attempt @? {
         .blockchain_rid == proposal_details.blockchain.rid,
-        .applied_at_height == proposal_details.height,
+        .applied_at_height <= proposal_details.height,
         .state == blockchain_configuration_update_state.SUCCESSFUL,
         .config_hash == proposed_config_hash
     }) or exists(forced_configuration @? {
         proposal_details.blockchain,
-        .height == proposal_details.height,
+        .height <= proposal_details.height,
         .config_hash == proposed_config_hash
-    }) or (proposal_details.blockchain.rid == proposed_config_hash and proposal_details.height == 0), // Initial config restoration
-        "No configuration with hash %s has been applied on height %s".format(proposed_config_hash, proposal_details.height));
+    }) or (proposal_details.blockchain.rid == proposed_config_hash), // Initial config restoration
+        "No configuration with hash %s has been applied before height %s".format(proposed_config_hash, proposal_details.height));
+}
+
+
+/**
+ * Return details for a stage2 restore original configuration proposal.
+ */
+query get_restore_original_configuration_stage2_proposal(blockchain_rid: byte_array): pending_restore_original_configuration_data? {
+    val blockchain = require_active_blockchain(blockchain_rid);
+    val proc2 = pending_restore_original_configuration_stage2 @? { blockchain };
+    if (proc2 == null) return null;
+
+    val current_config = get_blockchain_configuration(blockchain.rid, proc2.height);
+    return pending_restore_original_configuration_data(
+        blockchain_rid = blockchain.rid,
+        height = proc2.height,
+        original_configuration = proc2.original_configuration,
+        original_signers = extract_signers_from_raw(proc2.original_signers),
+        current_configuration = current_config?.base_config,
+        current_signers = current_config?.signers
+    );
 }

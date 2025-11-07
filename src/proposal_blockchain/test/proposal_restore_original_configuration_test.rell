@@ -55,8 +55,9 @@ function test_original_configuration_can_be_restored_when_overridden() {
     assert_equals(extract_config_version(get_blockchain_configuration(bc.rid, 0)!!.base_config), 2);
 
     rell.test.tx().op(
-        propose_restore_original_configuration(deployer.pubkey, bc.rid, 0, initial_configuration)
-    ).sign(rell.test.keypairs.bob).run();
+        propose_restore_original_configuration(deployer.pubkey, bc.rid, 0, initial_configuration),
+        approve_restore_original_configuration(initial_provider.pub, bc.rid)
+    ).sign(rell.test.keypairs.bob, initial_provider).run();
 
     val restored_config = get_blockchain_configuration(bc.rid, 0);
     // Assert back to version 1
@@ -98,8 +99,9 @@ function test_original_configuration_can_be_restored_when_overridden() {
 
     // Restore to PCU update
     rell.test.tx().op(
-        propose_restore_original_configuration(deployer.pubkey, bc.rid, 5, pcu_config_to_apply.base_config)
-    ).sign(rell.test.keypairs.bob).run();
+        propose_restore_original_configuration(deployer.pubkey, bc.rid, 5, pcu_config_to_apply.base_config),
+        approve_restore_original_configuration(initial_provider.pub, bc.rid)
+    ).sign(rell.test.keypairs.bob, initial_provider).run();
 
     val restored_pcu_config = get_blockchain_configuration(bc.rid, 5);
     // Assert back to version 3
@@ -148,8 +150,9 @@ function test_forced_configuration_can_be_restored_when_overridden() {
 
     // We try to restore the previous forced update
     rell.test.tx().op(
-        propose_restore_original_configuration(deployer.pubkey, bc.rid, 0, correct_forced_config)
-    ).sign(rell.test.keypairs.bob).run();
+        propose_restore_original_configuration(deployer.pubkey, bc.rid, 0, correct_forced_config),
+        approve_restore_original_configuration(initial_provider.pub, bc.rid)
+    ).sign(rell.test.keypairs.bob, initial_provider).run();
 
     val restored_config = get_blockchain_configuration(bc.rid, 0);
     // Assert back to version 2
@@ -219,8 +222,9 @@ function test_restoration_with_signers() {
     ).sign(rell.test.keypairs.bob).run_must_fail("No configuration with hash");
 
     rell.test.tx().op(
-        propose_restore_original_configuration(deployer.pubkey, bc.rid, 0, initial_configuration, [test_node.pubkey])
-    ).sign(rell.test.keypairs.bob).run();
+        propose_restore_original_configuration(deployer.pubkey, bc.rid, 0, initial_configuration, [test_node.pubkey]),
+        approve_restore_original_configuration(initial_provider.pub, bc.rid)
+    ).sign(rell.test.keypairs.bob, initial_provider).run();
 
     val restored_config = get_blockchain_configuration(bc.rid, 0);
     // Assert back to version 1
