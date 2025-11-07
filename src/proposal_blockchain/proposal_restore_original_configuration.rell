@@ -1,0 +1,114 @@
+entity pending_restore_original_configuration {
+    key blockchain, height: integer;
+    original_configuration: byte_array;
+    original_signers: byte_array;
+    index proposal;
+}
+
+struct pending_restore_original_configuration_data {
+    blockchain_rid: byte_array;
+    height: integer;
+    original_configuration: byte_array;
+    original_signers: list<byte_array>?;
+}
+
+@extend(delete_proposal_handlers) function(): map<text, (proposal) -> unit> = [proposal_type.restore_original_configuration.name: delete_pending_restore_original_configuration_proposal(*)];
+@extend(apply_voting_result_handlers) function() = [proposal_type.restore_original_configuration.name: apply_restore_original_configuration_proposal(*)];
+
+/**
+ * Propose restoration of original configuration.
+ * This is useful in a case where an original configuration was incorrectly overwritten by a forced configuration update.
+ * In that case, removal of the incorrect forced configuration is not enough.
+ * It also supports cases where a valid forced update has been overwritten.
+ *
+ * Any forced configuration entries at height are not removed, they can be cleaned up with removal proposal if necessary.
+ * By keeping them, this action is reversible.
+ *
+ * Permission: container deployer
+ *
+ * Rate limit: actions
+ *
+ * @param blockchain_rid Blockchain RID to restore the configuration on.
+ * @param height The height to restore the configuration on.
+ * @param original_configuration The original configuration to restore.
+ * @param original_signers Optional, in case signers were also mangled by the forced update.
+ * @param description A description for this proposal to explain why it should be approved.
+ */
+operation propose_restore_original_configuration(my_pubkey: pubkey, blockchain_rid: byte_array, height: integer, original_configuration: byte_array, original_signers: list<byte_array>? = null, description: text = "") {
+    val proposed_by_provider = require_is_provider_with_rate_limit(my_pubkey);
+    val blockchain = require_active_blockchain(blockchain_rid);
+    val container = container_blockchain @ { blockchain }.container;
+    require_container_deployer(container, proposed_by_provider);
+
+    val proposal = create_proposal(proposal_type.restore_original_configuration, proposed_by_provider, container.deployer, description);
+    val proposal_details = create pending_restore_original_configuration(
+        proposal,
+        blockchain,
+        height,
+        original_configuration = original_configuration,
+        original_signers = original_signers?.to_gtv()?.to_bytes() ?: x""
+    );
+    validate_restore_original_configuration_proposal(proposal_details);
+    internal_vote(proposed_by_provider, proposal, true);
+}
+
+function delete_pending_restore_original_configuration_proposal(proposal) {
+    delete pending_restore_original_configuration @? { proposal };
+}
+
+function apply_restore_original_configuration_proposal(proposal) {
+    val proposal_details = pending_restore_original_configuration @? {proposal};
+    if (proposal_details == null) return;
+
+    validate_restore_original_configuration_proposal(proposal_details);
+    log("Restoring configuration for blockchain %s".format(proposal_details.blockchain.rid));
+
+    // We store configuration as-is with given uniqueness parameters
+    compress_and_store_configuration(proposal_details.blockchain, proposal_details.height, proposal_details.original_configuration, true);
+
+    if (not proposal_details.original_signers.empty()) {
+        val blockchain_configuration_signers = blockchain_configuration_signers @? { proposal_details.blockchain, proposal_details.height};
+        if (blockchain_configuration_signers == null) {
+            create blockchain_configuration_signers(proposal_details.blockchain, proposal_details.height, proposal_details.original_signers);
+        } else {
+            blockchain_configuration_signers.signers = proposal_details.original_signers;
+        }
+    }
+}
+
+/**
+ * Return details for a restore original configuration proposal.
+ *
+ * @param rowid The proposal id
+ */
+query get_restore_original_configuration_proposal(rowid)= pending_restore_original_configuration @? { require_proposal(rowid) }
+    (pending_restore_original_configuration_data(
+        blockchain_rid = .blockchain.rid,
+        height = .height,
+        original_configuration = .original_configuration,
+        original_signers = extract_signers_from_raw(.original_signers)
+    ));
+
+function extract_signers_from_raw(raw_signers: byte_array) = if (raw_signers.empty()) null else list<byte_array>.from_gtv(gtv.from_bytes(raw_signers));
+
+function validate_restore_original_configuration_proposal(proposal_details: pending_restore_original_configuration) {
+    val current_config = get_blockchain_configuration(proposal_details.blockchain.rid, proposal_details.height);
+
+    val proposed_signers = if (proposal_details.original_signers.empty())
+        require(current_config, "No signer configuration at height %s, must specify original signers").signers
+    else list<byte_array>.from_gtv(gtv.from_bytes(proposal_details.original_signers));
+
+    val proposed_config_hash = calculate_configuration_hash(proposal_details.original_configuration, proposed_signers);
+    require(current_config == null or current_config.config_hash != proposed_config_hash, "Proposed configuration is already applied");
+    require(exists(blockchain_configuration_update_attempt @? {
+        .blockchain_rid == proposal_details.blockchain.rid,
+        .applied_at_height == proposal_details.height,
+        .state == blockchain_configuration_update_state.SUCCESSFUL,
+        .config_hash == proposed_config_hash
+    }) or exists(forced_configuration @? {
+        proposal_details.blockchain,
+        .height == proposal_details.height,
+        .config_hash == proposed_config_hash
+    }) or (proposal_details.blockchain.rid == proposed_config_hash and proposal_details.height == 0), // Initial config restoration
+        "No configuration with hash %s has been applied on height %s".format(proposed_config_hash, proposal_details.height));
+}

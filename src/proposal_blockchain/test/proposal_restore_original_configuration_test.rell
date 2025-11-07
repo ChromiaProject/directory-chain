@@ -1,0 +1,234 @@
+@test module;
+
+import ^^.*;
+import common.operations.*;
+import common.test.config_test_helpers.*;
+import common.test.ops.*;
+import common.test.setup.*;
+import common.test.util.*;
+import proposal.voting.test.helper_operations.*;
+import proposal_provider.*;
+import direct_container.*;
+import ^.helper_operations.*;
+
+val container = "container";
+val chain_name = "chain";
+
+function test_original_configuration_can_be_restored_when_overridden() {
+    setup_module(system_anchoring_config = ["any": "value".to_gtv()], cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val anchor_chain = cluster_anchoring_chain @ { system_cluster() } (.blockchain);
+
+    rell.test.tx().op(create_test_provider("deployer", rell.test.pubkeys.bob)).run();
+    val deployer = provider @ { rell.test.pubkeys.bob };
+
+    var initial_configuration = apply_required_configuration_properties(["version": (1).to_gtv()])
+        .to_gtv().to_bytes();
+    rell.test.tx().op(
+        create_container(rell.test.pubkeys.alice, container, clusters.system, 0, [deployer.pubkey]),
+    ).sign(initial_provider).run();
+    rell.test.tx().op(
+        propose_blockchain(deployer.pubkey, initial_configuration, chain_name, container),
+    ).sign(rell.test.keypairs.bob).run();
+    val bc = blockchain @ { chain_name };
+
+    rell.test.tx().op(
+        propose_restore_original_configuration(rell.test.keypairs.charlie.pub, bc.rid, 0, initial_configuration)
+    ).sign(rell.test.keypairs.charlie).run_must_fail("Unknown provider %s".format(rell.test.keypairs.charlie.pub));
+
+    rell.test.tx().op(
+        propose_restore_original_configuration(deployer.pubkey, x"00", 0, initial_configuration)
+    ).sign(rell.test.keypairs.bob).run_must_fail("Unknown blockchain 0x00");
+
+    rell.test.tx().op(
+        propose_restore_original_configuration(deployer.pubkey, bc.rid, 0, initial_configuration)
+    ).sign(rell.test.keypairs.bob).run_must_fail("Proposed configuration is already applied");
+
+    // We now override initial config with an incorrect forced update
+    val invalid_config = apply_required_configuration_properties(["version": (2).to_gtv()])
+        .to_gtv().to_bytes();
+    rell.test.tx().op(
+        propose_blockchain_action(deployer.pubkey, bc.rid, blockchain_action.pause),
+        propose_forced_configuration(deployer.pubkey, bc.rid, invalid_config, 0, resume_chain = true),
+        approve_proposed_forced_configuration(initial_provider.pub, bc.rid)
+    ).sign(initial_provider, rell.test.keypairs.bob).run();
+
+    assert_equals(extract_config_version(get_blockchain_configuration(bc.rid, 0)!!.base_config), 2);
+
+    rell.test.tx().op(
+        propose_restore_original_configuration(deployer.pubkey, bc.rid, 0, initial_configuration)
+    ).sign(rell.test.keypairs.bob).run();
+
+    val restored_config = get_blockchain_configuration(bc.rid, 0);
+    // Assert back to version 1
+    assert_equals(extract_config_version(restored_config!!.base_config), 1);
+    // And more importantly, it is an exact match (including uniqueness parameters)
+    assert_equals(restored_config.base_config, initial_configuration);
+
+    // Now let's do this for a config update applied via PCU
+    val base_pcu_config = apply_required_configuration_properties(["version": (3).to_gtv()])
+        .to_gtv().to_bytes();
+    rell.test.tx().op(
+        propose_configuration(deployer.pubkey, bc.rid, base_pcu_config),
+    ).sign(rell.test.keypairs.bob).run();
+
+    val pcu_config_to_apply = pending_blockchain_configuration @ { bc } (.base_config, .config_hash);
+
+    rell.test.tx().op(
+        receive_configuration_updated_op(
+            anchor_chain.rid,
+            configuration_updated_topic,
+            configuration_updated(
+                blockchain_rid = bc.rid,
+                height = 5,
+                config_hash = pcu_config_to_apply.config_hash
+            ).to_gtv()
+        )
+    ).run();
+
+    assert_equals(extract_config_version(get_blockchain_configuration(bc.rid, 5)!!.base_config), 3);
+
+    // Now do a forced override
+    rell.test.tx().op(
+        propose_blockchain_action(deployer.pubkey, bc.rid, blockchain_action.pause),
+        propose_forced_configuration(deployer.pubkey, bc.rid, invalid_config, 5, resume_chain = true),
+        approve_proposed_forced_configuration(initial_provider.pub, bc.rid)
+    ).sign(initial_provider, rell.test.keypairs.bob).run();
+
+    assert_equals(extract_config_version(get_blockchain_configuration(bc.rid, 5)!!.base_config), 2);
+
+    // Restore to PCU update
+    rell.test.tx().op(
+        propose_restore_original_configuration(deployer.pubkey, bc.rid, 5, pcu_config_to_apply.base_config)
+    ).sign(rell.test.keypairs.bob).run();
+
+    val restored_pcu_config = get_blockchain_configuration(bc.rid, 5);
+    // Assert back to version 3
+    assert_equals(extract_config_version(restored_pcu_config!!.base_config), 3);
+    // And more importantly, it is an exact match (including uniqueness parameters)
+    assert_equals(restored_pcu_config.base_config, pcu_config_to_apply.base_config);
+}
+
+function test_forced_configuration_can_be_restored_when_overridden() {
+    setup_module();
+
+    rell.test.tx().op(create_test_provider("deployer", rell.test.pubkeys.bob)).run();
+    val deployer = provider @ { rell.test.pubkeys.bob };
+
+    var initial_configuration = apply_required_configuration_properties(["version": (1).to_gtv()])
+        .to_gtv().to_bytes();
+    rell.test.tx().op(
+        create_container(rell.test.pubkeys.alice, container, clusters.system, 0, [deployer.pubkey]),
+    ).sign(initial_provider).run();
+    rell.test.tx().op(
+        propose_blockchain(deployer.pubkey, initial_configuration, chain_name, container),
+    ).sign(rell.test.keypairs.bob).run();
+    val bc = blockchain @ { chain_name };
+
+    // We now override initial config with a forced update
+    val config_override = apply_required_configuration_properties(["version": (2).to_gtv()])
+        .to_gtv().to_bytes();
+    rell.test.tx().op(
+        propose_blockchain_action(deployer.pubkey, bc.rid, blockchain_action.pause),
+        propose_forced_configuration(deployer.pubkey, bc.rid, config_override, 0, resume_chain = true),
+        approve_proposed_forced_configuration(initial_provider.pub, bc.rid)
+    ).sign(initial_provider, rell.test.keypairs.bob).run();
+
+    val correct_forced_config = get_blockchain_configuration(bc.rid, 0)!!.base_config;
+
+    assert_equals(extract_config_version(correct_forced_config), 2);
+
+    // Now we accidentally override the forced config, oops
+    val invalid_config = apply_required_configuration_properties(["version": (3).to_gtv()])
+        .to_gtv().to_bytes();
+    rell.test.tx().op(
+        propose_blockchain_action(deployer.pubkey, bc.rid, blockchain_action.pause),
+        propose_forced_configuration(deployer.pubkey, bc.rid, invalid_config, 0, resume_chain = true),
+        approve_proposed_forced_configuration(initial_provider.pub, bc.rid)
+    ).sign(initial_provider, rell.test.keypairs.bob).run();
+
+    // We try to restore the previous forced update
+    rell.test.tx().op(
+        propose_restore_original_configuration(deployer.pubkey, bc.rid, 0, correct_forced_config)
+    ).sign(rell.test.keypairs.bob).run();
+
+    val restored_config = get_blockchain_configuration(bc.rid, 0);
+    // Assert back to version 2
+    assert_equals(extract_config_version(restored_config!!.base_config), 2);
+    // And more importantly, it is an exact match (including uniqueness parameters)
+    assert_equals(restored_config.base_config, correct_forced_config);
+}
+
+function test_restoration_with_signers() {
+    setup_module(system_anchoring_config = ["any": "value".to_gtv()], cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val anchor_chain = cluster_anchoring_chain @ { system_cluster() } (.blockchain);
+
+    rell.test.tx().op(create_test_provider("deployer", rell.test.pubkeys.bob)).run();
+    val deployer = provider @ { rell.test.pubkeys.bob };
+
+    var initial_configuration = apply_required_configuration_properties(["version": (1).to_gtv()])
+        .to_gtv().to_bytes();
+    rell.test.tx().op(
+        create_container(rell.test.pubkeys.alice, container, clusters.system, 0, [deployer.pubkey]),
+    ).sign(initial_provider).run();
+    rell.test.tx().op(
+        propose_blockchain(deployer.pubkey, initial_configuration, chain_name, container),
+    ).sign(rell.test.keypairs.bob).run();
+    val bc = blockchain @ { chain_name };
+
+    // Add a new provider and node to system cluster
+    val new_system_provider = rell.test.keypairs.charlie;
+    val sp_node_key = x"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa50093798EF9D51E7260BA921CD673F";
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, new_system_provider.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, new_system_provider.pub, true)
+    ).sign(initial_provider).run();
+
+    // New SP adds a node
+    rell.test.tx().op(
+        register_node_with_node_data(new_system_provider.pub, register_node_data(sp_node_key, host = "host", port = 7777, api_url = "http://host/api_url", clusters = [clusters.system]))
+    ).sign(new_system_provider).run();
+
+    // This will trigger a pending signer update for our chain, let's complete it
+    val pcu_config_to_apply = pending_blockchain_configuration @ { bc } (.base_config, .config_hash);
+    rell.test.tx().op(
+        receive_configuration_updated_op(
+            anchor_chain.rid,
+            configuration_updated_topic,
+            configuration_updated(
+                blockchain_rid = bc.rid,
+                height = 5,
+                config_hash = pcu_config_to_apply.config_hash
+            ).to_gtv()
+        )
+    ).run();
+
+    // Now we forcefully override config at height 0, mangling the signers as well
+    val invalid_config = apply_required_configuration_properties(["version": (2).to_gtv()])
+        .to_gtv().to_bytes();
+    rell.test.tx().op(
+        propose_blockchain_action(deployer.pubkey, bc.rid, blockchain_action.pause),
+        propose_forced_configuration(deployer.pubkey, bc.rid, invalid_config, 0, resume_chain = true),
+        approve_proposed_forced_configuration(initial_provider.pub, bc.rid)
+    ).sign(initial_provider, rell.test.keypairs.bob).run();
+
+    assert_equals(extract_config_version(get_blockchain_configuration(bc.rid, 0)!!.base_config), 2);
+
+    // Assert that we need to provide signers in order to successfully restore
+    rell.test.tx().op(
+        propose_restore_original_configuration(deployer.pubkey, bc.rid, 0, initial_configuration)
+    ).sign(rell.test.keypairs.bob).run_must_fail("No configuration with hash");
+
+    rell.test.tx().op(
+        propose_restore_original_configuration(deployer.pubkey, bc.rid, 0, initial_configuration, [test_node.pubkey])
+    ).sign(rell.test.keypairs.bob).run();
+
+    val restored_config = get_blockchain_configuration(bc.rid, 0);
+    // Assert back to version 1
+    assert_equals(extract_config_version(restored_config!!.base_config), 1);
+    // And more importantly, it is an exact match (including uniqueness parameters)
+    assert_equals(restored_config.base_config, initial_configuration);
+}
+
+function extract_config_version(raw_config: byte_array) = integer.from_gtv(
+    map<text, gtv>.from_gtv(gtv.from_bytes(raw_config))["version"]
+);
