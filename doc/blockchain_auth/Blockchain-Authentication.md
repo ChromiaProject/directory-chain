@@ -19,7 +19,7 @@ The `add_provider_blockchain_auth` operation enables a provider to use another b
 
 - **`my_pubkey` (byte_array)**: The provider pubkey.
 
-- **`blockchain_rid` (byte_array)**: The identifier (RID) of the blockchain whose operation will be used for
+- **`blockchain_rid` (byte_array)**: The identifier (RID) of the blockchain whose transactions will be used for
   authentication.
 
 ### ICMF
@@ -69,11 +69,14 @@ The operations in the external blockchain have parameters like the corresponding
 
 ### ICMF
 
-The controlling blockchain sends messages in the "L_blockchain_auth" topic, the message body has the following structure: 
+The controlling blockchain sends messages in the "L_blockchain_auth_request" topic, the message body has the following structure: 
 
 ```rell
-struct blockchain_auth_message {
-    /** pubkey of provider */ 
+struct blockchain_auth_request_message {
+    /** unique id of the request */
+    id: integer;
+
+    /** pubkey of provider */
     my_pubkey: pubkey;
 
     /** the action */
@@ -82,6 +85,40 @@ struct blockchain_auth_message {
     /** arguments to the action */
     args: list<gtv>;
 }
+```
+
+Directory chain will send a response message back to the controlling blockchain on topic `L_blockchain_auth_response` with the following structure: 
+
+```rell
+struct blockchain_auth_response_message {
+    /** id of the corresponding request */
+    id: integer;
+
+    /** "applied", "delayed", "failed" */
+    status: text;
+
+    /** the delay in milliseconds if `status` == "delayed" */
+    delay: integer? = null;
+
+    /** the error message if `status` == "failed" */
+    error: text? = null;
+}
+```
+
+The controlling chain needs to subscribe in this manner:
+```yaml
+    config:
+      sync_ext:
+        - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
+      gtx:
+        modules:
+          - "net.postchain.d1.icmf.IcmfSenderGTXModule"
+          - "net.postchain.d1.icmf.IcmfReceiverGTXModule"
+      icmf:
+        receiver:
+          directory-chain-to-me:
+            topics:
+              - L_blockchain_auth_response
 ```
 
 The following actions are available, with expected arguments. 
