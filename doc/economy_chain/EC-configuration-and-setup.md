@@ -185,7 +185,7 @@ libs:
     rid: x"FEEB0633698E7650D29DCCFE2996AD57CDC70AA3BDF770365C3D442D9DFC2A5E"
     insecure: false
   price_oracle_messages:
-    registry: https://bitbucket.org/chromawallet/priceoracle.git
+    registry: https://gitlab.com/chromaway/core/price-oracle
     path: src/lib/price_oracle_messages
     tagOrBranch: "0.12"
     rid: x"2FFEB18A49FBD81C34225F482FF582071C43C914C5B5A15B16EBB01CE22E76BC"
