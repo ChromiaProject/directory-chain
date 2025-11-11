@@ -1,6 +1,6 @@
 # Setup Price oracle
 
-The [Price oracle](https://bitbucket.org/chromawallet/priceoracle/src/main/) collects exchange rates from EVM contracts and sends the results on a global ICMF topic. It is currently only used by economy change and runs as a system chain.
+The [Price oracle](https://gitlab.com/chromaway/core/price-oracle/) collects exchange rates from EVM contracts and sends the results on a global ICMF topic. It is currently only used by economy change and runs as a system chain.
 
 ## Requirements
  - EVM receiver listening on EVM contracts (see [postchain-eif](https://gitlab.com/chromaway/core/postchain-eif) repository).
