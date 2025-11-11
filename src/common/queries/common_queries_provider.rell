@@ -113,6 +113,24 @@ query get_provider_keys(pubkey) {
 }
 
 /**
+ * Get auth keys for provider and threshold.
+ *
+ * @param pubkey  provider identifier
+ * @return list of keys eligible to sign transaction and the threshold (minimum number of signatures needed)
+ */
+query get_provider_keys_and_threshold(pubkey): provider_keys_and_threshold {
+    val provider = require_provider(pubkey);
+
+    var keys = provider_auth_key @* { .provider_pubkey == provider.pubkey, provider_key_role.main, .active } ( .pubkey );
+    if (empty(keys)) keys = [ pubkey ];
+    var threshold = provider_auth_threshold @? { .provider_pubkey == provider.pubkey, provider_key_role.main } (.threshold) ?: keys.size();
+    if (threshold == consensus_threshold.majority) threshold = keys.size() / 2 + 1;
+    if (threshold == consensus_threshold.super_majority) threshold = keys.size() - (keys.size() - 1) / 3;
+
+    return provider_keys_and_threshold(keys, threshold);
+}
+
+/**
  * Find provider by auth key and return provider identifier pubkey.
  *
  * @param pubkey A provider key used for auth.
