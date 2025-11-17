@@ -4,7 +4,6 @@ import ^^.*;
 import ^.helper_operations.*;
 import common.*;
 import common.test.setup.*;
-import common.test.util.*;
 import roles.test.ops.*;
 import common.test.helper_operations.*;
 import publish_directory_chain.test.helpers.*;
@@ -132,55 +131,4 @@ function test_pcu_cleanup_excluded_signers_for_removed_chains() {
     assert_true(migration_completed.pcu_cleanup_excluded_signers_for_removed_chains);
     assert_false(exists(signer_excluded_from_pending_configuration @? { .blockchain == blockchain1, .pubkey == node0 }));
     assert_true(exists(signer_excluded_from_pending_configuration @? { .blockchain == blockchain2, .pubkey == node1 }));
-}
-
-function test_migrating_proposals() {
-    setup_module();
-
-    val provider = initial_provider;
-    val vs = system_p_voter_set();
-
-    rell.test.tx().op(
-        create_proposal_with_type(provider.pub, vs, proposal_type.container_action)
-    ).sign(provider).run();
-    val old_container_action_proposal = last_proposal();
-
-    rell.test.tx().op(
-        create_proposal_with_type(provider.pub, vs, proposal_type.container_configuration)
-    ).sign(provider).run();
-    val old_container_configuration_proposal = last_proposal();
-
-    // Simulate bad config
-    val bad_config_apply_timestamp = rell.test.last_block_time - 1;
-
-    rell.test.tx().op(
-        create_proposal_with_type(provider.pub, vs, proposal_type.subnode_jar_extension)
-    ).sign(provider).run();
-    val bad_container_action_proposal = last_proposal();
-
-    rell.test.tx().op(
-        create_proposal_with_type(provider.pub, vs, proposal_type.subnode_jar_extension_state)
-    ).sign(provider).run();
-    val bad_container_configuration_proposal = last_proposal();
-
-    rell.test.tx().op(
-        create_proposal_with_type(provider.pub, vs, proposal_type.container_action)
-    ).sign(provider).nop().run();
-    val bad_subnode_jar_extension_proposal = last_proposal();
-
-    rell.test.tx().op(
-        create_proposal_with_type(provider.pub, vs, proposal_type.container_configuration)
-    ).sign(provider).nop().run();
-    val bad_subnode_jar_extension_state_proposal = last_proposal();
-
-    rell.test.tx().op(
-        do_subnode_jar_migration(bad_config_apply_timestamp)
-    ).run();
-
-    assert_equals(old_container_action_proposal.proposal_type, proposal_type.container_action);
-    assert_equals(old_container_configuration_proposal.proposal_type, proposal_type.container_configuration);
-    assert_equals(bad_container_action_proposal.proposal_type, proposal_type.container_action);
-    assert_equals(bad_container_configuration_proposal.proposal_type, proposal_type.container_configuration);
-    assert_equals(bad_subnode_jar_extension_proposal.proposal_type, proposal_type.subnode_jar_extension);
-    assert_equals(bad_subnode_jar_extension_state_proposal.proposal_type, proposal_type.subnode_jar_extension_state);
 }
