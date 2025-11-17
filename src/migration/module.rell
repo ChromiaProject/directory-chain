@@ -8,6 +8,10 @@ import common.*;
 import publish_directory_chain.*;
 import economy_chain_in_directory_chain.*;
 
+struct module_args {
+    should_migrate_subnode_jar_from_timestamp: timestamp = -1;
+}
+
 /**
  * Migration statuses to only run a migration once.
  */
@@ -17,6 +21,7 @@ object migration_completed {
     mutable remove_system_voter_set: boolean = false;
     mutable sync_provider_name_and_url_to_ec: boolean = false;
     mutable pcu_cleanup_excluded_signers_for_removed_chains: boolean = false;
+    mutable migrate_subnode_jar_proposals: boolean = false;
 }
 
 @extend(on_begin_block)
@@ -42,6 +47,12 @@ function begin_block_migration(height: integer) {
     if (not migration_completed.pcu_cleanup_excluded_signers_for_removed_chains) {
         if (not try_call(pcu_cleanup_excluded_signers_for_removed_chains(*))) {
             log("Failed to cleanup excluded signers for removed chains");
+        }
+    }
+
+    if (chain_context.args.should_migrate_subnode_jar_from_timestamp != -1 and not migration_completed.migrate_subnode_jar_proposals) {
+        if (not try_call(migrate_subnode_jar_proposals(chain_context.args.should_migrate_subnode_jar_from_timestamp, *))) {
+            log("Failed to migrate subnode JAR proposals");
         }
     }
 }
@@ -87,4 +98,30 @@ function pcu_cleanup_excluded_signers_for_removed_chains() {
     delete signer_excluded_from_pending_configuration @* { .blockchain.state == blockchain_state.REMOVED };
     
     migration_completed.pcu_cleanup_excluded_signers_for_removed_chains = true;
+}
+
+function migrate_subnode_jar_proposals(bad_timestamp: timestamp) {
+    log("Migrating subnode JAR proposals...");
+
+    val wrong_types = [
+    	proposal_type.container_action,
+    	proposal_type.container_configuration,
+    	proposal_type.subnode_jar_extension,
+    	proposal_type.subnode_jar_extension_state,
+    ];
+
+    update proposal @* {
+    	.proposal_type in wrong_types,
+    	.timestamp >= bad_timestamp
+    } (
+    	.proposal_type = when (.proposal_type) {
+    	    proposal_type.container_action -> proposal_type.subnode_jar_extension;
+    	    proposal_type.container_configuration -> proposal_type.subnode_jar_extension_state;
+    	    proposal_type.subnode_jar_extension -> proposal_type.container_action;
+    	    proposal_type.subnode_jar_extension_state -> proposal_type.container_configuration;
+    	    else -> .proposal_type; // Should never happen but won't compile otherwise
+    	}
+    );
+
+    migration_completed.migrate_subnode_jar_proposals = true;
 }
