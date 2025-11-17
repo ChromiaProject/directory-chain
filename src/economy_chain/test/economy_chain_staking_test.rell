@@ -1448,6 +1448,7 @@ function test_set_provider_staking_account_and_transfer_staking_states() {
 
     add_provider(provider_keypair.pub);
     val initial_provider_account = provider_staking_account @ { .provider.pubkey == provider_keypair.pub } ( .staking_account );
+    assert_equals(initial_provider_account.id, get_provider_staking_account(provider_keypair.pub));
 
     rell.test.tx()
         .op(mint_to(initial_provider_account, 9999999))
@@ -1476,6 +1477,7 @@ function test_set_provider_staking_account_and_transfer_staking_states() {
             set_provider_staking_account(provider_keypair.pub, new_provider_account_keypair.pub)
         ).sign(provider_keypair, new_provider_account_keypair)
         .run();
+    assert_equals(new_provider_account_id, get_provider_staking_account(provider_keypair.pub));
     assert_equals(staking_get_balance(initial_provider_account.id), 0);
     assert_equals(staking_get_balance(new_provider_account_id), 9999999);
     assert_null(staking_get_current_delegate(initial_provider_account.id));
