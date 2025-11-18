@@ -203,8 +203,9 @@ function test_invalid_bridge_lease_brid() {
 
     val container_lease = lease @ { container_name };
 
-    rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, add_bridge_lease(container_name, x"01", 1, "validator", "bridge", false)),
-        add_bridge_lease(container_name, x"01", 1, "validator", "bridge", false)
-    ).sign(rell.test.keypairs.alice).run_must_fail("blockchain_rid must be 32 bytes");
+    val add_bridge_lease_op = rell.test.op(rell.meta(add_bridge_lease).mount_name,
+        [container_name.to_gtv(), x"01".to_gtv(), (1).to_gtv(), "validator".to_gtv(), "bridge".to_gtv(), false.to_gtv()]);
+    rell.test.tx()
+        .op(add_bridge_lease_op)
+        .sign(rell.test.keypairs.alice).run_must_fail("size too small");
 }

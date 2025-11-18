@@ -134,7 +134,7 @@ function _apply_unarchive_blockchain(action: pending_blockchain_action, proposal
  * 
  * @param my_pubkey pubkey of provider
  */
-operation propose_blockchain_action(my_pubkey: pubkey, blockchain_rid: byte_array, action: blockchain_action, description: text = "") {
+operation propose_blockchain_action(my_pubkey: pubkey, @size(32) blockchain_rid: byte_array, action: blockchain_action, description: text = "") {
     require(action != blockchain_action.unarchive, "Use propose_blockchain_unarchive_action() for unarchive operation");
     propose_blockchain_action_pubkey_impl(my_pubkey, blockchain_rid, action, x"", description);
 }
@@ -172,7 +172,7 @@ operation propose_blockchain_action_iccf(my_pubkey: pubkey, tx_to_prove: gtx_tra
  * 
  * @param my_pubkey pubkey of provider
  */
-operation propose_blockchain_unarchive_action(my_pubkey: pubkey, blockchain_rid: byte_array, destination_container: text, final_height: integer, description: text = "") {
+operation propose_blockchain_unarchive_action(my_pubkey: pubkey, @size(32) blockchain_rid: byte_array, destination_container: text, final_height: integer, description: text = "") {
     val args = unarchive_args(destination_container, final_height);
     propose_blockchain_action_pubkey_impl(my_pubkey, blockchain_rid, blockchain_action.unarchive, args.to_bytes(), description);
 }
@@ -261,10 +261,10 @@ function validate_blockchain_action_proposal(blockchain, action: blockchain_acti
             require(action != blockchain_action.unarchive, "Paused blockchain can't be unarchived: " + blockchain.rid);
         }
         blockchain_state.REMOVED -> {
-            require(false, "Removed blockchain can't be %sd: %s".format(action.name, blockchain.rid));
+            rell.error("Removed blockchain can't be %sd: %s".format(action.name, blockchain.rid));
         }
         blockchain_state.IMPORTING -> {
-            require(false, "Importing blockchain can't be %sd: %s".format(action.name, blockchain.rid));
+            rell.error("Importing blockchain can't be %sd: %s".format(action.name, blockchain.rid));
         }
         blockchain_state.ARCHIVED -> {
             require(action != blockchain_action.pause, "Archived blockchain can't be paused: " + blockchain.rid);
@@ -275,12 +275,12 @@ function validate_blockchain_action_proposal(blockchain, action: blockchain_acti
 
     // complex state: moving
     if (exists(pending_blockchain_move @? { blockchain }) or exists(moving_blockchain @? { blockchain, .final_height == -1 })) {
-        require(false, "Moving blockchain can't be %sd: %s".format(action.name, blockchain.rid));
+        rell.error("Moving blockchain can't be %sd: %s".format(action.name, blockchain.rid));
     }
 
     // complex state: unarchiving
     if (exists(unarchiving_blockchain @? { blockchain })) {
-        require(false, "Unarchiving blockchain can't be %sd: %s".format(action.name, blockchain.rid));
+        rell.error("Unarchiving blockchain can't be %sd: %s".format(action.name, blockchain.rid));
     }
 }
 

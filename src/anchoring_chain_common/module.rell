@@ -134,9 +134,7 @@ function extract_anchored_block(transaction, tx_index: integer): block_to_anchor
     }
 
     val batch_anchor_ops = gtx.body.operations @* { .name == rell.meta(__batch_anchor_block_header).mount_name };
-    if (empty(batch_anchor_ops)) {
-        require(false, "No anchoring operation found");
-    }
+    require(not empty(batch_anchor_ops), "No anchoring operation found");
     require(batch_anchor_ops.size() == 1, "Multiple batch anchoring operations found: %d".format(batch_anchor_ops.size()));
     return list<block_to_anchor>.from_gtv(batch_anchor_ops[0].args[0])[tx_index];
 }
