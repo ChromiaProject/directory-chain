@@ -73,7 +73,7 @@ struct blockchain_auth_response_message {
  * @param blockchain_rid  the other blockchain which will be sending ICMF messages on topic "L_blockchain_auth"
  * @param skip_to_height  height on the other blockchain to start read messages from
  */
-operation add_icmf_provider_blockchain_auth(my_pubkey: pubkey, blockchain_rid: byte_array, skip_to_height: integer) {
+operation add_icmf_provider_blockchain_auth(my_pubkey: pubkey, @size(32) blockchain_rid: byte_array, skip_to_height: integer) {
     require(blockchain_rid != chain_context.blockchain_rid, "Can't use directory-chain itself for ICMF auth");
     val bc = require_active_blockchain(blockchain_rid);
 
@@ -213,7 +213,7 @@ function receive_blockchain_auth_icmf(sender: blockchain, provider, provider_aut
         }
 
         else -> {
-            require(false, "Unrecognized action %s".format(message.action));
+            rell.error("Unrecognized action %s".format(message.action));
         }
     }
 }

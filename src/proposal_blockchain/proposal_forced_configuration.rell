@@ -31,7 +31,7 @@ entity forced_configuration {
  *
  * @param my_pubkey pubkey of provider
  */
-operation propose_forced_configuration(my_pubkey: pubkey, blockchain_rid: byte_array, config_data: byte_array,
+operation propose_forced_configuration(my_pubkey: pubkey, @size(32) blockchain_rid: byte_array, config_data: byte_array,
         height: integer, description: text = "", resume_chain: boolean = false) {
     val provider = require_is_provider_with_rate_limit(my_pubkey);
     val proposal = create_forced_configuration_proposal(provider, blockchain_rid, config_data, height, resume_chain, description);
@@ -114,7 +114,7 @@ function apply_proposed_forced_configuration(proposal) {
  * @param my_pubkey pubkey of provider
  * @param blockchain_rid Blockchain RID
  */
-operation approve_proposed_forced_configuration(my_pubkey: pubkey, blockchain_rid: byte_array) {
+operation approve_proposed_forced_configuration(my_pubkey: pubkey, @size(32) blockchain_rid: byte_array) {
     val provider = require_is_provider_with_rate_limit(my_pubkey);
     require(provider.tier == provider_tier.NODE_PROVIDER,
         "Transaction must be signed by node provider");
