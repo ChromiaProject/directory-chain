@@ -1,17 +1,45 @@
-#!/bin/sh
+#!/bin/sh -eu
 
-LIBRARY_NAME=$1
+while [ "$#" -gt 0 ]; do
+    case $1 in
+        -n|--name) LIBRARY_NAME="$2"; shift ;;
+        --major) MAJOR_VERSION="$2"; shift ;;
+        --minor) MINOR_VERSION="$2"; shift ;;
+        --library-description) LIBRARY_DESCRIPTION="$2"; shift ;;
+        *) echo "Unknown parameter passed: $1"; exit 1 ;;
+    esac
+    shift
+done
 
-RID_NEW=`xmllint --xpath 'string(/dict/entry[@key="rid"]/bytea)' build/$LIBRARY_NAME.xml`
 
+echo "Library: $LIBRARY_NAME"
+echo "Major: $MAJOR_VERSION"
+echo "Minor: $MINOR_VERSION"
+if [ -n "${LIBRARY_DESCRIPTION+x}" ]; then
+  echo "Library description: $LIBRARY_DESCRIPTION"
+fi
+echo
+
+XML_CONF="build/$LIBRARY_NAME.xml"
+if [ ! -f "$XML_CONF" ]; then
+  echo "Missing configuration: $XML_CONF"
+  exit 1
+fi
+
+RID_NEW=`xmllint --xpath 'string(/dict/entry[@key="rid"]/bytea)' "$XML_CONF"`
 EXISTING=`curl -sS "$LIBRARY_CHAIN_API_URL/query/$LIBRARY_CHAIN_BRID?type=library_chain_versioning.get_latest_library_version&lib_id=com.chromia.$LIBRARY_NAME"`
 
 RID_EXISTING=`echo $EXISTING | jq -r '.rid'`
 if [ "$RID_EXISTING" = "null" ]; then
-  echo "First deploy of library $LIBRARY_NAME"
-  VERSION=$2
-  DESCRIPTION=$3
 
+  if [ -z "${LIBRARY_DESCRIPTION+x}" ]; then
+    echo "Library description is required for first deployment"
+    exit 1
+  fi
+
+  echo "First deploy of library $LIBRARY_NAME"
+
+  VERSION="$MAJOR_VERSION.$MINOR_VERSION.0"
   echo "Creating $LIBRARY_NAME $VERSION..."
   echo "RID: $RID_NEW"
 
@@ -22,15 +50,32 @@ if [ "$RID_EXISTING" = "null" ]; then
     --organization com.chromia \
     --name "$LIBRARY_NAME" \
     --version "$VERSION" \
-    --description "$DESCRIPTION"
+    --description "$LIBRARY_DESCRIPTION"
 else
-  VERSION=${2:-$CI_COMMIT_TAG}
-  DESCRIPTION=`echo $EXISTING | jq -r '.version_description'`
 
   if [ "$RID_EXISTING" = "$RID_NEW" ]; then
      echo "Skipping deployment of $LIBRARY_NAME, because the RID has not changed: $RID_EXISTING."
      exit 0
   fi
+
+  EXISTING_VERSION="$(echo $EXISTING | jq -r '.version')"
+  echo "Current library version: $EXISTING_VERSION"
+
+  EXISTING_MAJOR=${EXISTING_VERSION%%.*}
+  EXISTING_VERSION_NO_MAJOR=${EXISTING_VERSION#*.}
+  EXISTING_MINOR=${EXISTING_VERSION_NO_MAJOR%%.*}
+  EXISTING_PATCH=${EXISTING_VERSION_NO_MAJOR#*.}
+
+  MAJOR_MINOR_PREFIX="$MAJOR_VERSION.$MINOR_VERSION."
+  if [ "${EXISTING_VERSION#$MAJOR_MINOR_PREFIX}" != "${EXISTING_VERSION}" ]; then
+    NEW_PATCH="$((LIBRARY_PATH + 1))"
+  else
+    NEW_PATCH=0
+  fi
+
+  VERSION="$MAJOR_VERSION.$MINOR_VERSION.$NEW_PATCH"
+  echo "New version: $VERSION"
+  echo
 
   VERSION_EXISTING=`echo $EXISTING | jq -r '.version'`
   if [ "$VERSION_EXISTING" = "$VERSION" ]; then
@@ -38,9 +83,10 @@ else
      exit 0
   fi
 
-  echo "previous RID: $RID_EXISTING"
+  DESCRIPTION=`echo $EXISTING | jq -r '.version_description'`
 
   echo "Deploying $LIBRARY_NAME $VERSION..."
+  echo "previous RID: $RID_EXISTING"
   echo "new RID: $RID_NEW"
 
   chr library deploy \
