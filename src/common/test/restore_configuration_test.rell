@@ -1,0 +1,372 @@
+@test module;
+
+import ^^.operations.*;
+import ^^.*;
+import ^.setup.*;
+import ^.util.*;
+import ^.config_test_helpers.*;
+import ^.helper_operations.*;
+import proposal_blockchain.*;
+import proposal_container.*;
+import proposal_provider.*;
+import lib.test.iccf.helper_operations.*;
+import lib.test.iccf.iccf_test_lib.*;
+
+function test_restore_anchored_configuration_by_removing_faulty_config() {
+    setup_module(system_anchoring_config = ["any": "value".to_gtv()], cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val system_cac = cluster_anchoring_chain @ { system_cluster() }.blockchain;
+
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p),
+        propose_blockchain(initial_provider.pub, apply_required_configuration_properties().to_gtv().to_bytes(),
+            "foo_chain", "container1")
+    ).sign(initial_provider).run();
+    val blockchain = blockchain @ { "foo_chain" };
+
+    val new_faulty_config = apply_required_configuration_properties(["number": (1).to_gtv()])
+        .to_gtv().to_bytes();
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, blockchain.rid, blockchain_action.pause),
+        propose_forced_configuration(initial_provider.pub, blockchain.rid, new_faulty_config, 2, "", true)
+    ).sign(initial_provider).run();
+    
+    val applied_forced_config = get_blockchain_configuration(blockchain.rid, 2)!!;
+    assert_not_equals(applied_forced_config.config_hash, blockchain.rid);
+
+    val mock_anchored_block = make_anchor_block_header(blockchain.rid, 2, blockchain.rid);
+    val mock_anchoring_tx = make_anchoring_transaction(system_cac.rid, blockchain.rid, mock_anchored_block, x"");
+    rell.test.tx().op(
+        iccf_proof_for(system_cac.rid, mock_anchoring_tx),
+        restore_blockchain_configuration(initial_provider.pub, blockchain.rid, 2, mock_anchoring_tx, 0)
+    ).sign(initial_provider).run();
+
+    val applied_restored_config = get_blockchain_configuration(blockchain.rid, 2)!!;
+    assert_equals(applied_restored_config.config_hash, blockchain.rid);
+}
+
+function test_restore_anchored_configuration_by_replacing_faulty_config() {
+    setup_module(system_anchoring_config = ["any": "value".to_gtv()], cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val system_cac = cluster_anchoring_chain @ { system_cluster() }.blockchain;
+
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p),
+        propose_blockchain(initial_provider.pub, apply_required_configuration_properties().to_gtv().to_bytes(),
+            "foo_chain", "container1")
+    ).sign(initial_provider).run();
+    val blockchain = blockchain @ { "foo_chain" };
+
+    // Apply new config via PCU
+    val base_pcu_config = apply_required_configuration_properties(["version": (1).to_gtv()])
+            .to_gtv().to_bytes();
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, blockchain.rid, base_pcu_config),
+    ).sign(initial_provider).run();
+
+    val pcu_config_to_apply = pending_blockchain_configuration @ { blockchain } (.base_config, .config_hash);
+
+    rell.test.tx().op(
+        receive_configuration_updated_op(
+            system_cac.rid,
+            configuration_updated_topic,
+            configuration_updated(
+                blockchain_rid = blockchain.rid,
+                height = 2,
+                config_hash = pcu_config_to_apply.config_hash
+            ).to_gtv()
+        )
+    ).run();
+
+    val correct_config = get_blockchain_configuration(blockchain.rid, 2)!!;
+    assert_equals(extract_config_version(correct_config.base_config), 1);
+
+    // Override new config with faulty forced update
+    val new_faulty_config = apply_required_configuration_properties(["version": (2).to_gtv()])
+        .to_gtv().to_bytes();
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, blockchain.rid, blockchain_action.pause),
+        propose_forced_configuration(initial_provider.pub, blockchain.rid, new_faulty_config, 2, "", true)
+    ).sign(initial_provider).run();
+
+    assert_equals(extract_config_version(get_blockchain_configuration(blockchain.rid, 2)!!.base_config), 2);
+
+    // Restore config
+    val mock_anchored_block = make_anchor_block_header(blockchain.rid, 2, correct_config.config_hash);
+    val mock_anchoring_tx = make_anchoring_transaction(system_cac.rid, blockchain.rid, mock_anchored_block, x"");
+    rell.test.tx().op(
+        iccf_proof_for(system_cac.rid, mock_anchoring_tx),
+        restore_blockchain_configuration(initial_provider.pub, blockchain.rid, 2, mock_anchoring_tx, 0, correct_config.base_config)
+    ).sign(initial_provider).run();
+
+    val applied_restored_config = get_blockchain_configuration(blockchain.rid, 2)!!;
+    assert_equals(extract_config_version(applied_restored_config.base_config), 1);
+}
+
+function test_restore_anchored_configuration_by_replacing_faulty_signers() {
+    setup_module(system_anchoring_config = ["any": "value".to_gtv()], cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val system_cac = cluster_anchoring_chain @ { system_cluster() }.blockchain;
+
+    val original_conf = apply_required_configuration_properties().to_gtv().to_bytes();
+    rell.test.tx().op(
+        create_test_voter_set_with_provider_member("container_vs", initial_provider()),
+        propose_container(initial_provider.pub, clusters.system, "container1", "container_vs"),
+        propose_blockchain(initial_provider.pub, original_conf, "foo_chain", "container1")
+    ).sign(initial_provider).run();
+    val blockchain = blockchain @ { "foo_chain" };
+
+    // Add a new provider and node to system cluster
+    val new_system_provider = rell.test.keypairs.charlie;
+    val sp_node_key = x"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa50093798EF9D51E7260BA921CD673F";
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, new_system_provider.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, new_system_provider.pub, true)
+    ).sign(initial_provider).run();
+
+    // New SP adds a node
+    rell.test.tx().op(
+        register_node_with_node_data(new_system_provider.pub, register_node_data(sp_node_key, host = "host", port = 7777, api_url = "http://host/api_url", clusters = [clusters.system]))
+    ).sign(new_system_provider).run();
+
+    // This will trigger a pending signer update for our chain, let's complete it
+    val pcu_config_to_apply = pending_blockchain_configuration @ { blockchain } (.base_config, .config_hash);
+    rell.test.tx().op(
+        receive_configuration_updated_op(
+            system_cac.rid,
+            configuration_updated_topic,
+            configuration_updated(
+                blockchain_rid = blockchain.rid,
+                height = 2,
+                config_hash = pcu_config_to_apply.config_hash
+            ).to_gtv()
+        )
+    ).run();
+
+    assert_equals(get_blockchain_configuration(blockchain.rid, 2)!!.signers.size(), 2);
+
+    // Now we forcefully override config at height 0, mangling the signers as well
+    val new_faulty_config = apply_required_configuration_properties(["number": (1).to_gtv()])
+            .to_gtv().to_bytes();
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, blockchain.rid, blockchain_action.pause),
+        propose_forced_configuration(initial_provider.pub, blockchain.rid, new_faulty_config, 0, "", true),
+        approve_proposed_forced_configuration(initial_provider.pub, blockchain.rid)
+    ).sign(initial_provider).run();
+
+    val applied_forced_config = get_blockchain_configuration(blockchain.rid, 0)!!;
+    assert_not_equals(applied_forced_config.config_hash, blockchain.rid);
+    assert_equals(applied_forced_config.signers.size(), 2);
+
+    // Restore config and signers
+    val mock_anchored_block = make_anchor_block_header(blockchain.rid, 0, blockchain.rid);
+    val mock_witness = x"0000000100000021" + initial_signer.pub + x"00000000";
+    val mock_anchoring_tx = make_anchoring_transaction(system_cac.rid, blockchain.rid, mock_anchored_block, mock_witness);
+    rell.test.tx().op(
+        iccf_proof_for(system_cac.rid, mock_anchoring_tx),
+        restore_blockchain_configuration(initial_provider.pub, blockchain.rid, 0, mock_anchoring_tx, 0, original_conf, [initial_signer.pub])
+    ).sign(initial_provider).run();
+
+    val applied_restored_config = get_blockchain_configuration(blockchain.rid, 0)!!;
+    assert_equals(applied_restored_config.config_hash, blockchain.rid);
+    assert_equals(applied_restored_config.signers.size(), 1);
+}
+
+function test_restore_anchored_configuration_validation() {
+    // Prepare environment with anchoring enabled
+    setup_module(system_anchoring_config = ["any": "value".to_gtv()], cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val system_cac = cluster_anchoring_chain @ { system_cluster() }.blockchain;
+
+    // Create container and blockchain
+    val original_conf = apply_required_configuration_properties().to_gtv().to_bytes();
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p),
+        propose_blockchain(initial_provider.pub, original_conf, "foo_chain", "container1")
+    ).sign(initial_provider).run();
+    val blockchain = blockchain @ { "foo_chain" };
+
+    // Helper: witness with single initial signer (no signatures needed for test validations)
+    val single_signer_witness = x"0000000100000021" + initial_signer.pub + x"00000000";
+
+    // 1) Wrong provider tier
+    val dapp_provider = rell.test.keypairs.bob;
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, dapp_provider.pub, provider_tier.DAPP_PROVIDER),
+        propose_provider_state(initial_provider.pub, dapp_provider.pub, true)
+    ).sign(initial_provider).run();
+
+    var header = make_anchor_block_header(blockchain.rid, 0, blockchain.rid);
+    var anch_tx = make_anchoring_transaction(system_cac.rid, blockchain.rid, header, x"");
+    rell.test.tx().op(
+        iccf_proof_for(system_cac.rid, anch_tx),
+        restore_blockchain_configuration(dapp_provider.pub, blockchain.rid, 0, anch_tx, 0)
+    ).sign(dapp_provider).run_must_fail("Transaction must be signed by node provider");
+
+    // 2) Node provider not running this blockchain
+    val other_np = rell.test.keypairs.charlie;
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, other_np.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, other_np.pub, true)
+    ).sign(initial_provider).run();
+    rell.test.tx().op(
+        iccf_proof_for(system_cac.rid, anch_tx),
+        restore_blockchain_configuration(other_np.pub, blockchain.rid, 0, anch_tx, 0)
+    ).sign(other_np).run_must_fail("Transaction must be signed by node provider running this blockchain");
+
+    // 3) Invalid anchoring operation name
+    val wrong_op_tx = gtx_transaction(
+        gtx_transaction_body(
+            system_cac.rid,
+            [ gtx_operation("__not_anchor", [blockchain.rid.to_gtv(), header.to_gtv(), x"".to_gtv()]) ],
+            list<gtv>()
+        ),
+        list<gtv>()
+    );
+    rell.test.tx().op(
+        iccf_proof_for(system_cac.rid, wrong_op_tx),
+        restore_blockchain_configuration(initial_provider.pub, blockchain.rid, 0, wrong_op_tx, 0)
+    ).sign(initial_provider).run_must_fail("Operation with name __not_anchor is not a valid anchoring operation");
+
+    // 4) RID mismatch
+    val other_rid = x"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    header = make_anchor_block_header(other_rid, 0, blockchain.rid);
+    anch_tx = make_anchoring_transaction(system_cac.rid, blockchain.rid, header, x"");
+    rell.test.tx().op(
+        iccf_proof_for(system_cac.rid, anch_tx),
+        restore_blockchain_configuration(initial_provider.pub, blockchain.rid, 0, anch_tx, 0)
+    ).sign(initial_provider).run_must_fail("Anchoring operation blockchain RID %s does not match given RID %s"
+        .format(other_rid, blockchain.rid));
+
+    // 5) Height mismatch
+    header = make_anchor_block_header(blockchain.rid, 1, blockchain.rid);
+    anch_tx = make_anchoring_transaction(system_cac.rid, blockchain.rid, header, x"");
+    rell.test.tx().op(
+        iccf_proof_for(system_cac.rid, anch_tx),
+        restore_blockchain_configuration(initial_provider.pub, blockchain.rid, 0, anch_tx, 0)
+    ).sign(initial_provider).run_must_fail("Anchoring operation block height %s does not match given height %s".format(1, 0));
+
+    // 6) Current configuration already matches applied configuration
+    header = make_anchor_block_header(blockchain.rid, 0, blockchain.rid);
+    anch_tx = make_anchoring_transaction(system_cac.rid, blockchain.rid, header, x"");
+    rell.test.tx().op(
+        iccf_proof_for(system_cac.rid, anch_tx),
+        restore_blockchain_configuration(initial_provider.pub, blockchain.rid, 0, anch_tx, 0)
+    ).sign(initial_provider).run_must_fail("Current configuration already matches applied configuration");
+
+    // Prepare a mismatch at height 0 by forcing faulty configuration at height 0
+    val faulty_conf0 = apply_required_configuration_properties(["number": (1).to_gtv()]).to_gtv().to_bytes();
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, blockchain.rid, blockchain_action.pause),
+        propose_forced_configuration(initial_provider.pub, blockchain.rid, faulty_conf0, 0, "", true)
+    ).sign(initial_provider).run();
+
+    // 7) Removal of initial configuration not allowed
+    header = make_anchor_block_header(blockchain.rid, 0, blockchain.rid);
+    anch_tx = make_anchoring_transaction(system_cac.rid, blockchain.rid, header, single_signer_witness);
+    rell.test.tx().op(
+        iccf_proof_for(system_cac.rid, anch_tx),
+        restore_blockchain_configuration(initial_provider.pub, blockchain.rid, 0, anch_tx, 0)
+    ).sign(initial_provider).run_must_fail("Removal of initial configuration is not allowed, it can only be replaced");
+
+    // Prepare a config at height 2 to test removal checks
+    val base_pcu_config = apply_required_configuration_properties(["version": (2).to_gtv()]).to_gtv().to_bytes();
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, blockchain.rid, base_pcu_config)
+    ).sign(initial_provider).run();
+    val pcu = pending_blockchain_configuration @ { blockchain } (.base_config, .config_hash);
+    rell.test.tx().op(
+        receive_configuration_updated_op(
+            system_cac.rid,
+            configuration_updated_topic,
+            configuration_updated(blockchain_rid = blockchain.rid, height = 2, config_hash = pcu.config_hash).to_gtv()
+        )
+    ).run();
+
+    // 8) Removing current configuration will not restore the correct configuration (height 2)
+    val bogus_hash = x"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    header = make_anchor_block_header(blockchain.rid, 2, bogus_hash);
+    anch_tx = make_anchoring_transaction(system_cac.rid, blockchain.rid, header, x"");
+    rell.test.tx().op(
+        iccf_proof_for(system_cac.rid, anch_tx),
+        restore_blockchain_configuration(initial_provider.pub, blockchain.rid, 2, anch_tx, 0)
+    ).sign(initial_provider).run_must_fail("Removing current configuration will not restore the correct configuration");
+
+    // 9) Supplied configuration will not restore the correct configuration
+    val wrong_supplied_conf = apply_required_configuration_properties(["version": (3).to_gtv()]).to_gtv().to_bytes();
+    header = make_anchor_block_header(blockchain.rid, 0, blockchain.rid);
+    anch_tx = make_anchoring_transaction(system_cac.rid, blockchain.rid, header, single_signer_witness);
+    rell.test.tx().op(
+        iccf_proof_for(system_cac.rid, anch_tx),
+        restore_blockchain_configuration(initial_provider.pub, blockchain.rid, 0, anch_tx, 0, wrong_supplied_conf)
+    ).sign(initial_provider).run_must_fail("Supplied configuration will not restore the correct configuration");
+
+    // Prepare data for signer validation branch at height 0 (we already have mismatch there)
+    val current_h0 = get_blockchain_configuration(blockchain.rid, 0)!!;
+
+    // 10) Signer list contains duplicates
+    val dup_signers = [initial_signer.pub, initial_signer.pub];
+    val dup_hash = calculate_configuration_hash(current_h0.base_config, dup_signers);
+    header = make_anchor_block_header(blockchain.rid, 0, dup_hash);
+    anch_tx = make_anchoring_transaction(system_cac.rid, blockchain.rid, header, single_signer_witness);
+    rell.test.tx().op(
+        iccf_proof_for(system_cac.rid, anch_tx),
+        restore_blockchain_configuration(initial_provider.pub, blockchain.rid, 0, anch_tx, 0, null, dup_signers)
+    ).sign(initial_provider).run_must_fail("Signer list contains duplicates");
+
+    // 11) Signer list contains too many signers
+    val extra1 = x"0101010101010101010101010101010101010101010101010101010101010101";
+    val extra2 = x"0202020202020202020202020202020202020202020202020202020202020202";
+    val extra3 = x"0303030303030303030303030303030303030303030303030303030303030303";
+    val extra4 = x"0404040404040404040404040404040404040404040404040404040404040404";
+    val many_signers = [initial_signer.pub, extra1, extra2, extra3, extra4];
+    val many_hash = calculate_configuration_hash(current_h0.base_config, many_signers);
+    header = make_anchor_block_header(blockchain.rid, 0, many_hash);
+    anch_tx = make_anchoring_transaction(system_cac.rid, blockchain.rid, header, single_signer_witness);
+    rell.test.tx().op(
+        iccf_proof_for(system_cac.rid, anch_tx),
+        restore_blockchain_configuration(initial_provider.pub, blockchain.rid, 0, anch_tx, 0, null, many_signers)
+    ).sign(initial_provider).run_must_fail("Signer list contains too many signers");
+
+    // 12) Signer list must include signer present in witness
+    val signers_without_required = [extra1];
+    val missing_required = initial_signer.pub;
+    val miss_hash = calculate_configuration_hash(current_h0.base_config, signers_without_required);
+    header = make_anchor_block_header(blockchain.rid, 0, miss_hash);
+    anch_tx = make_anchoring_transaction(system_cac.rid, blockchain.rid, header, single_signer_witness);
+    rell.test.tx().op(
+        iccf_proof_for(system_cac.rid, anch_tx),
+        restore_blockchain_configuration(initial_provider.pub, blockchain.rid, 0, anch_tx, 0, null, signers_without_required)
+    ).sign(initial_provider).run_must_fail("Signer list must include signer %s since it is present in anchored witness".format(missing_required));
+}
+
+function make_anchor_block_header(blockchain_rid: byte_array, height: integer, config_hash: byte_array) = iccf.block_header(
+    blockchain_rid = blockchain_rid,
+    previous_block_rid = x"",
+    merkle_root_hash = x"",
+    timestamp = 0,
+    height = height,
+    dependencies = null.to_gtv(),
+    extra = [
+        "config_hash": config_hash.to_gtv()
+    ]
+);
+
+function make_anchoring_transaction(
+    anchoring_blockchain_rid: byte_array,
+    anchored_blockchain_rid: byte_array,
+    anchored_block_header: iccf.block_header,
+    anchored_witness: byte_array
+) = gtx_transaction(
+    gtx_transaction_body(
+        anchoring_blockchain_rid,
+        [
+            gtx_operation(
+                  "__anchor_block_header",
+                  [anchored_blockchain_rid.to_gtv(), anchored_block_header.to_gtv(), anchored_witness.to_gtv()]
+            )
+        ],
+        list<gtv>()
+    ),
+    list<gtv>()
+);
+
+function extract_config_version(raw_config: byte_array) = integer.from_gtv(
+    map<text, gtv>.from_gtv(gtv.from_bytes(raw_config))["version"]
+);

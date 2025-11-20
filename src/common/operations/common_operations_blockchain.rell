@@ -32,3 +32,106 @@ operation remove_blockchain_replica(my_pubkey: pubkey, @size(32) blockchain_rid:
     require(node.provider == provider, "It is only allowed to remove own blockchain replica node; provider:%s, node: %s".format(provider.pubkey, node.pubkey));
     delete blockchain_replica_node @? { blockchain, node };
 }
+
+/**
+ * Restore configuration for blockchain.
+ * This is useful in a case where the blockchain configuration used in the actual block that was built on chain is
+ * different than what is recorded in directory chain.
+ * This can happen when forced configurations are incorrectly applied.
+ *
+ * Permission: node provider in blockchain cluster
+ *
+ * Requires ICCF proof that block is the actual block anchored in CAC
+ *
+ * Rate limit: actions
+ *
+ * @param blockchain_rid Blockchain RID to restore the configuration on.
+ * @param height The height to restore the configuration on.
+ * @param anchoring_tx The tx the block was anchored in
+ * @param anchoring_tx_op_index The operation index the block was anchored in
+ * @param original_configuration The configuration to restore, or null if configuration at height only needs to be removed.
+ * @param original_signers Optional, in case signers were also mangled by the forced update.
+ */
+operation restore_blockchain_configuration(my_pubkey: pubkey, @size(32) blockchain_rid: byte_array, height: integer, anchoring_tx: gtx_transaction, anchoring_tx_op_index: integer, original_configuration: byte_array? = null, original_signers: list<byte_array>? = null) {
+    val provider = require_is_provider_with_rate_limit(my_pubkey);
+    require(provider.tier == provider_tier.NODE_PROVIDER, "Transaction must be signed by node provider");
+
+    val blockchain = require_blockchain(blockchain_rid);
+    val cluster = container_blockchain @ { blockchain } ( .container ) .cluster;
+    val cluster_nodes = cluster_node @* { cluster } (.node);
+    require(exists(cluster_nodes @* { provider }), "Transaction must be signed by node provider running this blockchain");
+    val cluster_anchoring_chain = cluster_anchoring_chain @ { cluster }.blockchain.rid;
+
+    // We don't consider batch anchoring here
+    val anchoring_operation = iccf.require_valid_proof(
+        anchoring_tx,
+        verify_signers = false,
+        valid_source_blockchain_rids = set([cluster_anchoring_chain])
+    )[anchoring_tx_op_index];
+
+    require(anchoring_operation.name == "__anchor_block_header", "Operation with name %s is not a valid anchoring operation".format(anchoring_operation.name));
+
+    val block_header = iccf.block_header.from_gtv(anchoring_operation.args[1]);
+    require(
+        block_header.blockchain_rid == blockchain_rid,
+        "Anchoring operation blockchain RID %s does not match given RID %s".format(block_header.blockchain_rid, blockchain_rid)
+    );
+    require(
+        block_header.height == height,
+        "Anchoring operation block height %s does not match given height %s".format(block_header.height, height)
+    );
+    val actual_config_hash = byte_array.from_gtv(block_header.extra["config_hash"]);
+
+    // First check if we even have a mismatch
+    val current_config = get_blockchain_configuration(blockchain_rid, height)!!;
+    require(current_config.config_hash != actual_config_hash, "Current configuration already matches applied configuration");
+
+    // Plain removal case
+    if (original_configuration == null and original_signers == null) {
+        require(height > 0, "Removal of initial configuration is not allowed, it can only be replaced");
+
+        // If we remove configuration at height the previous configuration will become the active one
+        val resulting_config = get_blockchain_configuration(blockchain_rid, height - 1)!!;
+        require(resulting_config.config_hash == actual_config_hash, "Removing current configuration will not restore the correct configuration");
+
+        log("Removing configuration for blockchain %s at height %s to match what is anchored".format(blockchain_rid, height));
+        delete blockchain_configuration @? { blockchain, height };
+        delete blockchain_configuration_signers @? { blockchain, height };
+    } else {
+        val restored_config_hash = calculate_configuration_hash(
+            original_configuration ?: current_config.base_config,
+            original_signers ?: current_config.signers
+        );
+        require(restored_config_hash == actual_config_hash, "Supplied configuration will not restore the correct configuration");
+
+        if (original_signers != null) {
+            // In case we do override signers, let's do a sanity check first here since we can
+            validate_restored_signers(original_signers, byte_array.from_gtv(anchoring_operation.args[2]));
+
+            // All good, restore
+            val original_signers_raw = original_signers.to_gtv().to_bytes();
+            val blockchain_configuration_signers = blockchain_configuration_signers @? { blockchain, height};
+            if (blockchain_configuration_signers == null) {
+                create blockchain_configuration_signers(blockchain, height, original_signers_raw);
+            } else {
+                blockchain_configuration_signers.signers = original_signers_raw;
+            }
+        }
+
+        if (original_configuration != null) {
+            compress_and_store_configuration(blockchain, height, original_configuration, true);
+        }
+        log("Restored configuration for blockchain %s at height %s to match what is anchored".format(blockchain_rid, height));
+    }
+}
+
+function validate_restored_signers(new_signers: list<byte_array>, anchored_witness: byte_array) {
+    val new_signer_set = set(new_signers);
+    require(new_signer_set.size() == new_signers.size(), "Signer list contains duplicates");
+
+    val actual_block_signers = extract_signers_from_witness(anchored_witness);
+    require(actual_block_signers.size() >= new_signer_set.size() - (new_signer_set.size() - 1) / 3, "Signer list contains too many signers");
+    for (actual_block_signer in extract_signers_from_witness(anchored_witness)) {
+        require(new_signer_set.contains(actual_block_signer), "Signer list must include signer %s since it is present in anchored witness".format(actual_block_signer));
+    }
+}
