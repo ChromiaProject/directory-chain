@@ -1,7 +1,6 @@
 import messaging.node_availability_reporting.*;
 import lib.icmf.*;
 
-val INTEGER_SIZE = 4;
 val PRIMARY_HEADER_KEY = "primary";
 
 object node_availability_report_stat {
@@ -197,27 +196,3 @@ function fetch_aggregated_node_availability(start_time: integer, end_time: integ
 function clean_up_node_availabiliy() {
     delete node_availability @* { };
 }
-
-function extract_signers_from_witness(witness: byte_array): list<byte_array> {
-    val sig_count = parse_integer(witness, 0);
-    var witness_bytes_index = INTEGER_SIZE;
-
-    val signers = list<byte_array>();
-    for (signature in range(sig_count)) {
-        val subject_id_size = parse_integer(witness, witness_bytes_index);
-        witness_bytes_index += INTEGER_SIZE;
-
-        val subject_id = witness.sub(witness_bytes_index, witness_bytes_index + subject_id_size);
-        witness_bytes_index += subject_id_size;
-
-        signers.add(subject_id);
-
-        val signature_size = parse_integer(witness, witness_bytes_index);
-        witness_bytes_index += INTEGER_SIZE + signature_size;
-    }
-
-    return signers;
-}
-
-function parse_integer(bytes: byte_array, start_index: integer) =
-    bytes[start_index+0] * 0x1000000 + bytes[start_index+1] * 0x10000 + bytes[start_index+2] * 0x100 + bytes[start_index+3];
