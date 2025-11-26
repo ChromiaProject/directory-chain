@@ -336,6 +336,39 @@ query staking_get_shared_rewards_paid(
     );
 }
 
+struct staking_payment_data {
+    amount: integer;
+    provider_pubkey: byte_array;
+    shared_amount: integer;
+    timestamp;
+}
+
+/**
+ * Staking rewards that have already been distributed to the user
+ *
+ * @param account_id Account ID
+ * @param provider_pubkey Optionally get rewards from a specific provider only
+ * @param since Only get rewards after a specific timestamp
+ * @return list of reward payments
+*/
+query staking_get_rewards_paid_history(
+    account_id: byte_array,
+    provider_pubkey: pubkey? = null,
+    since: timestamp? = null
+): list<staking_payment_data> {
+    val account = ft4.accounts.Account(account_id);
+    return staking_payment @* {
+        .account == account,
+        (empty(provider_pubkey) or .provider_pubkey == provider_pubkey),
+        (empty(since) or .timestamp > since)
+    } (staking_payment_data(
+            .amount,
+            .provider_pubkey,
+            .shared_amount,
+            .timestamp
+    ));
+}
+
 // Balances
 
 /**
