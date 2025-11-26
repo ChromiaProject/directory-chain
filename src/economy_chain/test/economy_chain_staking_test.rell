@@ -1770,10 +1770,25 @@ function test_staking_payouts_multiple_pending_shared_rewards() {
     val bob_amount = staking_rewards_claimable_for(test_account_bob.id);
 
     // Do payout
+    val payout_time = rell.test.last_block_time;
     rell.test.tx().op(staking_claim_rewards()).sign(admin_privkey).run();
 
     assert_equals(staking_get_rewards_paid(test_account_bob.id), bob_amount);
     assert_equals(staking_get_shared_rewards_paid(test_account_bob.id), 20 * units_per_asset);
+
+    // Testing history query
+    assert_equals(staking_get_rewards_paid_history(test_account_bob.id), [staking_payment_data(
+        amount = bob_amount,
+        shared_amount = 20 * units_per_asset,
+        provider_pubkey = rell.test.keypairs.charlie.pub,
+        timestamp = payout_time
+    )]);
+
+    assert_true(staking_get_rewards_paid_history(test_account_bob.id, rell.test.keypairs.bob.pub).empty());
+    assert_false(staking_get_rewards_paid_history(test_account_bob.id, rell.test.keypairs.charlie.pub).empty());
+
+    assert_true(staking_get_rewards_paid_history(test_account_bob.id, since = rell.test.last_block_time).empty());
+    assert_false(staking_get_rewards_paid_history(test_account_bob.id, since = payout_time - 1).empty());
 }
 
 function test_ras_staking_operation_without_stake() {
