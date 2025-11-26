@@ -178,12 +178,8 @@ Example (mainnet config):
         chromia_foundation_mint_amount_limit: 150000000000 # 150k CHR, at 2025-04-15 this is ~0.08 / 12500 USD
 
 libs:
-  ft4:
-    registry: https://gitlab.com/chromaway/ft4-lib.git
-    path: rell/src/lib/ft4
-    tagOrBranch: v1.1.0r
-    rid: x"FEEB0633698E7650D29DCCFE2996AD57CDC70AA3BDF770365C3D442D9DFC2A5E"
-    insecure: false
+  com.chromia.ft4:
+    version: 1.1.1
   price_oracle_messages:
     registry: https://gitlab.com/chromaway/core/price-oracle
     path: src/lib/price_oracle_messages
