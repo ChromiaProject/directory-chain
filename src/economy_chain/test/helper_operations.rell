@@ -75,14 +75,16 @@ operation create_pending_cluster(
     );
 }
 
-operation create_pending_tag_operation(name: text, scu_price: integer = -1, extra_storage_price: integer = -1) {
+operation create_pending_tag_operation(name: text, scu_price: integer = -1,
+        extra_storage_price: integer = -1, extra_compute_request_price: integer = -1) {
 
     val proposal = create_proposal(common_proposal_type.ec_tag_create);
     create pending_tag_operation(
         name,
         proposal,
         scu_price = scu_price,
-        extra_storage_price = extra_storage_price
+        extra_storage_price = extra_storage_price,
+        extra_compute_request_price = extra_compute_request_price,
     );
 }
 
@@ -103,8 +105,9 @@ operation create_test_cluster(
     extra_storage: integer = 1,
     scu_price: integer = 1 * units_per_usd,
     extra_storage_price: integer = 1 * units_per_usd,
+    extra_compute_request_price: integer = 1 * units_per_usd,
 ) {
-    val tag = create tag(tag_name, scu_price, extra_storage_price);
+    val tag = create tag(tag_name, scu_price, extra_storage_price, extra_compute_request_price = extra_compute_request_price);
     create cluster(name = cluster_name, operational = true, cluster_units = cluster_units, extra_storage = extra_storage,
         anchoring_chain = x"", tag = tag);
 }
@@ -211,6 +214,7 @@ function create_or_return_tag(
     tag_name: text,
     scu_price: integer = 1 * units_per_usd,
     extra_storage_price: integer = 1 * units_per_usd,
+    extra_compute_request_price: integer = 1 * units_per_usd,
 ) {
     var tag = tag @? { tag_name };
     if (tag == null) {
@@ -218,6 +222,7 @@ function create_or_return_tag(
             tag_name,
             scu_price = scu_price,
             extra_storage_price = extra_storage_price,
+            extra_compute_request_price = extra_compute_request_price,
         );
     }
     return tag;
