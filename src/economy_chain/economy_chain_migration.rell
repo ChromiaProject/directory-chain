@@ -14,4 +14,9 @@ function do_migrations() {
         migration_completed.bridge_lease_enable = true;
         update bridge_lease @* { not .enabled and .tx_cost_debt == 0 } (.enabled = true);
     }
+
+    if (exists(provider @? { get_null_account(), .active or .system })) {
+        log("Demoting and deactivating null provider");
+        update provider @ { get_null_account() } (.active = false, .system = false);
+    }
 }
