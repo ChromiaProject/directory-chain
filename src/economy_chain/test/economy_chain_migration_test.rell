@@ -3,3 +3,21 @@
 import ^^.*;
 import ^.helper_functions.*;
 import ^.helper_operations.*;
+
+function test_migrate_null_provider() {
+    rell.test.tx().op(
+        init(),
+        put_null_provider_in_legacy_state()
+    ).run();
+
+    val null_provider = provider @ { get_null_account() };
+    assert_true(null_provider.active);
+    assert_true(null_provider.system);
+
+    rell.test.tx().op(
+        do_migrations_op()
+    ).run();
+
+    assert_false(null_provider.active);
+    assert_false(null_provider.system);
+}
