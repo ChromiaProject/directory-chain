@@ -91,11 +91,29 @@ function test_get_blockchain_info() {
     assert_equals(blockchain_info.is_foreign_importing, false);
     assert_equals(blockchain_info.is_moving, false);
     assert_equals(blockchain_info.is_unarchiving, false);
-    
-    // Test with non-existent blockchain
+
+    // Test get_blockchain_info_by_name query
+    val blockchain_info_by_name = get_blockchain_info_by_name("test_blockchain");
+    assert_not_null(blockchain_info_by_name);
+    assert_equals(blockchain_info_by_name.rid, blockchain_rid);
+    assert_equals(blockchain_info_by_name.name, "test_blockchain");
+    assert_equals(blockchain_info_by_name.state, blockchain_state.RUNNING);
+    assert_equals(blockchain_info_by_name.container, "test_container");
+    assert_equals(blockchain_info_by_name.container_state, container_state.RUNNING);
+    assert_equals(blockchain_info_by_name.cluster, clusters.system);
+    assert_equals(blockchain_info_by_name.system, false);
+    assert_equals(blockchain_info_by_name.is_foreign_importing, false);
+    assert_equals(blockchain_info_by_name.is_moving, false);
+    assert_equals(blockchain_info_by_name.is_unarchiving, false);
+
+    // Test get_blockchain_info query with non-existent blockchain
     val non_existent_rid = x"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
     val non_existent_info = get_blockchain_info(non_existent_rid);
     assert_null(non_existent_info);
+
+    // Test get_blockchain_info_by_name query with non-existent blockchain
+    val non_existent_info_by_name = get_blockchain_info_by_name("non_existent");
+    assert_null(non_existent_info_by_name);
 }
 
 function test_get_blockchain_info_list() {
