@@ -1,43 +1,16 @@
 @extend(receive_icmf_message) function receive_create_cluster(sender: byte_array, topic: text, body: gtv) {
-    if (topic != create_cluster_topic and topic != create_cluster_v2_topic) return;
+    if (topic != create_cluster_v2_topic) return;
 
     if (sender != economy_chain.rid) {
         log("Sender %s is not the economy chain, ignoring".format(sender));
         return;
     }
 
-    val message = if (topic == create_cluster_v2_topic)
-            create_cluster_v2_message.from_gtv(body)
-        else
-            map_create_cluster_v2_message_from_v1(body);
-
-    receive_create_cluster_impl(message);
-}
-
-function map_create_cluster_v2_message_from_v1(body: gtv): create_cluster_v2_message {
-    val v1 = create_cluster_message.from_gtv(body);
-    return create_cluster_v2_message(
-        name = v1.name,
-        governor_voter_set_name = v1.governor_voter_set_name,
-        voter_set_name = v1.voter_set_name,
-        cluster_units = v1.cluster_units,
-        extra_storage = v1.extra_storage,
-        container_unit_cpu = standard_container_unit.cpu,
-        container_unit_ram = standard_container_unit.ram,
-        container_unit_io_read = standard_container_unit.io_read,
-        container_unit_io_write = standard_container_unit.io_write,
-        container_unit_storage = standard_container_unit.storage,
-        system_container_units = system_container_defaults.container_units,
-        proposer_pubkey = v1.proposer_pubkey,
-        max_nodes = v1.max_nodes,
-    );
-}
-
-function receive_create_cluster_impl(message: create_cluster_v2_message) {
+    val message = create_cluster_v2_message.from_gtv(body);
 
     val cluster_name = try_call(create_cluster_from_v2_message(message, *));
 
-   if (cluster_name == null)
+    if (cluster_name == null)
         send_message(create_cluster_error_topic, create_cluster_error_message (
             name = message.name,
             error_message = "Unexpected error"
