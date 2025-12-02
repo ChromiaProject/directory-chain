@@ -186,18 +186,10 @@ libs:
     tagOrBranch: "0.12"
     rid: x"2FFEB18A49FBD81C34225F482FF582071C43C914C5B5A15B16EBB01CE22E76BC"
     insecure: false
-  eif:
-    registry: https://gitlab.com/chromaway/postchain-eif
-    path: postchain-eif-rell/rell/src/eif
-    tagOrBranch: 0.15.0
-    rid: x"BEFDD610E1BC3E8648E5B345D80CE1FCA4E94A21009D42CE16904FDCCF78E2A5"
-    insecure: false
-  hbridge:
-    registry: https://gitlab.com/chromaway/postchain-eif
-    path: postchain-eif-rell/rell/src/hbridge
-    tagOrBranch: 0.15.0
-    rid: x"F9124C180A39AFB5CA105A65FB7AFA9CEA6D568F018DB849B32AE0CA81C1272E"
-    insecure: false
+  com.chromia.eif:
+    version: 1.0.0
+  com.chromia.hbridge:
+    version: 1.0.0
   transaction_submitter_messaging:
     registry: https://gitlab.com/chromaway/postchain-eif
     path: postchain-eif-rell/rell/src/transaction_submitter/messaging/
