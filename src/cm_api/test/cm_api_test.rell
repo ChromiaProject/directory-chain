@@ -50,3 +50,24 @@ function test_cm_get_removed_cluster_anchoring_chains() {
     assert_equals(cm_get_removed_cluster_anchoring_chains(0), [cac_brid]);
     assert_true(cm_get_removed_cluster_anchoring_chains(rell.test.last_block_time).empty());
 }
+
+function test_cm_get_active_blockchain_api_urls() {
+    setup_module();
+
+    assert_fails("Unknown blockchain 0x01", cm_get_active_blockchain_api_urls(x"01", *));
+
+    var conf = apply_required_configuration_properties();
+    rell.test.tx().op(
+        create_container(initial_provider.pub, "container", clusters.system, 0, [initial_provider.pub]),
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "container")
+    ).sign(initial_provider).run();
+
+    val foo_brid = blockchain @ { .name == "foo_chain" }.rid;
+    assert_equals(cm_get_active_blockchain_api_urls(foo_brid), [test_node.api_url]);
+
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, foo_brid, blockchain_action.remove)
+    ).sign(initial_provider).run();
+
+    assert_fails("Blockchain %s is removed".format(foo_brid), cm_get_active_blockchain_api_urls(foo_brid, *));
+}

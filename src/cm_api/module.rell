@@ -22,7 +22,7 @@ struct cm_cluster_info {
  * Returns CM API Version
  * CM API Version: 2
  */
-query cm_api_version() = 2;
+query cm_api_version() = 3;
 
 query cm_get_cluster_info(name): cm_cluster_info {
     val cluster = require_cluster(name);
@@ -116,4 +116,20 @@ query cm_get_removed_cluster_anchoring_chains(removed_after: timestamp): list<by
         .blockchain.state == blockchain_state.REMOVED,
         .cluster_anchoring_chain
     }.blockchain.rid;
+}
+
+/**
+ * Returns API URLs for blockchain if it exists and has not been removed
+ * CM API Version: 3
+ */
+query cm_get_active_blockchain_api_urls(blockchain_rid: byte_array) {
+    val bc = require_blockchain(blockchain_rid);
+    require(bc.state != blockchain_state.REMOVED, "Blockchain %s is removed".format(blockchain_rid));
+    return (container_blockchain, cluster_node) @*
+    {
+        container_blockchain.blockchain == bc,
+        container_blockchain.container.cluster == cluster_node.cluster
+    } (
+        cluster_node.node.api_url
+    );
 }
