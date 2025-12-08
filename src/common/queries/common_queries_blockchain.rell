@@ -77,8 +77,12 @@ query get_blockchain_info(rid: byte_array): blockchain_info? {
  * Returns blockchain info by name, or null if not found.
  */
 query get_blockchain_info_by_name(name): blockchain_info? {
-    val blockchain = blockchain @? { name };
-    return to_blockchain_info(blockchain);
+    val blockchain = blockchain @* { name, .state != blockchain_state.REMOVED };
+    return when {
+        empty(blockchain) -> null; // not found
+        blockchain.size() == 1 -> to_blockchain_info(blockchain[0]); // one found
+        else -> null; // more than one found
+    };
 }
 
 /**
