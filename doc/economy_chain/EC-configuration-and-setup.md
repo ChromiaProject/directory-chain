@@ -187,7 +187,7 @@ libs:
     rid: x"2FFEB18A49FBD81C34225F482FF582071C43C914C5B5A15B16EBB01CE22E76BC"
     insecure: false
   com.chromia.eif:
-    version: 1.0.0
+    version: 1.0.1
   com.chromia.hbridge:
     version: 1.0.0
   transaction_submitter_messaging:
