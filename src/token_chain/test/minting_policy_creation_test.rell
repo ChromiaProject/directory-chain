@@ -9,13 +9,9 @@ namespace ft4 {
     import test_utils: lib.ft4.test.core;
 }
 
-struct module_args {
-    auth_privkey: byte_array = x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6";
-}
-
 function test_create_minting_policy_for_token_without_minting_policy() {
     // Setup
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    val proposer = setup(token_chain_constants.listing_fee);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
 
     val token = token @ {};
@@ -38,7 +34,7 @@ function test_create_minting_policy_for_token_without_minting_policy() {
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
 
     // Bob proposes minting policy #2 for Dave
-    val dave = do_create_account(rell.test.keypairs.dave, chain_context.args.auth_privkey, 0L);
+    val dave = do_create_account(rell.test.keypairs.dave, 0L);
     val proposal_op2 = propose_minting_policy(
         asset_id = token.asset.id,
         minters = set([dave.id]),
@@ -78,8 +74,8 @@ function test_create_minting_policy_for_token_without_minting_policy() {
 function test_create_minting_policy_for_token_with_minting_policy() {
     // Setup
     maybe_init_token_chain();
-    val bob = do_create_account(rell.test.keypairs.bob, chain_context.args.auth_privkey, token_chain_constants.listing_fee);
-    val dave = do_create_account(rell.test.keypairs.dave, chain_context.args.auth_privkey, 0L);
+    val bob = do_create_account(rell.test.keypairs.bob, token_chain_constants.listing_fee);
+    val dave = do_create_account(rell.test.keypairs.dave, 0L);
 
     // Bob proposes a token with a minting policy
     val propose_token_op = create_propose_token(
@@ -141,7 +137,7 @@ function test_create_minting_policy_for_token_with_minting_policy() {
 
 function test_cannot_create_minting_policy_for_unknown_token_asset() {
     // Setup
-    val bob = do_create_account(rell.test.keypairs.bob, chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    val bob = do_create_account(rell.test.keypairs.bob, token_chain_constants.listing_fee);
 
     // Bob proposes a minting policy for a non-existing token
     val proposal_op = propose_minting_policy(
@@ -160,11 +156,11 @@ function test_cannot_create_minting_policy_for_unknown_token_asset() {
 
 function test_only_token_owner_can_propose_minting_policy() {
     // Setup
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    val proposer = setup(token_chain_constants.listing_fee);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
 
     // Create a new account for Dave
-    val dave = do_create_account(rell.test.keypairs.dave, chain_context.args.auth_privkey, 0L);
+    val dave = do_create_account(rell.test.keypairs.dave, 0L);
 
     // Dave cannot propose a minting policy for the Bob's token
     val proposal_op = propose_minting_policy(
@@ -183,7 +179,7 @@ function test_only_token_owner_can_propose_minting_policy() {
 
 function test_minter_cannot_have_multiple_policies_per_token() {
     // Setup
-    val bob = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    val bob = setup(token_chain_constants.listing_fee);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
 
     // Bob proposes a minting policy for the token
@@ -247,7 +243,7 @@ function test_minter_cannot_have_multiple_policies_per_token() {
 
 function test_minting_policy_validation() {
     // Setup
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    val proposer = setup(token_chain_constants.listing_fee);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
     val token = token @ {};
 
@@ -310,13 +306,13 @@ function test_minting_policy_validation() {
 
 function test_get_minting_policy_proposal() {
     // Setup
-    val bob = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    val bob = setup(token_chain_constants.listing_fee);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
 
     val token = token @ {};
 
     // Create a new account for Dave
-    val dave = do_create_account(rell.test.keypairs.dave, chain_context.args.auth_privkey, 0L);
+    val dave = do_create_account(rell.test.keypairs.dave, 0L);
 
     // Bob proposes minting policy for Bob and Dave
     val proposal_op1 = propose_minting_policy(

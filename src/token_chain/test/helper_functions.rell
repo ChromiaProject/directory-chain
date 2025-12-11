@@ -15,7 +15,6 @@ import common_proposal.test.helper_functions.*;
 val account_creation_chain_one = "foo".hash();
 
 function setup(
-    auth_privkey: byte_array,
     initial_mint: big_integer,
     minting_policies: list<minting_policy> = [],
     account_creation_brids: list<byte_array> = [account_creation_chain_one, "bar".hash()]
@@ -23,10 +22,7 @@ function setup(
 
     maybe_init_token_chain();
 
-    val proposer = do_create_account(rell.test.keypairs.bob,
-        x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6",
-        initial_mint
-    );
+    val proposer = do_create_account(rell.test.keypairs.bob, initial_mint);
 
     val propose_op = create_propose_token(
         minting_policy = minting_policies,
@@ -40,18 +36,17 @@ function setup(
     return proposer;
 }
 
-function do_create_account(keypair: rell.test.keypair, auth_privkey: byte_array, initial_mint: big_integer): ft4.accounts.account {
+function do_create_account(keypair: rell.test.keypair, initial_mint: big_integer): ft4.accounts.account {
 
     maybe_init_token_chain();
 
     val eth_address = crypto.eth_privkey_to_address(keypair.priv);
     val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(eth_address, set(["A", "T"]));
 
-    val tx = rell.test.tx().op(
+    rell.test.tx().op(
         ft4.test_operations.register_account(auth_descriptor)
-    ).nop().sign(auth_privkey);
+    ).nop().run();
 
-    tx.run();
     val account_id = eth_address.hash();
     val account = ft4.accounts.account_by_id(account_id);
 
