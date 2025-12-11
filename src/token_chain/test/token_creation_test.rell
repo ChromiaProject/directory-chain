@@ -9,12 +9,8 @@ namespace ft4 {
     import test_utils: lib.ft4.test.core;
 }
 
-struct module_args {
-    auth_privkey: byte_array = x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6";
-}
-
 function test_creating_token_success() {
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    val proposer = setup(token_chain_constants.listing_fee);
     assert_equals(get_account_balance(proposer), 0);
 
     val pool_account = get_pool_account();
@@ -34,7 +30,7 @@ function test_creating_token_success() {
 }
 
 function test_creating_token_refund() {
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    val proposer = setup(token_chain_constants.listing_fee);
 
     val pool_account = get_pool_account();
     assert_equals(get_account_balance(pool_account), token_chain_constants.listing_fee);
@@ -53,7 +49,7 @@ function test_creating_token_refund() {
 }
 
 function test_creating_token_revoke() {
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    val proposer = setup(token_chain_constants.listing_fee);
 
     val pool_account = get_pool_account();
     assert_equals(get_account_balance(pool_account), token_chain_constants.listing_fee);
@@ -87,7 +83,7 @@ function test_creating_token_revoke() {
 function test_propose_token_validation() {
 
     maybe_init_token_chain();
-    val proposer = do_create_account(rell.test.keypairs.bob, chain_context.args.auth_privkey, 2 * token_chain_constants.listing_fee);
+    val proposer = do_create_account(rell.test.keypairs.bob, 2 * token_chain_constants.listing_fee);
 
     // Fail due to invalid decimals
     var propose_op = create_propose_token(decimals = 80);
@@ -180,7 +176,7 @@ function test_propose_token_validation() {
 function test_apply_token_create_validation() {
 
     maybe_init_token_chain();
-    val proposer = do_create_account(rell.test.keypairs.bob, chain_context.args.auth_privkey, 3 * token_chain_constants.listing_fee);
+    val proposer = do_create_account(rell.test.keypairs.bob, 3 * token_chain_constants.listing_fee);
 
     // Success
     var propose_op = create_propose_token();
@@ -213,9 +209,9 @@ function test_apply_token_create_validation() {
 function test_get_token_proposal() {
 
     maybe_init_token_chain();
-    val minting_policy_account1 = do_create_account(rell.test.keypairs.dave, chain_context.args.auth_privkey, token_chain_constants.listing_fee);
-    val minting_policy_account2 = do_create_account(rell.test.keypairs.eve, chain_context.args.auth_privkey, token_chain_constants.listing_fee);
-    val minting_policy_account3 = do_create_account(rell.test.keypairs.frank, chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    val minting_policy_account1 = do_create_account(rell.test.keypairs.dave, token_chain_constants.listing_fee);
+    val minting_policy_account2 = do_create_account(rell.test.keypairs.eve, token_chain_constants.listing_fee);
+    val minting_policy_account3 = do_create_account(rell.test.keypairs.frank, token_chain_constants.listing_fee);
     val account_creation_brid1 = x"B0";
 
     val minting_policies = [
@@ -234,7 +230,6 @@ function test_get_token_proposal() {
     ];
 
     val bob = setup(
-        chain_context.args.auth_privkey,
         token_chain_constants.listing_fee,
         minting_policies = minting_policies,
         account_creation_brids = [account_creation_brid1]

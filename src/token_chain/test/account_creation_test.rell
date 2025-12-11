@@ -11,13 +11,9 @@ namespace ft4 {
     import lib.ft4.accounts.strategies.transfer.fee;
 }
 
-struct module_args {
-    auth_privkey: byte_array = x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6";
-}
-
 function test_account_creation_success() {
     val initial_pool_balance = 1000000000;
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee + 1000000000);
+    val proposer = setup(token_chain_constants.listing_fee + 1000000000);
     assert_equals(pending_token_proposal @ { .common_proposal.rowid == get_latest_common_proposal_id() }.account_creation_brids,
         "foo".hash().to_hex() + "," + "bar".hash().to_hex());
 
@@ -57,7 +53,7 @@ function test_account_creation_success() {
 }
 
 function test_account_creation_fail_when_pool_is_empty() {
-    setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    setup(token_chain_constants.listing_fee);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
 
     val test_token = token @ { };
@@ -87,7 +83,7 @@ function test_account_creation_fail_when_pool_is_empty() {
 }
 
 function test_account_creation_fail_when_pool_balance_is_too_low() {
-    setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee + 1);
+    setup(token_chain_constants.listing_fee + 1);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
 
     val test_token = token @ { };
@@ -118,7 +114,7 @@ function test_account_creation_fail_when_pool_balance_is_too_low() {
 
 function test_account_creation_spam() {
     val initial_pool_balance = 1000000000;
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee + 1000000000);
+    val proposer = setup(token_chain_constants.listing_fee + 1000000000);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
 
     val test_token = token @ { };
@@ -148,7 +144,7 @@ function test_account_creation_spam() {
 
 function test_account_creation_without_proof() {
     val initial_pool_balance = 1000000000;
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee + 1000000000);
+    val proposer = setup(token_chain_constants.listing_fee + 1000000000);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
 
     val test_token = token @ { };
@@ -177,7 +173,7 @@ function test_account_creation_without_proof() {
 function test_account_creation_with_unauthorized_source_chain() {
     val initial_pool_balance = 1000000000;
     val fake_chain = "fake".hash();
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee + 1000000000, account_creation_brids = []);
+    val proposer = setup(token_chain_constants.listing_fee + 1000000000, account_creation_brids = []);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
 
     val test_token = token @ { };
@@ -208,7 +204,7 @@ function test_account_creation_with_unauthorized_source_chain() {
 
 function test_account_creation_with_incorrect_proof_op_name() {
     val initial_pool_balance = 1000000000;
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee + 1000000000);
+    val proposer = setup(token_chain_constants.listing_fee + 1000000000);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
 
     val test_token = token @ { };
@@ -239,7 +235,7 @@ function test_account_creation_with_incorrect_proof_op_name() {
 
 function test_account_creation_with_incorrect_proof_op_arg() {
     val initial_pool_balance = 1000000000;
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee + 1000000000);
+    val proposer = setup(token_chain_constants.listing_fee + 1000000000);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
 
     val test_token = token @ { };

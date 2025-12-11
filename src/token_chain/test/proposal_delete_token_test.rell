@@ -10,12 +10,8 @@ namespace ft4 {
     import lib.ft4.assets;
 }
 
-struct module_args {
-    auth_privkey: byte_array = x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6";
-}
-
 function test_delete_token_success() {
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    val proposer = setup(token_chain_constants.listing_fee);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
 
     val token = token @ {};
@@ -35,7 +31,7 @@ function test_delete_token_success() {
 
 function test_delete_token_fail_due_to_transfer_history() {
     val minter_account_id = crypto.eth_privkey_to_address(rell.test.keypairs.bob.priv).hash();
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee, [minting_policy(
+    val proposer = setup(token_chain_constants.listing_fee, [minting_policy(
         minters = set([minter_account_id]),
         max_supply = 25,
         minting_interval_ms = millis_per_day,
@@ -66,7 +62,7 @@ function test_delete_token_fail_due_to_transfer_history() {
 
 function test_delete_token_fail_due_to_transfer_history_before_apply() {
     val minter_account_id = crypto.eth_privkey_to_address(rell.test.keypairs.bob.priv).hash();
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee, [minting_policy(
+    val proposer = setup(token_chain_constants.listing_fee, [minting_policy(
         minters = set([minter_account_id]),
         max_supply = 25,
         minting_interval_ms = millis_per_day,
@@ -101,7 +97,7 @@ function test_delete_token_fail_due_to_transfer_history_before_apply() {
 
 function test_delete_token_fail_due_to_bridge() {
     val minter_account_id = crypto.eth_privkey_to_address(rell.test.keypairs.bob.priv).hash();
-    val proposer = setup(chain_context.args.auth_privkey, 100000000000, [minting_policy(
+    val proposer = setup(100000000000, [minting_policy(
         minters = set([minter_account_id]),
         max_supply = 25,
         minting_interval_ms = millis_per_day,
@@ -147,7 +143,7 @@ function test_delete_token_fail_due_to_bridge() {
 }
 
 function test_get_delete_token_proposal() {
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    val proposer = setup(token_chain_constants.listing_fee);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
 
     val token = token @ {};

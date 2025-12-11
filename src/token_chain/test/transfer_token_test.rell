@@ -8,12 +8,8 @@ namespace ft4 {
     import test_utils: lib.ft4.test.core;
 }
 
-struct module_args {
-    auth_privkey: byte_array = x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6";
-}
-
 function test_transfer_token_ownership() {
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    val proposer = setup(token_chain_constants.listing_fee);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
 
     val token = token @ {};
@@ -31,7 +27,7 @@ function test_transfer_token_ownership() {
         ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, op)
     ).op(op).run_must_fail("Account not found: '0x00'");
 
-    val charlie_account = do_create_account(rell.test.keypairs.charlie, chain_context.args.auth_privkey, 0L);
+    val charlie_account = do_create_account(rell.test.keypairs.charlie, 0L);
 
     op = offer_token_ownership_transfer(x"AA", charlie_account.id);
     rell.test.tx().op(
@@ -69,14 +65,14 @@ function test_transfer_token_ownership() {
 }
 
 function test_remove_transfer_token_ownership() {
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    val proposer = setup(token_chain_constants.listing_fee);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
 
     val token = token @ {};
     assert_equals(token.owner, proposer);
     assert_equals(token.asset.name, "Test");
 
-    val charlie_account = do_create_account(rell.test.keypairs.charlie, chain_context.args.auth_privkey, 0L);
+    val charlie_account = do_create_account(rell.test.keypairs.charlie, 0L);
 
     var op = offer_token_ownership_transfer(token.asset.id, charlie_account.id);
     rell.test.tx().op(

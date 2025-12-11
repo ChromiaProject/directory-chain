@@ -13,15 +13,11 @@ namespace ft4 {
     import test_utils: lib.ft4.test.core;
 }
 
-struct module_args {
-    auth_privkey: byte_array = x"B563C2BCC29FD0E014FBFC4AF3A69CB6C513C1943DB9A91093886DE18DCBE6C6";
-}
-
 val bridge_contract = x"00".repeat(20);
 val token_contract = x"01".repeat(20);
 
 function test_bridge_creation_success() {
-    val proposer = setup(chain_context.args.auth_privkey,
+    val proposer = setup(
         token_chain_constants.listing_fee + // For token
         token_chain_constants.bridge_fee // for bridge
     );
@@ -104,7 +100,7 @@ function test_bridge_creation_success() {
 }
 
 function test_bridge_can_only_be_added_by_token_owner() {
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee);
+    val proposer = setup(token_chain_constants.listing_fee);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
     val test_token = token @ { };
 
@@ -120,7 +116,7 @@ function test_bridge_can_only_be_added_by_token_owner() {
         )]
     );
 
-    do_create_account(rell.test.keypairs.charlie, chain_context.args.auth_privkey, 1);
+    do_create_account(rell.test.keypairs.charlie, 1);
     rell.test.tx().op(
         ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.charlie.priv, propose_bridge_op)
     ).op(
@@ -130,7 +126,7 @@ function test_bridge_can_only_be_added_by_token_owner() {
 
 function test_bridge_can_only_be_added_with_enough_funds() {
     // Enough funds for register token and 1 bridge
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee + token_chain_constants.bridge_fee);
+    val proposer = setup(token_chain_constants.listing_fee + token_chain_constants.bridge_fee);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
     val test_token = token @ { };
 
@@ -180,7 +176,7 @@ function test_bridge_can_only_be_added_with_enough_funds() {
 
 function test_bridge_refunded_on_reject() {
     // Enough funds for register token and 1 bridge
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee + token_chain_constants.bridge_fee);
+    val proposer = setup(token_chain_constants.listing_fee + token_chain_constants.bridge_fee);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
     val test_token = token @ { };
 
@@ -216,7 +212,7 @@ function test_bridge_refunded_on_reject() {
 }
 
 function test_bridge_proposal_revoke() {
-    val proposer = setup(chain_context.args.auth_privkey,
+    val proposer = setup(
         token_chain_constants.listing_fee + // For token
         token_chain_constants.bridge_fee // for bridge
     );
@@ -271,7 +267,7 @@ function test_bridge_proposal_revoke() {
 }
 
 function test_bridge_proposal_get_query() {
-    val proposer = setup(chain_context.args.auth_privkey, token_chain_constants.listing_fee + token_chain_constants.bridge_fee);
+    val proposer = setup(token_chain_constants.listing_fee + token_chain_constants.bridge_fee);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
     
     val test_token = token @ { };
