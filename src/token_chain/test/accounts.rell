@@ -1,0 +1,208 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import ^.helper_operations.*;
+
+namespace eif {
+    import dynamic_config: lib.eif.dynamic_config_common;
+    import lib.hbridge;
+    import hbridge_erc20: lib.hbridge.erc20;
+}
+
+namespace ft4 {
+    import test_utils: lib.ft4.test.core;
+    import lib.ft4.accounts;
+    import lib.ft4.admin;
+}
+
+val ft4_admin_priv_key = x"00CED79962D1150BF844CACB76310D4746C4426558A7FD9C827B30203DACC4CE";
+val bridge_address = x"00".repeat(20);
+val token_address = x"01".repeat(20);
+
+function test_cant_enable_account_creation_on_deposit_if_no_token_registered() {
+    val proposer = do_create_account(rell.test.keypairs.bob, 0L);
+
+    val enable_account_creation_op = enable_account_creation_on_deposit(x"00".repeat(32),  1);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, enable_account_creation_op),
+        enable_account_creation_op
+    ).run_must_fail("MISSING ASSET");
+}
+
+function test_only_token_owner_can_enable_account_creation_on_deposit() {
+    val bob = setup(token_chain_constants.listing_fee, keypair = rell.test.keypairs.bob);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+    val dave = do_create_account(rell.test.keypairs.dave, 0L);
+
+    val token = token @ {};
+
+    // Dave is not the owner of the token
+    val enable_account_creation_op = enable_account_creation_on_deposit(token.asset.id,  1);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.dave.priv, enable_account_creation_op),
+        enable_account_creation_op
+    ).run_must_fail("Only token owner can enable account creation on deposit");
+}
+
+function test_cant_enable_account_creation_on_deposit_if_no_erc20_registered() {
+    val bob = setup(token_chain_constants.listing_fee);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val token = token @ {};
+
+    val enable_account_creation_op = enable_account_creation_on_deposit(token.asset.id,  1);
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, enable_account_creation_op),
+        enable_account_creation_op
+    ).run_must_fail("No ERC-20 token address registered for asset %s on network %s".format(token.asset.id, 1));
+}
+
+function test_can_enable_account_creation_on_deposit_successfully() {
+    val bob = setup(token_chain_constants.listing_fee + token_chain_constants.bridge_fee);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val token = token @ {};
+    
+    propose_bridge(token, bridge_address, token_address, 1);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+    assert_true(exists(eif.hbridge_erc20.core.bridge_contract @? { bridge_address }));
+
+    // Enable account creation on deposit
+    val enable_account_creation_op = enable_account_creation_on_deposit(token.asset.id,  1);
+    rell.test.tx().nop().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, enable_account_creation_op),
+        enable_account_creation_op
+    ).run();
+
+    // Verify account creation on deposit is enabled
+    assert_true(eif.hbridge.is_account_creation_on_deposit_enabled(1, token_address));
+
+    // Trying to enable account creation on deposit again, should fail
+    val enable_account_creation_again_op = enable_account_creation_on_deposit(token.asset.id,  1);
+    rell.test.tx().nop().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, enable_account_creation_again_op),
+        enable_account_creation_again_op
+    ).run_must_fail("Account creation on deposit is already enabled");
+
+    // Disable account creation on deposit
+    val disable_account_creation_op = disable_account_creation_on_deposit(token.asset.id,  1);
+    rell.test.tx().nop().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, disable_account_creation_op),
+        disable_account_creation_op
+    ).run();
+
+    // Verify account creation on deposit is disabled
+    assert_false(eif.hbridge.is_account_creation_on_deposit_enabled(1, token_address));
+
+    // Disable account creation on deposit again, will not fail
+    val disable_account_creation_again_op = disable_account_creation_on_deposit(token.asset.id,  1);
+    rell.test.tx().nop().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, disable_account_creation_again_op),
+        disable_account_creation_again_op
+    ).run();
+
+    // Enable account creation on deposit again after disabling
+    val enable_account_creation_after_disabling_op = enable_account_creation_on_deposit(token.asset.id,  1);
+    rell.test.tx().nop().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, enable_account_creation_after_disabling_op),
+        enable_account_creation_after_disabling_op
+    ).run();
+
+    // Verify account creation on deposit is enabled again
+    assert_true(eif.hbridge.is_account_creation_on_deposit_enabled(1, token_address));
+}
+
+function test_can_enable_account_creation_on_deposit_for_multiple_networks() {
+    val bob = setup(2 * (token_chain_constants.listing_fee + token_chain_constants.bridge_fee));
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+
+    val token = token @ {};
+
+    // Propose bridge for network 1 and network 2
+    propose_bridge(token, bridge_address, token_address, 1);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+    assert_true(exists(eif.hbridge_erc20.core.bridge_contract @? { bridge_address, .network_id == 1 }));
+    propose_bridge(token, bridge_address, token_address, 2);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+    assert_true(exists(eif.hbridge_erc20.core.bridge_contract @? { bridge_address, .network_id == 2 }));
+
+    // Enable account creation on deposit for network 1
+    val enable_account_creation_on_deposit_op = enable_account_creation_on_deposit(token.asset.id,  1);
+    rell.test.tx().nop().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, enable_account_creation_on_deposit_op),
+        enable_account_creation_on_deposit_op
+    ).run();
+    
+    // Enable account creation on deposit for network 2
+    val enable_account_creation_on_deposit_op_2 = enable_account_creation_on_deposit(token.asset.id,  2);
+    rell.test.tx().nop().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, enable_account_creation_on_deposit_op_2),
+        enable_account_creation_on_deposit_op_2
+    ).run();
+    
+    // Verify account creation on deposit is enabled for network 1 and network 2
+    assert_true(eif.hbridge.is_account_creation_on_deposit_enabled(1, token_address));
+    assert_true(eif.hbridge.is_account_creation_on_deposit_enabled(2, token_address));
+
+    // Disable account creation on deposit for network 1
+    val disable_account_creation_on_deposit_op = disable_account_creation_on_deposit(token.asset.id,  1);
+    rell.test.tx().nop().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, disable_account_creation_on_deposit_op),
+        disable_account_creation_on_deposit_op
+    ).run();
+    
+    // Verify account creation on deposit is disabled for network 1 and enabled for network 2
+    assert_false(eif.hbridge.is_account_creation_on_deposit_enabled(1, token_address));
+    assert_true(eif.hbridge.is_account_creation_on_deposit_enabled(2, token_address));
+}
+
+function test_account_creation_on_deposit() {
+    // This functionality is tested in EIF library. 
+    // Here we just have a sanity check that the functionality is working.
+
+    // Bob creates a token
+    val bob = setup(token_chain_constants.listing_fee + token_chain_constants.bridge_fee);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+    val token = token @ {};
+
+    // Bob registers a bridge
+    propose_bridge(token, bridge_address, token_address, 1);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+    assert_true(exists(eif.hbridge_erc20.core.bridge_contract @? { bridge_address, .network_id == 1 }));
+
+    // Bob enables account creation on deposit
+    val enable_account_creation_on_deposit_op = enable_account_creation_on_deposit(token.asset.id,  1);
+    rell.test.tx().nop().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, enable_account_creation_on_deposit_op),
+        enable_account_creation_on_deposit_op
+    ).run();
+    assert_true(eif.hbridge.is_account_creation_on_deposit_enabled(1, token_address));
+
+    // Dave deposits funds into the bridge and creates an account
+    // Dave's account
+    val auth_descriptor = ft4.test_utils.create_auth_descriptor(rell.test.pubkeys.dave, ["A", "T"]);
+    val account_id = rell.test.pubkeys.dave.hash();
+    val evm_address = crypto.eth_pubkey_to_address(rell.test.pubkeys.eve); // Dave's EVM address
+    assert_null(ft4.accounts.external.get_account_by_id(account_id));
+
+    // Dave deposits funds into the bridge
+    val event = eif.hbridge.deposited_erc20_event(
+        bridge_address = bridge_address,
+        sender = evm_address,
+        token_address = token_address,
+        amount = 123L,
+        beneficiary = x"0000000000000000000000000000000000000000000000000000000000000000",
+        evm_tx_hash = ("TX", 1).hash()
+    );
+    rell.test.tx().nop().op(
+        evm_block_with_deposit_event_op(1, event)
+    ).run();
+    assert_not_null(eif.hbridge.erc20_deposit @? { .sender_address == evm_address, .amount == 123L });
+
+    // Register account
+    rell.test.tx().op(
+        ft4.admin.external.register_account(auth_descriptor)
+    ).sign(ft4_admin_priv_key).run();
+    assert_not_null(ft4.accounts.external.get_account_by_id(account_id));
+}

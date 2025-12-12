@@ -1,0 +1,57 @@
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(enable_account_creation_on_deposit).mount_name,
+    flags = ["T"],
+);
+
+/**
+ * Enable account creation on deposit for a specific token on a specific network.
+ *
+ * @param asset_id FT4 asset id of the token
+ * @param network_id Network ID
+ * @param min_amount Minimum token amount required to create an account on deposit. Default is 1.
+ * @param timeout_days Timeout (in days) to register the account and claim the funds. After this period, the transfer can be recalled by the sender. Default is 10.
+ * @throws If the token owner is not the account that is authenticated
+ * @throws If no token address found for the asset on the network
+ */
+operation enable_account_creation_on_deposit(
+    @size(32) asset_id: byte_array, 
+    network_id: integer, 
+    min_amount: big_integer = 1L,
+    timeout_days: integer = 10,
+) {
+    val account = ft4.auth.authenticate();
+    val asset = ft4.assets.Asset(asset_id);
+    val token = require_token(asset);
+    require(account == token.owner, "Only token owner can enable account creation on deposit");
+
+    val token_address = eif.hbridge_erc20.erc20_asset @? { asset, network_id } ( .token_address ) limit 1;
+    require(exists(token_address), "No ERC-20 token address registered for asset %s on network %s".format(asset_id, network_id));
+    eif.hbridge.enable_account_creation_on_deposit(network_id, token_address, min_amount, timeout_days);
+}
+
+@extend(ft4.auth.auth_handler)
+function () = ft4.auth.add_auth_handler(
+    scope = rell.meta(disable_account_creation_on_deposit).mount_name,
+    flags = ["T"],
+);
+
+/**
+ * Disable account creation on deposit for a specific token on a specific network.
+ *
+ * @param asset_id FT4 asset id of the token
+ * @param network_id Network ID
+ * @throws If the token owner is not the account that is authenticated
+ * @throws If no token address found for the asset on the network
+ */
+operation disable_account_creation_on_deposit(@size(32) asset_id: byte_array, network_id: integer) {
+    val account = ft4.auth.authenticate();
+    val asset = ft4.assets.Asset(asset_id);
+    val token = require_token(asset);
+    require(account == token.owner, "Only token owner can disable account creation on deposit");
+
+    val token_address = eif.hbridge_erc20.erc20_asset @? { asset, network_id } ( .token_address ) limit 1;
+    require(exists(token_address), "No ERC-20 token address registered for asset %s on network %s".format(asset_id, network_id));
+    eif.hbridge.disable_account_creation_on_deposit(network_id, token_address);
+}

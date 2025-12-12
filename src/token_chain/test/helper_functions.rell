@@ -16,22 +16,20 @@ val account_creation_chain_one = "foo".hash();
 
 function setup(
     initial_mint: big_integer,
-    minting_policies: list<minting_policy> = [],
-    account_creation_brids: list<byte_array> = [account_creation_chain_one, "bar".hash()]
+    minting_policy: list<minting_policy> = [],
+    account_creation_brids: list<byte_array> = [account_creation_chain_one, "bar".hash()],
+    keypair: rell.test.keypair = rell.test.keypairs.bob,
 ): ft4.accounts.account {
 
     maybe_init_token_chain();
 
-    val proposer = do_create_account(rell.test.keypairs.bob, initial_mint);
+    val proposer = do_create_account(keypair, initial_mint);
 
-    val propose_op = create_propose_token(
-        minting_policy = minting_policies,
-        account_creation_brids = account_creation_brids
+    propose_test_token(
+        minting_policy = minting_policy,
+        account_creation_brids = account_creation_brids,
+        keypair = keypair
     );
-    rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, propose_op),
-        propose_op
-    ).run();
 
     return proposer;
 }
@@ -81,5 +79,51 @@ function create_propose_token(
     return propose_token(name, symbol, decimals, icon, minting_policy, account_creation_brids);
 }
 
+function propose_test_token(
+    name: text = "Test",
+    symbol: text = "TST",
+    decimals: integer = 6,
+    icon: text = "http://test.com",
+    minting_policy: list<minting_policy> = [],
+    account_creation_brids: list<byte_array> = [],
+    keypair: rell.test.keypair = rell.test.keypairs.bob,
+) {
+    val propose_op = create_propose_token(
+        minting_policy = minting_policy,
+        account_creation_brids = account_creation_brids
+    );
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(keypair.priv, propose_op),
+        propose_op
+    ).run();
+}
+
 function get_latest_common_proposal(proposer: pubkey)
     = get_proposals_by_proposer(proposer) @ {} (@omit @sort_desc .id, $) limit 1;
+
+function propose_bridge(
+    token: token, 
+    bridge_address: byte_array, 
+    token_address: byte_array, 
+    network_id: integer, 
+    keypair: rell.test.keypair = rell.test.keypairs.bob,
+) {
+
+    val propose_bridge_op = propose_token_bridge(
+        token.asset.id,
+        [bridge_configuration(
+            network_id = network_id,
+            bridge_contract = bridge_address,
+            token_contract = token_address,
+            eif.hbridge.bridge_mode.foreign,
+            use_snapshots = false,
+            skip_to_height = 0
+        )]
+    );
+
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(keypair.priv, propose_bridge_op)
+    ).op(
+        propose_bridge_op
+    ).run();
+}
