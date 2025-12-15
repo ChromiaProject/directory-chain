@@ -63,7 +63,7 @@ function test_can_enable_account_creation_on_deposit_successfully() {
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
 
     val token = token @ {};
-    
+
     propose_bridge(token, bridge_address, token_address, 1);
     vote_yes_on_latest_proposal(rell.test.keypairs.alice);
     assert_true(exists(eif.hbridge_erc20.core.bridge_contract @? { bridge_address }));
@@ -76,7 +76,7 @@ function test_can_enable_account_creation_on_deposit_successfully() {
     ).run();
 
     // Verify account creation on deposit is enabled
-    assert_true(eif.hbridge.is_account_creation_on_deposit_enabled(1, token_address));
+    assert_true(is_account_creation_on_deposit_enabled(token.asset.id, 1));
 
     // Trying to enable account creation on deposit again, should fail
     val enable_account_creation_again_op = enable_account_creation_on_deposit(token.asset.id,  1);
@@ -93,7 +93,7 @@ function test_can_enable_account_creation_on_deposit_successfully() {
     ).run();
 
     // Verify account creation on deposit is disabled
-    assert_false(eif.hbridge.is_account_creation_on_deposit_enabled(1, token_address));
+    assert_false(is_account_creation_on_deposit_enabled(token.asset.id, 1));
 
     // Disable account creation on deposit again, will not fail
     val disable_account_creation_again_op = disable_account_creation_on_deposit(token.asset.id,  1);
@@ -110,7 +110,7 @@ function test_can_enable_account_creation_on_deposit_successfully() {
     ).run();
 
     // Verify account creation on deposit is enabled again
-    assert_true(eif.hbridge.is_account_creation_on_deposit_enabled(1, token_address));
+    assert_true(is_account_creation_on_deposit_enabled(token.asset.id, 1));
 }
 
 function test_can_enable_account_creation_on_deposit_for_multiple_networks() {
@@ -142,8 +142,8 @@ function test_can_enable_account_creation_on_deposit_for_multiple_networks() {
     ).run();
     
     // Verify account creation on deposit is enabled for network 1 and network 2
-    assert_true(eif.hbridge.is_account_creation_on_deposit_enabled(1, token_address));
-    assert_true(eif.hbridge.is_account_creation_on_deposit_enabled(2, token_address));
+    assert_true(is_account_creation_on_deposit_enabled(token.asset.id, 1));
+    assert_true(is_account_creation_on_deposit_enabled(token.asset.id, 2));
 
     // Disable account creation on deposit for network 1
     val disable_account_creation_on_deposit_op = disable_account_creation_on_deposit(token.asset.id,  1);
@@ -153,8 +153,8 @@ function test_can_enable_account_creation_on_deposit_for_multiple_networks() {
     ).run();
     
     // Verify account creation on deposit is disabled for network 1 and enabled for network 2
-    assert_false(eif.hbridge.is_account_creation_on_deposit_enabled(1, token_address));
-    assert_true(eif.hbridge.is_account_creation_on_deposit_enabled(2, token_address));
+    assert_false(is_account_creation_on_deposit_enabled(token.asset.id, 1));
+    assert_true(is_account_creation_on_deposit_enabled(token.asset.id, 2));
 }
 
 function test_account_creation_on_deposit() {
@@ -177,7 +177,7 @@ function test_account_creation_on_deposit() {
         ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.bob.priv, enable_account_creation_on_deposit_op),
         enable_account_creation_on_deposit_op
     ).run();
-    assert_true(eif.hbridge.is_account_creation_on_deposit_enabled(1, token_address));
+    assert_true(is_account_creation_on_deposit_enabled(token.asset.id, 1));
 
     // Dave deposits funds into the bridge and creates an account
     // Dave's account
@@ -205,4 +205,27 @@ function test_account_creation_on_deposit() {
         ft4.admin.external.register_account(auth_descriptor)
     ).sign(ft4_admin_priv_key).run();
     assert_not_null(ft4.accounts.external.get_account_by_id(account_id));
+}
+
+function test_is_account_creation_on_deposit_enabled_query_failures() {
+    val bob = setup(token_chain_constants.listing_fee);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+    val token = token @ {};
+
+    // Wrong asset id: missing asset
+    assert_fails(
+        "MISSING ASSET",
+        is_account_creation_on_deposit_enabled(x"01".repeat(32), 1, *)
+    );
+
+    // No ERC-20 token address registered for asset
+    assert_fails(
+        "No ERC-20 token address registered for asset %s on network %s".format(token.asset.id, 1),
+        is_account_creation_on_deposit_enabled(token.asset.id, 1, *)
+    );
+
+    // No token registered for asset
+    val asset_id = token.asset.id;
+    rell.test.tx().op(remove_token_op(token)).run();
+    assert_fails("No token for asset id found", is_account_creation_on_deposit_enabled(asset_id, 1, *));
 }
