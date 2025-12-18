@@ -1,5 +1,20 @@
 #!/bin/sh -eu
 
+RELEASE_DOTENV_FILE="${CI_PROJECT_DIR}/.library_chain_releases.env"
+
+function append_release {
+  version="$1"
+
+  echo "Appending $LIBRARY_NAME v$version to library chain release variable"
+
+  release_value=";$LIBRARY_NAME:$version"
+  if grep -q LIBRARY_CHAIN_RELEASES "$RELEASE_DOTENV_FILE" &> /dev/null; then
+    sed -i "s/^LIBRARY_CHAIN_RELEASES=.*/&;$release_value/" "$RELEASE_DOTENV_FILE"
+  else
+    echo "LIBRARY_CHAIN_RELEASES=$release_value" > "$RELEASE_DOTENV_FILE"
+  fi
+}
+
 while [ "$#" -gt 0 ]; do
     case $1 in
         -n|--name) LIBRARY_NAME="$2"; shift ;;
@@ -10,7 +25,6 @@ while [ "$#" -gt 0 ]; do
     esac
     shift
 done
-
 
 echo "Library: $LIBRARY_NAME"
 echo "Major: $MAJOR_VERSION"
@@ -51,6 +65,8 @@ if [ "$RID_EXISTING" = "null" ]; then
     --name "$LIBRARY_NAME" \
     --version "$VERSION" \
     --description "$LIBRARY_DESCRIPTION"
+
+  append_release "$VERSION"
 else
 
   if [ "$RID_EXISTING" = "$RID_NEW" ]; then
@@ -96,4 +112,6 @@ else
     --id "com.chromia.$LIBRARY_NAME" \
     --version "$VERSION" \
     --description "$DESCRIPTION"
+
+  append_release "$VERSION"
 fi

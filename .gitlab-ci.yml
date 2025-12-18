@@ -2,7 +2,7 @@ image: registry.gitlab.com/chromaway/core-tools/chromia-cli/chr:0.29.2
 
 include:
   - project: "chromaway/core-infra/gitlab-automation"
-    ref: 1.3.0
+    ref: 1.3.4
     file:
       - templates/release.yml
 
@@ -39,6 +39,9 @@ deploy_library_chain:
     - chr build
     - ci/library_chain/deploy.sh -n begin_block --major 1 --minor 100
     - ci/library_chain/deploy.sh -n transaction_prioritization --major 2 --minor 0 --library-description "Transaction prioritization"
+  artifacts:
+    reports:
+      dotenv: .library_chain_releases.env
 
 test:
   services:
@@ -137,6 +140,7 @@ gitlab-release:
   extends: .gitlab-release-with-notes
   script:
     - echo "Running the release job."
+    - include_library_chain_releases
   release:
     name: 'Directory chain $CI_COMMIT_TAG'
     description: release_notes.md
