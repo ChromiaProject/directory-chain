@@ -22,11 +22,8 @@ function decode_upgrade_container_message(gtv): upgrade_container_message {
                 extra_compute_requests = 0,
             );
         }
-        6 -> {
-            return upgrade_container_message.from_gtv(gtv);
-        }
         else -> {
-            rell.error("Unable to decode upgrade_container_message");
+            return try_call(upgrade_container_message.from_gtv(gtv, *)) ?: rell.error("Unable to decode upgrade_container_message");
         }
     }
 }
@@ -42,6 +39,11 @@ function receive_upgrade_container_impl(body: gtv) {
     val container = container @? { message.container_name };
     if (container == null) {
         send_upgrade_container_result(message, "Unable to upgrade non-existing container %s".format(message.container_name));
+        return;
+    }
+
+    if (message.require_empty_container and exists(container_blockchain @* { container })) {
+        send_upgrade_container_result(message, "Unable to upgrade non-empty container %s which is required to be empty".format(message.container_name));
         return;
     }
 

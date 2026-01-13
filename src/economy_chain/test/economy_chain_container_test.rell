@@ -950,6 +950,19 @@ function test_upgrade_container_lower_total_storage_no_space_state_available() {
     ).op(
         upgrade_container(container_name, 1, 15, cluster_name, 1)
     ).run();
+
+    assert_events(("icmf_message", (
+        topic = upgrade_container_topic,
+        body = upgrade_container_message(
+            ticket_id = 35,
+            container_name = container_name,
+            container_units = 1,
+            extra_storage = 1024 * 15,
+            cluster_name = cluster_name,
+            extra_compute_requests = 0,
+            require_empty_container = true, // Require this container to be empty due to the lack of storage information
+        ).to_gtv()
+    ).to_gtv_pretty()));
 }
 
 function test_upgrade_container_lower_total_storage_with_too_old_anchoring_data() {
@@ -972,7 +985,7 @@ function test_upgrade_container_lower_total_storage_with_too_old_anchoring_data(
         ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, upgrade_container(container_name, 1, 15, cluster_name, 1))
     ).op(
         upgrade_container(container_name, 1, 15, cluster_name, 1)
-    ).run_must_fail("Can't reduce space: Container space data is too old to be able to continue");
+    ).run_must_fail("Can't reduce space: Container space information is too old to be able to continue");
 }
 
 function test_upgrade_container_with_extra_compute_fail_when_no_support_in_cluster() {
@@ -1049,7 +1062,7 @@ function test_upgrade_container_lower_total_storage_too_old_space_data() {
         ft4.test_utils.evm_auth_operation_for(rell.test.privkeys.alice, upgrade_container(container_name, 1, 15, cluster_name, 1))
     ).op(
         upgrade_container(container_name, 1, 15, cluster_name, 1)
-    ).run_must_fail("Can't reduce space: Container space data is too old to be able to continue");
+    ).run_must_fail("Can't reduce space: Container space information is too old to be able to continue");
 }
 
 function test_upgrade_container_lower_total_storage_success() {
