@@ -77,6 +77,9 @@ function receive_ticket_container_result_message(body: gtv) {
                     } else {
                         current_subnode_image = null;
                     }
+                    val current_lease_subnode_jar_extensions = lease_subnode_jar_extension @* { current_lease };
+                    val current_subnode_jar_extensions = current_lease_subnode_jar_extensions @* { }.subnode_jar_extension;
+                    delete current_lease_subnode_jar_extensions;
                     delete current_lease;
                     val new_lease = create lease(
                         container_name = upgraded_container_name,
@@ -91,6 +94,9 @@ function receive_ticket_container_result_message(body: gtv) {
                     );
                     if (current_subnode_image != null) {
                         create lease_subnode_image(new_lease, current_subnode_image);
+                    }
+                    for (current_subnode_jar_extension in current_subnode_jar_extensions) {
+                        create lease_subnode_jar_extension(new_lease, current_subnode_jar_extension);
                     }
                     transfer_bridge_leases_to_lease(new_lease, bridge_leases);
                     transfer_dapp_providers_to_lease(new_lease, lease_dapp_providers);
@@ -150,6 +156,7 @@ function receive_ticket_container_result_message(body: gtv) {
                     val lease = lease @ { .container_name == specific_ticket.container_name };
                     on_lease_expired(lease);
                     on_expired_lease_removed(lease);
+                    delete lease_subnode_jar_extension @* { lease };
                     delete lease_subnode_image @? { lease };
                     delete lease;
                 }
