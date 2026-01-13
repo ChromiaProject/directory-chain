@@ -490,6 +490,17 @@ function test_precise_configuration_update_rejected_invalid_sync_exts() {
     ).sign(initial_provider).run_must_fail("Some of the configured synchronization infrastructure extensions are not in the allowed set");
 }
 
+function test_precise_configuration_update_rejected_invalid_rell_native_functions() {
+    val (anchor_chain, bc_rid) = setup();
+
+    val config_with_invalid_gtx_modules = apply_required_configuration_properties([
+        "gtx": ["rell": ["native": ["my_module": "net.postchain.UnknownFunction"].to_gtv()]].to_gtv()
+    ]);
+    rell.test.tx().op(
+        propose_configuration(initial_provider.pub, bc_rid, config_with_invalid_gtx_modules.to_gtv_pretty().to_bytes(), "")
+    ).sign(initial_provider).run_must_fail("Some of the configured Rell native function classes are not in the allowed set");
+}
+
 function test_invalid_add_primary_key_to_header_configuration() {
     val (anchor_chain, bc_rid) = setup();
 

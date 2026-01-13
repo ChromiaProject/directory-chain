@@ -77,7 +77,7 @@ function setup_blockchain_configuration_validation() {
 
     rell.test.tx().op(
         propose_subnode_image(alice.pubkey, "subnode_image1", "url", "digest", subnode_image_type.COMMON,
-            "one", "some.gtx.module,other.gtx.module", "")
+            "one", "some.gtx.module,other.gtx.module", "", native_functions = "some.rell.function")
     ).sign(rell.test.keypairs.alice).run();
     bob_votes();
 
@@ -659,6 +659,24 @@ function test_propose_scheduled_configuration() {
 
     val attempt = get_blockchain_configuration_update_attempt_state_by_proposal(proposal_id)!!;
     assert_equals(attempt.state, blockchain_configuration_update_state.PENDING);
+}
+
+function test_blockchain_configuration_rell_native_function_validation() {
+    val (container, alice, bob) = setup_blockchain_configuration_validation();
+
+    var conf0 = apply_required_configuration_properties();
+    conf0["gtx"] = ["rell": ["native": ["my_module": "some.rell.function"]]].to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf0.to_gtv().to_bytes(), "foo_chain", container)
+    ).sign(rell.test.keypairs.alice)
+        .run();
+
+    var conf1 = apply_required_configuration_properties();
+    conf1["gtx"] = ["rell": ["native": ["my_module": "invalid.rell.function"]]].to_gtv();
+    rell.test.tx().op(
+        propose_blockchain(alice.pubkey, conf1.to_gtv().to_bytes(), "foo_chain", container)
+    ).sign(rell.test.keypairs.alice)
+        .run_must_fail("Some of the configured Rell native function classes are not in the allowed set");
 }
 
 function force_config(brid: byte_array, conf: map<text, gtv>, height: integer, resume_chain: boolean) {
