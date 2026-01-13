@@ -24,6 +24,7 @@ struct module_args {
 
     /** When set require the specific EIF snapshot version in chain configs, or accept any version when null */
     require_eif_snapshot_version: integer? = null;
+    allowed_dapp_chain_native_functions: gtv;
 }
 
 function validate_blockchain_configuration(blockchain?, container, config_data: byte_array, signers: boolean, header_hash: boolean, system_chain: boolean) {
@@ -79,21 +80,25 @@ function validate_blockchain_configuration(blockchain?, container, config_data: 
     if (not system_chain) {
         val allowed_gtx_modules = set<text>.from_gtv(chain_context.args.allowed_dapp_chain_gtx_modules);
         val allowed_sync_exts = set<text>.from_gtv(chain_context.args.allowed_dapp_chain_sync_exts);
+        val allowed_native_functions = set<text>.from_gtv(chain_context.args.allowed_dapp_chain_native_functions);
 
         val subnode_image = container_subnode_image @? { container } (.subnode_image);
         if (subnode_image != null) {
             if (not subnode_image.gtx_modules.empty()) allowed_gtx_modules.add_all(subnode_image.gtx_modules.split(','));
             if (not subnode_image.sync_exts.empty()) allowed_sync_exts.add_all(subnode_image.sync_exts.split(','));
+            if (not subnode_image.native_functions.empty()) allowed_native_functions.add_all(subnode_image.native_functions.split(','));
         }
 
         for (jar_extension in container_subnode_jar_extension @* { container } (.subnode_jar_extension)) {
             if (not jar_extension.gtx_modules.empty()) allowed_gtx_modules.add_all(jar_extension.gtx_modules.split(','));
             if (not jar_extension.sync_exts.empty()) allowed_sync_exts.add_all(jar_extension.sync_exts.split(','));
+            if (not jar_extension.native_functions.empty()) allowed_native_functions.add_all(jar_extension.native_functions.split(','));
         }
 
         validate_gtx_modules(config_map, allowed_gtx_modules);
         validate_sync_exts(config_map, allowed_sync_exts);
         validate_sync_infra(config_map);
+        validate_native_functions(config_map, allowed_native_functions);
     }
 
     validate_compression(config_map);
@@ -186,6 +191,18 @@ function validate_gtx_modules(config_map: map<text, gtv>, allowed_gtx_modules: s
         require(
             configured_gtx_modules == null or allowed_gtx_modules.contains_all(list<text>.from_gtv(configured_gtx_modules)),
             "Some of the configured GTX modules are not in the allowed set %s".format(allowed_gtx_modules)
+        );
+    }
+}
+
+function validate_native_functions(config_map: map<text, gtv>, allowed_native_functions: set<text>) {
+    val configured_gtx = config_map.get_or_null("gtx");
+    val rell_config = if (configured_gtx != null) map<text, gtv>.from_gtv(configured_gtx).get_or_null("rell") else null;
+    if (rell_config != null) {
+        val configured_native_functions = map<text, gtv>.from_gtv(rell_config).get_or_null("native");
+        require(
+            configured_native_functions == null or allowed_native_functions.contains_all(map<text, text>.from_gtv(configured_native_functions).values()),
+            "Some of the configured Rell native function classes are not in the allowed set %s".format(allowed_native_functions)
         );
     }
 }

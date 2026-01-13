@@ -26,16 +26,25 @@ Module args for `common.queries` module:
 
 Module args for `proposal_blockchain` module:
 
-| Name                             | Description                                          | Type      | Required           | Default |
-|----------------------------------|------------------------------------------------------|-----------|--------------------|---------|
-| `max_config_path_depth`          | Maximum configuration path depth.                    | integer   | :white_check_mark: |         |
-| `max_config_size`                | Maximum config size.                                 | integer   | :white_check_mark: |         |
-| `max_block_size`                 | Maximum block size.                                  | integer   | :white_check_mark: |         |
-| `min_inter_block_interval`       | Minimum inter block interval in milliseconds.        | integer   | :white_check_mark: |         |
-| `min_max_block_time`             | Minimum custom maxblocktime setting in milliseconds. | integer   |                    | 0       |
-| `min_fast_revolt_status_timeout` | Minimum fast revolt status timeout in milliseconds.  | integer   | :white_check_mark: |         |
-| `allowed_dapp_chain_gtx_modules` | Allowed dapp chain gtx modules.                      | set<text> | :white_check_mark: |         |
-| `allowed_dapp_chain_sync_exts`   | Allowed dapp chain sync extensions.                  | set<text> | :white_check_mark: |         |
+| Name                                                     | Description                                                                      | Type      | Required           | Default |
+|----------------------------------------------------------|----------------------------------------------------------------------------------|-----------|--------------------|---------|
+| `max_config_path_depth`                                  | Maximum configuration path depth.                                                | integer   | :white_check_mark: |         |
+| `max_config_size`                                        | Maximum config size.                                                             | integer   | :white_check_mark: |         |
+| `max_block_size`                                         | Maximum block size.                                                              | integer   | :white_check_mark: |         |
+| `min_inter_block_interval`                               | Minimum inter block interval in milliseconds.                                    | integer   | :white_check_mark: |         |
+| `min_max_block_time`                                     | Minimum custom maxblocktime setting in milliseconds.                             | integer   |                    | 0       |
+| `min_fast_revolt_status_timeout`                         | Minimum fast revolt status timeout in milliseconds.                              | integer   | :white_check_mark: |         |
+| `allowed_dapp_chain_gtx_modules`                         | Allowed dapp chain gtx modules.                                                  | set<text> | :white_check_mark: |         |
+| `allowed_dapp_chain_sync_exts`                           | Allowed dapp chain sync extensions.                                              | set<text> | :white_check_mark: |         |
+| `allowed_blockchain_features`                            | Blockchain features allowed to be used.                                          | set<text> | :white_check_mark: |         |
+| `required_blockchain_features`                           | Blockchain features required to be used.                                         | set<text> | :white_check_mark: |         |
+| `require_min_merkle_hash_version`                        | Minimum allowed merkle hash version.                                             | integer   | :white_check_mark: |         |
+| `require_min_merkle_hash_version_ignore_existing_chains` | Ignore existing chain updates when checking minimum allowed merkle hash version. | boolean   |                    | false   |
+| `require_revolt_when_should_build_block`                 | Require that "revolt when should build block" feature is activated.              | boolean   |                    | true    |
+| `require_add_primary_key_to_header`                      | Require that block builder node key is added to block header.                    | boolean   |                    | true    |
+| `require_positive_eif_skip_to_height`                    | Require all EIF skip to height configurations to be positive.                    | boolean   |                    | true    |
+| `require_eif_snapshot_version`                           | Minimum allowed version for EIF snapshots, set to `null` to accept any version.  | integer?  |                    | null    |
+| `allowed_dapp_chain_native_functions`                    | Allowed dapp chain Rell native function implementations.                         | set<text> | :white_check_mark: |         |
 
 Module args for `proposal_blockchain_move` module:
 
@@ -171,6 +180,8 @@ From economy-chain:
           - "merkle_hash_version"
         require_eif_snapshot_version: 2
         require_min_merkle_hash_version: 2
+        allowed_dapp_chain_native_functions:
+          - "net.postchain.d1.BlockWitnessRellNative"
       node_software_version:
         node_image:
           url: registry.gitlab.com/chromaway/postchain-chromia/chromaway/chromia-server
