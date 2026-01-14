@@ -8,6 +8,8 @@ import common.test.setup.*;
 import direct_container.*;
 import direct_cluster.*;
 import proposal_provider.*;
+import proposal_subnode_image.*;
+import proposal_subnode_jar_extension.*;
 
 function test_move_container_blockchains() {
     // setup
@@ -34,6 +36,8 @@ function test_move_container_blockchains() {
         .container_resource_limit_type == container_resource_limit_type.container_units
     }.value, 2);
     assert_not_null(moving_blockchain @? { bc_to_be_moved });
+    assert_equals(container_subnode_image @ { .container == destination_container }.subnode_image.name, "subnode_image1");
+    assert_equals(container_subnode_jar_extension @ { .container == destination_container }.subnode_jar_extension.name, "subnode_jar_extension1");
     assert_equals(src_container.state, container_state.MIGRATING);
 
     // Assert that new bcs can't be added to the migrating container
@@ -71,11 +75,13 @@ function setup_migratable_container() {
     val second_node_data = register_node_data(second_node_pubkey, host = "", port = 0, api_url = "", territory = "SE", clusters = ["s2"], cluster_units = 1, extra_storage = 0);
 
     rell.test.tx().op(
+        propose_subnode_image(initial_provider.pub, "subnode_image1", "url", "digest", subnode_image_type.COMMON, "one", "", ""),
+        propose_subnode_jar_extension(initial_provider.pub, "subnode_jar_extension1", x"00", subnode_jar_extension_type.COMMON, "one", "", ""),
         register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
         propose_provider_is_system(initial_provider.pub, rell.test.pubkeys.bob, true),
         // s1 / c1
         create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
-        create_container(initial_provider.pub, "c1", "s1", 0, [initial_provider.pub]),
+        create_container_with_resource_limits_and_jar_extensions(initial_provider.pub, "c1", "s1", 0, [initial_provider.pub], map<container_resource_limit_type, integer>(), ["subnode_jar_extension1"], "subnode_image1"),
         update_node_with_units(initial_provider.pub, node0.pubkey, cluster_units = 2),
         add_node_to_cluster(initial_provider.pub, node0.pubkey, "s1"),
         // s2

@@ -523,6 +523,26 @@ operation upgrade_container(container_name: text, upgraded_container_units: inte
     require(upgraded_extra_compute_requests == 0 or cluster.tag.extra_compute_request_price > 0,
         "Cluster does not support extra compute requests");
 
+    if (cluster != lease.cluster) {
+        val lease_subnode_image = lease_subnode_image @? { lease };
+        if (lease_subnode_image != null) {
+            require(
+                lease_subnode_image.subnode_image.subnode_image_type == subnode_image_type.COMMON or
+                exists(cluster_subnode_image @? { cluster, lease_subnode_image.subnode_image }),
+                "Cluster does not support current container lease subnode image %s".format(lease_subnode_image.subnode_image.name)
+            );
+        }
+
+        val lease_subnode_jar_extensions = lease_subnode_jar_extension @* { lease };
+        for (lease_subnode_jar_extension in lease_subnode_jar_extensions) {
+            require(
+                lease_subnode_jar_extension.subnode_jar_extension.subnode_jar_extension_type == subnode_jar_extension_type.COMMON or
+                exists(cluster_subnode_jar_extension @? { cluster, lease_subnode_jar_extension.subnode_jar_extension }),
+                "Cluster does not support current container lease subnode JAR extension %s".format(lease_subnode_jar_extension.subnode_jar_extension.name)
+            );
+        }
+    }
+
     val cost = calculate_container_cost(upgraded_duration_weeks, upgraded_container_units, upgraded_extra_storage_gib, cluster.tag, upgraded_extra_compute_requests)
         - if (lease.expired) 0 else calculate_remaining_lease_value(lease, op_context.last_block_time);
     if (cost > 0) {

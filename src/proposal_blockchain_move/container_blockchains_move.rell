@@ -46,6 +46,27 @@ function move_container_blockchains_impl(
     val pb = pending_blockchain @? { src_container };
     require(empty(pb), "Container bcs cannot be moved due to a pending proposal %s related to it".format(pb?.proposal));
 
+    // require extensions allowed in destination cluster
+    val container_subnode_image = container_subnode_image @? { src_container }.subnode_image;
+    val container_subnode_jar_extensions = container_subnode_jar_extension @* { src_container }.subnode_jar_extension;
+    if (src_cluster != dst_cluster) {
+        if (container_subnode_image != null) {
+            require(
+                container_subnode_image.subnode_image_type == subnode_image_type.COMMON or
+                exists(cluster_subnode_image @? { dst_cluster, container_subnode_image }),
+                "Destination cluster does not support source container subnode image %s".format(container_subnode_image.name)
+            );
+        }
+
+        for (container_subnode_jar_extension in container_subnode_jar_extensions) {
+            require(
+                container_subnode_jar_extension.subnode_jar_extension_type == subnode_jar_extension_type.COMMON or
+                exists(cluster_subnode_jar_extension @? { dst_cluster, container_subnode_jar_extension }),
+                "Destination cluster does not support source container subnode JAR extension %s".format(container_subnode_jar_extension.name)
+            );
+        }
+    }
+
     // create dst container
     val new_name = increment_move_counter_in_name(src_container.name);
     val new_deployers = voter_set_member @* { src_container.deployer } (.provider.pubkey);
@@ -57,6 +78,12 @@ function move_container_blockchains_impl(
         destination_container_extra_storage,
         destination_container_extra_compute_requests,
     );
+    if (container_subnode_image != null) {
+        create container_subnode_image(dst_container, container_subnode_image);
+    }
+    for (ext in container_subnode_jar_extensions) {
+        create container_subnode_jar_extension(dst_container, ext);
+    }
 
     // moving
     val src_nodes = cluster_node @* { .cluster == src_cluster }.node;
