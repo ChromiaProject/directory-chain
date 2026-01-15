@@ -1,5 +1,7 @@
 #!/bin/sh -eu
 
+export POSTCHAIN_CLIENT_PUBKEY="${LIBRARY_CHAIN_PUBLIC_KEY}"
+export POSTCHAIN_CLIENT_PRIVKEY="${LIBRARY_CHAIN_PRIVATE_KEY}"
 RELEASE_DOTENV_FILE="${CI_PROJECT_DIR}/.library_chain_releases.env"
 
 function append_release {
@@ -34,7 +36,7 @@ if [ -n "${LIBRARY_DESCRIPTION+x}" ]; then
 fi
 echo
 
-XML_CONF="build/$LIBRARY_NAME.xml"
+XML_CONF="${CHR_BUILD_PATH:-build}/$LIBRARY_NAME.xml"
 if [ ! -f "$XML_CONF" ]; then
   echo "Missing configuration: $XML_CONF"
   exit 1
