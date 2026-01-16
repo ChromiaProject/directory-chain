@@ -449,6 +449,57 @@ function test_remove_node() {
     assert_true(empty(node @? { np1_node_key }));
 }
 
+function test_remove_cluster_node() {
+    setup_module();
+
+    // setup
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, node_provider1.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, node_provider1.pub, true),
+        create_cluster(initial_provider.pub, "cluster1", voter_sets.system_p, [initial_provider.pub, node_provider1.pub]),
+        create_cluster(initial_provider.pub, "cluster2", voter_sets.system_p, [initial_provider.pub, node_provider1.pub]),
+        create_cluster(initial_provider.pub, "cluster3", voter_sets.system_p, [initial_provider.pub]),
+        register_node_with_node_data(initial_provider.pub, register_node_data(np2_node_key, host = "host", port = 7777, api_url = "http://host/api_url", clusters=["cluster3"], cluster_units = 10)),
+    ).sign(initial_provider).run();
+
+    rell.test.tx().op(
+        register_node_with_node_data(node_provider1.pub, register_node_data(np1_node_key, host = "host", port = 7777, api_url = "http://host/api_url", clusters=["cluster1", "cluster2"], cluster_units = 10))
+    ).sign(node_provider1).run();
+
+    // asserts
+    // Cluster must exist
+    rell.test.tx().op(
+        remove_cluster_node(initial_provider.pub, "non-existing-cluster", np1_node_key)
+    ).sign(initial_provider).run_must_fail("Cluster non-existing-cluster not found");
+
+    // Node must be part of it
+    rell.test.tx().op(
+        remove_cluster_node(initial_provider.pub, "cluster3", np1_node_key)
+    ).sign(initial_provider).run_must_fail("Node is not part of this cluster");
+
+    // NP1 can't remove IPs nodes
+    rell.test.tx().op(
+        remove_cluster_node(node_provider1.pub, "cluster3", np2_node_key)
+    ).sign(node_provider1).run_must_fail("Non system provider is only allowed to remove own nodes");
+
+    assert_not_null(cluster_node @? { .node.pubkey == np1_node_key, .cluster.name == "cluster1" });
+    assert_not_null(cluster_node @? { .node.pubkey == np1_node_key, .cluster.name == "cluster2" });
+
+    // IP can remove NP1s node
+    rell.test.tx().op(
+        remove_cluster_node(initial_provider.pub, "cluster1", np1_node_key)
+    ).sign(initial_provider).run();
+
+    assert_null(cluster_node @? { .node.pubkey == np1_node_key, .cluster.name == "cluster1" });
+
+    // NP1s can remove its own node
+    rell.test.tx().op(
+        remove_cluster_node(node_provider1.pub, "cluster2", np1_node_key)
+    ).sign(node_provider1).run();
+
+    assert_null(cluster_node @? { .node.pubkey == np1_node_key, .cluster.name == "cluster2" });
+}
+
 function _get_node_data(provider)
     = node @ { provider } ( _ = .host, _ = .port, _ = .api_url, _ = .last_updated, _ = .cluster_units );
 

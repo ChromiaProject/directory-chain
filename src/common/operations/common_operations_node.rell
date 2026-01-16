@@ -246,6 +246,46 @@ operation disable_node(my_pubkey: pubkey, node_pubkey: pubkey) {
 }
 
 /**
+ * Remove a node and its replicas from a specific cluster. This will not disable the node, or remove the node from the network.
+ *
+ * Permission: node provider: (SP, NP, SP > NP)
+ *
+ * Rate limit: actions
+ *
+ * @param my_pubkey pubkey of provider
+ * @param cluster_name name of cluster to remove node from
+ * @param node_pubkey pubkey of node to remove
+ */
+operation remove_cluster_node(my_pubkey: pubkey, cluster_name: text, node_pubkey: pubkey) {
+    val provider = require_is_provider_with_rate_limit(my_pubkey);
+    val node_to_remove = require_node(node_pubkey);
+    val cluster = require_cluster(cluster_name);
+    val cluster_node = cluster_node @? { cluster, node_to_remove };
+    val replica_cluster_node = cluster_replica_node @? { cluster, node_to_remove };
+    require(cluster_node != null or replica_cluster_node != null, "Node is not part of this cluster");
+
+    if (provider != node_to_remove.provider) {
+        require(roles.has_system_access(provider), "Non system provider is only allowed to remove own nodes");
+        require(
+            node_to_remove.provider.tier == provider_tier.NODE_PROVIDER and not(node_to_remove.provider.system),
+            "System provider is only allowed to remove nodes of non system provider");
+    }
+
+    // cluster nodes
+    if (cluster_node != null) {
+        update_configuration_signers(cluster, node_to_remove);
+        delete cluster_node;
+        after_node_removed_from_cluster(node_to_remove, cluster);
+    }
+
+    // cluster replica nodes
+    if (replica_cluster_node != null) {
+        delete replica_cluster_node;
+        after_replica_node_removed_from_cluster(node_to_remove, cluster);
+    }
+}
+
+/**
  * Remove node.
  * 
  * Permission: node provider (owner)
