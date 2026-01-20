@@ -249,3 +249,54 @@ function require_pending_proposal_for_details(proposal: common_proposal) = requi
     proposal.state == common_proposal_state.PENDING, 
     "Proposal %s is %s. Details can only be retrieved for pending proposals".format(proposal.rowid, proposal.state)
 );
+
+object migration_completed {
+    mutable duplicated_deposits: boolean = false;
+}
+
+@extend(on_begin_block) function begin_block_migration(height: integer) {
+    if (not try_call(__duplicated_deposits_migration(*))) {
+        log("Failed to handle duplicated deposits");
+    }
+}
+
+function __duplicated_deposits_migration() {
+    if (not migration_completed.duplicated_deposits) {
+        handle_duplicated_deposits();
+        migration_completed.duplicated_deposits = true;
+    }
+}
+    
+function handle_duplicated_deposits() {
+    log("Handling duplicated deposits");
+
+    val total_deposits = eif.hbridge.erc20_deposit @ {} (@sum 1);
+    log("  Total deposits: " + total_deposits);
+
+    val duplicates = find_duplicates();
+    log("  Duplicate deposit groups: " + duplicates.size());
+
+    for ((evm_tx_hash, deposits) in duplicates) {
+        log("  Duplicate deposit with evm_tx_hash: " + evm_tx_hash);
+        log("    Deposits: " + deposits.size());
+        for (deposit in deposits) {
+            log("    %d".format(deposit.rowid) + ": " + deposit.to_struct().to_gtv_pretty());
+        }
+    }
+
+    // Remove duplicate deposits
+    for ((evm_tx_hash, deposits) in duplicates) {
+            log("  Removing duplicate deposits with evm_tx_hash: " + evm_tx_hash);
+        for (deposit in deposits.sub(1)) {
+            log("    Removing deposit with rowid: " + deposit.rowid);
+            delete deposit; // Damn, we can't delete deposit since `erc20_completed_deposit_transaction` is @log-ed entity :[
+        }
+    }
+
+    log("Done handling duplicated deposits");
+}
+
+function find_duplicates() : map<byte_array, list<eif.hbridge.erc20_deposit>> = eif.hbridge.erc20_deposit 
+    @* {} (@group .evm_tx_hash, @list $) 
+    @* { $[1].size() > 1 } ($) 
+    @ {} (@map $);

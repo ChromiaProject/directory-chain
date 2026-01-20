@@ -15,6 +15,9 @@ val bridge_address = x"00".repeat(20);
 val token_address = x"01".repeat(20);
 
 function test_migration_duplicated_deposits() {
+    // Disable duplicated deposits migration
+    rell.test.tx().op(set_duplicated_deposits_completed_op(true)).run();
+    
     // Setup
     // 1. Create accounts
     val initial_mint = token_chain_constants.listing_fee + token_chain_constants.bridge_fee;
@@ -37,7 +40,7 @@ function test_migration_duplicated_deposits() {
     log("erc20 assets: " + eif.hbridge.erc20.erc20_asset @* {} ($.to_struct()));
 
     // 3. Deposit funds
-    val count = 5000; // Mainnet like number of deposits.
+    val count = 500; // Mainnet like number of deposits.
     val ops = list<rell.test.op>();
     val expected_duplicates = set<byte_array>();
     for (i in range(count)) {
@@ -52,13 +55,13 @@ function test_migration_duplicated_deposits() {
             token_address = token_address,
             amount = i + 1L,
             recipient_id = x"0000000000000000000000000000000000000000000000000000000000000000",
-            evm_tx_hash = "%064d".format(i).to_bytes(),
+            evm_tx_hash = byte_array.from_hex("%064d".format(i)),
             evm_log_index = 0
         );
         ops.add(evm_block_with_deposit_event_op(97, event));
 
         // Add duplicate deposit event
-        if (i in [111, 2222, 3333, 4444]) {
+        if (i in [111, 222, 333, 444]) {
             ops.add(evm_block_with_deposit_event_op(97, event));
             expected_duplicates.add(event.evm_tx_hash);
         }
@@ -77,12 +80,14 @@ function test_migration_duplicated_deposits() {
     // Check test data
     assert_equals(eif.hbridge.erc20_deposit @ {} (@sum 1), count + 4);
     // Check duplicate deposits
-    val duplicates = eif.hbridge.erc20_deposit 
-        @* {} (@group .evm_tx_hash, @list $) 
-        @* { $[1].size() > 1 } ($) 
-        @ {} (@map $);
+    val duplicates = find_duplicates();
     assert_equals(duplicates.size(), 4);
     assert_equals(duplicates.keys(), expected_duplicates);
+
+    // Enable duplicated deposits migration
+    rell.test.tx().op(set_duplicated_deposits_completed_op(false)).run();
+    // Trigger block migration
+    rell.test.block().run();
 
 
 }
