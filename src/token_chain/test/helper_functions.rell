@@ -34,19 +34,24 @@ function setup(
     return proposer;
 }
 
-function do_create_account(keypair: rell.test.keypair, initial_mint: big_integer): ft4.accounts.account {
+function do_create_account(keypair: rell.test.keypair, initial_mint: big_integer, link_evm_account: boolean = false): ft4.accounts.account {
 
     maybe_init_token_chain();
 
     val eth_address = crypto.eth_privkey_to_address(keypair.priv);
     val auth_descriptor = ft4.accounts.single_sig_auth_descriptor(eth_address, set(["A", "T"]));
+    val account_id = eth_address.hash();
 
+    // Register account
     rell.test.tx().op(
         ft4.test_operations.register_account(auth_descriptor)
     ).nop().run();
-
-    val account_id = eth_address.hash();
     val account = ft4.accounts.account_by_id(account_id);
+
+    // Link EVM address to FT account
+    if (link_evm_account) {
+        link_eoa_account(keypair, keypair, account_id, auth_descriptor.hash());
+    }
 
     if (initial_mint > 0L) {
         rell.test.tx().op(
@@ -55,6 +60,30 @@ function do_create_account(keypair: rell.test.keypair, initial_mint: big_integer
     }
 
     return account;
+}
+
+function link_eoa_account(
+    evm_keypair: rell.test.keypair,
+    ft_keypair: rell.test.keypair,
+    account_id: byte_array,
+    auth_descriptor_id: byte_array
+) {
+    val evm_address = crypto.eth_pubkey_to_address(evm_keypair.pub);
+    val op = eif.hbridge_core.link_evm_eoa_account(evm_address);
+    val message = ft4.test_utils.create_evm_auth_message(op)
+        .replace(ft4.auth.ACCOUNT_ID_PLACEHOLDER, account_id.to_hex().upper_case())
+        .replace(ft4.auth.AUTH_DESCRIPTOR_ID_PLACEHOLDER, auth_descriptor_id.to_hex().upper_case());
+    val signature = ft4.test_utils.evm_sign(message, evm_keypair.priv);
+    rell.test.tx()
+        .op(ft4.auth.evm_signatures([evm_address], [signature]))
+        .op(ft4.auth.external.evm_auth(account_id, auth_descriptor_id, [signature]))
+        .op(op)
+        .nop()
+        .sign(ft_keypair).run();
+    assert_not_null(eif.hbridge_core.evm_eoa_account_link @? { .address == evm_address });
+
+    assert_equals(eif.hbridge_core.get_account_for_eoa_address(evm_address), account_id);
+    assert_equals(eif.hbridge_core.get_eoa_addresses_for_account(account_id), [evm_address]);
 }
 
 function maybe_init_token_chain() {
