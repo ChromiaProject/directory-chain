@@ -1,0 +1,88 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import ^.helper_operations.*;
+
+namespace ft4 {
+    import test_utils: lib.ft4.test.core;
+    import lib.ft4.accounts;
+    import lib.ft4.admin;
+}
+
+val ft4_admin_priv_key = x"00CED79962D1150BF844CACB76310D4746C4426558A7FD9C827B30203DACC4CE";
+val bridge_address = x"00".repeat(20);
+val token_address = x"01".repeat(20);
+
+function test_migration_duplicated_deposits() {
+    // Setup
+    // 1. Create accounts
+    val initial_mint = token_chain_constants.listing_fee + token_chain_constants.bridge_fee;
+    val accounts = [
+        rell.test.keypairs.alice, rell.test.keypairs.bob, rell.test.keypairs.charlie, rell.test.keypairs.dave, 
+        rell.test.keypairs.eve, rell.test.keypairs.frank, rell.test.keypairs.grace, rell.test.keypairs.heidi
+    ];
+    val evm_address = accounts @* {} (crypto.eth_privkey_to_address(.priv));
+    for (account in accounts) {
+        do_create_account(account, initial_mint, link_evm_account = true);
+    }
+
+    // 2. Register token and bridge
+    propose_test_token(name = "MIGRATION TEST", symbol = "MGR", keypair = rell.test.keypairs.alice);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+    val token = token @ {};
+    propose_bridge(token, bridge_address, token_address, network_id = 97, keypair = rell.test.keypairs.alice);
+    vote_yes_on_latest_proposal(rell.test.keypairs.alice);
+    log("Bridge: " + eif.hbridge_erc20.get_bridge_contracts(97));
+    log("erc20 assets: " + eif.hbridge.erc20.erc20_asset @* {} ($.to_struct()));
+
+    // 3. Deposit funds
+    val count = 5000; // Mainnet like number of deposits.
+    val ops = list<rell.test.op>();
+    val expected_duplicates = set<byte_array>();
+    for (i in range(count)) {
+        
+        if (i % 100 == 0) {
+            log("Depositing " + i + " of " + count);
+        }
+
+        val event = eif.hbridge.deposited_erc20_event(
+            bridge_address = bridge_address,
+            sender = evm_address[i % evm_address.size()],
+            token_address = token_address,
+            amount = i + 1L,
+            recipient_id = x"0000000000000000000000000000000000000000000000000000000000000000",
+            evm_tx_hash = "%064d".format(i).to_bytes(),
+            evm_log_index = 0
+        );
+        ops.add(evm_block_with_deposit_event_op(97, event));
+
+        // Add duplicate deposit event
+        if (i in [111, 2222, 3333, 4444]) {
+            ops.add(evm_block_with_deposit_event_op(97, event));
+            expected_duplicates.add(event.evm_tx_hash);
+        }
+
+        // 200 txs per block
+        if (ops.size() > 200) {
+            rell.test.tx().op(ops).run();
+            ops.clear();
+        }
+    }
+    // Run remaining ops
+    if (ops.size() > 0) {
+        rell.test.tx().op(ops).run();
+    }
+
+    // Check test data
+    assert_equals(eif.hbridge.erc20_deposit @ {} (@sum 1), count + 4);
+    // Check duplicate deposits
+    val duplicates = eif.hbridge.erc20_deposit 
+        @* {} (@group .evm_tx_hash, @list $) 
+        @* { $[1].size() > 1 } ($) 
+        @ {} (@map $);
+    assert_equals(duplicates.size(), 4);
+    assert_equals(duplicates.keys(), expected_duplicates);
+
+
+}
