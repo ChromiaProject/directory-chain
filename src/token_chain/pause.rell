@@ -1,0 +1,57 @@
+/**
+ * Any system provider can pause the token chain.
+ * This operation will pause all bridges and crosschain transfers.
+ *
+ * @param my_pubkey Provider public key.
+ */
+operation pause_token_chain(my_pubkey: pubkey) {
+    require_initialized();
+    require(not state.paused, "Token chain is already paused");
+
+    require_is_system_provider_and_signer(my_pubkey);
+    eif.hbridge.pause_hbridge();
+    send_pause_event_to_event_receiver(true);
+    state.paused = true;
+
+    log("Token chain paused by provider %s".format(my_pubkey));
+}
+
+function unpause_token_chain() {
+    eif.hbridge.unpause_hbridge();
+    send_pause_event_to_event_receiver(false);
+    state.paused = false;
+}
+
+function send_pause_event_to_event_receiver(pause: boolean) {
+    val pause_message = eif.dynamic_config.pause_message(pause);
+    send_message(eif.dynamic_config.eif_event_receiver_pause_topic, pause_message.to_gtv());
+}
+
+@extend(ft4.crosschain.before_init_transfer)
+function before_init_crosschain_transfer(
+    sender: ft4.accounts.account,
+    recipient_id: byte_array,
+    ft4.assets.asset,
+    amount: big_integer,
+    hops: list<byte_array>,
+    deadline: timestamp
+) {
+    require(not state.paused, "Crosschain transfers are not allowed when token chain is paused");
+}
+
+@extend(ft4.crosschain.before_apply_transfer)
+function before_apply_crosschain_transfer(
+    sender_blockchain_rid: byte_array,
+    sender_account_id: byte_array,
+    recipient_id: byte_array,
+    ft4.assets.asset,
+    amount: big_integer,
+    hop_index: integer,
+    is_final: boolean
+) {
+    require(not state.paused, "Crosschain transfers are not allowed when token chain is paused");
+}
+
+query is_token_chain_paused() {
+    return state.paused;
+}

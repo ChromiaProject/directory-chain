@@ -1,0 +1,109 @@
+val system_p_voter_set_name = "SYSTEM_P";
+
+enum provider_tier {
+    DAPP_PROVIDER,
+    NODE_PROVIDER
+}
+
+entity provider {
+    key pubkey;
+    mutable system: boolean = false;
+    mutable tier: provider_tier;
+    mutable active: boolean;
+    mutable name: text = "";
+    mutable url: text = "";
+}
+
+function receive_provider_update_message(body: gtv) {
+    val message = decode_provider_update_message(body);
+    var provider = provider @? { message.pubkey };
+
+    if (exists(provider)) {
+        log("Updating provider %s".format(message.pubkey));
+
+        provider.system = message.system;
+        provider.tier = provider_tier.value(message.tier);
+        provider.active = message.active;
+        provider.name = message.name;
+        provider.url = message.url;
+    } else {
+        log("Creating provider %s".format(message.pubkey));
+
+        provider = create provider(pubkey = message.pubkey,
+            system = message.system,
+            tier = provider_tier.value(message.tier),
+            active = message.active,
+            name = message.name,
+            url = message.url,
+        );
+    }
+
+    update_system_p_vote_set(provider);
+}
+
+function receive_provider_auth_update_message(body: gtv) {
+    val message = provider_auth_update_message.from_gtv(body);
+
+    delete provider_auth_threshold @* { .provider_pubkey == message.provider_pubkey };
+    delete provider_auth_key @* { .provider_pubkey == message.provider_pubkey };
+
+    for (key_role in message.key_roles) {
+        // We are only interested in the main type
+        if (key_role.role == provider_key_role.main) {
+
+            for (a_key in key_role.keys) {
+                create provider_auth_key(
+                    provider_pubkey = message.provider_pubkey,
+                    provider_key_role = key_role.role,
+                    pubkey = a_key.pubkey,
+                    active = a_key.active
+                );
+            }
+
+            _set_provider_key_threshold(message.provider_pubkey, key_role.role, key_role.threshold);
+        }
+    }
+}
+
+function update_system_p_vote_set(provider: provider) {
+
+    var system_p_voter_set = common_voter_set @? { system_p_voter_set_name };
+    if (system_p_voter_set == null) {
+        system_p_voter_set = create_common_voter_set_internal(system_p_voter_set_name, vote_type = common_proposal_vote_type.PROVIDER_AUTH);
+    }
+
+    val voter_set_member = common_voter_set_member @? { system_p_voter_set, provider.pubkey };
+
+    if (provider.system and provider.active and voter_set_member == null) {
+        create common_voter_set_member(system_p_voter_set, provider.pubkey);
+        revoke_proposals_for_provider_as_member(provider);
+    } else if ((not provider.system or not provider.active) and voter_set_member != null) {
+        revoke_proposals_for_provider_as_member(provider);
+        delete voter_set_member;
+    }
+}
+
+function revoke_proposals_for_provider_as_member(provider) {
+    var system_p_voter_set = common_voter_set @? { system_p_voter_set_name };
+    if (system_p_voter_set != null) {
+        val system_p_proposals = common_proposal @* { .voter_set == system_p_voter_set, .state == common_proposal_state.PENDING };
+
+        for (proposal in system_p_proposals) {
+            log("Revoke proposal %s due to system provider changes".format(proposal.rowid));
+            proposal.state = common_proposal_state.REVOKED;
+            delete_common_proposal(proposal);
+        }
+    }
+}
+
+function require_system_provider(pubkey) = require(provider @? { .active == true, .system == true, pubkey }, "No active system provider found with pubkey %s".format(pubkey));
+
+/**
+ * Return the system provider entity if found by provider_pubkey.
+ */
+function require_is_system_provider_and_signer(provider_pubkey: pubkey): provider {
+    require(provider_is_signer(provider_pubkey), "Expected system provider signature");
+    return require_system_provider(provider_pubkey);
+}
+
+function require_system_p_voter_set() = require_common_voter_set(system_p_voter_set_name);

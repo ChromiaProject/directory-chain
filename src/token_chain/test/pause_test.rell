@@ -1,0 +1,137 @@
+@test module;
+
+import ^^.*;
+import ^.helper_functions.*;
+import ^.helper_operations.*;
+import common_proposal.test.helper_functions.*;
+import lib.iccf_test.iccf_test_lib.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.assets;
+    import lib.ft4.crosschain;
+    import test_auth: lib.ft4.test.core.auth;
+}
+
+val system_provider_keypair = rell.test.keypairs.alice;
+val system_provider2_keypair = rell.test.keypairs.charlie;
+
+function setup_system_provider() {
+    setup(token_chain_constants.listing_fee);
+    
+    rell.test.tx().op(
+        create_system_provider_op(system_provider_keypair.pub),
+        create_system_provider_op(system_provider2_keypair.pub)
+    ).run();
+}
+
+function test_pause_token_chain_permissions() {
+    setup_system_provider();
+    
+    // Non-system provider cannot pause
+    rell.test.tx().op(
+        pause_token_chain(rell.test.keypairs.bob.pub)
+    ).sign(rell.test.keypairs.bob).run_must_fail("Expected system provider signature");
+    
+    // System provider can pause
+    rell.test.tx().op(
+        pause_token_chain(system_provider_keypair.pub)
+    ).sign(system_provider_keypair).run();
+    
+    assert_true(is_token_chain_paused());
+    
+    // Cannot pause if already paused
+    rell.test.tx().op(
+        pause_token_chain(system_provider_keypair.pub)
+    ).nop().sign(system_provider_keypair).run_must_fail("Token chain is already paused");
+}
+
+function test_crosschain_transfer_restricted_when_paused() {
+    setup_system_provider();
+    
+    rell.test.tx().op(
+        pause_token_chain(system_provider_keypair.pub)
+    ).sign(system_provider_keypair).run();
+    
+    val account = do_create_account(rell.test.keypairs.alice, 100L);
+    val asset = get_asset();
+    val transfer_brid = x"00".repeat(32);
+
+    // Outgoing transfer should fail
+    val init_transfer_op = ft4.crosschain.external.init_transfer(
+        account.id,
+        asset.id,
+        10L,
+        [transfer_brid],
+        integer.MAX_VALUE
+    );
+    rell.test.tx()
+        .op(ft4.test_auth.evm_auth_operation_for(rell.test.keypairs.alice.priv, init_transfer_op))
+        .op(init_transfer_op)
+    .run_must_fail("Crosschain transfers are not allowed when token chain is paused");
+    
+    // Incoming should fail
+    val dummy_init_transfer = gtx_transaction(
+        gtx_transaction_body(
+            blockchain_rid = transfer_brid,
+            operations = [
+                gtx_operation("ft4.ft_auth", [account.id.to_gtv(), (0).to_gtv()]),
+                gtx_operation(
+                    "ft4.crosschain.init_transfer",
+                    [
+                        account.id.to_gtv(),
+                        asset.id.to_gtv(),
+                        10L.to_gtv(),
+                        [chain_context.blockchain_rid].to_gtv(),
+                        integer.MAX_VALUE.to_gtv()
+                    ]
+                )
+            ],
+            signers = []
+        ),
+        signatures = []
+    );
+    val proof_op = iccf_proof_for(transfer_brid, dummy_init_transfer);
+    rell.test.tx()
+        .op(proof_op)
+        .op(
+            ft4.crosschain.external.apply_transfer(
+                init_transfer_tx = dummy_init_transfer,
+                init_tx_op_index = 1,
+                previous_hop_tx = dummy_init_transfer,
+                op_index = 1,
+                hop_index = 0
+            )
+    ).run_must_fail("Crosschain transfers are not allowed when token chain is paused");
+}
+
+function test_unpause_via_proposal() {
+    setup_system_provider();
+    
+    // Pause first
+    rell.test.tx().op(
+        pause_token_chain(system_provider_keypair.pub)
+    ).sign(system_provider_keypair).run();
+    
+    assert_true(is_token_chain_paused());
+    
+    // Propose unpause
+    rell.test.tx().op(
+        propose_unpause_token_chain(system_provider_keypair.pub)
+    ).sign(system_provider_keypair).run();
+
+    // Only one unpause proposal allowed at a time
+    rell.test.tx().op(
+        propose_unpause_token_chain(system_provider_keypair.pub)
+    ).nop().sign(system_provider_keypair).run_must_fail("There is already a pending unpause proposal");
+    
+    // Vote yes
+    vote_yes_on_latest_proposal(system_provider2_keypair);
+    
+    assert_false(is_token_chain_paused());
+    
+    // Cannot unpause if already unpaused
+    rell.test.tx().op(
+        propose_unpause_token_chain(system_provider_keypair.pub)
+    ).nop().sign(system_provider_keypair).run_must_fail("Token chain is not paused");
+}
