@@ -11,6 +11,7 @@ import lib.iccf.*;
 import lib.icmf.*;
 import lib.icmf.receiver.*;
 import lib.begin_block.*;
+import messaging.provider.*;
 
 namespace eif {
     import dynamic_config: lib.eif.dynamic_config_common;
@@ -44,6 +45,7 @@ struct module_args {
 
 object state {
     mutable initialized: boolean = false;
+    mutable paused: boolean = false;
 }
 
 object token_chain_constants {
@@ -213,6 +215,8 @@ query get_token_info(asset_id: byte_array) {
 
     when (topic) {
         eif.messaging.evm_block_events_topic -> eif.messaging.handle_evm_block(eif.messaging.evm_block_message.from_gtv(body));
+        provider_update_topic -> receive_provider_update_message(body);
+        provider_auth_update_topic -> receive_provider_auth_update_message(body);
         else -> log("Unexpected ICMF topic %s".format(topic));
     }
 }

@@ -93,28 +93,6 @@ function receive_provider_update_message(body: gtv) {
     update_system_p_vote_set(provider);
 }
 
-function decode_provider_update_message(gtv): provider_update_message {
-    when (list<gtv>.from_gtv(gtv).size()) {
-        4 -> {
-            val v1 = provider_update_message_v1.from_gtv(gtv);
-            return provider_update_message(
-                pubkey = v1.pubkey,
-                system = v1.system,
-                tier = v1.tier,
-                active = v1.active,
-                name = "",
-                url = "",
-            );
-        }
-        6 -> {
-            return provider_update_message.from_gtv(gtv);
-        }
-        else -> {
-            rell.error("Unable to decode provider_update_message");
-        }
-    }
-}
-
 function receive_provider_auth_update_message(body: gtv) {
     val message = provider_auth_update_message.from_gtv(body);
 

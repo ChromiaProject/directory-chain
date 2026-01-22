@@ -1,0 +1,28 @@
+@extend(apply_common_voting_result_handlers) function() = [common_proposal_type.tc_unpause.name: apply_unpause(*)];
+
+/**
+ * Unpausing token chain requires a supermajority of system provider votes.
+ *
+ * @param my_pubkey Provider public key.
+ */
+operation propose_unpause_token_chain(my_pubkey: pubkey) {
+    require_initialized();
+    require(state.paused, "Token chain is not paused");
+    require(empty(common_proposal @? { common_proposal_type.tc_unpause }), "There is already a pending unpause proposal");
+
+    require_is_system_provider_and_signer(my_pubkey);
+
+    val proposal = create common_proposal(
+        op_context.last_block_time,
+        common_proposal_type.tc_unpause,
+        my_pubkey,
+        require_system_p_voter_set(),
+        description = "Proposing to unpause token chain"
+    );
+
+    internal_common_vote(my_pubkey, proposal, true);
+}
+
+function apply_unpause(proposal: common_proposal) {
+    unpause_token_chain();
+}

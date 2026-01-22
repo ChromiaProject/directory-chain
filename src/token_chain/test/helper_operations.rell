@@ -55,3 +55,23 @@ operation remove_token_op(token: token) {
     delete token_account_minting_policy @* { token };
     delete token;
 }
+
+operation create_system_provider_op(pubkey) {
+    val p = create provider(
+        pubkey = pubkey,
+        system = true,
+        tier = provider_tier.NODE_PROVIDER,
+        active = true,
+        name = "System Provider",
+        url = "http://example.com"
+    );
+    create provider_auth_key(
+        provider_pubkey = pubkey,
+        provider_key_role = provider_key_role.main,
+        pubkey = pubkey,
+        active = true
+    );
+    _set_provider_key_threshold(pubkey, provider_key_role.main, consensus_threshold.super_majority);
+
+    update_system_p_vote_set(p);
+}
