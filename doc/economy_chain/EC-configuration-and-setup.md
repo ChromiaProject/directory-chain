@@ -179,7 +179,7 @@ Example (mainnet config):
 
 libs:
   com.chromia.ft4:
-    version: 1.1.1
+    version: 1.2.0
   price_oracle_messages:
     registry: https://gitlab.com/chromaway/core/price-oracle
     path: src/lib/price_oracle_messages
@@ -187,9 +187,9 @@ libs:
     rid: x"2FFEB18A49FBD81C34225F482FF582071C43C914C5B5A15B16EBB01CE22E76BC"
     insecure: false
   com.chromia.eif:
-    version: 1.0.1
+    version: 1.3.0
   com.chromia.hbridge:
-    version: 1.0.0
+    version: 1.3.0
   transaction_submitter_messaging:
     registry: https://gitlab.com/chromaway/postchain-eif
     path: postchain-eif-rell/rell/src/transaction_submitter/messaging/
