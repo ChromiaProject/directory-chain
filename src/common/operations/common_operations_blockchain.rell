@@ -57,7 +57,7 @@ operation restore_blockchain_configuration(my_pubkey: pubkey, @size(32) blockcha
     require(provider.tier == provider_tier.NODE_PROVIDER, "Transaction must be signed by node provider");
 
     val blockchain = require_blockchain(blockchain_rid);
-    val cluster = container_blockchain @ { blockchain } ( .container ) .cluster;
+    val cluster = get_blockchain_cluster(blockchain);
     val cluster_nodes = cluster_node @* { cluster } (.node);
     require(exists(cluster_nodes @* { provider }), "Transaction must be signed by node provider running this blockchain");
     val cluster_anchoring_chain = cluster_anchoring_chain @ { cluster }.blockchain.rid;
@@ -122,6 +122,15 @@ operation restore_blockchain_configuration(my_pubkey: pubkey, @size(32) blockcha
             compress_and_store_configuration(blockchain, height, original_configuration, true);
         }
         log("Restored configuration for blockchain %s at height %s to match what is anchored".format(blockchain_rid, height));
+    }
+}
+
+function get_blockchain_cluster(blockchain): cluster {
+    if (blockchain.state == blockchain_state.REMOVED) {
+        val cluster_name = inactive_blockchain @ { blockchain }.cluster_name;
+        return require(cluster @? { cluster_name }, "Configuration restoration is not supported for blockchains in removed clusters");
+    } else {
+        return container_blockchain @ { blockchain } ( .container ).cluster;
     }
 }
 
