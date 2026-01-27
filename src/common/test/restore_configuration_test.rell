@@ -336,6 +336,44 @@ function test_restore_anchored_configuration_validation() {
     ).sign(initial_provider).run_must_fail("Signer list must include signer %s since it is present in anchored witness".format(missing_required));
 }
 
+function test_restore_anchored_configuration_on_a_removed_blockchain() {
+    setup_module(system_anchoring_config = ["any": "value".to_gtv()], cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val system_cac = cluster_anchoring_chain @ { system_cluster() }.blockchain;
+
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p),
+        propose_blockchain(initial_provider.pub, apply_required_configuration_properties().to_gtv().to_bytes(),
+            "foo_chain", "container1")
+    ).sign(initial_provider).run();
+    val blockchain = blockchain @ { "foo_chain" };
+
+    val new_faulty_config = apply_required_configuration_properties(["number": (1).to_gtv()])
+        .to_gtv().to_bytes();
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, blockchain.rid, blockchain_action.pause),
+        propose_forced_configuration(initial_provider.pub, blockchain.rid, new_faulty_config, 2, "", true)
+    ).sign(initial_provider).run();
+
+    val applied_forced_config = get_blockchain_configuration(blockchain.rid, 2)!!;
+    assert_not_equals(applied_forced_config.config_hash, blockchain.rid);
+
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, blockchain.rid, blockchain_action.remove)
+    ).sign(initial_provider).run();
+
+    assert_equals(blockchain.state, blockchain_state.REMOVED);
+
+    val mock_anchored_block = make_anchor_block_header(blockchain.rid, 2, blockchain.rid);
+    val mock_anchoring_tx = make_anchoring_transaction(system_cac.rid, blockchain.rid, mock_anchored_block, x"");
+    rell.test.tx().op(
+        iccf_proof_for(system_cac.rid, mock_anchoring_tx),
+        restore_blockchain_configuration(initial_provider.pub, blockchain.rid, 2, mock_anchoring_tx, 0)
+    ).sign(initial_provider).run();
+
+    val applied_restored_config = get_blockchain_configuration(blockchain.rid, 2)!!;
+    assert_equals(applied_restored_config.config_hash, blockchain.rid);
+}
+
 function make_anchor_block_header(blockchain_rid: byte_array, height: integer, config_hash: byte_array) = iccf.block_header(
     blockchain_rid = blockchain_rid,
     previous_block_rid = x"",
