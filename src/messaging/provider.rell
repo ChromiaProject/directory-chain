@@ -23,6 +23,20 @@ struct provider_update_message {
 }
 
 /**
+ * So we can parse legacy messages
+ */
+struct provider_auth_update_message_v1 {
+    provider_pubkey: pubkey;
+    key_roles: list<provider_auth_update_role_v1>;
+}
+
+struct provider_auth_update_role_v1 {
+    role: provider_key_role;
+    threshold: integer;
+    keys: list<pubkey>;
+}
+
+/**
  * The message sent from DC to a receiving chain for each provider key update.
  * Each message will contain all provider keys to let the receiving chain wipe and add.
  */
@@ -60,4 +74,23 @@ function decode_provider_update_message(gtv): provider_update_message {
             rell.error("Unable to decode provider_update_message");
         }
     }
+}
+
+function decode_provider_auth_update_message(gtv): provider_auth_update_message {
+    val decoded_message = try_call(provider_auth_update_message.from_gtv(gtv, *));
+
+    if (decoded_message != null) return decoded_message;
+
+    // Decoding failed so we need to try the legacy format
+    val v1_message = provider_auth_update_message_v1.from_gtv(gtv);
+    return provider_auth_update_message(
+        v1_message.provider_pubkey,
+        v1_message.key_roles @* { } (
+            provider_auth_update_role(
+                .role,
+                .threshold,
+                .keys @* { } (pubkey = $, active = true)
+            )
+        )
+    );
 }
