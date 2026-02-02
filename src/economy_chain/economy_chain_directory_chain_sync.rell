@@ -191,9 +191,12 @@ function receive_node_update_message(body: gtv) {
 
 function receive_cluster_node_update_message(body: gtv) {
     val message = cluster_node_update_message.from_gtv(body);
-    val node = require(node @? { message.pubkey }, "Cannot update cluster node due to missing node %s".format(message.pubkey));
     if (message.deleted) {
-        val cluster = if (exists(message.name)) require(cluster @? { .name == message.name }, "Cannot update cluster node due to missing cluster %s".format(message.name)) else null;
+        val node = node @? { message.pubkey };
+        if (not exists(node)) return; // Node removal was processed before this, should be fine to ignore
+
+        val cluster = if (exists(message.name)) cluster @? { message.name } else null;
+        if (exists(message.name) and empty(cluster)) return; // Cluster removal was processed before this, should be fine to ignore
         if (message.replica_node) {
             if (exists(cluster)) {
                 log("Deleting cluster_replica_node for cluster %s and node %s".format(cluster.name, node.pubkey));
@@ -214,6 +217,7 @@ function receive_cluster_node_update_message(body: gtv) {
             }
         }
     } else {
+        val node = require(node @? { message.pubkey }, "Cannot update cluster node due to missing node %s".format(message.pubkey));
         require(message.name, "Missing cluster name when updating node %s".format(message.pubkey));
         val cluster = require(cluster @? { .name == message.name }, "Cannot update cluster node due to missing cluster %s".format(message.name));
         if (message.replica_node) {
