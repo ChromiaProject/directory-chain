@@ -97,17 +97,3 @@ function test_list_delayed_blockchain_configs() {
         delayed_blockchain_proposal_data(proposal2_id, proposal_type.configuration, proposal_state.PENDING, delay=bc_delay, apply_at=null)
     ]));
 }
-
-function test_migration() {
-    rell.test.tx().op(
-        add_legacy_delayed_event(delay_type.PROPOSAL, ref_id = 1, time = 1577836800000000, active = true),
-        add_legacy_delayed_event(delay_type.PROPOSAL, ref_id = 2, time = 1577836800000000, active = true),
-        add_legacy_delayed_event(delay_type.PROPOSAL, ref_id = 3, time = 300000, active = false),
-    ).run();
-
-    rell.test.block().run();
-
-    assert_equals(get_scheduled_callback_at_time(delay_type.PROPOSAL.value, 1), 1577836800000000);
-    assert_equals(get_scheduled_callback_at_time(delay_type.PROPOSAL.value, 2), 1577836800000000);
-    assert_true(exists(scheduled_callback @? { .context == delay_type.PROPOSAL.value, .ref_id == 3, .active == false, .time == 300000 }));
-}

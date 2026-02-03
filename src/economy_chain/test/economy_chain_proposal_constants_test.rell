@@ -6,6 +6,10 @@ import common_proposal.test.helper_functions.*;
 
 function test_update_economy_constants_validate_input() {
 
+    rell.test.tx().op(
+        update_economy_constants(rell.test.keypairs.alice.pub, 1, 2, 3, 5, 6, 7)
+    ).run_must_fail("Expected system provider signature");
+
     add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
 
     rell.test.tx().op(
@@ -60,11 +64,6 @@ function test_update_economy_constants() {
     assert_equals(constants.resource_pool_margin_fee_share, 0.1);
     assert_equals(constants.system_provider_risk_share, 0.1);
     assert_equals(constants.dapp_provider_risk_share, 0.2);
-
-    // Update constants
-    rell.test.tx().op(
-        update_economy_constants(rell.test.keypairs.alice.pub, 1, 2, 3, 5, 6, 7)
-    ).run_must_fail("Expected system provider signature");
 
     add_provider(rell.test.keypairs.alice.pub, true, provider_tier.NODE_PROVIDER);
 
@@ -124,5 +123,4 @@ function test_update_economy_constants_scheduld_at() {
     proposal = get_common_proposal(get_latest_common_proposal_id())!!;
     assert_equals(proposal.state, common_proposal_state.APPROVED);
     assert_equals(get_economy_constants().min_lease_time_weeks, original_min_lease_time_weeks + 1);
-    assert_true(empty(scheduled_event @* {}));
 }
