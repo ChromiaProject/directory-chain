@@ -7,6 +7,7 @@ entity pending_economy_constants {
     chromia_foundation_fee_share: decimal;
     resource_pool_margin_fee_share: decimal;
     dapp_provider_risk_share: decimal;
+    scheduled_at: timestamp = 0;
 }
 
 @extend(apply_common_voting_result_handlers) function() = [common_proposal_type.ec_constants_update.name: apply_economy_constants(*)];
@@ -24,6 +25,8 @@ operation update_economy_constants(
 ) {
 
     val provider = require_is_system_provider_and_signer(my_pubkey);
+    require(scheduled_at == null or scheduled_at > get_last_blocktime(),
+        "Scheduled time must be later than last block time (%s > %s)".format(scheduled_at, get_last_blocktime()));
 
     val proposal = create_system_p_proposal(common_proposal_type.ec_constants_update, provider, "Update economy constants");
     val proposal_details = create pending_economy_constants(
@@ -33,13 +36,10 @@ operation update_economy_constants(
         staking_reward_rate = staking_reward_rate ?: -1.0,
         chromia_foundation_fee_share = chromia_foundation_fee_share ?: -1.0,
         resource_pool_margin_fee_share = resource_pool_margin_fee_share ?: -1.0,
-        dapp_provider_risk_share = dapp_provider_risk_share?: -1.0
+        dapp_provider_risk_share = dapp_provider_risk_share ?: -1.0,
+        scheduled_at = scheduled_at ?: 0,
     );
     validate_economy_constants_proposal(proposal_details);
-    if (scheduled_at != null) {
-        add_scheduled_event(delay_type.PROPOSAL, proposal.rowid.to_integer(), scheduled_at);
-    }
-
     internal_common_vote(provider.pubkey, proposal, true);
 }
 
@@ -177,3 +177,8 @@ query get_economy_constants(): economy_constants_data = economy_constants_data(
     staking_requirement_dapp_node_total_stake_chr = economy_constants.staking_requirement_dapp_node_total_stake_chr,
     bridge_lease_add_min_balance_usd = economy_constants.bridge_lease_add_min_balance_usd,
 );
+
+@extend(common_scheduled_proposal_time_handlers) function() = [common_proposal_type.ec_constants_update.name: scheduled_proposal_constants_time_handler(*)];
+function scheduled_proposal_constants_time_handler(common_proposal): timestamp? {
+    return pending_economy_constants @? { common_proposal }( .scheduled_at );
+}

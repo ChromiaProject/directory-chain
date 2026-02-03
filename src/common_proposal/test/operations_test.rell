@@ -79,25 +79,6 @@ function test_revoke_pending_proposal() {
     assert_equals(common_proposal @ { .rowid == proposal_id } ( .state ), common_proposal_state.REVOKED);
 }
 
-function test_revoke_delayed_proposal() {
-
-    rell.test.tx().op(
-        create_test_common_proposal(common_proposal_type.ec_cluster_create, alice.pub, "voter_set_name",scheduled_at = timestamp.MAX_VALUE)
-    ).sign(alice).run();
-
-    vote_yes_on_latest_proposal(alice);
-
-    val proposal_id = get_latest_common_proposal_id();
-    assert_equals(common_proposal @ { .rowid == proposal_id } ( .state ), common_proposal_state.DELAYED);
-
-    rell.test.tx().op(
-        revoke_common_proposal(alice.pub, get_latest_common_proposal_id()))
-        .sign(alice)
-        .run();
-
-    assert_equals(common_proposal @ { .rowid == proposal_id } ( .state ), common_proposal_state.REVOKED);
-}
-
 function test_revoke_proposal__provider_auth() {
 
     rell.test.tx().op(

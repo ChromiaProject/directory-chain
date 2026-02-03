@@ -7,8 +7,20 @@ module;
 
 import common_consensus.*;
 import provider_auth.*;
-import delay.*;
-import delay.proposal_callback.*;
+import lib.begin_block.*;
+
+struct module_args {
+    /**
+     * Begin block schedule context ID for common proposals. Can be set in config in case `0` is in use by the
+     * begin block schedule library. EC will use `0` by default.
+     */
+    begin_block_schedule_context_id: integer = 0;
+}
+
+@extend(on_scheduled_callback_map) function() =
+    [chain_context.args.begin_block_schedule_context_id: proposal_delayed_apply(*)];
+
+@extendable function proposal_delayed_apply(proposal_id: integer);
 
 function create_common_voter_set_internal(
     name,
@@ -31,8 +43,7 @@ function create_common_voter_set_internal(
 
 function delete_common_proposal(common_proposal) {
     run_common_proposal_event(delete_common_proposal_handlers(), common_proposal);
-    remove_scheduled_callback(delay_type.PROPOSAL.value, common_proposal.rowid.to_integer());
-    delete_scheduled_event(delay_type.PROPOSAL, common_proposal.rowid.to_integer());
+    remove_scheduled_callback(chain_context.args.begin_block_schedule_context_id, common_proposal.rowid.to_integer());
 }
 
 function apply_common_voting_result(common_proposal) = run_common_proposal_event(apply_common_voting_result_handlers(), common_proposal);
@@ -42,3 +53,8 @@ function run_common_proposal_event(handlers: map<text, (common_proposal) -> unit
         handlers[proposal.proposal_type.name](proposal);
     }
 }
+
+/**
+ * Extend a common proposal to make it support `scheudled at` functionallity.
+ */
+@extendable function common_scheduled_proposal_time_handlers(): map<text, (common_proposal) -> timestamp?>;

@@ -1,47 +1,15 @@
 /**
- * Simple module to support delayed events by adding an event entity and then extend and listen to the callback.
+ * The purpose of this module was previously to provide a `schedule_at` framework. Over time this has been replaced by
+ * the scheduler in the `begin_block` library. Now this only manages directory chain proposals and the part before they
+ * are approved, to keep track of `schedule_at` times that are later used to schedule applying the proposal.
  */
 
 module;
 
 import lib.begin_block.*;
 import common_helpers.block.*;
+import model.*;
 
 enum delay_type {
     PROPOSAL,
 }
-
-/**
- * Deprecated entity, replaced by scheduled_callback. Remove once migrated.
- */
-entity delayed_event {
-    key type, ref_id;
-    type: delay_type;
-    ref_id: integer;
-    index mutable time: timestamp;
-    index mutable active: boolean = true;
-}
-
-@extend(on_begin_block)
-function being_block_delay_migration_wrapper(height: integer) {
-    if (not try_call(migrate_delays_to_scheduled_callbacks(*))) log("Failed to run delayed jobs");
-}
-
-function migrate_delays_to_scheduled_callbacks() {
-
-    for (delay in delayed_event @* { }) {
-
-        log("Migrating delay of type %s and ref_id %s to scheduled callbacks".format(
-            delay.type.value, delay.ref_id));
-
-        create scheduled_callback(
-            context = delay.type.value,
-            ref_id = delay.ref_id,
-            time = delay.time,
-            delay.active,
-            repeatable_delay = -1
-        );
-        delete delay;
-    }
-}
-

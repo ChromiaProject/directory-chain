@@ -11,6 +11,8 @@ entity pending_staking_requirement_constants {
     system_provider_total_stake_chr: integer = -1; // Do not use or remove - rell fix for removed attribute
     dapp_provider_own_stake_chr: integer = -1; // Do not use or remove - rell fix for removed attribute
     dapp_provider_total_stake_chr: integer = -1; // Do not use or remove - rell fix for removed attribute
+
+    scheduled_at: timestamp = 0;
 }
 
 struct pending_staking_requirement_constants_data {
@@ -46,12 +48,9 @@ operation propose_staking_requirement_constants(
         system_node_total_stake_chr = system_node_total_stake_chr ?: -1,
         dapp_node_own_stake_chr = dapp_node_own_stake_chr ?: -1,
         dapp_node_total_stake_chr = dapp_node_total_stake_chr ?: -1,
+        scheduled_at = scheduled_at ?: 0,
     );
     validate_staking_requirement_constants_proposal(proposal_details);
-    if (scheduled_at != null) {
-        add_scheduled_event(delay_type.PROPOSAL, proposal.rowid.to_integer(), scheduled_at);
-    }
-
     internal_common_vote(provider.pubkey, proposal, true);
 }
 
@@ -126,3 +125,9 @@ function get_boolean_int(value: boolean?): integer {
         true -> 1;
     };
 }
+
+@extend(common_scheduled_proposal_time_handlers) function() = [common_proposal_type.ec_staking_requirement_constants_update.name: scheduled_proposal_staking_requirements_time_handler(*)];
+function scheduled_proposal_staking_requirements_time_handler(common_proposal): timestamp? {
+    return pending_staking_requirement_constants @? { common_proposal }( .scheduled_at );
+}
+

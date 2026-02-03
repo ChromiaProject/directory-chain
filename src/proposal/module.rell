@@ -112,7 +112,7 @@ function create_proposal(proposal_type, proposed_by: provider, deployer: voter_s
 }
 
 function delete_proposal(prop: proposal) {
-    remove_scheduled_callback(delay_type.PROPOSAL.value, prop.rowid.to_integer());
+    remove_scheduled_callback(begin_block_context.PROPOSAL.value, prop.rowid.to_integer());
     delete_scheduled_event(delay_type.PROPOSAL, prop.rowid.to_integer());
     delete_proposal_handlers()[prop.proposal_type.name](prop);
 }
@@ -125,7 +125,7 @@ function delete_proposal(prop: proposal) {
 function set_blockchain_proposal_delay_states(blockchain, active: boolean) {
 
     for (proposal_id in get_blockchain_proposal_delay_ids(blockchain)) {
-        set_scheduled_callback_active(delay_type.PROPOSAL.value, proposal_id.to_integer(), active);
+        set_scheduled_callback_active(begin_block_context.PROPOSAL.value, proposal_id.to_integer(), active);
     }
 }
 
@@ -143,4 +143,12 @@ function get_blockchain_proposal_delay_ids(blockchain) {
     }
 
     return proposal_ids;
+}
+
+function scheduled_proposals_delay_time_handler(proposal): (blockchain: blockchain?, delay: integer) {
+    val scheduled_at_delay = get_scheduled_event_delay(delay_type.PROPOSAL, proposal.rowid.to_integer());
+    if (scheduled_at_delay != null) {
+        return (blockchain = null, delay = scheduled_at_delay);
+    }
+    return (blockchain = null, delay = 0);
 }
