@@ -3,6 +3,7 @@
 
     val message = configuration_updated.from_gtv(body);
 
+    // Validation
     if (message.blockchain_rid == chain_context.blockchain_rid) {
         log("Received updated configuration from chain %s for chain0 at height %d to %s, ignoring"
             .format(sender, message.height, message.config_hash));
@@ -25,11 +26,12 @@
         return;
     }
 
+    // Fixed configuration processing is considered completed. Notify other modules.
     log("Received updated configuration from chain %s for chain %s at height %d to %s"
         .format(sender, message.blockchain_rid, message.height, message.config_hash));
-
     on_configuration_updated(message);
 
+    // Processing pending configuration
     val pending_configuration = pending_blockchain_configuration @?
         { bc, .config_hash == message.config_hash, .minimum_height <= message.height };
     if (pending_configuration == null) {
@@ -61,6 +63,7 @@
         signal_signer_list_update(message.blockchain_rid, pending_signers);
     }
 
+    // Processing dependencies
     add_dependencies(pending_base_config, bc.rid, message.height);
 }
 
