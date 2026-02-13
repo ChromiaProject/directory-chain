@@ -491,15 +491,18 @@ function upgrade_container_auth_message(gtv): text {
  *
  * @param upgraded_container_units The new number of container units for this container. Can both be increased and reduced.
  * @param upgraded_extra_storage_gib The new size of extra storage.
- * @param upgraded_cluster_name Move this container to a new cluster.
+ * @param upgraded_cluster_name Must equal the current container cluster name starting from API version 68, as container migration is not supported. Use blockchain migration instead.
  * @param upgraded_duration_weeks Duration for the new upgraded lease
  * @param upgraded_extra_compute_requests  number of extra compute requests per week
  */
 operation upgrade_container(container_name: text, upgraded_container_units: integer,
         upgraded_extra_storage_gib: integer, upgraded_cluster_name: text, upgraded_duration_weeks: integer,
-        upgraded_extra_compute_requests: integer = 0) {
+        upgraded_extra_compute_requests: integer = 0
+) {
     require_initialized();
     val lease = require_lease(container_name);
+    require(upgraded_cluster_name == lease.cluster.name,
+        "Container migration is not supported starting from API version 68. upgraded_cluster_name must equal the current container cluster '%s'. Use blockchain migration instead.".format(lease.cluster.name));
     require(not has_pending_upgrade(container_name), "Container %s already has a pending upgrade".format(container_name));
     require(
         upgraded_container_units != lease.container_units
