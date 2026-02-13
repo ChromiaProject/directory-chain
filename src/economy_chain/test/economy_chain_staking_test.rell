@@ -2265,3 +2265,38 @@ function test_evm_stakers_still_get_any_native_reward_after_1st_april_2026() {
     //Alice has 100% of all delegation to Dave and gets the full 10%
     assert_equals(staking_get_shared_rewards_paid(test_account_alice.id), 10 * units_per_asset);
 }
+
+function test_pending_undelegation_is_cancelled_on_withdrawal() {
+    rell.test.tx().op(init()).run();
+    add_provider(rell.test.keypairs.bob.pub);
+
+    val test_account_alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
+
+    rell.test.tx()
+        .op(mint_to(test_account_alice, 9999999))
+    .run();
+    do_staking_deposit_native(rell.test.keypairs.alice, 7777);
+    do_staking_delegate(rell.test.keypairs.alice, rell.test.keypairs.bob.pub);
+
+    // Request withdrawal
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_request_withdrawal())
+    )
+    .op(staking_request_withdrawal())
+    .run();
+
+    // Cancel withdraw before delegation delay
+    rell.test.tx().op(
+        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, staking_cancel_withdrawal())
+    )
+    .op(staking_cancel_withdrawal())
+    .run();
+
+    // Fast-forward time and see balance and initial delegation is intact
+    rell.test.set_next_block_time_delta(chain_context.args.staking_withdrawals_payout_interval_ms);
+    rell.test.block().run();
+    rell.test.block().run();
+
+    assert_equals(staking_get_balance(test_account_alice.id), 7777);
+    assert_equals(staking_get_current_delegate(test_account_alice.id), rell.test.keypairs.bob.pub);;
+}

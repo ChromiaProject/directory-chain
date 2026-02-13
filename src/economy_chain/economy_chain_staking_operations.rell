@@ -63,11 +63,25 @@ function staking_cancel_withdrawal_auth_message(gtv): text {
 }
 
 /**
- * Cancel any unaction withdrawal request. This cancellation does not affect delegation.
+ * Cancel any unaction withdrawal request. This will cancel undelegation if it is still pending.
 */
 operation staking_cancel_withdrawal() {
     val user = ft4.auth.authenticate();
-    update staker_withdrawal_request @* { .staker_state.account == user and .staker_state.network == network.CHR and .active == true } ( .active = false );
+    val withdraw_requests = staker_withdrawal_request @* { .staker_state.account == user and .staker_state.network == network.CHR and .active == true };
+    require(not withdraw_requests.empty(), "No withdrawal requests found");
+
+    // Cancel any pending undelegation
+    val null_provider = require(provider @? { get_null_account() }, "No provider for this public key.");
+    val withdrawn_staker_states = withdraw_requests @* {} ( .staker_state );
+    update delegation_state @* {
+        .staker_state in withdrawn_staker_states
+        and .next_provider == null_provider
+        and .next_change_at > _staking_last_known_time()
+    } (
+        .next_change_at = 0
+    );
+
+    update withdraw_requests( .active = false );
     publish_staking_state(user);
 }
 
