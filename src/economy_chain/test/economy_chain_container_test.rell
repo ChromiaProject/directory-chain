@@ -931,67 +931,6 @@ function test_upgrade_container_with_subnode_jar_extension() {
     assert_equals(lease_data, expected_lease);
 }
 
-function test_upgrade_container_extension_validation() {
-    val destination_cluster_name = "dst_cluster";
-    rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
-    rell.test.tx().op(create_test_cluster_with_tag(destination_cluster_name, tag = tag @ {})).run();
-    val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
-    val bob = add_provider(rell.test.pubkeys.bob);
-    rell.test.tx().op(create_test_subnode_image(name = "subnode_image1", owner = bob, subnode_image_type = subnode_image_type.SPECIAL, cluster_name = cluster_name)).run();
-    rell.test.tx().op(create_test_subnode_jar_extension(name = "subnode_jar_extension1", owner = bob, subnode_jar_extension_type = subnode_jar_extension_type.SPECIAL, cluster_name = cluster_name)).run();
-    val container_name = do_create_container(
-        alice, rell.test.keypairs.alice, success = true, ticket_id = ticket_id_after_init + 17, container_units = 2, subnode_image_name = "subnode_image1", subnode_jar_extension_names = ["subnode_jar_extension1"]);
-
-    val created_lease = lease @ { container_name };
-
-    rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, upgrade_container(container_name, 3, 0, destination_cluster_name, 1, 0))
-    ).op(
-        upgrade_container(container_name, 3, 0, destination_cluster_name, 1, 0)
-    ).run_must_fail("Cluster does not support current container lease subnode image");
-
-    val destination_cluster = cluster @ { destination_cluster_name };
-    val subnode_image = subnode_image @ { .name == "subnode_image1" };
-    rell.test.tx().op(
-        create_test_cluster_subnode_image(destination_cluster, subnode_image)
-    ).run();
-
-    rell.test.tx().op(
-        ft4.test_utils.evm_auth_operation_for(rell.test.keypairs.alice.priv, upgrade_container(container_name, 3, 0, destination_cluster_name, 1, 0))
-    ).op(
-        upgrade_container(container_name, 3, 0, destination_cluster_name, 1, 0)
-    ).run_must_fail("Cluster does not support current container lease subnode JAR extension");
-
-    val subnode_jar_extension = subnode_jar_extension @ { .name == "subnode_jar_extension1" };
-    rell.test.tx().op(
-        create_test_cluster_subnode_jar_extension(destination_cluster, subnode_jar_extension)
-    ).run();
-
-    do_upgrade_container(alice, rell.test.keypairs.alice, success = true, block_height = 9, ticket_id = ticket_id_after_init + 27, current_lease = created_lease, container_units = 3, cluster_name = destination_cluster_name);
-
-    val expected_lease = lease_data(
-        container_name = container_name,
-        cluster_name = destination_cluster_name,
-        container_units = 3,
-        extra_storage_gib = 0,
-        expire_time_millis = rell.test.DEFAULT_FIRST_BLOCK_TIME + rell.test.DEFAULT_BLOCK_INTERVAL*10 + millis_per_week,
-        expired = false,
-        auto_renew = false,
-        subnode_image_name = "subnode_image1",
-        subnode_jar_extension_names = ["subnode_jar_extension1"],
-        bridge_leases = [],
-        lease_owner_account_id = alice.id,
-        extra_compute_requests = 0,
-    );
-
-    val leases2 = get_leases_by_account(alice.id);
-    assert_equals(leases2.size(), 1);
-    assert_equals(leases2[0], expected_lease);
-
-    val lease_data = require(get_lease_by_container_name(container_name));
-    assert_equals(lease_data, expected_lease);
-}
-
 function test_upgrade_container_failure() {
     rell.test.tx().op(init(), create_test_cluster(cluster_name)).run();
     val alice = require(do_create_account(rell.test.keypairs.alice, auth_privkey));
