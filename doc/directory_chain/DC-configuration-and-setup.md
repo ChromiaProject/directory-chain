@@ -83,7 +83,6 @@ From anchoring chain:
 
 - `G_configuration_updated` 
 - `G_configuration_failed` 
-- `G_last_anchored_heights` 
 
 From economy-chain:
 
@@ -122,7 +121,6 @@ From economy-chain:
             topics:
               - G_configuration_updated
               - G_configuration_failed
-              - G_last_anchored_heights
           global:
             topics:
               - G_create_cluster
