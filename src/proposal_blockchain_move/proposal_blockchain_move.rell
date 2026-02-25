@@ -18,10 +18,8 @@ entity pending_blockchain_move {
 operation propose_blockchain_move(my_pubkey: pubkey, @size(32) blockchain_rid: byte_array, destination_container: text, description: text = "") {
     val me = require_is_provider_with_rate_limit(my_pubkey, cost = chain_context.args.provider_quota_move_cost);
 
-    val blockchain = require_blockchain(blockchain_rid);
-    require(not(blockchain.system), "Moving of system chains is not allowed: " + blockchain_rid);
-
-    val dst_container = validate_blockchain_move_proposal(blockchain, me, destination_container);
+    val dst_container = validate_blockchain_move_proposal(blockchain_rid, me, destination_container);
+    val blockchain = blockchain @ { blockchain_rid };
 
     val prop = create_proposal(proposal_type.blockchain_move_start, me, dst_container.deployer, description);
     val pending_blockchain_move = create pending_blockchain_move(prop, blockchain, dst_container);
@@ -57,12 +55,8 @@ function blockchain_move_proposal_delay_ids_handler(blockchain): list<rowid> {
 }
 
 function apply_blockchain_move(proposal) {
-    val pending_blockchain_move = pending_blockchain_move @ { proposal };
-    val pbm = pending_blockchain_move.to_struct();
-    validate_blockchain_move_proposal(
-        pending_blockchain_move.blockchain,
-        pending_blockchain_move.proposal.proposed_by,
-        pending_blockchain_move.destination.name);
+    val pbm = pending_blockchain_move @ { proposal } ($.to_struct());
+    validate_blockchain_move_proposal(pbm.blockchain.rid, pbm.proposal.proposed_by, pbm.destination.name);
 
     // keep src cluster/container nodes as replicas
     val src_container = container_blockchain @ { pbm.blockchain } (.container);
@@ -91,19 +85,15 @@ function delete_pending_blockchain_move(proposal) {
     delete pending_blockchain_move @? { proposal };
 }
 
-function validate_blockchain_move_proposal(blockchain, proposed_by: provider, destination_container: text) {
+function validate_blockchain_move_proposal(@size(32) blockchain_rid: byte_array, proposed_by: provider, destination_container: text) : container {
 
-    // require blockchain state
-    require(blockchain.state in [blockchain_state.RUNNING, blockchain_state.PAUSED],
-        "Only blockchains in RUNNING | PAUSED states can be moved; current state of blockchain %s is: %s".format(blockchain.rid, blockchain.state)
-    );
-    
+        // require blockchain state
+    val blockchain = require_blockchain_states(blockchain_rid, [blockchain_state.RUNNING, blockchain_state.PAUSED]);
+    require(not(blockchain.system), "Moving of system chains is not allowed: " + blockchain_rid);
+
     // require blockchain is not being moved right now
     require(empty(moving_blockchain @? { blockchain }), "Blockchain %s is being moved".format(blockchain.rid));
-
-    // require there no pending blockchain actions (pause, resume, remove, archive, unarchive)
-    val pba = pending_blockchain_action @? { blockchain };
-    require(empty(pba), "Blockchain %s cannot be moved due to a pending proposal %s related to it".format(blockchain.rid, pba?.proposal));
+    require_no_pending_blockchain_action(blockchain);
 
     // containers
     val src_container = container_blockchain @ { blockchain } .container;
@@ -112,13 +102,9 @@ function validate_blockchain_move_proposal(blockchain, proposed_by: provider, de
     // container deployers
     require_container_deployer(src_container, proposed_by);
     require_container_deployer(dst_container, proposed_by);
+    require_container_deployers_identical(src_container, dst_container);
     // container limits
     require_container_is_not_full(dst_container);
-
-    require(
-        get_voter_set_members_sorted(src_container.deployer.name) == get_voter_set_members_sorted(dst_container.deployer.name),
-        "Deployers of source and destination container must be identical"
-    );
 
     return dst_container;
 }
