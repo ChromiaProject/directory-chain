@@ -17,7 +17,7 @@ entity pending_blockchain_move_cancel {
  */
 operation propose_blockchain_move_cancel(my_pubkey: pubkey, @size(32) blockchain_rid: byte_array, description: text = "") {
     val me = require_is_provider_with_rate_limit(my_pubkey);
-    val blockchain = require_active_blockchain(blockchain_rid);
+    val blockchain = require_blockchain_states(blockchain_rid, [blockchain_state.RUNNING, blockchain_state.PAUSED]);
     require(empty(pending_blockchain_move_cancel @? { blockchain }), "Canceling of blockchain move %s is already proposed".format(blockchain.rid));
     val mv_bc = validate_blockchain_move_cancel_proposal(blockchain);
 
@@ -60,14 +60,11 @@ function delete_pending_blockchain_move_cancel(proposal) {
     delete pending_blockchain_move_cancel @? { proposal };
 }
 
-function validate_blockchain_move_cancel_proposal(blockchain: blockchain): moving_blockchain {
-    val proposal_details = require(moving_blockchain @? { blockchain }, "Blockchain %s is not being moved".format(blockchain.rid));
+function validate_blockchain_move_cancel_proposal(blockchain) : moving_blockchain {
+    val moving_blockchain = require(moving_blockchain @? { blockchain }, "Blockchain %s is not being moved".format(blockchain.rid));
 
-    // require there no pending blockchain actions (pause, resume, remove, archive, unarchive)
-    val pba = pending_blockchain_action @? { blockchain };
-    require(empty(pba), "Blockchain move %s cannot be proposed due to a pending proposal %s related to it".format(blockchain.rid, pba?.proposal));
+    require_no_pending_blockchain_action(blockchain);
+    require(moving_blockchain.final_height == -1, "Cannot cancel an already finalized blockchain move for blockchain %s".format(blockchain.rid));
 
-    require(proposal_details.final_height == -1, "Cannot cancel an already finalized blockchain move for blockchain %s".format(blockchain.rid));
-
-    return proposal_details;
+    return moving_blockchain;
 }

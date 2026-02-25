@@ -10,6 +10,19 @@ struct module_args {
     provider_quota_move_cost: integer;
 }
 
+function require_container_deployers_identical(src: container, dst: container) {
+    require(
+        get_voter_set_members_sorted(src.deployer.name) == get_voter_set_members_sorted(dst.deployer.name),
+        "Deployers of source and destination container must be identical"
+    );
+}
+
+/** Require no pending blockchain actions (pause, resume, remove, archive, unarchive) for the given blockchain. */
+function require_no_pending_blockchain_action(blockchain) {
+    val pending_action = pending_blockchain_action @? { blockchain };
+    require(empty(pending_action), "Blockchain %s has a pending proposal %s related to it".format(blockchain.rid, pending_action?.proposal));
+}
+
 @extend(on_configuration_updated)
 function try_to_finalize_blockchain_move(message: configuration_updated) {
     val moving_bc = moving_blockchain @? { .blockchain.rid == message.blockchain_rid, .final_height == message.height - 1 };

@@ -22,9 +22,13 @@ function require_container(name) = require(container @? { name }, "Container %s 
 function require_running_container(name) = require(container @? { name, .state == container_state.RUNNING }, "Container %s not found or is not running".format(name));
 function require_voter_set(name) = require(voter_set @? { name }, "Voter set %s does not exist".format(name));
 
+
+/** Blockchain state requirements */
+
 function require_active_blockchain(blockchain_rid: byte_array) =
     require(maybe_active_blockchain(blockchain_rid), "Unknown blockchain " + blockchain_rid);
-function maybe_active_blockchain(blockchain_rid: byte_array): blockchain? = maybe_blockchain(
+
+function maybe_active_blockchain(blockchain_rid: byte_array): blockchain? = _maybe_blockchain(
     blockchain_rid,
     allowed_states = [
         blockchain_state.RUNNING,
@@ -33,17 +37,41 @@ function maybe_active_blockchain(blockchain_rid: byte_array): blockchain? = mayb
         blockchain_state.UNARCHIVING,
     ]
 );
+
 function require_blockchain(
     blockchain_rid: byte_array,
     allowed_states: list<blockchain_state>? = null
-) = require(maybe_blockchain(blockchain_rid, allowed_states), "Unknown blockchain " + blockchain_rid);
-function maybe_blockchain(
+) = require(_maybe_blockchain(blockchain_rid, allowed_states), "Unknown blockchain " + blockchain_rid);
+
+function _maybe_blockchain(
     blockchain_rid: byte_array,
     allowed_states: list<blockchain_state>? = null,
 ): blockchain? = blockchain @? {
     blockchain_rid,
     allowed_states == null or allowed_states.size() == 0 or .state in allowed_states
 };
+
+function require_blockchain_states(
+    blockchain_rid: byte_array,
+    allowed_states: list<blockchain_state>,
+    message_prefix: text = ""
+) {
+
+    val blockchain = require(
+        blockchain @? { .rid == blockchain_rid }, 
+        "%sUnknown blockchain %s".format(message_prefix, blockchain_rid)
+    );
+
+    require(
+        blockchain.state in allowed_states, 
+        "%sBlockchain %s state is %s. Must be one of: %s".format(message_prefix, blockchain_rid, blockchain.state, allowed_states)
+    );
+
+    return blockchain;
+}
+
+
+/** Provider requirements */
 
 function require_is_system_provider(pubkey) {
     val p = require_provider(pubkey);
@@ -214,6 +242,9 @@ function require_pubkey(pubkey) {
             or pubkey.size() == 1336, // Dilithium
         "Wrong size of public key: %d".format(pubkey.size()));
 }
+
+
+/** Extension requirements */
 
 function require_subnode_image(name) = require(subnode_image @? { name }, "Subnode image %s not found".format(name));
 

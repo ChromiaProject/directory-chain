@@ -18,7 +18,7 @@ entity pending_blockchain_move_finish {
  */
 operation propose_blockchain_move_finish(my_pubkey: pubkey, blockchain_rid: byte_array, final_height: integer, description: text = "") {
     val me = require_is_provider_with_rate_limit(my_pubkey);
-    val blockchain = require_active_blockchain(blockchain_rid);
+    val blockchain = require_blockchain_states(blockchain_rid, [blockchain_state.RUNNING, blockchain_state.PAUSED]);
     val mv_bc = validate_blockchain_move_finish_proposal(blockchain);
 
     val prop = create_proposal(proposal_type.blockchain_move_finish, me, mv_bc.destination.deployer, description);
@@ -68,17 +68,12 @@ function delete_pending_blockchain_move_finish(proposal) {
     delete pending_blockchain_move_finish @? { proposal };
 }
 
-function validate_blockchain_move_finish_proposal(blockchain) {
+function validate_blockchain_move_finish_proposal(blockchain) : moving_blockchain {
 
-    val proposal_details = require(moving_blockchain @? { blockchain }, "Blockchain %s is not being moved".format(blockchain.rid));
+    val moving_blockchain = require(moving_blockchain @? { blockchain }, "Blockchain %s is not being moved".format(blockchain.rid));
 
-    // require there no pending blockchain actions (pause, resume, remove, archive, unarchive)
-    val pba = pending_blockchain_action @? { blockchain };
-    require(empty(pba), "Blockchain move %s cannot be proposed due to a pending proposal %s related to it".format(blockchain.rid, pba?.proposal));
+    require_no_pending_blockchain_action(blockchain);
+    require_container_deployers_identical(moving_blockchain.source, moving_blockchain.destination);
 
-    require(
-        get_voter_set_members_sorted(proposal_details.source.deployer.name) == get_voter_set_members_sorted(proposal_details.destination.deployer.name),
-        "Deployers of source and destination container must be identical");
-
-    return proposal_details;
+    return moving_blockchain;
 }

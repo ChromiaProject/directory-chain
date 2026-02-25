@@ -1,0 +1,50 @@
+@test module;
+
+import common.test.config_test_helpers.*;
+import common.test.setup.*;
+import messaging.configuration_update_message.*;
+import model.*;
+import proposal_blockchain.test.utils.*;
+import proposal_blockchain_move.*;
+import nm_api.*;
+
+function _build_block_after_moving(cluster: text, brid: byte_array, height: integer) {
+    rell.test.tx().op(
+        receive_configuration_updated_op(
+            cluster_anchoring_chain @ { .cluster.name == cluster } ( .blockchain.rid ),
+            configuration_updated_topic,
+            configuration_updated(
+                blockchain_rid = brid,
+                height = height,
+                config_hash = x"" // x"" is enough for this test
+            ).to_gtv()
+        )
+    ).run();
+}
+
+function _test_backward_moving(brid: byte_array, src_container: text, src_node_pubkey: byte_array, dst_container: text, dst_cluster: text, dst_node_pubkey: byte_array, final_height: integer) {
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, brid, "c1")
+    ).sign(initial_provider).run();
+    bob_votes();
+    rell.test.tx().op(
+        propose_blockchain_move_finish(initial_provider.pub, brid, final_height)
+    ).sign(initial_provider).run();
+    bob_votes();
+    val info02 = nm_get_migrating_blockchain_node_info(src_node_pubkey, brid);
+    assert_true(exists(info02));
+    assert_equals(info02!!.source_container, "c2");
+    assert_equals(info02.destination_container, "c1");
+    assert_equals(info02.is_source_node, false);
+    assert_equals(info02.is_destination_node, true);
+    assert_equals(info02.final_height, final_height);
+    val info12 = nm_get_migrating_blockchain_node_info(dst_node_pubkey, brid);
+    assert_true(exists(info12));
+    assert_equals(info12!!.source_container, "c2");
+    assert_equals(info12.destination_container, "c1");
+    assert_equals(info12.is_source_node, true);
+    assert_equals(info12.is_destination_node, false);
+    assert_equals(info12.final_height, final_height);
+    _build_block_after_moving("s1", brid, final_height + 1);
+    assert_null(nm_get_migrating_blockchain_node_info(dst_node_pubkey, brid));
+}
