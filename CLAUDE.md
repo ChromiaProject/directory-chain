@@ -16,14 +16,29 @@ chr install
 # Build the project
 chr build
 
+# Build with specific configuration file (e.g. chromia-testnet.yml)
+chr build --hide-lib-warnings --settings <config-file>
+
 # Run all tests
 chr test
 
 # Run tests with detailed reporting
 chr test --test-report
 
-# Build with specific configuration
-chr build --hide-lib-warnings --settings <config-file>
+# Run tests for a specific module (e.g. blockchain_auth.test)
+chr test -m <module-name>
+
+# Run tests for a specific blockchain
+chr test -bc <blockchain-name>
+
+# Run a specific test
+chr test -t <test-name>
+
+# Run Rell tests for a specific module with specific test names
+chr test -m <module-name> --tests <csv-list-of-test-names>
+
+# Run Rell tests for a specific module matching a pattern (e.g. *blockchain_auth*)
+chr test -m <module-name> --tests <test-pattern>
 
 # Generate documentation site
 chr generate docs-site --target public
