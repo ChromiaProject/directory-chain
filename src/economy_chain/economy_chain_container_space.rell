@@ -9,12 +9,15 @@ entity node_container_space_usage {
 function receive_resource_usage_statistics_message(body: gtv) {
 
     val message = resource_usage_statistics_message.from_gtv(body);
+    if (message.measurement_time < op_context.last_block_time - millis_per_week) {
+        // This measurement is too old and would be deleted after insert anyway
+        return;
+    }
 
     if (message.type == resource_type.space_usage_mib.name) {
         val space_entity = node_container_space_usage @? { message.node_pubkey, message.container_name };
         if (space_entity != null) {
-            space_entity.space_usage_mib = message.metric_value.to_integer();
-            space_entity.measurement_time = message.measurement_time;
+            update space_entity(space_usage_mib = message.metric_value.to_integer(), measurement_time = message.measurement_time);
         } else {
             create node_container_space_usage(message.node_pubkey, message.container_name,
                 space_usage_mib = message.metric_value.to_integer(), measurement_time = message.measurement_time);
