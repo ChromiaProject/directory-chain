@@ -61,7 +61,19 @@ function apply_blockchain_move_finish(proposal) {
 
     // update moving_blockchain state
     mv_bc.final_height = pbmf.final_height;
-    mv_bc.remove_on_nodes = (cluster_node @* { mv_bc.source.cluster } (@sort .node.pubkey )).to_gtv().to_bytes();
+
+    // move blockchain from src container to dst container
+    delete_container_blockchain_by_blockchain(pbmf.blockchain);
+    create_container_blockchain(pbmf.destination, pbmf.blockchain);
+
+    // (temporarily) add src nodes as replicas so they keep serving the blockchain until
+    // the configuration_updated message is processed and the move is fully finalized;
+    // skip nodes already marked as replicas to avoid unique key violations
+    val src_nodes_to_replicate_on = cluster_node @* {
+        mv_bc.source.cluster,
+        .node not in blockchain_replica_node @* { pbmf.blockchain } (.node)
+    } (struct<blockchain_replica_node>(pbmf.blockchain, .node));
+    create blockchain_replica_node(src_nodes_to_replicate_on);
 }
 
 function delete_pending_blockchain_move_finish(proposal) {

@@ -1,12 +1,9 @@
 @test module;
 
-import ^^^.common.operations.*;
 import ^^^.common.test.setup.*;
-import ^^^.common.test.util.*;
-import ^^^.direct_cluster.*;
-import ^^^.direct_container.*;
 import ^^.*;
-import ^.helpers.*;
+import ^.helper_operations.*;
+import ^.utils.*;
 
 function test_container_state_operations() {
     setup_module();
@@ -52,39 +49,6 @@ function test_container_state_operations() {
     assert_equals(bob_blockchain.state, blockchain_state.REMOVED);
 }
 
-/**
- * Sets up a cluster `s1` with two containers, `c1` and `c2`,
- * and starts a blockchain in container `c1`.
- */
-function _setup_cluster_with_two_containers_and_blockchain(): blockchain {
-    setup_module(provider_quota_max_containers = 3);
-
-    val cluster_data = cluster_creation_data(cluster_units = 1, extra_storage = 1024);
-    val register_node_data = register_node_data(
-        rell.test.pubkeys.charlie, host = "host", port = 7777, api_url = "http://host/api_url", ["s1"],
-        cluster_units = 1, extra_storage = 1024
-    );
-    var conf = apply_required_configuration_properties();
-
-    // setup
-    rell.test.tx().op(
-        create_cluster_with_cluster_data(initial_provider.pub, "s1", system_p_voter_set().name, [initial_provider.pub], cluster_data),
-        register_node_with_node_data(initial_provider.pub, register_node_data),
-        create_container(initial_provider.pub, "c1", "s1", 1, [initial_provider.pub]),
-        create_container(initial_provider.pub, "c2", "s1", 1, [initial_provider.pub]),
-        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
-    ).sign(initial_provider).run();
-
-    return blockchain @ { .name == "foo_chain" };
-}
-
-function _start_blockchain_moving_to_c2(foo_chain: blockchain) {
-    rell.test.tx().op(
-        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c2")
-    ).sign(initial_provider).run();
-    assert_not_null(moving_blockchain @? { foo_chain });
-}
-
 function test_remove_source_container_during_blockchain_move() {
     val foo_chain = _setup_cluster_with_two_containers_and_blockchain();
     _start_blockchain_moving_to_c2(foo_chain);
@@ -111,19 +75,30 @@ function test_remove_destination_container_during_blockchain_move() {
     assert_null(moving_blockchain @? { foo_chain });
 }
 
-function _archive_blockchain_then_start_unarchiving_to_c2(foo_chain: blockchain) {
-    // Archive blockchain
+function test_remove_source_container_after_blockchain_move_finish() {
+    val foo_chain = _setup_cluster_with_two_containers_and_blockchain();
+    _start_blockchain_moving_to_c2(foo_chain);
+    _finish_blockchain_move_to_c2(foo_chain);
+
     rell.test.tx().op(
-        propose_blockchain_action(initial_provider.pub, foo_chain.rid, blockchain_action.archive)
-    ).sign(initial_provider).run();
-    assert_equals(foo_chain.state, blockchain_state.ARCHIVED);
-    // 2. Unarchive blockchain from c1 to c2
+        receive_remove_container_op(remove_container_message("c1").to_gtv())
+    ).run();
+    assert_null(container @? { "c1" });
+    assert_equals(foo_chain.state, blockchain_state.REMOVED);
+    assert_null(moving_blockchain @? { foo_chain });
+}
+
+function test_remove_destination_container_after_blockchain_move_finish() {
+    val foo_chain = _setup_cluster_with_two_containers_and_blockchain();
+    _start_blockchain_moving_to_c2(foo_chain);
+    _finish_blockchain_move_to_c2(foo_chain);
+
     rell.test.tx().op(
-        propose_blockchain_unarchive_action(initial_provider.pub, foo_chain.rid, "c2", 100)
-    ).sign(initial_provider).run();
-    assert_not_null(
-        unarchiving_blockchain @? { foo_chain, .source.name == "c1", .destination.name == "c2" }
-    );
+        receive_remove_container_op(remove_container_message("c2").to_gtv())
+    ).run();
+    assert_null(container @? { "c2" });
+    assert_equals(foo_chain.state, blockchain_state.REMOVED);
+    assert_null(moving_blockchain @? { foo_chain });
 }
 
 function test_remove_source_container_during_blockchain_unarchiving() {
