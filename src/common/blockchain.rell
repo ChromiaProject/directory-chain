@@ -292,12 +292,23 @@ function remove_blockchain(blockchain) {
     for (blockchain in container_blockchains) {
         remove_blockchain(blockchain);
     }
-    // Note: Incoming blockchains can be found in `container_blockchain`,
-    // while outgoing blockchains must be retrieved from `moving_blockchain` and `unarchiving_blockchain`.
+
+    // Before apply_blockchain_move_finish, container_blockchain still points to src, 
+    // so removing the dst container won't find the blockchain via container_blockchain.
+    val incoming_moving_blockchains = moving_blockchain @* { .destination == container }.blockchain;
+    for (blockchain in incoming_moving_blockchains) {
+        remove_blockchain(blockchain);
+    }
+
+    // After apply_blockchain_move_finish, container_blockchain is already switched to the dst
+    // container, so removing the src container won't find the blockchain via container_blockchain.
     val outgoing_moving_blockchains = moving_blockchain @* { .source == container }.blockchain;
     for (blockchain in outgoing_moving_blockchains) {
         remove_blockchain(blockchain);
     }
+
+    // During unarchiving, the blockchain stays in the src container, so only the
+    // src container removal needs to be handled here (dst has no container_blockchain entry yet).
     val outgoing_unarchiving_blockchain = unarchiving_blockchain @* { .source == container }.blockchain;
     for (blockchain in outgoing_unarchiving_blockchain) {
         remove_blockchain(blockchain);

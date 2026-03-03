@@ -8,6 +8,14 @@ import proposal_blockchain.test.utils.*;
 import proposal_blockchain_move.*;
 import nm_api.*;
 
+function assert_node_runs_blockchain(node_pubkey: pubkey, brid: byte_array) {
+    assert_true(brid in nm_compute_blockchain_info_list(node_pubkey) @* {} ( .rid ));
+}
+
+function assert_node_not_runs_blockchain(node_pubkey: pubkey, brid: byte_array) {
+    assert_false(brid in nm_compute_blockchain_info_list(node_pubkey) @* {} ( .rid ));
+}
+
 function _build_block_after_moving(cluster: text, brid: byte_array, height: integer) {
     rell.test.tx().op(
         receive_configuration_updated_op(
@@ -23,28 +31,58 @@ function _build_block_after_moving(cluster: text, brid: byte_array, height: inte
 }
 
 function _test_backward_moving(brid: byte_array, src_container: text, src_node_pubkey: byte_array, dst_container: text, dst_cluster: text, dst_node_pubkey: byte_array, final_height: integer) {
+    // propose blockchain move to dst container
     rell.test.tx().op(
-        propose_blockchain_move(initial_provider.pub, brid, "c1")
+        propose_blockchain_move(initial_provider.pub, brid, dst_container)
     ).sign(initial_provider).run();
     bob_votes();
+    // src node (dst_node_pubkey, in src cluster) is still a signer; dst node (src_node_pubkey)
+    // receives as explicit replica (was kept as replica from prior keep_src_as_replica finalization)
+    assert_node_runs_blockchain(src_node_pubkey, brid);
+    assert_node_runs_blockchain(dst_node_pubkey, brid);
+
+    // finish blockchain move
     rell.test.tx().op(
         propose_blockchain_move_finish(initial_provider.pub, brid, final_height)
     ).sign(initial_provider).run();
     bob_votes();
+    // both src node (dst_node_pubkey, temporarily added at finish) and dst node (src_node_pubkey,
+    // already a replica from prior keep_src_as_replica finalization) are replicas until finalization
+    assert_equals(
+        blockchain_replica_node @ { .blockchain.rid == brid } ( @set .node.pubkey ),
+        set([src_node_pubkey, dst_node_pubkey])
+    );
+    // dst node (src_node_pubkey) is now a signer; src node (dst_node_pubkey) is an explicit replica
+    assert_node_runs_blockchain(src_node_pubkey, brid);
+    assert_node_runs_blockchain(dst_node_pubkey, brid);
+
+    // assert migrating_blockchain_node_info through NM API
     val info02 = nm_get_migrating_blockchain_node_info(src_node_pubkey, brid);
     assert_true(exists(info02));
-    assert_equals(info02!!.source_container, "c2");
-    assert_equals(info02.destination_container, "c1");
+    assert_equals(info02!!.source_container, src_container);
+    assert_equals(info02.destination_container, dst_container);
     assert_equals(info02.is_source_node, false);
     assert_equals(info02.is_destination_node, true);
     assert_equals(info02.final_height, final_height);
+
     val info12 = nm_get_migrating_blockchain_node_info(dst_node_pubkey, brid);
     assert_true(exists(info12));
-    assert_equals(info12!!.source_container, "c2");
-    assert_equals(info12.destination_container, "c1");
+    assert_equals(info12!!.source_container, src_container);
+    assert_equals(info12.destination_container, dst_container);
     assert_equals(info12.is_source_node, true);
     assert_equals(info12.is_destination_node, false);
     assert_equals(info12.final_height, final_height);
-    _build_block_after_moving("s1", brid, final_height + 1);
+
+    // simulate ICMF message receiving
+    _build_block_after_moving(dst_cluster, brid, final_height + 1);
+
+    // no migrating blockchain info for dst node
     assert_null(nm_get_migrating_blockchain_node_info(dst_node_pubkey, brid));
+    // dst node (src_node_pubkey) is no longer a replica — it is now a signer in dst cluster
+    assert_true(empty(blockchain_replica_node @* { .blockchain.rid == brid, .node.pubkey == src_node_pubkey }));
+    // src node (dst_node_pubkey) stays as a replica because keep_src_as_replica defaults to true
+    assert_false(empty(blockchain_replica_node @* { .blockchain.rid == brid, .node.pubkey == dst_node_pubkey }));
+    // dst node (src_node_pubkey) receives as signer; src node (dst_node_pubkey) receives as explicit replica
+    assert_node_runs_blockchain(src_node_pubkey, brid);
+    assert_node_runs_blockchain(dst_node_pubkey, brid);
 }

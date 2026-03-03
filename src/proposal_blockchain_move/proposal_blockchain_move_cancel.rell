@@ -48,10 +48,10 @@ function apply_blockchain_move_cancel(proposal) {
     val pbmc = pending_blockchain_move_cancel @ { proposal } ( $.to_struct() );
     val mv_bc = validate_blockchain_move_cancel_proposal(pbmc.blockchain);
 
-    // remove bc from destination container
-    delete_container_blockchain_by_blockchain(mv_bc.blockchain);
-    // add bc to source container
-    create_container_blockchain(mv_bc.source, mv_bc.blockchain);
+    // remove only the dst replica nodes that were added at move-start, preserving any pre-existing manual replicas
+    // blockchain never left the src container, so no container changes needed
+    val added_replica_nodes = list<node>.from_gtv(gtv.from_bytes(mv_bc.added_replica_nodes));
+    delete blockchain_replica_node @* { mv_bc.blockchain, .node in added_replica_nodes };
 
     delete mv_bc;
 }

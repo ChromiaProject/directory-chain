@@ -27,19 +27,20 @@ function require_no_pending_blockchain_action(blockchain) {
 function try_to_finalize_blockchain_move(message: configuration_updated) {
     val moving_bc = moving_blockchain @? { .blockchain.rid == message.blockchain_rid, .final_height == message.height - 1 };
     if (exists(moving_bc)) {
-        val src_nodes = cluster_node @* { moving_bc.source.cluster } ( .node );
-        for (node in src_nodes) {
-            delete blockchain_replica_node @? { moving_bc.blockchain, node };
-        }
-        if (not src_nodes.empty()) {
-            log("blockchain_replica_node removed: %s".format(src_nodes @* {} ( .pubkey )));
+        // dst nodes are now signers via the new config; remove them from replicas
+        val dst_nodes = cluster_node @* { moving_bc.destination.cluster } ( .node );
+        delete blockchain_replica_node @* { moving_bc.blockchain, .node in dst_nodes };
+
+        // remove src nodes from replicas if not keeping src as replica
+        if (not moving_bc.keep_src_as_replica) {
+            val src_nodes = cluster_node @* { moving_bc.source.cluster } ( .node );
+            delete blockchain_replica_node @* { moving_bc.blockchain, .node in src_nodes };
         }
 
         log("Blockchain %s moving from container %s to container %s was finished at height %s".format(
             moving_bc.blockchain.rid, moving_bc.source.name, moving_bc.destination.name, moving_bc.final_height)
         );
 
-        val src_container = moving_bc.source;
         delete moving_bc;
     }
 }

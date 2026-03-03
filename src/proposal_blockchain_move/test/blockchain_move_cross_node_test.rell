@@ -1,0 +1,585 @@
+@test module;
+
+import ^^.*;
+import common.operations.*;
+import common.queries.*;
+import common.test.ops.*;
+import common.test.config_test_helpers.*;
+import common.test.setup.*;
+import common.test.util.*;
+import proposal.voting.test.ops.*;
+import proposal_blockchain.*;
+import proposal_blockchain.test.utils.*;
+import proposal_blockchain_move.test.utils.*;
+import proposal_container.*;
+import proposal_provider.*;
+import direct_container.*;
+import direct_cluster.*;
+import nm_api.*;
+
+
+function test_blockchain_move_between_containers_running_on_different_nodes() {
+    // setup
+    setup_module(provider_quota_max_containers = 3, cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val ip = provider @ { initial_provider.pub };
+    val node0 = node @ { test_node.pubkey };
+    var conf = apply_required_configuration_properties();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, rell.test.pubkeys.bob, true),
+        // s1 / c1
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1", "s1", 0, [initial_provider.pub, rell.test.pubkeys.bob]),
+        update_node_with_units(initial_provider.pub, node0.pubkey, cluster_units = 2),
+        add_node_to_cluster(initial_provider.pub, node0.pubkey, "s1"),
+        // s2 / c2, c3
+        create_cluster(initial_provider.pub, "s2", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c2", "s2", 0, [initial_provider.pub, rell.test.pubkeys.bob]),
+        create_container_with_resource_limits(
+            initial_provider.pub, "c3", "s2", 1,
+            [initial_provider.pub, rell.test.pubkeys.bob],
+            [container_resource_limit_type.container_units : 1, container_resource_limit_type.max_blockchains : 1]
+        ),
+        // proposing the blockchain to the c1
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
+    ).sign(initial_provider).run();
+    bob_votes();
+    val foo_chain = blockchain @ { "foo_chain" };
+
+    // Create node1 and add it to cluster s2
+    // Propose the blockchain to the c3 to make it full
+    rell.test.tx().op(
+        create_test_node(ip, rell.test.pubkeys.trudy, cluster @ { .name == "s2" }),
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain_copy", "c3")
+    ).sign(initial_provider).run();
+    val node1 = node @ { rell.test.pubkeys.trudy };
+    // baseline: node0 runs blockchain, node1 does not run blockchain
+    assert_node_runs_blockchain(node0.pubkey, foo_chain.rid);
+    assert_node_not_runs_blockchain(node1.pubkey, foo_chain.rid);
+
+    // 1. start blockchain move
+    // Trying to move the blockchain to a full container c3 -- must fail
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c3")
+    ).sign(initial_provider).run_must_fail("Can't add blockchain, container c3 is full");
+
+    // Moving to a proper container c2
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c2")
+    ).sign(initial_provider).run();
+    assert_not_null(pending_blockchain_move @? { foo_chain });
+    // Trying to propose an blockchain_action, must fail due to non-null pending_blockchain_move
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, foo_chain.rid, blockchain_action.pause)
+    ).sign(initial_provider).run_must_fail("Moving blockchain can't be paused");
+    // Continuing with pending_blockchain_move
+    bob_votes();
+    val mv_bc = moving_blockchain @? { foo_chain,
+        .source.name == "c1", .destination.name == "c2",
+        .final_height == -1, .remove_on_nodes == x"", .keep_src_as_replica == true
+    };
+    assert_not_null(mv_bc);
+    // asserting that s2/c2 dst nodes are blockchain replicas
+    assert_equals(blockchain_replica_node @* { foo_chain } ( .node ), [node1]);
+    // blockchain still belongs to c1 (src)
+    assert_equals(container_blockchain @ { foo_chain } ( .container.name ), "c1");
+    // both nodes run the blockchain
+    assert_node_runs_blockchain(node0.pubkey, foo_chain.rid);
+    assert_node_runs_blockchain(node1.pubkey, foo_chain.rid);
+    // asserting migrating_blockchain_info through NM API
+    /// for node0
+    val info0 = nm_get_migrating_blockchain_node_info(node0.pubkey, foo_chain.rid);
+    assert_true(exists(info0));
+    assert_equals(info0!!.source_container, "c1");
+    assert_equals(info0.destination_container, "c2");
+    assert_equals(info0.is_source_node, true);
+    assert_equals(info0.is_destination_node, false);
+    assert_equals(info0.final_height, -1);
+    /// for node1
+    val info1 = nm_get_migrating_blockchain_node_info(node1.pubkey, foo_chain.rid);
+    assert_true(exists(info1));
+    assert_equals(info1!!.source_container, "c1");
+    assert_equals(info1.destination_container, "c2");
+    assert_equals(info1.is_source_node, false);
+    assert_equals(info1.is_destination_node, true);
+    assert_equals(info1.final_height, -1);
+
+    // Trying again to propose an blockchain_action, must fail due to non-null moving_blockchain
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, foo_chain.rid, blockchain_action.pause)
+    ).sign(initial_provider).run_must_fail("Moving blockchain can't be paused");
+
+    // Trying to move blockchain that is already being moved -- must fail
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c1") // c2 -> c1
+    ).sign(initial_provider).run_must_fail("Blockchain %s is being moved".format(foo_chain.rid));
+
+    // 2. finish blockchain move
+    rell.test.tx().op(
+        propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 123)
+    ).sign(initial_provider).run();
+    bob_votes();
+    // both src node0 (temporarily added at finish) and dst node1 are replicas until finalization
+    assert_equals(blockchain_replica_node @ { foo_chain } ( @set .node ), set([node0, node1]));
+    // blockchain moved to c2 at finish time
+    assert_equals(container_blockchain @ { foo_chain } ( .container.name ), "c2");
+    // both nodes run the blockchain
+    assert_node_runs_blockchain(node0.pubkey, foo_chain.rid);
+    assert_node_runs_blockchain(node1.pubkey, foo_chain.rid);
+    // asserting migrating_blockchain_info
+    assert_equals(nm_get_migrating_blockchain_node_info(node0.pubkey, foo_chain.rid)?.final_height, 123);
+    assert_equals(nm_get_migrating_blockchain_node_info(node1.pubkey, foo_chain.rid)?.final_height, 123);
+    // new config
+    assert_not_null(blockchain_configuration @? { foo_chain, 124 });
+    // asserting that a new signers config is present at the proposed height
+    val bcs = blockchain_configuration_signers @? { foo_chain, 124 };
+    assert_not_null(bcs);
+    assert_equals(bcs.signers, [node1.pubkey].to_gtv().to_bytes());
+    // asserting that mv_bc has relevant .final_height and .remove_on_nodes
+    assert_equals(mv_bc.final_height, 123);
+    assert_equals(mv_bc.remove_on_nodes, x"");
+
+    // simulate ICMF message receiving
+    _build_block_after_moving("s2", foo_chain.rid, 124);
+
+    // node0 (src) is now a replica because keep_src_as_replica defaults to true
+    assert_equals(blockchain_replica_node @* { foo_chain } ( .node ), [node0]);
+    // no moving state for foo_chain
+    assert_true(empty(moving_blockchain @? { foo_chain }));
+    // blockchain remains in c2 after finalization
+    assert_equals(container_blockchain @ { foo_chain } ( .container.name ), "c2");
+    // asserting migrating_blockchain_info through NM API
+    assert_null(nm_get_migrating_blockchain_node_info(node0.pubkey, foo_chain.rid));
+    assert_null(nm_get_migrating_blockchain_node_info(node1.pubkey, foo_chain.rid));
+    // bc state didn't change (RUNNING)
+    assert_equals(foo_chain.state, blockchain_state.RUNNING);
+    // both nodes run the blockchain (node0 is kept as replica)
+    assert_node_runs_blockchain(node0.pubkey, foo_chain.rid);
+    assert_node_runs_blockchain(node1.pubkey, foo_chain.rid);
+
+    // Moving blockchain backward from c2 -> c1
+    _test_backward_moving(foo_chain.rid, "c2", node0.pubkey, "c1", "s1", node1.pubkey, 456);
+}
+
+function test_blockchain_move_between_containers_running_on_different_nodes_with_removing_src_and_dst_containers() {
+    // setup
+    setup_module(provider_quota_max_containers = 3, cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val ip = provider @ { initial_provider.pub };
+    val node0 = node @ { test_node.pubkey };
+    val node1_pubkey = rell.test.pubkeys.trudy;
+    var conf = apply_required_configuration_properties();
+
+    rell.test.tx().op(
+        // s1 / c1
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1", "s1", 0, [initial_provider.pub]),
+        update_node_with_units(initial_provider.pub, node0.pubkey, cluster_units = 2),
+        add_node_to_cluster(initial_provider.pub, node0.pubkey, "s1"),
+        // s2 / c2
+        create_cluster(initial_provider.pub, "s2", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c2", "s2", 0, [initial_provider.pub]),
+        // proposing the blockchain to the c1
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
+    ).sign(initial_provider).run();
+    val foo_chain = blockchain @ { "foo_chain" };
+
+    // Create node1 and add it to cluster s2
+    rell.test.tx().op(
+        create_test_node(ip, node1_pubkey, cluster @ { .name == "s2" }),
+    ).sign(initial_provider).run();
+
+    // 1. start blockchain moving
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c2")
+    ).sign(initial_provider).run();
+    // asserting moving_blockchain
+    val mv_bc = moving_blockchain @? { foo_chain,
+        .source.name == "c1", .destination.name == "c2",
+        .final_height == -1, .remove_on_nodes == x"", .keep_src_as_replica == true
+    };
+    assert_not_null(mv_bc);
+    val node1 = node @ { node1_pubkey };
+    // both nodes run the blockchain
+    assert_node_runs_blockchain(node0.pubkey, foo_chain.rid);
+    assert_node_runs_blockchain(node1.pubkey, foo_chain.rid);
+
+    // Trying to remove container c1 and c2
+    assert_false(empty(get_container_blockchain("c1")));  // c1 still has foo_chain
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c1")
+    ).sign(initial_provider).run_must_fail("Container c1 is currently a source in a moving blockchain process and can't be deleted");
+    assert_true(empty(get_container_blockchain("c2")));  // c2 has no blockchains yet
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c2")
+    ).sign(initial_provider).run_must_fail("Container c2 is currently a destination in a moving blockchain process and can't be deleted");
+
+    // 2. finish blockchain move
+    rell.test.tx().op(
+        propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 123)
+    ).sign(initial_provider).run();
+
+    // Container switched at finish time; configuration_updated ICMF message not received yet.
+    // Trying to remove container c1 and c2 still fails because moving_blockchain still exists.
+    // both src node0 (temporarily added at finish) and dst node1 are replicas until finalization
+    assert_equals(blockchain_replica_node @ { foo_chain } ( @set .node ), set([node0, node1]));
+    assert_true(empty(get_container_blockchain("c1")));   // c1 no longer has foo_chain
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c1")
+    ).sign(initial_provider).run_must_fail("Container c1 is currently a source in a moving blockchain process and can't be deleted");
+    assert_false(empty(get_container_blockchain("c2")));  // c2 now has foo_chain
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c2")
+    ).sign(initial_provider).run_must_fail("Container c2 is currently a destination in a moving blockchain process and can't be deleted");
+    // both nodes run the blockchain
+    assert_node_runs_blockchain(node0.pubkey, foo_chain.rid);
+    assert_node_runs_blockchain(node1.pubkey, foo_chain.rid);
+
+    // simulate ICMF message receiving
+    _build_block_after_moving("s2", foo_chain.rid, 124);
+
+    // node0 (src) is now a replica because keep_src_as_replica defaults to true
+    assert_equals(blockchain_replica_node @* { foo_chain } ( .node ), [node0]);
+    // both nodes run the blockchain (node0 is kept as replica)
+    assert_node_runs_blockchain(node0.pubkey, foo_chain.rid);
+    assert_node_runs_blockchain(node1.pubkey, foo_chain.rid);
+
+    // remove src container "c1" succeeds
+    assert_true(empty(get_container_blockchain("c1")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c1")
+    ).sign(initial_provider).run();
+
+    // remove dst container "c2" succeeds
+    assert_true(exists(get_container_blockchain("c2")));
+    rell.test.tx().op(
+        remove_container(initial_provider.pub, "c2")
+    ).sign(initial_provider).run();
+}
+
+function test_cancel_blockchain_move_between_containers_running_on_different_nodes() {
+    // setup
+    setup_module(provider_quota_max_containers = 3, cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val ip = provider @ { initial_provider.pub };
+    val node0 = node @ { test_node.pubkey };
+    var conf = apply_required_configuration_properties();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, rell.test.pubkeys.bob, true),
+        // s1 / c1
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1", "s1", 0, [initial_provider.pub, rell.test.pubkeys.bob]),
+        update_node_with_units(initial_provider.pub, node0.pubkey, cluster_units = 2),
+        add_node_to_cluster(initial_provider.pub, node0.pubkey, "s1"),
+        // s2 / c2, c3
+        create_cluster(initial_provider.pub, "s2", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c2", "s2", 0, [initial_provider.pub, rell.test.pubkeys.bob]),
+        // proposing the blockchain to the c1
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
+    ).sign(initial_provider).run();
+    bob_votes();
+    val foo_chain = blockchain @ { "foo_chain" };
+
+    rell.test.tx().op(
+        create_test_node(ip, rell.test.pubkeys.trudy, cluster @ { .name == "s2" }),
+    ).sign(initial_provider).run();
+    val node1 = node @ { rell.test.pubkeys.trudy };
+
+    // 1. try to cancel the blockchain move for a blockchain that is not being moved
+    rell.test.tx().op(
+        propose_blockchain_move_cancel(initial_provider.pub, foo_chain.rid)
+    ).sign(initial_provider)
+        .run_must_fail("Blockchain %s is not being moved".format(foo_chain.rid));
+
+    // 2. start blockchain move
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c2")
+    ).sign(initial_provider).run();
+    // Trying to propose an blockchain_move_cancel, must fail due to non-null pending_blockchain_move
+    rell.test.tx().op(
+        propose_blockchain_move_cancel(initial_provider.pub, foo_chain.rid)
+    ).sign(initial_provider).run_must_fail("Blockchain %s is not being moved".format(foo_chain.rid));
+    // Continuing with pending_blockchain_move
+    bob_votes();
+    assert_not_null(moving_blockchain @? { foo_chain });
+    // blockchain still in c1 (src); c2 has no blockchains yet
+    assert_not_null(container_blockchain @? { foo_chain, .container.name == "c1" });
+    assert_null(container_blockchain @? { foo_chain, .container.name == "c2" });
+    // node1 (dst) is now a replica
+    assert_equals(blockchain_replica_node @* { foo_chain } ( .node ), [node1]);
+    // both nodes run the blockchain
+    assert_node_runs_blockchain(node0.pubkey, foo_chain.rid);
+    assert_node_runs_blockchain(node1.pubkey, foo_chain.rid);
+
+    // 3. cancel the blockchain move
+    rell.test.tx().op(
+        propose_blockchain_move_cancel(initial_provider.pub, foo_chain.rid)
+    ).sign(initial_provider).run();
+    // Trying to propose an blockchain_move_cancel again
+    rell.test.tx().op(
+        propose_blockchain_move_cancel(initial_provider.pub, foo_chain.rid)
+    ).nop().sign(initial_provider)
+        .run_must_fail("Canceling of blockchain move %s is already proposed".format(foo_chain.rid));
+    // Trying to propose an blockchain_action
+    rell.test.tx().op(
+        propose_blockchain_action(initial_provider.pub, foo_chain.rid, blockchain_action.pause)
+    ).nop().sign(initial_provider)
+        .run_must_fail("Moving blockchain can't be paused: %s".format(foo_chain.rid));
+    // Continuing with pending_blockchain_move_cancel
+    bob_votes();
+    assert_null(moving_blockchain @? { foo_chain });
+    assert_not_null(container_blockchain @? { foo_chain, .container.name == "c1" });
+    assert_null(container_blockchain @? { foo_chain, .container.name == "c2" });
+    // dst replicas removed after cancel
+    assert_true(empty(blockchain_replica_node @* { foo_chain }));
+    // node0 runs the blockchain, node1 does not
+    assert_node_runs_blockchain(node0.pubkey, foo_chain.rid);
+    assert_node_not_runs_blockchain(node1.pubkey, foo_chain.rid);
+
+    // 4. move blockchain again and try to cancel after finalizing of blockchain move
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c2")
+    ).nop().sign(initial_provider).run();
+    bob_votes();
+    rell.test.tx().op(
+        propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 123)
+    ).nop().sign(initial_provider).run();
+    bob_votes();
+    assert_not_null(moving_blockchain @? { foo_chain, .final_height == 123 });
+    // blockchain moved to c2 at finish time
+    assert_null(container_blockchain @? { foo_chain, .container.name == "c1" });
+    assert_not_null(container_blockchain @? { foo_chain, .container.name == "c2" });
+    // both src node0 (temporarily added at finish) and dst node1 are replicas until finalization
+    assert_equals(blockchain_replica_node @ { foo_chain } ( @set .node ), set([node0, node1]));
+    // both nodes run the blockchain (node0 is kept as replica)
+    assert_node_runs_blockchain(node0.pubkey, foo_chain.rid);
+    assert_node_runs_blockchain(node1.pubkey, foo_chain.rid);
+    rell.test.tx().op(
+        propose_blockchain_move_cancel(initial_provider.pub, foo_chain.rid)
+    ).nop().sign(initial_provider)
+        .run_must_fail("Cannot cancel an already finalized blockchain move for blockchain %s".format(foo_chain.rid));
+}
+
+function test_paused_blockchain_move_between_containers_running_on_different_nodes() {
+    // setup
+    setup_module(provider_quota_max_containers = 3, cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val ip = provider @ { initial_provider.pub };
+    val node0 = node @ { test_node.pubkey };
+    var conf = apply_required_configuration_properties();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, rell.test.pubkeys.bob, true),
+        // s1 / c1
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1", "s1", 0, [initial_provider.pub, rell.test.pubkeys.bob]),
+        update_node_with_units(initial_provider.pub, node0.pubkey, cluster_units = 2),
+        add_node_to_cluster(initial_provider.pub, node0.pubkey, "s1"),
+        // s2 / c2
+        create_cluster(initial_provider.pub, "s2", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c2", "s2", 0, [initial_provider.pub, rell.test.pubkeys.bob]),
+        // proposing the blockchain to the c1
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
+    ).sign(initial_provider).run();
+    bob_votes();
+    val foo_chain = blockchain @ { "foo_chain" };
+
+    rell.test.tx().op(
+        create_test_node(ip, rell.test.pubkeys.trudy, cluster @ { .name == "s2" }),
+        propose_blockchain_action(initial_provider.pub, foo_chain.rid, blockchain_action.pause)
+    ).sign(initial_provider).run();
+    bob_votes();
+    assert_equals(foo_chain.state, blockchain_state.PAUSED);
+    val node1 = node @ { rell.test.pubkeys.trudy };
+
+    // 1. start blockchain move
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c2")
+    ).sign(initial_provider).run();
+    assert_not_null(pending_blockchain_move @? { foo_chain });
+    bob_votes();
+    val mv_bc = moving_blockchain @? { foo_chain,
+        .source.name == "c1", .destination.name == "c2",
+        .final_height == -1, .remove_on_nodes == x"", .keep_src_as_replica == true
+    };
+    assert_not_null(mv_bc);
+    // asserting that s2/c2 dst nodes are blockchain replicas
+    assert_equals(blockchain_replica_node @* { foo_chain } ( .node ), [node1]);
+    // blockchain still belongs to c1 (src)
+    assert_equals(container_blockchain @ { foo_chain } ( .container.name ), "c1");
+    // both nodes run the blockchain
+    assert_node_runs_blockchain(node0.pubkey, foo_chain.rid);
+    assert_node_runs_blockchain(node1.pubkey, foo_chain.rid);
+    // asserting that nm_get_blockchain_containers_for_node returns proper values for node0 and node1
+    assert_equals(nm_get_blockchain_containers_for_node(node0.pubkey, foo_chain.rid), ["c1"]);
+    assert_equals(nm_get_blockchain_containers_for_node(node1.pubkey, foo_chain.rid), ["c2"]);
+
+    // 2. finish blockchain move
+    rell.test.tx().op(
+        propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 123)
+    ).sign(initial_provider).run();
+    bob_votes();
+    // both src node0 (temporarily added at finish) and dst node1 are replicas until finalization
+    assert_equals(blockchain_replica_node @ { foo_chain } ( @set .node ), set([node0, node1]));
+    // blockchain moved to c2 at finish time
+    assert_equals(container_blockchain @ { foo_chain } ( .container.name ), "c2");
+    // both nodes run the blockchain
+    assert_node_runs_blockchain(node0.pubkey, foo_chain.rid);
+    assert_node_runs_blockchain(node1.pubkey, foo_chain.rid);
+    // asserting that a new signers config is present at the proposed height
+    val bcs = blockchain_configuration_signers @? { foo_chain, 124 };
+    assert_not_null(bcs);
+    assert_equals(bcs.signers, [node1.pubkey].to_gtv().to_bytes());
+    // asserting that mv_bc has relevant .final_height and .remove_on_nodes
+    assert_equals(mv_bc.final_height, 123);
+    assert_equals(mv_bc.remove_on_nodes, x"");
+    // asserting that blockchain_state is PAUSED
+    assert_equals(foo_chain.state, blockchain_state.PAUSED);
+
+    // simulate ICMF message receiving
+    _build_block_after_moving("s2", foo_chain.rid, 124);
+
+    // node0 (src) is now a replica because keep_src_as_replica defaults to true
+    assert_equals(blockchain_replica_node @* { foo_chain } ( .node ), [node0]);
+    // no moving state for foo_chain
+    assert_true(empty(moving_blockchain @? { foo_chain }));
+    // blockchain remains in c2 after finalization
+    assert_equals(container_blockchain @ { foo_chain } ( .container.name ), "c2");
+    // asserting migrating_blockchain_info through NM API
+    assert_null(nm_get_migrating_blockchain_node_info(node0.pubkey, foo_chain.rid));
+    assert_null(nm_get_migrating_blockchain_node_info(node1.pubkey, foo_chain.rid));
+    // bc state didn't change (PAUSED)
+    assert_equals(foo_chain.state, blockchain_state.PAUSED);
+    // both nodes run the blockchain (node0 is kept as replica)
+    assert_node_runs_blockchain(node0.pubkey, foo_chain.rid);
+    assert_node_runs_blockchain(node1.pubkey, foo_chain.rid);
+
+    // Moving blockchain backward from c2 -> c1
+    _test_backward_moving(foo_chain.rid, "c2", node0.pubkey, "c1", "s1", node1.pubkey, 456);
+}
+
+/**
+ * Testing `keep_src_as_replica` option
+ */
+
+function test_blockchain_move_with_keep_src_as_replica_false() {
+    // setup: two different clusters/containers/nodes
+    setup_module(provider_quota_max_containers = 3, cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val ip = provider @ { initial_provider.pub };
+    val node0 = node @ { test_node.pubkey };
+    var conf = apply_required_configuration_properties();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, rell.test.pubkeys.bob, true),
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1", "s1", 0, [initial_provider.pub, rell.test.pubkeys.bob]),
+        update_node_with_units(initial_provider.pub, node0.pubkey, cluster_units = 2),
+        add_node_to_cluster(initial_provider.pub, node0.pubkey, "s1"),
+        create_cluster(initial_provider.pub, "s2", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c2", "s2", 0, [initial_provider.pub, rell.test.pubkeys.bob]),
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
+    ).sign(initial_provider).run();
+    bob_votes();
+    val foo_chain = blockchain @ { "foo_chain" };
+
+    rell.test.tx().op(
+        create_test_node(ip, rell.test.pubkeys.trudy, cluster @ { .name == "s2" }),
+    ).sign(initial_provider).run();
+    val node1 = node @ { rell.test.pubkeys.trudy };
+
+    // start move with keep_src_as_replica = false (explicit opt-out)
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c2", keep_src_as_replica = false)
+    ).sign(initial_provider).run();
+    bob_votes();
+    // node1 (dst) is a replica during the move
+    assert_equals(blockchain_replica_node @* { foo_chain } ( .node ), [node1]);
+    // both nodes run the blockchain
+    assert_node_runs_blockchain(node0.pubkey, foo_chain.rid);
+    assert_node_runs_blockchain(node1.pubkey, foo_chain.rid);
+
+    // finish the move
+    rell.test.tx().op(
+        propose_blockchain_move_finish(initial_provider.pub, foo_chain.rid, 100)
+    ).sign(initial_provider).run();
+    bob_votes();
+    // both src node0 (temporarily added at finish) and dst node1 are replicas until finalization
+    assert_equals(blockchain_replica_node @ { foo_chain } ( @set .node ), set([node0, node1]));
+    // both nodes run the blockchain
+    assert_node_runs_blockchain(node0.pubkey, foo_chain.rid);
+    assert_node_runs_blockchain(node1.pubkey, foo_chain.rid);
+
+    _build_block_after_moving("s2", foo_chain.rid, 101);
+
+    // blockchain moved to c2
+    assert_equals(container_blockchain @ { foo_chain } ( .container.name ), "c2");
+    // node1 is no longer a replica (it is now a signer)
+    // node0 (src) is NOT a replica because keep_src_as_replica = false
+    assert_true(empty(blockchain_replica_node @* { foo_chain }));
+    assert_true(empty(moving_blockchain @? { foo_chain }));
+    // node1 runs the blockchain, node0 does not
+    assert_node_not_runs_blockchain(node0.pubkey, foo_chain.rid);
+    assert_node_runs_blockchain(node1.pubkey, foo_chain.rid);
+}
+
+function test_cancel_blockchain_move_preserves_manual_replicas() {
+    // setup: two different clusters/containers/nodes
+    setup_module(provider_quota_max_containers = 3, cluster_anchoring_config = ["any": "value".to_gtv()]);
+    val ip = provider @ { initial_provider.pub };
+    val node0 = node @ { test_node.pubkey };
+    var conf = apply_required_configuration_properties();
+
+    rell.test.tx().op(
+        register_provider(initial_provider.pub, rell.test.pubkeys.bob, provider_tier.NODE_PROVIDER),
+        propose_provider_is_system(initial_provider.pub, rell.test.pubkeys.bob, true),
+        create_cluster(initial_provider.pub, "s1", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c1", "s1", 0, [initial_provider.pub, rell.test.pubkeys.bob]),
+        update_node_with_units(initial_provider.pub, node0.pubkey, cluster_units = 2),
+        add_node_to_cluster(initial_provider.pub, node0.pubkey, "s1"),
+        create_cluster(initial_provider.pub, "s2", voter_sets.system_p, [initial_provider.pub]),
+        create_container(initial_provider.pub, "c2", "s2", 0, [initial_provider.pub, rell.test.pubkeys.bob]),
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "c1")
+    ).sign(initial_provider).run();
+    bob_votes();
+    val foo_chain = blockchain @ { "foo_chain" };
+
+    rell.test.tx().op(
+        create_test_node(ip, rell.test.pubkeys.trudy, cluster @ { .name == "s2" }),
+    ).sign(initial_provider).run();
+    val node1 = node @ { rell.test.pubkeys.trudy };
+
+    // manually add node1 as a replica BEFORE the move starts
+    rell.test.tx().op(
+        add_blockchain_replica(initial_provider.pub, foo_chain.rid, node1.pubkey)
+    ).sign(initial_provider).run();
+    assert_equals(blockchain_replica_node @* { foo_chain } ( .node ), [node1]);
+    // both nodes run the blockchain
+    assert_node_runs_blockchain(node0.pubkey, foo_chain.rid);
+    assert_node_runs_blockchain(node1.pubkey, foo_chain.rid);
+
+    // start move: node1 is already a replica so apply_blockchain_move skips adding it
+    rell.test.tx().op(
+        propose_blockchain_move(initial_provider.pub, foo_chain.rid, "c2")
+    ).sign(initial_provider).run();
+    bob_votes();
+    // node1 is still the only replica (was pre-existing, not tracked in added_replica_nodes)
+    assert_equals(blockchain_replica_node @* { foo_chain } ( .node ), [node1]);
+    // both nodes run the blockchain
+    assert_node_runs_blockchain(node0.pubkey, foo_chain.rid);
+    assert_node_runs_blockchain(node1.pubkey, foo_chain.rid);
+
+    // cancel the move: only nodes in added_replica_nodes should be removed — which is none here
+    rell.test.tx().op(
+        propose_blockchain_move_cancel(initial_provider.pub, foo_chain.rid)
+    ).sign(initial_provider).run();
+    bob_votes();
+    assert_null(moving_blockchain @? { foo_chain });
+    // node1 is still a replica — it was pre-existing and was not touched by cancel
+    assert_equals(blockchain_replica_node @* { foo_chain } ( .node ), [node1]);
+    // both nodes run the blockchain
+    assert_node_runs_blockchain(node0.pubkey, foo_chain.rid);
+    assert_node_runs_blockchain(node1.pubkey, foo_chain.rid);
+}
+
