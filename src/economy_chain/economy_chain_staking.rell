@@ -426,6 +426,9 @@ function _staking_distribute_rewards(using_batches: boolean = false, update_pend
 
 function _staking_pay_reward(last_known_time: timestamp, pool: ft4.accounts.account, ft4.assets.asset, account: ft4.accounts.account, amount: integer, shared_amount: integer, providers: list<byte_array>) {
     val total_amount = amount + shared_amount;
+    update staker_state @* { account } ( .pending_token_time = 0 );
+    delete pending_shared_payment @* { account };
+
     if (total_amount == 0) {
         log("Total staking reward for %s was 0. Nothing to pay out.".format(account.id));
         return;
@@ -433,8 +436,6 @@ function _staking_pay_reward(last_known_time: timestamp, pool: ft4.accounts.acco
 
     val provider = if (empty(providers)) x'' else providers[0];
     ft4.assets.Unsafe.transfer(pool, account, asset, total_amount);
-    update staker_state @* { account } ( .pending_token_time = 0 );
-    delete pending_shared_payment @* { account };
     create staking_payment(timestamp = last_known_time, amount = amount, account, shared_amount, provider);
     log("Paid out reward of %s including %s staking reward and %s shared reward to %s".format(total_amount, amount, shared_amount, account.id));
 }
