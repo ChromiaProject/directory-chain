@@ -104,3 +104,45 @@ The codebase follows a **modular blockchain architecture** with these key compon
 - Changes often require corresponding updates to the Postchain Management Console (PMC)
 - CI/CD pipeline uses GitLab with PostgreSQL containers
 - Documentation in `/doc/` includes network setup and configuration guides
+
+## Integration Tests (`it/`)
+
+The `it/` directory contains Maven/Kotlin integration tests that run against a live node. They use the postchain-client library (not the Rell test framework) and are executed separately from `chr test`.
+
+### Version sync checklist
+
+**When bumping any of the following, update `it/pom.xml` as well:**
+
+| What changed | Property in `it/pom.xml` |
+|---|---|
+| `postchain-client` / `chromia-client` version | `postchain.client.version` |
+| Postchain BOM version | `postchain.version` |
+| Rell Maven plugin version | `rell.maven.plugin.version` |
+
+**When bumping tool versions used in CI, update `.gitlab-ci.yml` `integration-test` job:**
+
+| Tool | Where in `.gitlab-ci.yml` |
+|---|---|
+| `chr` CLI | `apt-get install -y chr=<version>` (line ~62) |
+| `pmc` CLI | `apt-get install -y pmc=<version>` (same line) |
+
+### Running locally
+
+```bash
+# 1. Build the IT configuration
+chr build --hide-lib-warnings --settings chromia-it.yml
+
+# 2. Start a local node (from repo root)
+chr node start --settings chromia-it.yml --name manager_it --hide-lib-warnings --managed-mode --wipe >> node.log 2>&1 &
+# Wait for "Node is initialized" in node.log
+
+# 3. Bootstrap the network
+cd it
+pmc network initialize -cac ../build/cluster_anchoring_it.xml -sac ../build/system_anchoring_it.xml \
+  -ecc ../build/economy_chain_it.xml -tcc ../build/token_chain_it.xml --lookup-brid
+pmc economy add-tag --name tag --scu-price 1 --extra-storage-price 1
+pmc economy add-cluster --tag tag --name dappCluster --cluster-units 1 --voter-set SYSTEM_P --governor SYSTEM_P
+
+# 4. Run tests
+mvn test
+```

@@ -32,6 +32,43 @@ For example, the change that allowed the reward rate to be voted on by providers
 For all such changes, `version.rell` needs to be incremented appropriately. Otherwise existing PMC users will not know to upgrade to use the new features.
 
 
+## Integration Tests (`it/`)
+
+The `it/` directory contains Maven/Kotlin integration tests that run against a live node, separate from `chr test`.
+
+### Running locally
+
+```bash
+# 1. Build the IT configuration
+chr build --hide-lib-warnings --settings chromia-it.yml
+
+# 2. Start a local node (from repo root)
+chr node start --settings chromia-it.yml --name manager_it --hide-lib-warnings --managed-mode --wipe >> node.log 2>&1 &
+# Wait for "Node is initialized" in node.log
+
+# 3. Bootstrap the network
+cd it
+pmc network initialize -cac ../build/cluster_anchoring_it.xml -sac ../build/system_anchoring_it.xml \
+  -ecc ../build/economy_chain_it.xml -tcc ../build/token_chain_it.xml --lookup-brid
+pmc economy add-tag --name tag --scu-price 1 --extra-storage-price 1
+pmc economy add-cluster --tag tag --name dappCluster --cluster-units 1 --voter-set SYSTEM_P --governor SYSTEM_P
+
+# 4. Run tests
+mvn test
+```
+
+### Keeping versions in sync
+
+`it/pom.xml` has its own version properties that must be kept in sync with the main project. When bumping dependencies, check these too:
+
+| What changed | Update in `it/pom.xml` | Update in `.gitlab-ci.yml` |
+|---|---|---|
+| `postchain-client` / `chromia-client` | `postchain.client.version` | — |
+| Postchain BOM | `postchain.version` | — |
+| Rell Maven plugin | `rell.maven.plugin.version` | — |
+| `chr` CLI | — | `apt-get install -y chr=<version>` in `integration-test` job |
+| `pmc` CLI | — | `apt-get install -y pmc=<version>` in `integration-test` job |
+
 ## Releases
 
 Whenever an api is added or changed (signature of query/operations), the api version should be updated in `version.rell`. If the api is changed in `nm_api` or `cm_api`, the respective version of those libs should also be updated.
