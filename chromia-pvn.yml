@@ -1,0 +1,158 @@
+definitions:
+  chain_version: &chain_version
+    release_version: ${RELEASE_VERSION:-dev}
+    release_commit: ${RELEASE_COMMIT:-dev}
+blockchains:
+  pvn:
+    module: management_chain_devnet1
+    config:
+      features:
+        merkle_hash_version: 2
+      # *common_config
+      signers:
+        - x"0350fe40766bc0ce8d08b3f5b810e49a8352fdd458606bd5fafe5acdcdc8ff3f57"
+      sync_ext:
+        - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
+      gtx:
+        modules:
+          - "net.postchain.d1.icmf.IcmfSenderGTXModule"
+          - "net.postchain.d1.icmf.IcmfReceiverGTXModule"
+          - "net.postchain.eif.transaction.signerupdate.directorychain.SignerUpdateGTXModule"
+          - "net.postchain.d1.iccf.IccfGTXModule"
+      icmf:
+        receiver:
+          anchoring:
+            topics:
+              - G_configuration_updated
+              - G_configuration_failed
+          global:
+            topics:
+              - G_create_cluster_v2
+              - G_create_container
+              - G_stop_container
+              - G_restart_container
+              - G_upgrade_container
+              - G_remove_container
+              - G_assign_subnode_image_to_container
+              - G_add_subnode_jar_extensions_to_container
+              - G_register_dapp_provider
+    moduleArgs:
+      common.init:
+        initial_provider: 03ECD350EEBC617CBBFBEF0A1B7AE553A748021FD65C7C50C5ABB4CA16D4EA5B05
+        genesis_node:
+          - 0350fe40766bc0ce8d08b3f5b810e49a8352fdd458606bd5fafe5acdcdc8ff3f57
+          - node0.devnet1.chromia.dev
+          - 9870
+          - https://node0.devnet1.chromia.dev:7740
+          - SE
+      common:
+        allow_blockchain_dependencies: false
+        provider_quota_max_actions_per_day: 100
+      common.queries:
+        developers:
+          - andrei.ursu@chromaway.com
+          - eugene.tykulov@chromaway.com
+          - johan.nilsson@chromaway.com
+          - mikael.staldal@chromaway.com
+          - robert.wideberg@chromaway.com
+      proposal_blockchain_move:
+        provider_quota_move_cost: 2
+      proposal_blockchain.util:
+        # *proposal_blockchain_util
+        max_config_path_depth: 10
+        max_config_size: 5242880 # 5 MiB
+        max_block_size: 27262976 # 26 MiB
+        min_inter_block_interval: 25
+        min_fast_revolt_status_timeout: 2000
+        allowed_dapp_chain_gtx_modules:
+          - "net.postchain.rell.module.RellPostchainModuleFactory"
+          - "net.postchain.gtx.StandardOpsGTXModule"
+          - "net.postchain.d1.icmf.IcmfSenderGTXModule"
+          - "net.postchain.d1.icmf.IcmfReceiverGTXModule"
+          - "net.postchain.d1.iccf.IccfGTXModule"
+          - "net.postchain.eif.EifGTXModule"
+          - "net.postchain.web.WebStaticGTXModuleFactory"
+          - "net.postchain.crypto.ethereum.EthereumAuthGTXModule"
+          - "net.postchain.crypto.webauthn.WebAuthnGTXModuleFactory"
+        allowed_dapp_chain_sync_exts:
+          - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
+          - "net.postchain.eif.EifSynchronizationInfrastructureExtension"
+        allowed_blockchain_features:
+          - "merkle_hash_version"
+        required_blockchain_features:
+          - "merkle_hash_version"
+        require_min_merkle_hash_version: 2
+        require_eif_snapshot_version: 2
+        allowed_dapp_chain_native_functions:
+          - "net.postchain.d1.BlockWitnessRellNative"
+      proposal_container.proposal_container_configuration:
+        min_slow_db_statement_log_ms: 1000
+      chain_version: *chain_version
+      housekeeping:
+        max_empty_container_time: 259200000 # 3 days
+      node_software_version:
+        node_image:
+          url: registry.gitlab.com/chromaway/postchain-chromia/chromaway/chromia-server
+          tag: ${NODE_IMAGE_VERSION}
+          digest: ${NODE_IMAGE_DIGEST}
+        default_subnode_image:
+          url: registry.gitlab.com/chromaway/postchain-chromia/chromaway/chromia-subnode
+          tag: ${DEFAULT_SUBNODE_IMAGE_VERSION}
+          digest: ${DEFAULT_SUBNODE_IMAGE_DIGEST}
+      blockchain_auth_icmf:
+        icmf_rate_limit_ms: 10000
+  system_anchoring:
+    module: anchoring_chain_system
+    config:
+      features:
+        merkle_hash_version: 2
+      blockstrategy:
+        maxblocktime: 300000
+      gtx:
+        modules:
+          - "net.postchain.d1.anchoring.system.SystemAnchoringGTXModule"
+          - "net.postchain.d1.icmf.IcmfSenderGTXModule"
+    moduleArgs:
+      chain_version: *chain_version
+    test:
+      modules:
+        - anchoring_chain_system.test
+  cluster_anchoring:
+    module: anchoring_chain_cluster
+    config:
+      features:
+        merkle_hash_version: 2
+      blockstrategy:
+        maxblocktime: 300000
+      sync_ext:
+        - "net.postchain.d1.icmf.IcmfReceiverSynchronizationInfrastructureExtension"
+      gtx:
+        modules:
+          - "net.postchain.d1.anchoring.cluster.ClusterAnchoringGTXModule"
+          - "net.postchain.d1.icmf.IcmfSenderGTXModule"
+          - "net.postchain.d1.icmf.IcmfReceiverGTXModule"
+      icmf:
+        receiver:
+          directory-chain:
+            topics:
+              - L_container_blockchain_update
+    moduleArgs:
+      chain_version: *chain_version
+    test:
+      modules:
+        - anchoring_chain_cluster.test
+      moduleArgs:
+        anchoring_chain_cluster:
+          imcf_headers_with_messages_query_limit: 3 # Good for testing limits
+
+docs:
+  title: Directory chain
+  footerMessage: © 2024 Chromia
+  additionalContent:
+    - module-docs.md
+  sourceLink:
+    remoteUrl: https://gitlab.com/chromaway/core/directory-chain/-/tree/dev/src
+    remoteLineSuffix: "#L"
+
+compile:
+  rellVersion: 0.15.4
