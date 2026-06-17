@@ -94,7 +94,7 @@ The codebase follows a **modular blockchain architecture** with these key compon
 - Configuration-driven deployment via YAML files
 
 ## Dependencies
-- **Rell version**: 0.14.12
+- **Rell version**: 0.15.3
 - **Database**: PostgreSQL  
 - **Runtime**: Postchain (Chromia's blockchain runtime)
 - **External libraries**: FT4, EIF, hbridge, ICMF/ICCF
