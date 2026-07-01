@@ -8,8 +8,9 @@ import messaging.configuration_update_message.*;
     index timestamp: integer;
     block_rid: byte_array;
     index blockchain_rid, block_rid;
-    block_header: byte_array; // not used any longer, will be empty
-    witness: byte_array; // not used any longer, will be empty
+    // block_header and witness are no longer stored here; the values are reconstructed on demand from the
+    // anchoring transaction (see extract_anchored_block). Removing these attributes lets Rell drop the columns
+    // (compatibility >= 0.15.1) and reclaims the historical storage after VACUUM FULL.
     anchoring_tx_op_index: integer; // For batch anchoring it's the index in the array of blocks
 }
 
@@ -42,8 +43,6 @@ operation __anchor_block_header(block_rid: byte_array, header: gtv, witness: byt
         block_height = decoded_header.height,
         timestamp = decoded_header.timestamp,
         block_rid = block_rid,
-        block_header = x"",
-        witness = x"",
         anchoring_tx_op_index = op_context.op_index,
     );
 
@@ -65,8 +64,6 @@ function map_block_to_anchor_to_entity(block_to_anchor, batch_index: integer): s
         block_height = block_to_anchor.block_header.height,
         timestamp = block_to_anchor.block_header.timestamp,
         block_rid = block_to_anchor.block_rid,
-        block_header = x"",
-        witness = x"",
         anchoring_tx_op_index = batch_index,
         transaction = op_context.transaction,
     );
@@ -78,6 +75,8 @@ struct anchor_block_data {
     block_height: integer;
     block_rid: byte_array;
     timestamp: integer;
+    // No longer stored on anchor_block; reconstructed on demand from the anchoring transaction
+    // (see build_anchor_block_data / extract_anchored_block).
     block_header: byte_array;
     witness: byte_array;
 
