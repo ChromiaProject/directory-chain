@@ -94,7 +94,6 @@ From economy-chain:
 - `G_restart_container`
 - `G_remove_container`
 - `G_register_dapp_provider`
-- `G_change_dapp_providers_state`
 - `G_assign_subnode_image_to_container`
 - `G_add_subnode_jar_extensions_to_container`
 
@@ -133,7 +132,6 @@ From economy-chain:
               - G_restart_container
               - G_remove_container
               - G_register_dapp_provider
-              - G_change_dapp_providers_state
     moduleArgs:
       common.init:
         initial_provider: ${INITIAL_PROVIDER:-03ECD350EEBC617CBBFBEF0A1B7AE553A748021FD65C7C50C5ABB4CA16D4EA5B05}
