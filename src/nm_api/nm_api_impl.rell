@@ -26,9 +26,12 @@ function get_cluster_replica_node_blockchains(node) = set(
 );
 
 function get_blockchains_replicated_by_node(node) = set(
-    blockchain_replica_node @* {
-        node, .blockchain.state in [blockchain_state.RUNNING, blockchain_state.PAUSED, blockchain_state.IMPORTING, blockchain_state.UNARCHIVING]
-    } (blockchain_info(.blockchain.rid, .blockchain.system, .blockchain.state))
+    (blockchain_replica_node, container_blockchain) @* {
+        blockchain_replica_node.node == node,
+        blockchain_replica_node.blockchain == container_blockchain.blockchain,
+        container_blockchain.blockchain.state in [blockchain_state.RUNNING, blockchain_state.PAUSED, blockchain_state.IMPORTING, blockchain_state.UNARCHIVING],
+        container_blockchain.container.state == container_state.RUNNING
+    } ( blockchain_info(container_blockchain.blockchain.rid, container_blockchain.blockchain.system, container_blockchain.blockchain.state) )
 );
 
 function get_mandatory_system_chains(): set<blockchain_info> {

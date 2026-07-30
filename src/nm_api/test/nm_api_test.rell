@@ -220,6 +220,52 @@ function test_nm_compute_blockchain_info_list__and__nm_get_containers__with__sto
     assert_equals(nm_get_containers(np1_node_key), ["cluster1_system", "container1"]);
 }
 
+function test_get_blockchains_replicated_by_node__with_stopped_container() {
+    setup_module();
+    val node_provider1 = rell.test.keypairs.bob;
+    val np1_node_key = x"1111111111111111111111111111111B8DD00AC8E5CB0869F267212F35425E3C8F";
+
+    rell.test.tx().op(
+        propose_container(initial_provider.pub, clusters.system, "container1", voter_sets.system_p),
+        register_provider(initial_provider.pub, node_provider1.pub, provider_tier.NODE_PROVIDER),
+        propose_provider_state(initial_provider.pub, node_provider1.pub, true)
+    ).sign(initial_provider).run();
+    // np1's node is not a member of any cluster, so it only sees blockchains it's explicitly a replica of
+    rell.test.tx().op(
+        register_node(node_provider1.pub, np1_node_key, "host", 7777, "http://host/api_url")
+    ).sign(node_provider1).run();
+
+    var conf = apply_required_configuration_properties();
+    rell.test.tx().op(
+        propose_blockchain(initial_provider.pub, conf.to_gtv().to_bytes(), "foo_chain", "container1")
+    ).sign(initial_provider).run();
+
+    val foo_chain = blockchain @ { "foo_chain" } (.rid);
+    val np1_node = node @ { np1_node_key };
+
+    // np1 explicitly adds its node as a replica of `foo_chain`
+    rell.test.tx().op(
+        add_blockchain_replica(node_provider1.pub, foo_chain, np1_node_key)
+    ).sign(node_provider1).run();
+
+    assert_true(to_brids(get_blockchains_replicated_by_node(np1_node)).contains(foo_chain));
+    assert_true(nm_compute_blockchain_list(np1_node_key).contains(foo_chain));
+
+    rell.test.tx().op(
+        stop_container_op("container1")
+    ).sign(initial_provider).run();
+
+    assert_false(to_brids(get_blockchains_replicated_by_node(np1_node)).contains(foo_chain));
+    assert_false(nm_compute_blockchain_list(np1_node_key).contains(foo_chain));
+
+    rell.test.tx().op(
+        restart_container_op("container1")
+    ).sign(initial_provider).run();
+
+    assert_true(to_brids(get_blockchains_replicated_by_node(np1_node)).contains(foo_chain));
+    assert_true(nm_compute_blockchain_list(np1_node_key).contains(foo_chain));
+}
+
 function to_brids(bc_info_list: set<blockchain_info>): set<byte_array> = set(bc_info_list @* {} .rid);
 
 function test_nm_get_container_limits() {
