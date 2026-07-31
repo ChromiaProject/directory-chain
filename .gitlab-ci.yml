@@ -34,15 +34,14 @@ deploy_library_chain:
     - ${CI_PROJECT_DIR}/ci/library_chain/deploy.sh -n begin_block --major 1 --minor 100 --library-description "Provides common functionality such as detecting configuration updates and scheduling jobs"
     - ${CI_PROJECT_DIR}/ci/library_chain/deploy.sh -n transaction_prioritization --major 2 --minor 0 --library-description "Transaction prioritization"
 
-test:
+.rell-test:
   services:
     - postgres
   stage: test
   tags:
     - saas-linux-medium-amd64
-  script:
+  before_script:
     - CASC_YAML_MAX_ALIASES=1000 chr install --config config/chr.properties
-    - chr test --test-report
   artifacts:
     when: always
     paths:
@@ -51,6 +50,44 @@ test:
       junit:
         - "build/reports/*-tests.xml"
     expire_in: 1 week
+
+# The suite is split so the two halves run concurrently on separate runners.
+# GitLab merges the JUnit reports from both jobs into one pipeline test report.
+#
+# Chain-scoped tests must be selected with an explicit -bc: `chr test -m` maps a
+# module to a chain by string prefix, so e.g. `-m lib.test_alt_config` otherwise
+# matches the `lib.test` entry of chain lib_test and runs under the wrong chain.
+# Note that -bc takes ONE chain per flag -- a comma-separated list silently
+# selects nothing and the job passes having run zero tests.
+#
+# Together the two jobs run exactly the same 817 tests as the single job did, but
+# the pipeline reports 830: common_proposal.test is declared both under
+# economy_chain_test and in the top-level `test:` block, so test:main already runs
+# it under both chains (two different chain configs, as before) and this job then
+# repeats the economy_chain_test variant -- 13 tests, ~21s, counted twice.
+# Deduplicating would mean listing economy_chain_test's other modules by hand.
+test:chains:
+  extends: .rell-test
+  script:
+    - chr test --test-report
+      -bc economy_chain_test
+      -bc economy_chain_alt_config_test
+      -bc token_chain
+      -bc cluster_anchoring
+      -bc system_anchoring
+      -bc lib_test
+      -bc lib_alt_config_test
+
+# The top-level `test:` block of chromia.yml. The module list is read from
+# chromia.yml rather than duplicated here, so new modules are picked up.
+test:main:
+  extends: .rell-test
+  script:
+    - |
+      MODULES=$(awk '/^test:/{f=1} f&&/^  modules:/{m=1;next} m&&/^    - /{printf "%s%s",s,$2; s=","} m&&/^  [a-zA-Z]/{exit}' chromia.yml)
+      [ -n "$MODULES" ] || { echo "Could not read test modules from chromia.yml"; exit 1; }
+      echo "Running top-level test modules: $MODULES"
+      chr test --test-report -m "$MODULES"
 
 integration-test:
   image: registry.gitlab.com/chromaway/core-tools/chromia-images/maven-docker-java21:1.0.11@sha256:a985644b469b4d01dcbd726176d69e238d8c7012c077a429beb65f86905d0bd1
