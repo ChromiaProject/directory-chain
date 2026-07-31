@@ -59,6 +59,13 @@ deploy_library_chain:
 # matches the `lib.test` entry of chain lib_test and runs under the wrong chain.
 # Note that -bc takes ONE chain per flag -- a comma-separated list silently
 # selects nothing and the job passes having run zero tests.
+#
+# Together the two jobs run exactly the same 817 tests as the single job did, but
+# the pipeline reports 830: common_proposal.test is declared both under
+# economy_chain_test and in the top-level `test:` block, so test:main already runs
+# it under both chains (two different chain configs, as before) and this job then
+# repeats the economy_chain_test variant -- 13 tests, ~21s, counted twice.
+# Deduplicating would mean listing economy_chain_test's other modules by hand.
 test:chains:
   extends: .rell-test
   script:
