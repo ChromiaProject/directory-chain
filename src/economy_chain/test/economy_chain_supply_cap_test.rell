@@ -1,0 +1,196 @@
+@test module;
+
+/*
+ * What this proves
+ * ----------------
+ * Chromia publishes a CHR "max supply" of 978,064,789 CHR (1,000,000,000 minus the
+ * 2020 treasury burn). That number is shown on explorer.chromia.com and is carried by
+ * CoinMarketCap / CoinGecko as `max_supply`.
+ *
+ * It is not enforced by any code. It exists nowhere on chain:
+ *
+ *   - `ft4.assets.asset` (src/lib/ft4/core/assets/asset.rell) has a `mutable total_supply`
+ *     and no cap / max-supply attribute at all, and `Unsafe.register_asset()` takes no
+ *     cap parameter, so the CHR asset carries no notion of a maximum.
+ *   - The only ceiling in the whole system is in `assets.Unsafe.mint()`, which requires
+ *     `total_supply <= max_asset_amount`, where `max_asset_amount = 2^256 - 1`. That is
+ *     ~1.2e62 times the published "max supply".
+ *   - No `before_mint` / `after_mint` extension adds a cap either. The only extension of
+ *     those hooks in this repo is in `src/lib/hbridge/erc20/snapshot.rell`, and it merely
+ *     records snapshot data.
+ *   - The `chromia_foundation_mint_amount_limit` on `propose_minting` is a *rate* limit
+ *     (amount per `chromia_foundation_mint_time_limit_ms` window), not a cumulative cap:
+ *     the quota resets every window and the running total is discarded, so an unbounded
+ *     total can be minted over enough windows.
+ *
+ * Note that this repo already implements exactly the missing check - just not for CHR.
+ * Third-party tokens on the *token* chain get a `minting_policy` with a cumulative
+ * `max_supply` that `mint_token()` enforces alongside its per-interval limit
+ * (`src/token_chain/minting.rell`, `require(amount + total_minted <= minting_policy.max_supply, ...)`).
+ * CHR on the economy chain has no such policy: it has the per-window rate limit and
+ * nothing else. The literal 978,064,789 does not appear anywhere in the source tree.
+ *
+ * Why it matters: on 2026-08-15 mainnet CHR supply crossed 978,064,789 CHR in production.
+ * Nothing rejected it, nothing alarmed - it was only noticed afterwards and had to be
+ * undone by four manual `ft4.burn` transactions. These tests are the executable version
+ * of that incident: every mint below succeeds, and no assertion about the published max
+ * supply is ever made by production code.
+ */
+
+import ^^.*;
+import ^.helper_functions.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.assets;
+}
+
+/** The "max supply" Chromia publishes, in whole CHR. Enforced nowhere in this codebase. */
+val published_max_supply_chr = 978064789;
+
+/** Mainnet CHR supply on 2026-08-17, in whole CHR (977,331,914.378200 CHR, rounded down). */
+val mainnet_supply_chr_2026_08_17 = 977331914;
+
+/** `chromia_foundation_mint_amount_limit` as configured on mainnet: 10m CHR per day. */
+val mainnet_mint_amount_limit_chr = 10000000;
+
+function published_max_supply_units(): big_integer = (published_max_supply_chr * units_per_asset).to_big_integer();
+
+/**
+ * The headline proof: ordinary foundation mint proposals, each one strictly inside the
+ * configured per-window mint limit, walk total supply past the published max supply. Every
+ * transaction succeeds, the crossing proposal is APPROVED like any other, and the next
+ * window mints happily on top of an already-over-max supply.
+ *
+ * Supply is first brought to the real mainnet level of 2026-08-17 (977,331,914 CHR) with
+ * the existing `mint_to` test helper, which calls the same production
+ * `ft4.assets.Unsafe.mint()` as every real mint path. The crossing itself is then done
+ * purely through the production governance operation `propose_minting`.
+ */
+function test_governance_mint_crosses_published_max_supply() {
+
+    rell.test.tx().op(init(), create_test_cluster("cluster_name")).run();
+
+    val foundation = get_chromia_foundation_account();
+    val mint_limit = get_ec_mint_proposal_amount_limit();
+
+    // Reproduce the mainnet starting point: just below the published "max supply".
+    rell.test.tx()
+        .op(mint_to(foundation, (mainnet_supply_chr_2026_08_17 * units_per_asset).to_big_integer()))
+        .run();
+
+    val supply_before = get_chr_asset().supply;
+    assert_true(supply_before < published_max_supply_units());
+    log("Supply before: %s units (published max supply is %s units)".format(supply_before, published_max_supply_units()));
+
+    // Single-member voter set: the proposal is applied as soon as it is created.
+    rell.test.tx()
+        .op(create_chromia_foundation_voter_set())
+        .sign(rell.test.keypairs.alice)
+        .run();
+
+    // Mint the full per-window quota, one window at a time, until the published max supply
+    // is behind us. Each proposal is an entirely legitimate governance action: it is within
+    // the rate limit, so `enforce_and_record_mint_rate_limit()` is satisfied every time.
+    // No `run_must_fail` anywhere below - nothing in the code objects.
+    var windows_used = 0;
+    while (get_chr_asset().supply <= published_max_supply_units()) {
+        rell.test.set_next_block_time_delta(get_ec_mint_proposal_time_limit_ms());
+        rell.test.tx()
+            .op(propose_minting(rell.test.pubkeys.alice, mint_limit, foundation.id))
+            .sign(rell.test.keypairs.alice)
+            .nop()
+            .run();
+        windows_used += 1;
+        // The proposal was applied, not left pending and not failed.
+        assert_true(empty(pending_minting @* { }));
+        assert_equals(get_common_proposal(get_latest_common_proposal_id())!!.state, common_proposal_state.APPROVED);
+    }
+
+    val supply_after = get_chr_asset().supply;
+    log("Supply after %s window(s) of %s units: %s units".format(windows_used, mint_limit, supply_after));
+
+    // The point of the whole file.
+    assert_true(supply_after > published_max_supply_units());
+    assert_equals(supply_after, supply_before + (windows_used * mint_limit).to_big_integer());
+    assert_equals(get_account_balance(foundation), supply_after);
+
+    // And being over the published max supply does not poison anything: the very next
+    // window mints again, on top of a supply that is already above the published maximum.
+    rell.test.set_next_block_time_delta(get_ec_mint_proposal_time_limit_ms());
+    rell.test.tx()
+        .op(propose_minting(rell.test.pubkeys.alice, mint_limit, foundation.id))
+        .sign(rell.test.keypairs.alice)
+        .nop()
+        .run();
+
+    assert_equals(get_chr_asset().supply, supply_after + mint_limit.to_big_integer());
+}
+
+/**
+ * The foundation mint limit is a rate limit, not a cumulative cap: the quota resets on
+ * every new time window and the amount already minted in previous windows is never
+ * consulted. So the governance path alone, using only `propose_minting` at exactly the
+ * configured limit, mints an unbounded total given enough windows - it just takes
+ * `published max supply / limit` of them.
+ */
+function test_foundation_mint_limit_is_a_rate_limit_not_a_cumulative_cap() {
+
+    rell.test.tx().op(init(), create_test_cluster("cluster_name")).run();
+
+    val foundation = get_chromia_foundation_account();
+    val mint_limit = get_ec_mint_proposal_amount_limit();
+    assert_equals(get_chr_asset().supply, 0L);
+
+    rell.test.tx()
+        .op(create_chromia_foundation_voter_set())
+        .sign(rell.test.keypairs.alice)
+        .run();
+
+    val windows = 30;
+    var i = 0;
+    while (i < windows) {
+        rell.test.set_next_block_time_delta(get_ec_mint_proposal_time_limit_ms());
+        rell.test.tx()
+            .op(propose_minting(rell.test.pubkeys.alice, mint_limit, foundation.id))
+            .sign(rell.test.keypairs.alice)
+            .nop()
+            .run();
+        i += 1;
+    }
+
+    // Total minted grows strictly with the number of windows. No cumulative ceiling was
+    // ever checked, so nothing here converges on any "max supply".
+    assert_equals(get_chr_asset().supply, (windows * mint_limit).to_big_integer());
+
+    // With mainnet's own configured limit of 10m CHR per day, the published max supply is
+    // reachable from zero in this many daily windows - no code change, no exploit, just
+    // repeated use of the ordinary governance operation.
+    val windows_to_published_max = published_max_supply_chr / mainnet_mint_amount_limit_chr + 1;
+    assert_equals(windows_to_published_max, 98);
+    log("At mainnet's 10m CHR/day foundation mint limit, %s daily proposals reach the published max supply from zero".format(windows_to_published_max));
+}
+
+/**
+ * There is no cap anywhere between the published max supply and 2^256-1: a single mint of
+ * ten times the published max supply goes through the production
+ * `ft4.assets.Unsafe.mint()` without complaint, and the only bound that mint enforces is
+ * `max_asset_amount`, which is astronomically larger than 978,064,789 CHR.
+ */
+function test_only_supply_ceiling_is_2_pow_256() {
+
+    rell.test.tx().op(init(), create_test_cluster("cluster_name")).run();
+
+    // The sole ceiling in the system, straight from src/lib/ft4/core/assets/asset.rell.
+    assert_equals(ft4.assets.max_asset_amount, big_integer.from_hex("ff".repeat(32)));
+    assert_true(ft4.assets.max_asset_amount > published_max_supply_units());
+
+    // Ten times the published "max supply", minted in one operation.
+    val absurd_amount = (10 * published_max_supply_chr * units_per_asset).to_big_integer();
+    rell.test.tx()
+        .op(mint_to(get_chromia_foundation_account(), absurd_amount))
+        .run();
+
+    assert_equals(get_chr_asset().supply, absurd_amount);
+    assert_true(get_chr_asset().supply > published_max_supply_units());
+}
