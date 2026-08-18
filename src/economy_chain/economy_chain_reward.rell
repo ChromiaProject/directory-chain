@@ -1,5 +1,31 @@
 val DAY_MS = 86400000; // 1000 * 60 * 60 * 24 - 1 day
 
+/**
+ * Reward payouts.
+ *
+ * Every payout here moves CHR out of REWARD_POOL. What each account holds and who can sign for
+ * it is documented where they are defined, in `economy_chain_account.rell`; this file is only
+ * concerned with the ROLE an account plays in a payout:
+ *
+ * - the `pool` parameter is always REWARD_POOL -- the SOURCE.
+ * - the `account` parameter is the DESTINATION -- a provider's `provider_account.account`, or
+ *   FOUNDATION for the foundation fee share. It is a parameter rather than something each
+ *   function resolves itself precisely because there is more than one possible destination.
+ *
+ * Both are `ft4.accounts.account`, so the type system cannot tell them apart and swapping them
+ * would silently move money the wrong way.
+ *
+ * Delegators are never paid from this file: their share is only reserved here (see
+ * `delegation_share`) and is transferred later by `_staking_shared_rewards`.
+ */
+
+/**
+ * Reimburse the provider whose node submitted an EVM transaction:
+ * REWARD_POOL -> that node's provider account.
+ *
+ * Paid with `has_delegation_share = false`, so unlike cluster rewards the provider keeps the
+ * whole amount and no delegator share is reserved.
+ */
 function pay_evm_transaction_submitter_rewards(
     evm_transaction_submitter_cost: evm_transaction_submitter_cost,
     reward: big_integer
@@ -12,6 +38,13 @@ function pay_evm_transaction_submitter_rewards(
     }
 }
 
+/**
+ * Entry point for one cluster's reward round, reached when a node availability report arrives.
+ *
+ * Pays REWARD_POOL -> provider account for every rewarded node in the cluster, and
+ * additionally REWARD_POOL -> FOUNDATION when this is the system cluster, so the Foundation
+ * share is claimed exactly once per round rather than once per cluster.
+ */
 function pay_rewards(cluster: cluster, node_availability_report: node_availability_report) {
 
     val is_system_cluster = cluster.name == system_cluster_name;
@@ -103,6 +136,14 @@ function calculate_dapp_cluster_rewards(cluster: cluster, node_availability_repo
     return node_reward;
 }
 
+/**
+ * Pay the Chromia Foundation fee share: REWARD_POOL -> FOUNDATION.
+ *
+ * Unlike node rewards this is not per node, is not scaled by node availability, and is not
+ * gated by staking requirements -- the full computed share is always claimed. Any shortfall
+ * is carried on the `chromia_foundation` object's own `reward_debt`, which is separate from
+ * the per-provider debts held on `provider_account`.
+ */
 function pay_out_chromia_foundation_reward() {
     val sum_total_max_revenue_per_dapp_cluster = sum_total_max_revenue_per_dapp_cluster();
     val chromia_foundation_reward = (sum_total_max_revenue_per_dapp_cluster * economy_constants.chromia_foundation_fee_share * economy_constants.chr_per_usd * units_per_asset).to_big_integer();
@@ -117,6 +158,20 @@ function pay_out_chromia_foundation_reward() {
     chromia_foundation.reward_debt = pay_reward_result.reward_debt;
 }
 
+/**
+ * Pay one round of node rewards: REWARD_POOL -> each rewarded node's provider account.
+ *
+ * Rewards are computed per node but paid to `node.provider`'s single `provider_account`, so a
+ * provider running several nodes receives one transfer per node into the same account.
+ *
+ * Providers failing `is_staking_approved` are skipped entirely: that reward is forfeited and
+ * is NOT added to `reward_debt`.
+ *
+ * @param node_reward           amount earned per node this round
+ * @param has_delegation_share  when true, the provider's `staking_rewards_share` is reserved
+ *                              for its delegators; false for EVM submitter rewards, which are
+ *                              paid in full to the provider account
+ */
 function pay_out_node_rewards(node_reward: map<node, big_integer>, has_delegation_share: boolean) {
 
     val pool = get_pool_account();
@@ -137,6 +192,26 @@ function pay_out_node_rewards(node_reward: map<node, big_integer>, has_delegatio
     }
 }
 
+/**
+ * Pay `reward`, plus any previously carried `reward_debt`, from the reward pool to one recipient.
+ *
+ * Both account parameters have the same type but are not interchangeable.
+ *
+ * @param pool             SOURCE -- always REWARD_POOL. Read for its balance, and passed through
+ *                         `refill_pool_account_if_possible` if it cannot cover the total owed.
+ * @param account          DESTINATION -- either a provider's `provider_account.account` (from
+ *                         `pay_out_node_rewards`) or FOUNDATION (from
+ *                         `pay_out_chromia_foundation_reward`).
+ * @param reward_debt      amount already owed to `account` from earlier rounds; added to
+ *                         `reward`. Any remaining shortfall is returned in the result and must
+ *                         be written back to the caller's own debt field.
+ * @param reward           amount newly earned this round
+ * @param identity         log label for `account` only; never used to resolve an account
+ * @param delegation_share fraction of the payout owed onward to `account`'s delegators. It is
+ *                         deducted from the provider's transfer here but NOT sent to delegators
+ *                         by this function -- `after_pay_reward` reserves it and staking pays it
+ *                         out in a later block.
+ */
 function pay_reward(pool: ft4.accounts.account, account: ft4.accounts.account, reward_debt: big_integer,
         reward: big_integer, identity: text, delegation_share: decimal): pay_reward_result {
     var pool_balance = get_account_balance(pool);
@@ -219,6 +294,15 @@ function occupancy_rate(cluster): decimal {
 
 function adjusted_availability_factor(availability_factor: decimal): decimal = max(0, availability_factor - 0.9) * 10;
 
+/**
+ * Move `amount` from the reward pool to a recipient account, returning false rather than
+ * aborting the block if the transfer cannot be made.
+ *
+ * @param pool     SOURCE -- REWARD_POOL. Note that `try_transfer_reward` ignores this argument
+ *                 and calls `get_pool_account()` itself, so passing any other account would not
+ *                 change where the funds come from.
+ * @param account  DESTINATION -- a provider account or FOUNDATION.
+ */
 function transfer_reward(pool: ft4.accounts.account, account: ft4.accounts.account, amount: big_integer): boolean {
     return try_call(try_transfer_reward(pool, account, amount, *));
 }
