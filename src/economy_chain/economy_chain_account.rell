@@ -1,3 +1,52 @@
+/**
+ * CHR accounts on the economy chain.
+ *
+ * Two families of account are defined here, and they differ in who can move the money:
+ *
+ * 1. PROVIDER accounts -- `register_provider_account`. Created *with* an auth descriptor
+ *    (single-sig on the provider pubkey), so the provider itself can sign transfers.
+ *    One per registered provider, no matter how many nodes it runs.
+ *
+ *    Providers are not registered on this chain directly: they are SYNCED FROM THE
+ *    DIRECTORY CHAIN over ICMF. The `provider` entity is created or updated from a
+ *    `provider_update` message, and the account is created locally as a side effect of
+ *    first seeing that provider -- see `receive_provider_update_message` in
+ *    `economy_chain_directory_chain_sync.rell`, the only caller of
+ *    `register_provider_account`. So the pubkey the auth descriptor is built from is
+ *    DC-supplied, and no provider account can exist here without DC having announced it.
+ *
+ * 2. SYSTEM accounts -- created with `create_account_without_auth`, so they have NO auth
+ *    descriptor and nobody can sign for them. Their funds move only through `Unsafe.*`
+ *    calls in protocol code. There are exactly three:
+ *
+ *      REWARD_POOL  the only account CHR is ever minted into, and the source of every
+ *                   reward payout. See `refill_pool_account_if_possible`.
+ *      DEPOSIT      escrow for native staking principal only. Staked CHR is transferred
+ *                   in by `economy_chain_staking`, and back out on withdrawal. No reward
+ *                   is ever paid out of it, and it is not treasury money -- it belongs to
+ *                   the stakers.
+ *      FOUNDATION   Chromia Foundation treasury. Receives the foundation fee share each
+ *                   reward round; paid out again only by governance proposal.
+ *
+ * Every system account id is derived as `(<type name> + blockchain_rid).hash()`, so it is
+ * deterministic per chain and needs no registry. Note this is Rell's GTV-merkle `hash()`,
+ * not a plain sha256 over the concatenated bytes, so the ids cannot be reproduced with an
+ * off-chain sha256 -- read them from `get_ft4_account_ids` or `ft4.get_accounts_by_type`.
+ */
+
+/**
+ * Create a provider's own CHR account, if it does not already have one.
+ *
+ * Called only from `receive_provider_update_message`
+ * (`economy_chain_directory_chain_sync.rell`) when a provider synced from the directory
+ * chain over ICMF is seen for the first time. The provider record is DC's; the account is
+ * created here.
+ *
+ * Unlike the system accounts below this one IS user-controlled: it gets a single-signature
+ * auth descriptor over `provider.pubkey` with the "A" and "T" flags, so the provider can
+ * transfer out of it. `provider_account` and `provider_staking_account` are both pointed at
+ * the same underlying account -- reward payouts and staking share one balance.
+ */
 function register_provider_account(provider) {
 
     if (provider_account @? { provider } == null) {
@@ -25,6 +74,11 @@ function get_account_balance(ft4.accounts.account): big_integer =
 
 /**
  * Get information about the CHR asset.
+ *
+ * The `supply` field is FT4's `total_supply`: every CHR in existence, wherever it is held --
+ * this chain, other Chromia chains, and the EVM-side representations, since bridging and
+ * cross-chain transfers move balances without changing supply. It includes the three system
+ * account balances above, so it is a TOTAL supply figure and not a circulating one.
  */
 query get_chr_asset() = ft4.assets.map_asset(get_asset());
 
@@ -33,6 +87,14 @@ function get_asset(): ft4.assets.asset {
     return ft4.assets.asset @ { .id == asset_id };
 }
 
+/**
+ * REWARD_POOL -- the account CHR is minted into and every reward is paid from.
+ *
+ * Created without an auth descriptor, so no key can move its funds; only protocol code can,
+ * via `Unsafe.transfer`. Funded by container lease payments and by minting
+ * (`refill_pool_account_if_possible`), and drained by provider rewards, the foundation fee
+ * share, and staking rewards.
+ */
 function create_pool_account() =
     ft4.accounts.create_account_without_auth(get_pool_account_id(), pool_account_type);
 
@@ -49,6 +111,14 @@ function get_pool_account_id() = (pool_account_type + chain_context.blockchain_r
 
 val pool_account_type = "REWARD_POOL";
 
+/**
+ * DEPOSIT -- escrow holding native staking principal, and nothing else.
+ *
+ * Stakers' CHR is transferred in when they stake and back out when they withdraw, after
+ * `staking_withdrawal_delay_ms`. Do not confuse this with treasury: the balance belongs to
+ * the stakers, and no reward is ever paid out of it -- staking rewards come from
+ * REWARD_POOL. Its balance therefore equals the total native stake.
+ */
 function create_deposit_account() =
     ft4.accounts.create_account_without_auth(get_deposit_account_id(), deposit_account_type);
 
@@ -58,6 +128,14 @@ function get_deposit_account_id() = (deposit_account_type + chain_context.blockc
 
 val deposit_account_type = "DEPOSIT";
 
+/**
+ * FOUNDATION -- the Chromia Foundation treasury.
+ *
+ * Credited once per reward round with `chromia_foundation_fee_share` of notional cluster
+ * revenue. Unlike provider rewards that credit is not scaled by node availability and is
+ * not gated by staking requirements. Funds leave only through the
+ * `transfer_chromia_foundation_funds` governance proposal.
+ */
 function create_chromia_foundation_account() =
     ft4.accounts.create_account_without_auth(get_chromia_foundation_account_id(), foundation_account_type);
 
@@ -77,6 +155,25 @@ function register_assets() {
     );
 }
 
+/**
+ * Mint `pool_amount_to_mint` into REWARD_POOL, if the rate limit allows it.
+ *
+ * This is one of only two places CHR is created on this chain -- the other being the
+ * `propose_minting` governance path. It is called lazily from the reward and staking payout
+ * paths whenever the pool cannot cover what it owes, so minting is demand-driven rather
+ * than scheduled.
+ *
+ * Two behaviours worth knowing before relying on this:
+ *
+ * - When the rate limit has not yet elapsed it LOGS AND RETURNS NORMALLY. It does not throw,
+ *   so a caller cannot distinguish "refilled" from "refused" by control flow -- only by
+ *   comparing the returned balance against what it needs.
+ * - Nothing here, or anywhere in the mint path, compares total supply against any maximum.
+ *   The only ceiling is FT4's `max_asset_amount` (2^256-1). Any published "max supply"
+ *   figure is off-chain metadata and is not enforced by this function.
+ *
+ * @return the pool balance after the attempt, refilled or not
+ */
 function refill_pool_account_if_possible() {
     val pool = get_pool_account();
     if (pool_details.last_refill_millis + chain_context.args.pool_refill_limit_ms > op_context.last_block_time) {
@@ -92,6 +189,13 @@ function refill_pool_account_if_possible() {
     return get_account_balance(pool);
 }
 
+/**
+ * Ids of the system accounts, for off-chain consumers that cannot derive them.
+ *
+ * NOTE: this returns only REWARD_POOL and FOUNDATION -- DEPOSIT is missing, so anything
+ * computing circulating supply from this query will not see the staking escrow. Use
+ * `ft4.get_accounts_by_type("DEPOSIT")` for that one.
+ */
 query get_ft4_account_ids() {
     return [
         "pool_account_id": get_pool_account().id,
