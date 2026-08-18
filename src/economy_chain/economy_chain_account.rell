@@ -29,9 +29,7 @@
  *                   reward round; paid out again only by governance proposal.
  *
  * Every system account id is derived as `(<type name> + blockchain_rid).hash()`, so it is
- * deterministic per chain and needs no registry. Note this is Rell's GTV-merkle `hash()`,
- * not a plain sha256 over the concatenated bytes, so the ids cannot be reproduced with an
- * off-chain sha256 -- read them from `get_ft4_account_ids` or `ft4.get_accounts_by_type`.
+ * deterministic per chain and needs no registry.
  */
 
 /**
@@ -74,11 +72,6 @@ function get_account_balance(ft4.accounts.account): big_integer =
 
 /**
  * Get information about the CHR asset.
- *
- * The `supply` field is FT4's `total_supply`: every CHR in existence, wherever it is held --
- * this chain, other Chromia chains, and the EVM-side representations, since bridging and
- * cross-chain transfers move balances without changing supply. It includes the three system
- * account balances above, so it is a TOTAL supply figure and not a circulating one.
  */
 query get_chr_asset() = ft4.assets.map_asset(get_asset());
 
@@ -95,12 +88,11 @@ function get_asset(): ft4.assets.asset {
  * (`refill_pool_account_if_possible`), and drained by provider rewards, the foundation fee
  * share, and staking rewards.
  */
+val pool_account_type = "REWARD_POOL";
+
 function create_pool_account() =
     ft4.accounts.create_account_without_auth(get_pool_account_id(), pool_account_type);
 
-/**
- * Returns current balance of reward pool.
- */
 query get_pool_balance(): big_integer = get_account_balance(get_pool_account());
 
 function get_pool_account() = ft4.accounts.account_by_id(get_pool_account_id());
@@ -109,7 +101,6 @@ query get_pool_account_id_query() = get_pool_account_id();
 
 function get_pool_account_id() = (pool_account_type + chain_context.blockchain_rid).hash();
 
-val pool_account_type = "REWARD_POOL";
 
 /**
  * DEPOSIT -- escrow holding native staking principal, and nothing else.
@@ -119,6 +110,8 @@ val pool_account_type = "REWARD_POOL";
  * the stakers, and no reward is ever paid out of it -- staking rewards come from
  * REWARD_POOL. Its balance therefore equals the total native stake.
  */
+val deposit_account_type = "DEPOSIT";
+
 function create_deposit_account() =
     ft4.accounts.create_account_without_auth(get_deposit_account_id(), deposit_account_type);
 
@@ -126,7 +119,6 @@ function get_deposit_account() = ft4.accounts.account_by_id(get_deposit_account_
 
 function get_deposit_account_id() = (deposit_account_type + chain_context.blockchain_rid).hash();
 
-val deposit_account_type = "DEPOSIT";
 
 /**
  * FOUNDATION -- the Chromia Foundation treasury.
@@ -136,6 +128,8 @@ val deposit_account_type = "DEPOSIT";
  * not gated by staking requirements. Funds leave only through the
  * `transfer_chromia_foundation_funds` governance proposal.
  */
+val foundation_account_type = "FOUNDATION";
+
 function create_chromia_foundation_account() =
     ft4.accounts.create_account_without_auth(get_chromia_foundation_account_id(), foundation_account_type);
 
@@ -143,18 +137,9 @@ function get_chromia_foundation_account() = ft4.accounts.account_by_id(get_chrom
 
 function get_chromia_foundation_account_id() = (foundation_account_type + chain_context.blockchain_rid).hash();
 
-val foundation_account_type = "FOUNDATION";
 
 /**
- * Register the CHR asset itself. Called once, from `init()` (`module.rell:84`).
- *
- * Name, symbol, decimals and icon all come from module args. The issuing blockchain is set to
- * this chain, which is what makes the economy chain the only place CHR can be minted or burned
- * -- FT4 rejects both elsewhere. The resulting asset id is derived from
- * `(asset_name, blockchain_rid)`, the same way `get_asset` looks it up.
- *
- * Note there is no maximum-supply argument, because FT4's `asset` has no such field: no cap is
- * or can be recorded here. Despite the plural name this registers exactly one asset.
+ * Register the CHR asset itself. Called once, from `init()`.
  */
 function register_assets() {
     return ft4.assets.Unsafe.register_asset(
@@ -167,7 +152,7 @@ function register_assets() {
 }
 
 /**
- * Mint `pool_amount_to_mint` into REWARD_POOL, if the rate limit allows it.
+ * Mint `pool_amount_to_mint` CHR into REWARD_POOL, if the rate limit allows it.
  *
  * This is one of only two places CHR is created on this chain -- the other being the
  * `propose_minting` governance path. It is called lazily from the reward and staking payout
