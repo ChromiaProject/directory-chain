@@ -145,6 +145,17 @@ function get_chromia_foundation_account_id() = (foundation_account_type + chain_
 
 val foundation_account_type = "FOUNDATION";
 
+/**
+ * Register the CHR asset itself. Called once, from `init()` (`module.rell:84`).
+ *
+ * Name, symbol, decimals and icon all come from module args. The issuing blockchain is set to
+ * this chain, which is what makes the economy chain the only place CHR can be minted or burned
+ * -- FT4 rejects both elsewhere. The resulting asset id is derived from
+ * `(asset_name, blockchain_rid)`, the same way `get_asset` looks it up.
+ *
+ * Note there is no maximum-supply argument, because FT4's `asset` has no such field: no cap is
+ * or can be recorded here. Despite the plural name this registers exactly one asset.
+ */
 function register_assets() {
     return ft4.assets.Unsafe.register_asset(
         chain_context.args.asset_name,
