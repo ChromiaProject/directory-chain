@@ -2,13 +2,11 @@
  * Hard cap on CHR total supply.
  *
  * CHR is created at two points -- the reward pool refill (`refill_pool_account_if_possible`)
- * and the governance mint (`apply_ec_pending_minting`). Both were previously bounded only by
- * RATE limits: how fast CHR could be minted, never how much in total. The figure Chromia
- * publishes as "max supply" lived entirely off chain and was enforced nowhere, so total supply
- * crossed it in production on 2026-08-15 without anything objecting.
+ * and the governance mint (`apply_ec_pending_minting`). Each is bounded by its own RATE limit,
+ * which governs how fast CHR may be minted but not how much in total, and the two share no
+ * budget with each other.
  *
- * This module supplies the missing cumulative invariant, the same one `token_chain` has always
- * enforced for third-party tokens via `minting_policy.max_supply`:
+ * This module adds the cumulative invariant:
  *
  *     asset.total_supply <= max_supply, at all times
  *
@@ -27,9 +25,8 @@
 /**
  * The cap in force on this chain, read straight from `module_args.max_supply`.
  *
- * `0` means "no cap", the same convention `token_chain`'s `minting_policy.max_supply` uses,
- * which keeps every existing chain and test behaving exactly as before until a cap is
- * deliberately configured.
+ * `0` means "no cap", which keeps every existing chain and test behaving exactly as before
+ * until a cap is deliberately configured.
  *
  * It is deliberately a configuration value and not chain state: raising or lowering the cap
  * on CHR issuance then requires a blockchain configuration update, the same governance path
@@ -99,8 +96,9 @@ struct chr_max_supply_info {
 /**
  * Report the cap, current supply and remaining headroom in one call.
  *
- * The 2026-08-15 incident was not noticed as it happened, partly because no query answered
- * "how close is supply to the published maximum". This one does.
+ * Headroom is not derivable from `get_chr_asset()` alone, since that returns supply without the
+ * cap. Exposing all three together lets operators and external consumers see how close supply
+ * is to the cap, rather than having to infer it.
  */
 query get_chr_max_supply(): chr_max_supply_info {
     val asset = chr_asset_or_null();
