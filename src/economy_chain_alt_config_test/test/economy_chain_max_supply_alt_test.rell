@@ -57,7 +57,7 @@ function seed_supply_to(recipient: ft4.accounts.account, target: big_integer) {
 function test_max_supply_is_configured_on_this_chain() {
     rell.test.tx().op(init()).run();
 
-    val state = get_chr_max_supply();
+    val state = get_chr_supply_info();
     assert_true(state.enforced);
     assert_true(state.max_supply > 0L);
     assert_equals(state.max_supply, get_max_supply());
@@ -78,14 +78,14 @@ function test_pool_refill_clamps_to_remaining_headroom() {
     // Leave less headroom than a single refill would normally mint.
     val headroom = 1L;
     seed_supply_to(recipient, get_max_supply() - headroom);
-    assert_equals(get_chr_max_supply().remaining_mintable, headroom);
+    assert_equals(get_chr_supply_info().remaining_mintable, headroom);
 
     open_new_refill_window();
     force_payout_needing_refill(recipient);
 
     // Minted the headroom, not the full refill amount, landing exactly on the cap.
     assert_equals(get_chr_asset().supply, get_max_supply());
-    assert_equals(get_chr_max_supply().remaining_mintable, 0L);
+    assert_equals(get_chr_supply_info().remaining_mintable, 0L);
 }
 
 /**
@@ -97,7 +97,7 @@ function test_pool_refill_stops_at_max_supply_without_failing() {
     val recipient = get_chromia_foundation_account();
 
     seed_supply_to(recipient, get_max_supply());
-    assert_equals(get_chr_max_supply().remaining_mintable, 0L);
+    assert_equals(get_chr_supply_info().remaining_mintable, 0L);
 
     var i = 0;
     while (i < 3) {
@@ -152,7 +152,7 @@ function test_governance_mint_succeeds_exactly_up_to_max_supply() {
         .run();
 
     assert_equals(get_chr_asset().supply, get_max_supply());
-    assert_equals(get_chr_max_supply().remaining_mintable, 0L);
+    assert_equals(get_chr_supply_info().remaining_mintable, 0L);
 
     // Not one unit more, even in a fresh rate-limit window.
     rell.test.set_next_block_time_delta(get_ec_mint_proposal_time_limit_ms());
@@ -183,14 +183,14 @@ function test_both_mint_paths_share_one_max_supply() {
         .sign(rell.test.keypairs.alice)
         .nop()
         .run();
-    assert_equals(get_chr_max_supply().remaining_mintable, 1L);
+    assert_equals(get_chr_supply_info().remaining_mintable, 1L);
 
     // The refill gets only what governance left behind, however much it would normally mint.
     open_new_refill_window();
     force_payout_needing_refill(foundation);
 
     assert_equals(get_chr_asset().supply, get_max_supply());
-    assert_equals(get_chr_max_supply().remaining_mintable, 0L);
+    assert_equals(get_chr_supply_info().remaining_mintable, 0L);
 }
 
 /**
