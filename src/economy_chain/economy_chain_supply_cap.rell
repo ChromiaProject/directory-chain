@@ -25,21 +25,20 @@
  */
 
 /**
- * The cap in force on this chain, seeded from `module_args.max_supply` at `init()`.
+ * The cap in force on this chain, read straight from `module_args.max_supply`.
  *
- * It is an object rather than a plain config read so that it can be observed with
- * `get_chr_supply_cap()` and adjusted later without a code change. `0` means "no cap", the same
- * convention `token_chain`'s `minting_policy.max_supply` uses, which keeps every existing chain
- * and test behaving exactly as before until a cap is deliberately configured.
+ * `0` means "no cap", the same convention `token_chain`'s `minting_policy.max_supply` uses,
+ * which keeps every existing chain and test behaving exactly as before until a cap is
+ * deliberately configured.
+ *
+ * It is deliberately a configuration value and not chain state: raising or lowering the ceiling
+ * on CHR issuance then requires a blockchain configuration update, the same governance path
+ * that already controls `pool_amount_to_mint`, `pool_refill_limit_ms` and
+ * `chromia_foundation_mint_amount_limit`. No operation can move it.
  */
-object chr_supply_cap {
-    mutable max_supply: big_integer = 0;
-}
+function get_max_supply(): big_integer = chain_context.args.max_supply;
 
-/** Returns 0 when this chain is uncapped. */
-function get_max_supply(): big_integer = chr_supply_cap.max_supply;
-
-function is_chr_supply_capped(): boolean = chr_supply_cap.max_supply > 0;
+function is_chr_supply_capped(): boolean = get_max_supply() > 0;
 
 /**
  * The CHR asset, or null if it has not been registered yet.
@@ -59,11 +58,11 @@ function chr_asset_or_null(): ft4.assets.asset? {
 function remaining_mintable_chr(): big_integer {
     if (not is_chr_supply_capped()) return ft4.assets.max_asset_amount;
     val asset = chr_asset_or_null();
-    if (asset == null) return chr_supply_cap.max_supply;
-    return if (asset.total_supply >= chr_supply_cap.max_supply)
-        0L
-    else
-        chr_supply_cap.max_supply - asset.total_supply;
+    if (asset == null) return get_max_supply();
+    // Clamped at zero rather than going negative. Unreachable on a chain capped from genesis,
+    // since nothing can mint past the cap - but reachable if a cap is LOWERED below current
+    // supply by a later configuration update, which must halt minting rather than misbehave.
+    return if (asset.total_supply >= get_max_supply()) 0L else get_max_supply() - asset.total_supply;
 }
 
 /** Throws if minting `amount` more CHR would break the invariant. */
@@ -71,9 +70,9 @@ function require_within_max_supply(amount: big_integer) {
     if (not is_chr_supply_capped()) return;
     val asset = chr_asset_or_null();
     if (asset == null) return;
-    require(asset.total_supply + amount <= chr_supply_cap.max_supply,
+    require(asset.total_supply + amount <= get_max_supply(),
         "MAX SUPPLY EXCEEDED: minting %s would take CHR total supply to %s, above max_supply %s"
-            .format(amount, asset.total_supply + amount, chr_supply_cap.max_supply));
+            .format(amount, asset.total_supply + amount, get_max_supply()));
 }
 
 /**
@@ -106,7 +105,7 @@ struct chr_supply_cap_info {
 query get_chr_supply_cap(): chr_supply_cap_info {
     val asset = chr_asset_or_null();
     return chr_supply_cap_info(
-        max_supply = chr_supply_cap.max_supply,
+        max_supply = get_max_supply(),
         total_supply = if (asset == null) 0L else asset.total_supply,
         remaining_mintable = remaining_mintable_chr(),
         capped = is_chr_supply_capped()
