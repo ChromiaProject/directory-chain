@@ -42,12 +42,15 @@ function is_max_supply_set(): boolean = get_max_supply() > 0;
  * this is 0 and minting simply stops, rather than failing arithmetic somewhere.
  */
 function remaining_mintable_chr(): big_integer {
-    if (not is_max_supply_set()) return ft4.assets.max_asset_amount;
+    // With no cap configured the only bound is FT4's own `max_asset_amount`, so that is what
+    // supply is measured against. Either way this means the same thing - how much may still be
+    // minted - rather than the bound itself.
+    val effective_max = if (is_max_supply_set()) get_max_supply() else ft4.assets.max_asset_amount;
     val supply = get_asset().total_supply;
     // Clamped at zero rather than going negative. Unreachable on a chain capped from genesis,
     // since nothing can mint past the cap - but reachable if a cap is LOWERED below current
     // supply by a later configuration update, which must halt minting rather than misbehave.
-    return if (supply >= get_max_supply()) 0L else get_max_supply() - supply;
+    return if (supply >= effective_max) 0L else effective_max - supply;
 }
 
 /** Throws if minting `amount` more CHR would break the invariant. */
