@@ -152,21 +152,23 @@ function register_assets() {
 }
 
 /**
- * Mint `pool_amount_to_mint` CHR into REWARD_POOL, if the rate limit allows it.
+ * Mint up to `pool_amount_to_mint` CHR into REWARD_POOL, if the rate limit and the cap allow.
  *
  * This is one of only two places CHR is created on this chain -- the other being the
  * `propose_minting` governance path. It is called lazily from the reward and staking payout
  * paths whenever the pool cannot cover what it owes, so minting is demand-driven rather
  * than scheduled.
  *
- * Two behaviours worth knowing before relying on this:
+ * Three behaviours worth knowing before relying on this:
  *
+ * - The amount minted is not always `pool_amount_to_mint`. It is whichever is smaller: that,
+ *   or the headroom left under `max_supply` (see economy_chain_max_supply.rell).
  * - When the rate limit has not yet elapsed it LOGS AND RETURNS NORMALLY. It does not throw,
  *   so a caller cannot distinguish "refilled" from "refused" by control flow -- only by
  *   comparing the returned balance against what it needs.
- * - Nothing here, or anywhere in the mint path, compares total supply against any maximum.
- *   The only ceiling is FT4's `max_asset_amount` (2^256-1). Any published "max supply"
- *   figure is off-chain metadata and is not enforced by this function.
+ * - The same holds at the cap: it mints the remaining headroom, or nothing at all, and still
+ *   returns normally. It must not throw, because it runs inside ICMF reward processing where
+ *   a throw would abort the entire reward round rather than just the mint.
  *
  * @return the pool balance after the attempt, refilled or not
  */
@@ -178,7 +180,7 @@ function refill_pool_account_if_possible() {
             chain_context.args.asset_symbol,
             chain_context.args.pool_refill_limit_ms));
     } else {
-        // Clamp to whatever headroom the supply cap leaves. Deliberately does not throw: this
+        // Clamp to whatever headroom the cap leaves. Deliberately does not throw: this
         // runs inside ICMF reward processing, where a throw would abort the whole round.
         val amount = min(chain_context.args.pool_amount_to_mint, remaining_mintable_chr());
         if (amount <= 0) {

@@ -5,11 +5,11 @@
  *
  * `max_supply` is a module arg defaulting to 0, which means "no cap" - the same convention
  * `token_chain`'s `minting_policy.max_supply` uses. Every chain that does not deliberately
- * configure a ceiling therefore behaves exactly as it did before the cap existed, and this test
+ * configure a cap therefore behaves exactly as it did before the cap existed, and this test
  * is what holds that door open.
  *
  * The enforced behaviour is exercised on a chain that actually configures a cap, in
- * economy_chain_alt_config_test.test.economy_chain_supply_cap_alt_test.
+ * economy_chain_alt_config_test.test.economy_chain_max_supply_alt_test.
  */
 
 import ^^.*;
@@ -23,12 +23,12 @@ namespace ft4 {
 /** The figure Chromia publishes as "max supply", in whole CHR. */
 val published_max_supply_chr = 978064789;
 
-function test_supply_cap_is_disabled_by_default() {
+function test_max_supply_is_disabled_by_default() {
 
     rell.test.tx().op(init()).run();
 
-    val cap = get_chr_supply_cap();
-    assert_false(cap.capped);
+    val cap = get_chr_max_supply();
+    assert_false(cap.enforced);
     assert_equals(cap.max_supply, 0L);
     assert_equals(cap.remaining_mintable, ft4.assets.max_asset_amount);
 
@@ -37,5 +37,5 @@ function test_supply_cap_is_disabled_by_default() {
     rell.test.tx().op(mint_to(get_chromia_foundation_account(), absurd)).run();
 
     assert_equals(get_chr_asset().supply, absurd);
-    assert_equals(get_chr_supply_cap().total_supply, absurd);
+    assert_equals(get_chr_max_supply().total_supply, absurd);
 }
