@@ -243,3 +243,51 @@ function test_direct_mint_is_blocked_by_the_backstop() {
     rell.test.tx().op(mint_to(foundation, get_max_supply())).run();
     assert_equals(get_chr_asset().supply, get_max_supply());
 }
+
+/**
+ * Reaching the cap does not cancel what is owed - it defers it.
+ *
+ * With no headroom left the refill mints nothing, so the pool stays empty and `pay_reward` can
+ * transfer nothing. The unpaid amount is not dropped: it is carried on
+ * `chromia_foundation.reward_debt` and the next round adds to it, so the debt grows once per
+ * round for as long as the chain sits at the cap.
+ *
+ * This matters when choosing a value for a live chain. A cap set below what the network is
+ * already committed to paying does not reduce the obligation, it accumulates it - and raising
+ * the cap later releases the whole accrued amount at once.
+ */
+function test_reward_debt_grows_while_supply_is_at_max_supply() {
+
+    rell.test.tx().op(init(), create_test_cluster("cluster_name")).run();
+    val foundation = get_chromia_foundation_account();
+
+    // No headroom left, and nothing in the pool to pay from: the seed mints to the foundation,
+    // so the pool is untouched and still empty.
+    seed_supply_to(foundation, get_max_supply());
+    assert_equals(get_pool_balance(), 0L);
+    assert_equals(get_chr_supply_info().remaining_mintable, 0L);
+    assert_equals(chromia_foundation.reward_debt, 0L);
+
+    // One round: nothing is paid, and the whole reward becomes debt.
+    open_new_refill_window();
+    rell.test.tx().op(pay_out_chromia_foundation_reward_op()).nop().run();
+
+    val one_round = chromia_foundation.reward_debt;
+    assert_true(one_round > 0L);
+    assert_equals(get_pool_balance(), 0L);
+
+    // Each further round adds another round's worth. The debt is never written down, and no
+    // CHR is minted to service it.
+    var rounds = 1;
+    while (rounds < 4) {
+        open_new_refill_window();
+        rell.test.tx().op(pay_out_chromia_foundation_reward_op()).nop().run();
+        rounds += 1;
+        assert_equals(chromia_foundation.reward_debt, one_round * rounds);
+    }
+
+    // Supply never moved: the cap held throughout, and the debt grew instead.
+    assert_equals(get_chr_asset().supply, get_max_supply());
+    assert_equals(get_chr_supply_info().remaining_mintable, 0L);
+    assert_true(chromia_foundation.reward_debt > one_round);
+}
