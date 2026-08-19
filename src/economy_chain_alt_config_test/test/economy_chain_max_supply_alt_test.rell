@@ -46,12 +46,33 @@ function force_payout_needing_refill(recipient: ft4.accounts.account) {
         .run();
 }
 
-/** Bring supply to `target` in one mint, from a fresh chain. */
-function seed_supply_to(recipient: ft4.accounts.account, target: big_integer) {
+/** The size of one refill, measured rather than assumed: on a fresh chain supply starts at 0. */
+function measure_one_refill(recipient: ft4.accounts.account): big_integer {
     assert_equals(get_chr_asset().supply, 0L);
-    rell.test.tx().op(mint_to(recipient, target)).run();
+    force_payout_needing_refill(recipient);
+    val amount = get_chr_asset().supply;
+    assert_true(amount > 0L);
+    return amount;
+}
+
+/**
+ * Bring supply up to `target`, whatever it is now.
+ *
+ * Tests seed supply close to the cap and then mint small amounts, rather than minting the whole
+ * cap in one go. That keeps them independent of the configured cap size, and clear of the
+ * separate per-window governance rate limit, which is a much smaller number.
+ */
+function seed_supply_to(recipient: ft4.accounts.account, target: big_integer) {
+    val supply = get_chr_asset().supply;
+    assert_true(target >= supply);
+    if (target > supply) {
+        rell.test.tx().op(mint_to(recipient, target - supply)).nop().run();
+    }
     assert_equals(get_chr_asset().supply, target);
 }
+
+/** A mint small enough to sit comfortably inside the governance per-window rate limit. */
+val a_small_mint = 1000L;
 
 /** This chain configures a cap; that is what makes the rest of the file meaningful. */
 function test_max_supply_is_configured_on_this_chain() {
@@ -117,21 +138,23 @@ function test_governance_mint_is_rejected_above_max_supply() {
     rell.test.tx().op(init(), create_test_cluster("cluster_name")).run();
     val foundation = get_chromia_foundation_account();
 
+    // One unit of headroom left, so a two-unit mint is one too many. Both amounts sit well
+    // inside the per-window rate limit, so only the cap can reject this.
+    seed_supply_to(foundation, get_max_supply() - 1);
+
     rell.test.tx()
         .op(create_chromia_foundation_voter_set())
         .sign(rell.test.keypairs.alice)
         .run();
 
-    // One unit more than the cap allows, well inside the per-window rate limit.
-    val too_much = (get_max_supply() + 1).to_integer();
     rell.test.tx()
-        .op(propose_minting(rell.test.pubkeys.alice, too_much, foundation.id))
+        .op(propose_minting(rell.test.pubkeys.alice, 2, foundation.id))
         .sign(rell.test.keypairs.alice)
         .nop()
         .run_must_fail("MAX SUPPLY EXCEEDED");
 
     // Nothing minted, no proposal left half-applied.
-    assert_equals(get_chr_asset().supply, 0L);
+    assert_equals(get_chr_asset().supply, get_max_supply() - 1);
     assert_true(empty(pending_minting @* { }));
 }
 
@@ -140,13 +163,15 @@ function test_governance_mint_succeeds_exactly_up_to_max_supply() {
     rell.test.tx().op(init(), create_test_cluster("cluster_name")).run();
     val foundation = get_chromia_foundation_account();
 
+    seed_supply_to(foundation, get_max_supply() - a_small_mint);
+
     rell.test.tx()
         .op(create_chromia_foundation_voter_set())
         .sign(rell.test.keypairs.alice)
         .run();
 
     rell.test.tx()
-        .op(propose_minting(rell.test.pubkeys.alice, get_max_supply().to_integer(), foundation.id))
+        .op(propose_minting(rell.test.pubkeys.alice, a_small_mint.to_integer(), foundation.id))
         .sign(rell.test.keypairs.alice)
         .nop()
         .run();
@@ -171,19 +196,23 @@ function test_governance_mint_succeeds_exactly_up_to_max_supply() {
 function test_both_mint_paths_share_one_max_supply() {
     rell.test.tx().op(init(), create_test_cluster("cluster_name")).run();
     val foundation = get_chromia_foundation_account();
+    val one_refill = measure_one_refill(foundation);
 
     rell.test.tx()
         .op(create_chromia_foundation_voter_set())
         .sign(rell.test.keypairs.alice)
         .run();
 
-    // Governance takes all but one unit of the cap.
+    // Leave exactly one small governance mint plus half a refill of headroom.
+    seed_supply_to(foundation, get_max_supply() - a_small_mint - one_refill / 2);
+
+    // Governance takes its part first.
     rell.test.tx()
-        .op(propose_minting(rell.test.pubkeys.alice, (get_max_supply() - 1).to_integer(), foundation.id))
+        .op(propose_minting(rell.test.pubkeys.alice, a_small_mint.to_integer(), foundation.id))
         .sign(rell.test.keypairs.alice)
         .nop()
         .run();
-    assert_equals(get_chr_supply_info().remaining_mintable, 1L);
+    assert_equals(get_chr_supply_info().remaining_mintable, one_refill / 2);
 
     // The refill gets only what governance left behind, however much it would normally mint.
     open_new_refill_window();
