@@ -38,38 +38,25 @@ function get_max_supply(): big_integer = chain_context.args.max_supply;
 function is_max_supply_set(): boolean = get_max_supply() > 0;
 
 /**
- * The CHR asset, or null if it has not been registered yet.
- *
- * `get_asset()` throws when the asset is missing, which is not safe inside `before_mint`: that
- * hook fires for every asset on the chain, including ones minted before CHR exists.
- */
-function chr_asset_or_null(): ft4.assets.asset? {
-    val asset_id = (chain_context.args.asset_name, chain_context.blockchain_rid).hash();
-    return ft4.assets.asset @? { .id == asset_id };
-}
-
-/**
  * How much CHR may still be minted. Never negative -- if a cap is set below current supply,
  * this is 0 and minting simply stops, rather than failing arithmetic somewhere.
  */
 function remaining_mintable_chr(): big_integer {
     if (not is_max_supply_set()) return ft4.assets.max_asset_amount;
-    val asset = chr_asset_or_null();
-    if (asset == null) return get_max_supply();
-    // Clamped at zero rather than going negative. Unreachable on a chain enforced from genesis,
+    val supply = get_asset().total_supply;
+    // Clamped at zero rather than going negative. Unreachable on a chain capped from genesis,
     // since nothing can mint past the cap - but reachable if a cap is LOWERED below current
     // supply by a later configuration update, which must halt minting rather than misbehave.
-    return if (asset.total_supply >= get_max_supply()) 0L else get_max_supply() - asset.total_supply;
+    return if (supply >= get_max_supply()) 0L else get_max_supply() - supply;
 }
 
 /** Throws if minting `amount` more CHR would break the invariant. */
 function require_within_max_supply(amount: big_integer) {
     if (not is_max_supply_set()) return;
-    val asset = chr_asset_or_null();
-    if (asset == null) return;
-    require(asset.total_supply + amount <= get_max_supply(),
+    val supply = get_asset().total_supply;
+    require(supply + amount <= get_max_supply(),
         "MAX SUPPLY EXCEEDED: minting %s would take CHR total supply to %s, above max_supply %s"
-            .format(amount, asset.total_supply + amount, get_max_supply()));
+            .format(amount, supply + amount, get_max_supply()));
 }
 
 /**
@@ -80,10 +67,7 @@ function require_within_max_supply(amount: big_integer) {
  */
 @extend(ft4.assets.before_mint)
 function enforce_chr_max_supply(ft4.accounts.account, ft4.assets.asset, amount: big_integer) {
-    val chr = chr_asset_or_null();
-    if (chr != null and asset == chr) {
-        require_within_max_supply(amount);
-    }
+    if (asset == get_asset()) require_within_max_supply(amount);
 }
 
 struct chr_max_supply_info {
@@ -101,10 +85,9 @@ struct chr_max_supply_info {
  * is to the cap, rather than having to infer it.
  */
 query get_chr_max_supply(): chr_max_supply_info {
-    val asset = chr_asset_or_null();
     return chr_max_supply_info(
         max_supply = get_max_supply(),
-        total_supply = if (asset == null) 0L else asset.total_supply,
+        total_supply = get_asset().total_supply,
         remaining_mintable = remaining_mintable_chr(),
         enforced = is_max_supply_set()
     );
