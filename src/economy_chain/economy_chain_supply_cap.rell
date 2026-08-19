@@ -10,7 +10,7 @@
  * This module supplies the missing cumulative invariant, the same one `token_chain` has always
  * enforced for third-party tokens via `minting_policy.max_supply`:
  *
- *     asset.total_supply <= max_total_supply, at all times
+ *     asset.total_supply <= max_supply, at all times
  *
  * The two mint paths handle the cap differently on purpose:
  *
@@ -25,7 +25,7 @@
  */
 
 /**
- * The cap in force on this chain, seeded from `module_args.max_total_supply` at `init()`.
+ * The cap in force on this chain, seeded from `module_args.max_supply` at `init()`.
  *
  * It is an object rather than a plain config read so that it can be observed with
  * `get_chr_supply_cap()` and adjusted later without a code change. `0` means "no cap", the same
@@ -33,13 +33,13 @@
  * and test behaving exactly as before until a cap is deliberately configured.
  */
 object chr_supply_cap {
-    mutable max_total_supply: big_integer = 0;
+    mutable max_supply: big_integer = 0;
 }
 
 /** Returns 0 when this chain is uncapped. */
-function get_max_total_supply(): big_integer = chr_supply_cap.max_total_supply;
+function get_max_supply(): big_integer = chr_supply_cap.max_supply;
 
-function is_chr_supply_capped(): boolean = chr_supply_cap.max_total_supply > 0;
+function is_chr_supply_capped(): boolean = chr_supply_cap.max_supply > 0;
 
 /**
  * The CHR asset, or null if it has not been registered yet.
@@ -59,21 +59,21 @@ function chr_asset_or_null(): ft4.assets.asset? {
 function remaining_mintable_chr(): big_integer {
     if (not is_chr_supply_capped()) return ft4.assets.max_asset_amount;
     val asset = chr_asset_or_null();
-    if (asset == null) return chr_supply_cap.max_total_supply;
-    return if (asset.total_supply >= chr_supply_cap.max_total_supply)
+    if (asset == null) return chr_supply_cap.max_supply;
+    return if (asset.total_supply >= chr_supply_cap.max_supply)
         0L
     else
-        chr_supply_cap.max_total_supply - asset.total_supply;
+        chr_supply_cap.max_supply - asset.total_supply;
 }
 
 /** Throws if minting `amount` more CHR would break the invariant. */
-function require_within_max_total_supply(amount: big_integer) {
+function require_within_max_supply(amount: big_integer) {
     if (not is_chr_supply_capped()) return;
     val asset = chr_asset_or_null();
     if (asset == null) return;
-    require(asset.total_supply + amount <= chr_supply_cap.max_total_supply,
-        "MAX SUPPLY EXCEEDED: minting %s would take CHR total supply to %s, above max_total_supply %s"
-            .format(amount, asset.total_supply + amount, chr_supply_cap.max_total_supply));
+    require(asset.total_supply + amount <= chr_supply_cap.max_supply,
+        "MAX SUPPLY EXCEEDED: minting %s would take CHR total supply to %s, above max_supply %s"
+            .format(amount, asset.total_supply + amount, chr_supply_cap.max_supply));
 }
 
 /**
@@ -83,15 +83,15 @@ function require_within_max_total_supply(amount: big_integer) {
  * Only CHR is affected; other assets registered on this chain are left alone.
  */
 @extend(ft4.assets.before_mint)
-function enforce_chr_max_total_supply(ft4.accounts.account, ft4.assets.asset, amount: big_integer) {
+function enforce_chr_max_supply(ft4.accounts.account, ft4.assets.asset, amount: big_integer) {
     val chr = chr_asset_or_null();
     if (chr != null and asset == chr) {
-        require_within_max_total_supply(amount);
+        require_within_max_supply(amount);
     }
 }
 
 struct chr_supply_cap_info {
-    max_total_supply: big_integer;
+    max_supply: big_integer;
     total_supply: big_integer;
     remaining_mintable: big_integer;
     capped: boolean;
@@ -106,7 +106,7 @@ struct chr_supply_cap_info {
 query get_chr_supply_cap(): chr_supply_cap_info {
     val asset = chr_asset_or_null();
     return chr_supply_cap_info(
-        max_total_supply = chr_supply_cap.max_total_supply,
+        max_supply = chr_supply_cap.max_supply,
         total_supply = if (asset == null) 0L else asset.total_supply,
         remaining_mintable = remaining_mintable_chr(),
         capped = is_chr_supply_capped()

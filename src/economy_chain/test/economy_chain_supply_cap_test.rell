@@ -5,7 +5,7 @@
  * ----------------
  * The cumulative cap on CHR total supply introduced in economy_chain_supply_cap.rell:
  *
- *     asset.total_supply <= max_total_supply, at all times
+ *     asset.total_supply <= max_supply, at all times
  *
  * Background. CHR is created at exactly two points - the reward pool refill
  * (`refill_pool_account_if_possible`, which is what actually mints on mainnet) and the
@@ -71,11 +71,11 @@ function measure_one_refill(recipient: ft4.accounts.account): big_integer {
 }
 
 function set_cap(amount: big_integer) {
-    rell.test.tx().op(set_max_total_supply_op(amount)).nop().run();
+    rell.test.tx().op(set_max_supply_op(amount)).nop().run();
 }
 
 /**
- * Existing chains are untouched. With `max_total_supply` left at its default of 0 there is no
+ * Existing chains are untouched. With `max_supply` left at its default of 0 there is no
  * cap, nothing is clamped and nothing throws - exactly the behaviour every chain had before.
  */
 function test_supply_cap_is_disabled_by_default() {
@@ -84,7 +84,7 @@ function test_supply_cap_is_disabled_by_default() {
 
     val cap = get_chr_supply_cap();
     assert_false(cap.capped);
-    assert_equals(cap.max_total_supply, 0L);
+    assert_equals(cap.max_supply, 0L);
     assert_equals(cap.remaining_mintable, ft4.assets.max_asset_amount);
 
     // A mint far beyond any published maximum still succeeds when uncapped.
@@ -115,7 +115,7 @@ function test_pool_refill_clamps_to_remaining_headroom() {
     force_payout_needing_refill(recipient);
 
     // Minted the headroom, not the full refill amount, and landed exactly on the cap.
-    assert_equals(get_chr_asset().supply, get_max_total_supply());
+    assert_equals(get_chr_asset().supply, get_max_supply());
     assert_equals(get_chr_supply_cap().remaining_mintable, 0L);
 }
 
@@ -141,7 +141,7 @@ function test_pool_refill_stops_at_the_cap_without_failing() {
         i += 1;
     }
 
-    assert_equals(get_chr_asset().supply, get_max_total_supply());
+    assert_equals(get_chr_asset().supply, get_max_supply());
 }
 
 /**
@@ -247,7 +247,7 @@ function test_both_mint_paths_share_one_cap() {
 
     assert_equals(get_chr_asset().supply, cap);
     assert_equals(get_chr_supply_cap().remaining_mintable, 0L);
-    assert_true(get_chr_asset().supply <= get_max_total_supply());
+    assert_true(get_chr_asset().supply <= get_max_supply());
 }
 
 /**
@@ -270,7 +270,7 @@ function test_direct_mint_is_blocked_by_the_backstop() {
 
     // Right up to the cap is still fine.
     rell.test.tx().op(mint_to(foundation, (1000 * units_per_asset).to_big_integer())).run();
-    assert_equals(get_chr_asset().supply, get_max_total_supply());
+    assert_equals(get_chr_asset().supply, get_max_supply());
 }
 
 /**
@@ -286,7 +286,7 @@ function test_cap_below_current_supply_halts_minting_safely() {
     set_cap(one_refill / 2); // below what is already in existence
 
     val cap_state = get_chr_supply_cap();
-    assert_true(cap_state.total_supply > cap_state.max_total_supply);
+    assert_true(cap_state.total_supply > cap_state.max_supply);
     assert_equals(cap_state.remaining_mintable, 0L); // clamped at zero, never negative
 
     // The automatic path keeps running and mints nothing.
