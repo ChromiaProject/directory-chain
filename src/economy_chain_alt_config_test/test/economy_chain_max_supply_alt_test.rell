@@ -24,7 +24,10 @@ import economy_chain.test.helper_functions.*;
 import economy_chain.test.helper_operations.*;
 
 /** Any delta larger than `pool_refill_limit_ms` opens a fresh refill window. */
-val a_new_refill_window_ms = 86400000 * 30; // 30 days
+val new_refill_window_ms = 86400000 * 30; // 30 days
+
+/** A mint small enough to sit comfortably inside the governance per-window rate limit. */
+val small_mint = 1000L;
 
 /**
  * Open a fresh refill window.
@@ -34,7 +37,7 @@ val a_new_refill_window_ms = 86400000 * 30; // 30 days
  * immediately before the payout would not yet be visible to it.
  */
 function open_new_refill_window() {
-    rell.test.set_next_block_time_delta(a_new_refill_window_ms);
+    rell.test.set_next_block_time_delta(new_refill_window_ms);
     rell.test.block().run();
 }
 
@@ -71,18 +74,18 @@ function seed_supply_to(recipient: ft4.accounts.account, target: big_integer) {
     assert_equals(get_chr_asset().supply, target);
 }
 
-/** A mint small enough to sit comfortably inside the governance per-window rate limit. */
-val a_small_mint = 1000L;
-
-/** This chain configures a cap; that is what makes the rest of the file meaningful. */
+/** This chain configures a cap. */
 function test_max_supply_is_configured_on_this_chain() {
     rell.test.tx().op(init()).run();
+
+    val expected = 1000000000000L;
+    assert_equals(get_max_supply(), expected);
 
     val state = get_chr_supply_info();
     assert_true(state.enforced);
     assert_true(state.max_supply > 0L);
-    assert_equals(state.max_supply, get_max_supply());
-    assert_equals(state.remaining_mintable, get_max_supply());
+    assert_equals(state.max_supply, expected);
+    assert_equals(state.remaining_mintable, expected);
     assert_equals(state.total_supply, 0L);
 }
 
@@ -163,7 +166,7 @@ function test_governance_mint_succeeds_exactly_up_to_max_supply() {
     rell.test.tx().op(init(), create_test_cluster("cluster_name")).run();
     val foundation = get_chromia_foundation_account();
 
-    seed_supply_to(foundation, get_max_supply() - a_small_mint);
+    seed_supply_to(foundation, get_max_supply() - small_mint);
 
     rell.test.tx()
         .op(create_chromia_foundation_voter_set())
@@ -171,7 +174,7 @@ function test_governance_mint_succeeds_exactly_up_to_max_supply() {
         .run();
 
     rell.test.tx()
-        .op(propose_minting(rell.test.pubkeys.alice, a_small_mint.to_integer(), foundation.id))
+        .op(propose_minting(rell.test.pubkeys.alice, small_mint.to_integer(), foundation.id))
         .sign(rell.test.keypairs.alice)
         .nop()
         .run();
@@ -204,11 +207,11 @@ function test_both_mint_paths_share_one_max_supply() {
         .run();
 
     // Leave exactly one small governance mint plus half a refill of headroom.
-    seed_supply_to(foundation, get_max_supply() - a_small_mint - one_refill / 2);
+    seed_supply_to(foundation, get_max_supply() - small_mint - one_refill / 2);
 
     // Governance takes its part first.
     rell.test.tx()
-        .op(propose_minting(rell.test.pubkeys.alice, a_small_mint.to_integer(), foundation.id))
+        .op(propose_minting(rell.test.pubkeys.alice, small_mint.to_integer(), foundation.id))
         .sign(rell.test.keypairs.alice)
         .nop()
         .run();
