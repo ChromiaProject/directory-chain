@@ -71,6 +71,8 @@ struct module_args {
     token_rate_update_interval_ms: integer;
     chromia_foundation_mint_time_limit_ms: integer = millis_per_day;
     chromia_foundation_mint_amount_limit: integer = 150000 * 1000000; // 150k CHR, at 2025-04-15 this is ~0.08 / 12500 USD
+    /** Hard ceiling on CHR total supply, in units. 0 disables the cap. See economy_chain_supply_cap.rell. */
+    max_total_supply: big_integer = 0;
 }
 
 val units_per_asset = (10).pow(chain_context.args.asset_decimals);
@@ -83,6 +85,8 @@ operation init() {
 
     val asset = register_assets();
     register_and_link_bridge_and_erc20_asset(asset);
+
+    chr_supply_cap.max_total_supply = chain_context.args.max_total_supply;
 
     create_pool_account();
 

@@ -69,6 +69,10 @@ function validate_ec_minting_proposal_input(proposal_details: pending_minting) {
 
     require(proposal_details.amount > 0, "Amount must be greater than 0");
 
+    // Called both when the proposal is created and again when it is applied, so a proposal that
+    // was within the cap when raised is still rejected if supply has grown since.
+    require_within_max_total_supply(proposal_details.amount.to_big_integer());
+
     return ft4.accounts.Account(proposal_details.account_id);
 }
 

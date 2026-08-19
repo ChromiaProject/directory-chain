@@ -1,0 +1,114 @@
+/**
+ * Hard cap on CHR total supply.
+ *
+ * CHR is created at two points -- the reward pool refill (`refill_pool_account_if_possible`)
+ * and the governance mint (`apply_ec_pending_minting`). Both were previously bounded only by
+ * RATE limits: how fast CHR could be minted, never how much in total. The figure Chromia
+ * publishes as "max supply" lived entirely off chain and was enforced nowhere, so total supply
+ * crossed it in production on 2026-08-15 without anything objecting.
+ *
+ * This module supplies the missing cumulative invariant, the same one `token_chain` has always
+ * enforced for third-party tokens via `minting_policy.max_supply`:
+ *
+ *     asset.total_supply <= max_total_supply, at all times
+ *
+ * The two mint paths handle the cap differently on purpose:
+ *
+ *   - the pool refill CLAMPS. It mints whatever headroom is left and logs, rather than
+ *     throwing, because it runs inside ICMF message handling: a throw there would abort reward
+ *     processing for the whole round, not just the mint.
+ *   - the governance mint THROWS, because it is an explicit, deliberate action and should fail
+ *     loudly and visibly rather than quietly mint less than was voted on.
+ *
+ * `before_mint` below is the backstop that makes the invariant hold regardless: no route to
+ * minting CHR, present or future, can pass it.
+ */
+
+/**
+ * The cap in force on this chain, seeded from `module_args.max_total_supply` at `init()`.
+ *
+ * It is an object rather than a plain config read so that it can be observed with
+ * `get_chr_supply_cap()` and adjusted later without a code change. `0` means "no cap", the same
+ * convention `token_chain`'s `minting_policy.max_supply` uses, which keeps every existing chain
+ * and test behaving exactly as before until a cap is deliberately configured.
+ */
+object chr_supply_cap {
+    mutable max_total_supply: big_integer = 0;
+}
+
+/** Returns 0 when this chain is uncapped. */
+function get_max_total_supply(): big_integer = chr_supply_cap.max_total_supply;
+
+function is_chr_supply_capped(): boolean = chr_supply_cap.max_total_supply > 0;
+
+/**
+ * The CHR asset, or null if it has not been registered yet.
+ *
+ * `get_asset()` throws when the asset is missing, which is not safe inside `before_mint`: that
+ * hook fires for every asset on the chain, including ones minted before CHR exists.
+ */
+function chr_asset_or_null(): ft4.assets.asset? {
+    val asset_id = (chain_context.args.asset_name, chain_context.blockchain_rid).hash();
+    return ft4.assets.asset @? { .id == asset_id };
+}
+
+/**
+ * How much CHR may still be minted. Never negative -- if a cap is set below current supply,
+ * this is 0 and minting simply stops, rather than failing arithmetic somewhere.
+ */
+function remaining_mintable_chr(): big_integer {
+    if (not is_chr_supply_capped()) return ft4.assets.max_asset_amount;
+    val asset = chr_asset_or_null();
+    if (asset == null) return chr_supply_cap.max_total_supply;
+    return if (asset.total_supply >= chr_supply_cap.max_total_supply)
+        0L
+    else
+        chr_supply_cap.max_total_supply - asset.total_supply;
+}
+
+/** Throws if minting `amount` more CHR would break the invariant. */
+function require_within_max_total_supply(amount: big_integer) {
+    if (not is_chr_supply_capped()) return;
+    val asset = chr_asset_or_null();
+    if (asset == null) return;
+    require(asset.total_supply + amount <= chr_supply_cap.max_total_supply,
+        "MAX SUPPLY EXCEEDED: minting %s would take CHR total supply to %s, above max_total_supply %s"
+            .format(amount, asset.total_supply + amount, chr_supply_cap.max_total_supply));
+}
+
+/**
+ * The backstop. Every CHR mint on this chain passes through here, whichever path called it, so
+ * the invariant cannot be bypassed by a new mint path added later that forgets to check.
+ *
+ * Only CHR is affected; other assets registered on this chain are left alone.
+ */
+@extend(ft4.assets.before_mint)
+function enforce_chr_max_total_supply(ft4.accounts.account, ft4.assets.asset, amount: big_integer) {
+    val chr = chr_asset_or_null();
+    if (chr != null and asset == chr) {
+        require_within_max_total_supply(amount);
+    }
+}
+
+struct chr_supply_cap_info {
+    max_total_supply: big_integer;
+    total_supply: big_integer;
+    remaining_mintable: big_integer;
+    capped: boolean;
+}
+
+/**
+ * Report the cap, current supply and remaining headroom in one call.
+ *
+ * The 2026-08-15 incident was not noticed as it happened, partly because no query answered
+ * "how close is supply to the published maximum". This one does.
+ */
+query get_chr_supply_cap(): chr_supply_cap_info {
+    val asset = chr_asset_or_null();
+    return chr_supply_cap_info(
+        max_total_supply = chr_supply_cap.max_total_supply,
+        total_supply = if (asset == null) 0L else asset.total_supply,
+        remaining_mintable = remaining_mintable_chr(),
+        capped = is_chr_supply_capped()
+    );
+}
