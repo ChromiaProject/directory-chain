@@ -31,10 +31,18 @@ function test_max_supply_is_disabled_by_default() {
     assert_equals(cap.max_supply, 0L);
     assert_equals(cap.remaining_mintable, ft4.assets.max_asset_amount);
 
-    // Ten times the published maximum, minted in one operation, on an uncapped chain.
+    // Ten times the published maximum, minted in one operation, into each of the two accounts
+    // the real mint paths target: the governance mint goes to FOUNDATION, the refill to
+    // REWARD_POOL. Uncapped, neither destination is constrained and they do not share a budget.
     val absurd = (10 * published_max_supply_chr * units_per_asset).to_big_integer();
-    rell.test.tx().op(mint_to(get_chromia_foundation_account(), absurd)).run();
+    val foundation = get_chromia_foundation_account();
 
-    assert_equals(get_chr_asset().supply, absurd);
-    assert_equals(get_chr_supply_info().total_supply, absurd);
+    rell.test.tx().op(mint_to(foundation, absurd)).run();
+    rell.test.tx().op(mint_to_pool(absurd)).run();
+
+    assert_equals(get_account_balance(foundation), absurd);
+    assert_equals(get_pool_balance(), absurd);
+    assert_equals(get_chr_asset().supply, absurd * 2);
+    assert_equals(get_chr_supply_info().total_supply, absurd * 2);
+    assert_equals(get_chr_supply_info().remaining_mintable, ft4.assets.max_asset_amount);
 }
