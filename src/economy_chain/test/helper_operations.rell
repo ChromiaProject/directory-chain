@@ -166,14 +166,20 @@ operation create_test_cluster_subnode_jar_extension(
     create cluster_subnode_jar_extension(cluster, subnode_jar_extension);
 }
 
-operation create_lease(container_name: text, container_units: integer, account: ft4.accounts.account, cluster: cluster, expired: boolean) {
+/**
+ * @param duration_millis  0 (the default) makes the lease expire on the next block, which is
+ *                         what most callers want. Pass a long duration to keep a cluster
+ *                         occupied across blocks -- `__begin_block` expires and then deletes
+ *                         a lease once `start_time + duration_millis` has passed.
+ */
+operation create_lease(container_name: text, container_units: integer, account: ft4.accounts.account, cluster: cluster, expired: boolean, duration_millis: integer = 0) {
     create lease(
         container_name = container_name,
         account = account,
         container_units = container_units,
         cluster = cluster,
         start_time = 0,
-        duration_millis = 0,
+        duration_millis = duration_millis,
         expired = expired,
         auto_renew = false,
         extra_storage_gib = 0,
