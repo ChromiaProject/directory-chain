@@ -212,8 +212,15 @@ function pay_out_node_rewards(node_reward: map<node, big_integer>, has_delegatio
  *                         by this function -- `after_pay_reward` reserves it and staking pays it
  *                         out in a later block.
  */
-function pay_reward(pool: ft4.accounts.account, account: ft4.accounts.account, reward_debt: big_integer,
-        reward: big_integer, identity: text, delegation_share: decimal): pay_reward_result {
+function pay_reward(
+    pool: ft4.accounts.account,
+    account: ft4.accounts.account,
+    reward_debt: big_integer,
+    reward: big_integer,
+    identity: text,
+    delegation_share: decimal
+): pay_reward_result {
+
     var pool_balance = get_account_balance(pool);
     var total_reward_debt = reward + reward_debt;
 
@@ -365,6 +372,53 @@ operation reset_provider_reward_debt(my_pubkey: pubkey) {
 function reset_provider_reward_debt_impl(provider) {
     val pa = provider_account @ { provider };
     pa.reward_debt = 0;
+}
+
+struct provider_reward_debt {
+    pubkey;
+    name: text;
+    reward_debt: big_integer;
+}
+
+struct reward_debt_info {
+    total: big_integer;
+    chromia_foundation: big_integer;
+    providers: list<provider_reward_debt>;
+}
+
+/**
+ * Report every unpaid reward the chain is still carrying.
+ *
+ * `reward_debt` accrues whenever a reward round computes more than the pool can cover, and is
+ * settled out of the pool as funds arrive -- from a refill mint, or from container lease income,
+ * which reaches the pool without minting anything.
+ *
+ * Nothing else exposes these fields, so the liability is otherwise only visible by reading
+ * `provider_account` and the `chromia_foundation` object directly. That matters wherever CHR
+ * issuance is bounded: the bound limits minting, not what is owed, so the two can diverge
+ * quietly and this query is what makes the gap observable.
+ *
+ * The Foundation is reported separately because its debt lives on its own object rather than on
+ * a `provider_account`. Providers that owe nothing are omitted, so the list is the liability
+ * rather than a roster, ordered largest first.
+ */
+query get_reward_debt(): reward_debt_info {
+    val providers = provider_account @* { .reward_debt > 0 } (
+        @omit @sort_desc .reward_debt,
+        provider_reward_debt(
+            pubkey = .provider.pubkey,
+            name = .provider.name,
+            reward_debt = .reward_debt
+        )
+    );
+
+    val owed_to_providers = provider_account @ { .reward_debt > 0 } ( @sum .reward_debt );
+
+    return reward_debt_info(
+        total = chromia_foundation.reward_debt + owed_to_providers,
+        chromia_foundation = chromia_foundation.reward_debt,
+        providers = providers
+    );
 }
 
 /**
