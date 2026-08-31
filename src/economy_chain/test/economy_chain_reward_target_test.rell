@@ -1,0 +1,274 @@
+@test module;
+
+/*
+ * Reward constants tuned to pay roughly 60,000 CHR per node per month.
+ *
+ * This is a calibration test, not a behavioural one. It reproduces mainnet's shape -- one
+ * dapp cluster, its real tag prices, its real occupancy, and the number of nodes signing in
+ * each cluster -- and then shows which two constants land a node near the target, so the
+ * values can be taken straight into a governance proposal.
+ *
+ * The target is PER NODE, not per provider. A provider is paid once per node it signs with,
+ * so a provider signing in two clusters receives roughly twice the figure below. Nothing in
+ * the economy chain caps a provider's total; see the note at the end of this file.
+ *
+ * Two levers, one per cluster type, because the two reward formulas share no terms:
+ *
+ *   system cluster  ->  total_cost_system_providers   (economy_chain_reward.rell:69-70)
+ *   dapp cluster    ->  dapp_provider_risk_share      (economy_chain_reward.rell:108)
+ *
+ * Both are reachable by governance: the first through
+ * `propose_system_provider_economy_constants`, the second through `update_economy_constants`.
+ */
+
+import ^^.*;
+import ^.helper_constants.*;
+import ^.helper_functions.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.assets;
+}
+
+/* ---------------------------------------------------------------- mainnet shape ---- */
+
+/** Tag `standard` on mainnet: $12.864885 per SCU per day. */
+val SCU_PRICE = 12864885;
+/** Tag `standard` on mainnet: $0.004142 per GiB per day. */
+val EXTRA_STORAGE_PRICE = 4142;
+/** Cluster `pink`: 8 cluster units -> 8 * 16 = 128 SCU, less 4 reserved for the system container. */
+val CLUSTER_UNITS = 8;
+/** Cluster `pink` extra storage, in MiB. Divided by 1024 in the reward formula. */
+val EXTRA_STORAGE_MIB = 5722046;
+/** Leased SCU on `pink`: 12 of 124 chargeable, so occupancy is ~9.7%. */
+val LEASED_SCU = 12;
+/** Nodes signing in each cluster on mainnet. */
+val SYSTEM_NODES = 12;
+val DAPP_NODES = 6;
+/** Oracle rate at the time these values were calibrated (CHR ~ $0.01503). */
+val CHR_PER_USD = 66.53304;
+
+/* ------------------------------------------------------------- proposed constants ---- */
+
+/** Down from $131. Whole dollars, which is what a proposal would realistically carry. */
+val PROPOSED_TOTAL_COST_SYSTEM_PROVIDERS_USD = 36;
+/** Up from 0.2. At 0.91 a dapp node is paid almost entirely on what the cluster actually earns. */
+val PROPOSED_DAPP_PROVIDER_RISK_SHARE = 0.91;
+
+val TARGET_PER_NODE_PER_MONTH = 60000L * units_per_asset;
+/** The letter says "approximately", so calibration is checked to within 5%. */
+val TOLERANCE = 3000L * units_per_asset;
+val DAYS_PER_MONTH = 30;
+
+val system_provider_key = rell.test.keypairs.bob;
+val dapp_provider_key = rell.test.keypairs.dave;
+val dapp_cluster_name = "pink";
+/** Long enough that `__begin_block` never expires the occupancy lease mid-test. */
+val LEASE_DURATION_MS = 1000 * 365 * 24 * 60 * 60 * 1000;
+
+/** Node keys are only ever stored and compared, never used to sign, so they are synthesised. */
+function node_key(i: integer): pubkey = byte_array.from_hex("02" + "%064x".format(i));
+
+/* --------------------------------------------------------------------- fixtures ---- */
+
+/**
+ * Build a network with mainnet's proportions and apply the proposed constants.
+ *
+ * Staking requirements are switched off so that `is_staking_approved` cannot skip a node --
+ * this test is about the size of the reward, not about eligibility.
+ */
+function setup_mainnet_shaped_network() {
+    rell.test.tx().op(init()).run();
+    update_staking_requirements_constants(staking_requirements_enabled = false);
+
+    rell.test.tx().op(
+        update_reward_economy_constants(
+            chr_per_usd = CHR_PER_USD,
+            dapp_provider_risk_share = PROPOSED_DAPP_PROVIDER_RISK_SHARE
+        ),
+        update_system_provider_economy_constants(
+            total_cost_system_providers = PROPOSED_TOTAL_COST_SYSTEM_PROVIDERS_USD
+        )
+    ).run();
+
+    val system_cluster = ensure_system_cluster();
+    val dapp_cluster = ensure_cluster(
+        dapp_cluster_name, false, false, CLUSTER_UNITS, EXTRA_STORAGE_MIB,
+        scu_price = SCU_PRICE, extra_storage_price = EXTRA_STORAGE_PRICE
+    );
+
+    val system_provider = add_provider(system_provider_key.pub, true, provider_tier.NODE_PROVIDER);
+    val dapp_provider = add_provider(dapp_provider_key.pub, false, provider_tier.NODE_PROVIDER);
+
+    var i = 0;
+    while (i < SYSTEM_NODES) {
+        ensure_node(system_provider_key.pub, node_key(i), true, "SE", 1, 0, false);
+        add_cluster_node(system_cluster.name, node_key(i), false);
+        i += 1;
+    }
+    while (i < SYSTEM_NODES + DAPP_NODES) {
+        ensure_node(dapp_provider_key.pub, node_key(i), true, "SE", 1, 0, false);
+        add_cluster_node(dapp_cluster.name, node_key(i), false);
+        i += 1;
+    }
+
+    // Occupancy. The lease holder is irrelevant to the reward formula -- only the summed
+    // container_units of unexpired leases are read -- so an existing system account is used
+    // rather than creating one, which would need the account-creator key.
+    rell.test.tx().op(
+        create_lease("occupancy", LEASED_SCU, get_chromia_foundation_account(), dapp_cluster, false, LEASE_DURATION_MS),
+        set_pool_details_last_refill_millis_last_block_time_op()
+    ).run();
+
+    // Fund the pool far beyond one round so nothing is clamped or deferred into reward_debt;
+    // partial payment is a different concern and would mask the calibration.
+    add_assets_to_pool(1000000 * units_per_asset);
+
+    return (system_cluster = system_cluster, dapp_cluster = dapp_cluster);
+}
+
+/** Every node in the cluster reporting full availability, so the factor is exactly 1.0. */
+function full_availability(from: integer, count: integer): map<byte_array, decimal> {
+    val report = map<byte_array, decimal>();
+    var i = from;
+    while (i < from + count) {
+        report[node_key(i)] = 1.0;
+        i += 1;
+    }
+    return report;
+}
+
+/** Run one reward round and return what a single node was actually paid. */
+function pay_one_round_and_read_node_reward(cluster: cluster, from: integer, count: integer): big_integer {
+    rell.test.tx().op(
+        pay_rewards_op(cluster, node_availability_report(start_time = 0, end_time = 0, full_availability(from, count)))
+    ).nop().run();
+
+    // Newest first: a node can be paid more than once in a test, and only the round just
+    // run is of interest.
+    return (node_payed_reward @* { .node == node_key(from) } ( @sort_desc @omit .time, .value ))[0];
+}
+
+function assert_near_target(label: text, monthly: big_integer) {
+    val delta = if (monthly > TARGET_PER_NODE_PER_MONTH) monthly - TARGET_PER_NODE_PER_MONTH
+                else TARGET_PER_NODE_PER_MONTH - monthly;
+    // Printed so the calibration is readable from the test output, not just asserted.
+    log("%s: %s CHR per month (target %s, off by %s)".format(
+        label,
+        monthly / units_per_asset,
+        TARGET_PER_NODE_PER_MONTH / units_per_asset,
+        delta / units_per_asset));
+    assert_true(delta <= TOLERANCE);
+}
+
+/* ------------------------------------------------------------------------ tests ---- */
+
+/**
+ * The mainnet shape is reproduced faithfully, so the calibration below means something.
+ *
+ * 8 cluster units give 128 SCU, less the 4 the system container reserves, leaves 124
+ * chargeable; 12 of those are leased.
+ */
+function test_fixture_matches_mainnet_shape() {
+    val clusters = setup_mainnet_shaped_network();
+
+    assert_equals(total_available_scus(CLUSTER_UNITS), 128);
+    assert_equals(total_available_scus_exclude_system(clusters.dapp_cluster), 124);
+    assert_equals(occupied_scus(clusters.dapp_cluster), LEASED_SCU);
+    assert_equals(occupancy_rate(clusters.dapp_cluster), decimal(LEASED_SCU) / 124);
+
+    assert_equals(cluster_node @ { .cluster == clusters.system_cluster } ( @sum 1 ), SYSTEM_NODES);
+    assert_equals(cluster_node @ { .cluster == clusters.dapp_cluster } ( @sum 1 ), DAPP_NODES);
+    assert_equals(economy_constants.chr_per_usd, CHR_PER_USD);
+}
+
+/**
+ * `total_cost_system_providers` at $36 pays a system node about 60,000 CHR a month.
+ *
+ * The flat cost term dominates the formula, so this lever is very nearly linear: it was $131,
+ * which is why system nodes are on roughly 231,000 CHR a month today.
+ */
+function test_system_node_is_paid_about_60k_chr_per_month() {
+    val clusters = setup_mainnet_shaped_network();
+
+    val daily = pay_one_round_and_read_node_reward(clusters.system_cluster, 0, SYSTEM_NODES);
+    val monthly = daily * DAYS_PER_MONTH;
+
+    assert_true(daily > 0);
+    assert_near_target("system node", monthly);
+}
+
+/**
+ * `dapp_provider_risk_share` at 0.91 pays a dapp node about 60,000 CHR a month.
+ *
+ * The multiplier is `(1 - risk_share) + risk_share * occupancy`. At the current 0.2 a node is
+ * paid 82% of cluster value on a cluster that is a tenth full; at 0.91 it is paid almost
+ * entirely on what the cluster actually earns.
+ */
+function test_dapp_node_is_paid_about_60k_chr_per_month() {
+    val clusters = setup_mainnet_shaped_network();
+
+    val daily = pay_one_round_and_read_node_reward(clusters.dapp_cluster, SYSTEM_NODES, DAPP_NODES);
+    val monthly = daily * DAYS_PER_MONTH;
+
+    assert_true(daily > 0);
+    assert_near_target("dapp node", monthly);
+}
+
+/**
+ * Raising `dapp_provider_risk_share` ties the reward to demand rather than to capacity.
+ *
+ * Worth knowing before proposing it: 60,000 is the figure at today's ~9.7% occupancy, not a
+ * ceiling. Fill the cluster and the same constant pays substantially more, because the
+ * occupancy term stops being close to zero. That is the intended behaviour -- providers are
+ * then paid out of what the network earns -- but it does mean the number moves on its own.
+ */
+function test_dapp_reward_rises_with_occupancy_at_the_proposed_risk_share() {
+    val clusters = setup_mainnet_shaped_network();
+    val at_current_occupancy = pay_one_round_and_read_node_reward(clusters.dapp_cluster, SYSTEM_NODES, DAPP_NODES);
+
+    // Lease the rest of the cluster.
+    rell.test.tx().op(
+        create_lease("fill", 124 - LEASED_SCU, get_chromia_foundation_account(), clusters.dapp_cluster, false, LEASE_DURATION_MS)
+    ).run();
+    assert_equals(occupancy_rate(clusters.dapp_cluster), 1);
+
+    rell.test.set_next_block_time_delta(1);
+    val at_full_occupancy = pay_one_round_and_read_node_reward(clusters.dapp_cluster, SYSTEM_NODES, DAPP_NODES);
+
+    assert_true(at_full_occupancy > at_current_occupancy);
+}
+
+/**
+ * The target is per node, so a provider signing in two clusters is paid twice.
+ *
+ * ChromaWay is in exactly this position on mainnet -- one node in the system cluster and one
+ * in `pink` -- so a per-node calibration pays it around 120,000 CHR a month. Capping a
+ * provider's total would need a per-provider accounting window, which the economy chain does
+ * not have.
+ */
+function test_a_provider_signing_in_two_clusters_is_paid_per_node() {
+    val clusters = setup_mainnet_shaped_network();
+
+    // Give the system provider a second node, in the dapp cluster.
+    val second_node = node_key(SYSTEM_NODES + DAPP_NODES);
+    ensure_node(system_provider_key.pub, second_node, true, "SE", 1, 0, false);
+    add_cluster_node(clusters.dapp_cluster.name, second_node, false);
+
+    val report = full_availability(SYSTEM_NODES, DAPP_NODES);
+    report[second_node] = 1.0;
+    rell.test.tx().op(
+        pay_rewards_op(clusters.dapp_cluster, node_availability_report(start_time = 0, end_time = 0, report))
+    ).nop().run();
+
+    rell.test.set_next_block_time_delta(1);
+    rell.test.tx().op(
+        pay_rewards_op(clusters.system_cluster, node_availability_report(start_time = 0, end_time = 0, full_availability(0, SYSTEM_NODES)))
+    ).nop().run();
+
+    val paid_across_both = node_payed_reward @ { .node in [node_key(0), second_node] } ( @sum .value );
+
+    // Both nodes earned, and the provider's total is the sum rather than a single node's share.
+    assert_true(node_payed_reward @ { .node == second_node } ( .value ) > 0);
+    assert_true(paid_across_both * DAYS_PER_MONTH > TARGET_PER_NODE_PER_MONTH + TOLERANCE);
+}
