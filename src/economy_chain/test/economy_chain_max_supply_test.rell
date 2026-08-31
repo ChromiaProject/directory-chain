@@ -1,0 +1,51 @@
+@test module;
+
+/*
+ * The uncapped default.
+ *
+ * `max_supply` is a module arg defaulting to 0, which means "no cap". Every chain that does not
+ * deliberately configure a cap therefore behaves exactly as it did before the cap existed, and
+ * this test is what holds that door open.
+ *
+ * The enforced behaviour is exercised on a chain that actually configures a cap, in
+ * economy_chain_alt_config_test.test.economy_chain_max_supply_alt_test.
+ */
+
+import ^^.*;
+import ^.helper_functions.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.assets;
+}
+
+/** The figure Chromia publishes as "max supply", in whole CHR. */
+val published_max_supply_chr = 978064789;
+
+function test_max_supply_is_disabled_by_default() {
+
+    rell.test.tx().op(init()).run();
+
+    val cap = get_chr_supply_info();
+    assert_false(cap.enforced);
+    assert_equals(cap.max_supply, 0L);
+    assert_equals(cap.remaining_mintable, ft4.assets.max_asset_amount);
+
+    // Ten times the published maximum, minted in one operation, into each of the two accounts
+    // the real mint paths target: the governance mint goes to FOUNDATION, the refill to
+    // REWARD_POOL. Uncapped, neither destination is constrained and they do not share a budget.
+    val absurd = (10 * published_max_supply_chr * units_per_asset).to_big_integer();
+    val foundation = get_chromia_foundation_account();
+
+    rell.test.tx().op(mint_to(foundation, absurd)).run();
+    rell.test.tx().op(mint_to_pool(absurd)).run();
+
+    assert_equals(get_account_balance(foundation), absurd);
+    assert_equals(get_pool_balance(), absurd);
+    assert_equals(get_chr_asset().supply, absurd * 2);
+    assert_equals(get_chr_supply_info().total_supply, absurd * 2);
+
+    // Uncapped still means bounded, by FT4's own `max_asset_amount` - and what is reported is
+    // how much may still be minted against it, not the bound itself.
+    assert_equals(get_chr_supply_info().remaining_mintable, ft4.assets.max_asset_amount - absurd * 2);
+}

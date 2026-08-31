@@ -875,6 +875,35 @@ function run_pay_reward(reward: big_integer = 0, refill: boolean) {
     return alice;
 }
 
+/**
+ * The query reports what is owed, and stops reporting a provider once it is settled.
+ *
+ * The system-cluster round is used because it pays the node and the Foundation share in the
+ * same call, so an empty pool leaves debt on both at once.
+ */
+function test_get_reward_debt_reports_unpaid_rewards() {
+    val pa = run_pay_rewards(0, true);
+    assert_true(pa.reward_debt > 0);
+    assert_true(chromia_foundation.reward_debt > 0);
+
+    val debt = get_reward_debt();
+    assert_equals(debt.chromia_foundation, chromia_foundation.reward_debt);
+    assert_equals(debt.providers.size(), 1);
+    assert_equals(debt.providers[0].pubkey, provider_pubkey);
+    assert_equals(debt.providers[0].reward_debt, pa.reward_debt);
+    assert_equals(debt.total, pa.reward_debt + chromia_foundation.reward_debt);
+
+    // Settling a provider drops it from the list; the Foundation's own debt is untouched.
+    rell.test.tx().op(
+        reset_provider_reward_debt(provider_pubkey)
+    ).sign(provider_key).run();
+
+    val after = get_reward_debt();
+    assert_true(after.providers.empty());
+    assert_equals(after.chromia_foundation, chromia_foundation.reward_debt);
+    assert_equals(after.total, chromia_foundation.reward_debt);
+}
+
 function test_reset_provider_rewards() {
     val pa = run_pay_rewards(0, false);
 

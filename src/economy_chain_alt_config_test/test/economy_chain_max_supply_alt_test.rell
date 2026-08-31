@@ -1,0 +1,293 @@
+@test module;
+
+/*
+ * The CHR max supply, exercised on a chain that actually configures one.
+ *
+ * `max_supply` is a module arg, so it cannot be changed at runtime - which is the point: the
+ * cap on CHR issuance moves only by blockchain configuration update, the same governance
+ * path as `pool_amount_to_mint`. That also means these tests cannot set the cap themselves.
+ * They read whatever this chain configures via `get_max_supply()` and seed supply relative to
+ * it, so they stay correct if the configured value changes.
+ *
+ * The uncapped default (`max_supply = 0`, every other chain) is covered separately by
+ * economy_chain.test.economy_chain_max_supply_test.
+ */
+
+import ^^.*;
+
+namespace ft4 {
+    import lib.ft4.accounts;
+    import lib.ft4.assets;
+}
+
+import economy_chain.test.helper_functions.*;
+import economy_chain.test.helper_operations.*;
+
+/** Any delta larger than `pool_refill_limit_ms` opens a fresh refill window. */
+val new_refill_window_ms = 86400000 * 30; // 30 days
+
+/** A mint small enough to sit comfortably inside the governance per-window rate limit. */
+val small_mint = 1000L;
+
+/**
+ * Open a fresh refill window.
+ *
+ * The delta is applied by running an empty block, not merely set: the rate-limit check compares
+ * against `op_context.last_block_time`, which is the PREVIOUS block's timestamp, so a delta set
+ * immediately before the payout would not yet be visible to it.
+ */
+function open_new_refill_window() {
+    rell.test.set_next_block_time_delta(new_refill_window_ms);
+    rell.test.block().run();
+}
+
+/** Force one reward payout the pool cannot cover, which makes `pay_reward` attempt a refill. */
+function force_payout_needing_refill(recipient: ft4.accounts.account) {
+    rell.test.tx()
+        .op(pay_reward_op(get_pool_account(), recipient, 0, get_max_supply() * 10, "test provider", 0.0))
+        .nop()
+        .run();
+}
+
+/** The size of one refill, measured rather than assumed: on a fresh chain supply starts at 0. */
+function measure_one_refill(recipient: ft4.accounts.account): big_integer {
+    assert_equals(get_chr_asset().supply, 0L);
+    force_payout_needing_refill(recipient);
+    val amount = get_chr_asset().supply;
+    assert_true(amount > 0L);
+    return amount;
+}
+
+/**
+ * Bring supply up to `target`, whatever it is now.
+ *
+ * Tests seed supply close to the cap and then mint small amounts, rather than minting the whole
+ * cap in one go. That keeps them independent of the configured cap size, and clear of the
+ * separate per-window governance rate limit, which is a much smaller number.
+ */
+function seed_supply_to(recipient: ft4.accounts.account, target: big_integer) {
+    val supply = get_chr_asset().supply;
+    assert_true(target >= supply);
+    if (target > supply) {
+        rell.test.tx().op(mint_to(recipient, target - supply)).nop().run();
+    }
+    assert_equals(get_chr_asset().supply, target);
+}
+
+/** This chain configures a cap. */
+function test_max_supply_is_configured_on_this_chain() {
+    rell.test.tx().op(init()).run();
+
+    val expected = 1000000000000L;
+    assert_equals(get_max_supply(), expected);
+
+    val state = get_chr_supply_info();
+    assert_true(state.enforced);
+    assert_true(state.max_supply > 0L);
+    assert_equals(state.max_supply, expected);
+    assert_equals(state.remaining_mintable, expected);
+    assert_equals(state.total_supply, 0L);
+}
+
+/**
+ * The pool refill mints only the headroom that is left, and stops there.
+ *
+ * This is the path that mints during normal operation, so it must not throw: it runs inside ICMF reward
+ * processing, where a throw would abort the whole reward round rather than just the mint.
+ */
+function test_pool_refill_clamps_to_remaining_headroom() {
+    rell.test.tx().op(init()).run();
+    val recipient = get_chromia_foundation_account();
+
+    // Leave less headroom than a single refill would normally mint.
+    val headroom = 1L;
+    seed_supply_to(recipient, get_max_supply() - headroom);
+    assert_equals(get_chr_supply_info().remaining_mintable, headroom);
+
+    open_new_refill_window();
+    force_payout_needing_refill(recipient);
+
+    // Minted the headroom, not the full refill amount, landing exactly on the cap.
+    assert_equals(get_chr_asset().supply, get_max_supply());
+    assert_equals(get_chr_supply_info().remaining_mintable, 0L);
+}
+
+/**
+ * Once supply is at the cap the refill stops minting entirely - and still does not fail, so
+ * reward payouts carry on being processed as normal.
+ */
+function test_pool_refill_stops_at_max_supply_without_failing() {
+    rell.test.tx().op(init()).run();
+    val recipient = get_chromia_foundation_account();
+
+    seed_supply_to(recipient, get_max_supply());
+    assert_equals(get_chr_supply_info().remaining_mintable, 0L);
+
+    var i = 0;
+    while (i < 3) {
+        open_new_refill_window();
+        force_payout_needing_refill(recipient); // no run_must_fail - this must succeed
+        assert_equals(get_chr_asset().supply, get_max_supply());
+        i += 1;
+    }
+}
+
+/**
+ * The governance mint is rejected outright when it would breach the cap. Unlike the refill it
+ * throws rather than minting a smaller amount, because it is a deliberate act: silently minting
+ * less than was voted on would be worse than failing.
+ */
+function test_governance_mint_is_rejected_above_max_supply() {
+    rell.test.tx().op(init(), create_test_cluster("cluster_name")).run();
+    val foundation = get_chromia_foundation_account();
+
+    // One unit of headroom left, so a two-unit mint is one too many. Both amounts sit well
+    // inside the per-window rate limit, so only the cap can reject this.
+    seed_supply_to(foundation, get_max_supply() - 1);
+
+    rell.test.tx()
+        .op(create_chromia_foundation_voter_set())
+        .sign(rell.test.keypairs.alice)
+        .run();
+
+    rell.test.tx()
+        .op(propose_minting(rell.test.pubkeys.alice, 2, foundation.id))
+        .sign(rell.test.keypairs.alice)
+        .nop()
+        .run_must_fail("MAX SUPPLY EXCEEDED");
+
+    // Nothing minted, no proposal left half-applied.
+    assert_equals(get_chr_asset().supply, get_max_supply() - 1);
+    assert_true(empty(pending_minting @* { }));
+}
+
+/** Minting exactly up to the cap is allowed; one unit more is not. The boundary is inclusive. */
+function test_governance_mint_succeeds_exactly_up_to_max_supply() {
+    rell.test.tx().op(init(), create_test_cluster("cluster_name")).run();
+    val foundation = get_chromia_foundation_account();
+
+    seed_supply_to(foundation, get_max_supply() - small_mint);
+
+    rell.test.tx()
+        .op(create_chromia_foundation_voter_set())
+        .sign(rell.test.keypairs.alice)
+        .run();
+
+    rell.test.tx()
+        .op(propose_minting(rell.test.pubkeys.alice, small_mint.to_integer(), foundation.id))
+        .sign(rell.test.keypairs.alice)
+        .nop()
+        .run();
+
+    assert_equals(get_chr_asset().supply, get_max_supply());
+    assert_equals(get_chr_supply_info().remaining_mintable, 0L);
+
+    // Not one unit more, even in a fresh rate-limit window.
+    rell.test.set_next_block_time_delta(get_ec_mint_proposal_time_limit_ms());
+    rell.test.tx()
+        .op(propose_minting(rell.test.pubkeys.alice, 1, foundation.id))
+        .sign(rell.test.keypairs.alice)
+        .nop()
+        .run_must_fail("MAX SUPPLY EXCEEDED");
+}
+
+/**
+ * The two mint paths share one cap. Headroom spent by governance is headroom the pool refill no
+ * longer has, so they cannot be combined to exceed the maximum - which is exactly what they
+ * could do before, when each was bounded only by its own independent rate limit.
+ */
+function test_both_mint_paths_share_one_max_supply() {
+    rell.test.tx().op(init(), create_test_cluster("cluster_name")).run();
+    val foundation = get_chromia_foundation_account();
+    val one_refill = measure_one_refill(foundation);
+
+    rell.test.tx()
+        .op(create_chromia_foundation_voter_set())
+        .sign(rell.test.keypairs.alice)
+        .run();
+
+    // Leave exactly one small governance mint plus half a refill of headroom.
+    seed_supply_to(foundation, get_max_supply() - small_mint - one_refill / 2);
+
+    // Governance takes its part first.
+    rell.test.tx()
+        .op(propose_minting(rell.test.pubkeys.alice, small_mint.to_integer(), foundation.id))
+        .sign(rell.test.keypairs.alice)
+        .nop()
+        .run();
+    assert_equals(get_chr_supply_info().remaining_mintable, one_refill / 2);
+
+    // The refill gets only what governance left behind, however much it would normally mint.
+    open_new_refill_window();
+    force_payout_needing_refill(foundation);
+
+    assert_equals(get_chr_asset().supply, get_max_supply());
+    assert_equals(get_chr_supply_info().remaining_mintable, 0L);
+}
+
+/**
+ * The `before_mint` backstop catches any route to minting CHR, including a direct `Unsafe.mint`
+ * that never consults the cap itself. This is what makes the invariant hold for mint paths added
+ * later that forget to check.
+ */
+function test_direct_mint_is_blocked_by_the_backstop() {
+    rell.test.tx().op(init()).run();
+    val foundation = get_chromia_foundation_account();
+
+    rell.test.tx()
+        .op(mint_to(foundation, get_max_supply() + 1))
+        .run_must_fail("MAX SUPPLY EXCEEDED");
+    assert_equals(get_chr_asset().supply, 0L);
+
+    // Right up to the cap is still fine.
+    rell.test.tx().op(mint_to(foundation, get_max_supply())).run();
+    assert_equals(get_chr_asset().supply, get_max_supply());
+}
+
+/**
+ * Reaching the cap does not cancel what is owed - it defers it.
+ *
+ * With no headroom left the refill mints nothing, so the pool stays empty and `pay_reward` can
+ * transfer nothing. The unpaid amount is not dropped: it is carried on
+ * `chromia_foundation.reward_debt` and the next round adds to it, so the debt grows once per
+ * round for as long as the chain sits at the cap.
+ *
+ * This matters when choosing a value for a live chain. A cap set below what the network is
+ * already committed to paying does not reduce the obligation, it accumulates it - and raising
+ * the cap later releases the whole accrued amount at once.
+ */
+function test_reward_debt_grows_while_supply_is_at_max_supply() {
+
+    rell.test.tx().op(init(), create_test_cluster("cluster_name")).run();
+    val foundation = get_chromia_foundation_account();
+
+    // No headroom left, and nothing in the pool to pay from: the seed mints to the foundation,
+    // so the pool is untouched and still empty.
+    seed_supply_to(foundation, get_max_supply());
+    assert_equals(get_pool_balance(), 0L);
+    assert_equals(get_chr_supply_info().remaining_mintable, 0L);
+    assert_equals(chromia_foundation.reward_debt, 0L);
+
+    // One round: nothing is paid, and the whole reward becomes debt.
+    open_new_refill_window();
+    rell.test.tx().op(pay_out_chromia_foundation_reward_op()).nop().run();
+
+    val one_round = chromia_foundation.reward_debt;
+    assert_true(one_round > 0L);
+    assert_equals(get_pool_balance(), 0L);
+
+    // Each further round adds another round's worth. The debt is never written down, and no
+    // CHR is minted to service it.
+    var rounds = 1;
+    while (rounds < 4) {
+        open_new_refill_window();
+        rell.test.tx().op(pay_out_chromia_foundation_reward_op()).nop().run();
+        rounds += 1;
+        assert_equals(chromia_foundation.reward_debt, one_round * rounds);
+    }
+
+    // Supply never moved: the cap held throughout, and the debt grew instead.
+    assert_equals(get_chr_asset().supply, get_max_supply());
+    assert_equals(get_chr_supply_info().remaining_mintable, 0L);
+    assert_true(chromia_foundation.reward_debt > one_round);
+}
