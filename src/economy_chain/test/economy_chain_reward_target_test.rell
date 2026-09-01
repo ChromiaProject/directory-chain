@@ -50,24 +50,50 @@ val CHR_PER_USD = 66.53304;
 
 /* ------------------------------------------------------------- proposed constants ---- */
 
-/** Down from $131. Whole dollars, which is what a proposal would realistically carry. */
+/** Down from $131. Whole dollars, since that is what the governance operation carries. */
 val PROPOSED_TOTAL_COST_SYSTEM_PROVIDERS_USD = 36;
 /** Up from 0.2. At 0.91 a dapp node is paid almost entirely on what the cluster actually earns. */
 val PROPOSED_DAPP_PROVIDER_RISK_SHARE = 0.91;
 
 val TARGET_PER_NODE_PER_MONTH = 60000L * units_per_asset;
-/** The letter says "approximately", so calibration is checked to within 5%. */
+/** The target is approximate, so calibration is checked to within 5%. */
 val TOLERANCE = 3000L * units_per_asset;
 val DAYS_PER_MONTH = 30;
 
-val system_provider_key = rell.test.keypairs.bob;
-val dapp_provider_key = rell.test.keypairs.dave;
 val dapp_cluster_name = "pink";
+/**
+ * Provider 0 signs in both clusters, as ChromaWay does on mainnet. Every other provider holds
+ * exactly one node, so 18 nodes belong to 17 providers.
+ */
+val BOTH_CLUSTERS_PROVIDER = 0;
+/** Controls: one signs only in the system cluster, the other only in the dapp cluster. */
+val SYSTEM_ONLY_PROVIDER = 1;
+val DAPP_ONLY_PROVIDER = SYSTEM_NODES;
+val TOTAL_PROVIDERS = SYSTEM_NODES + DAPP_NODES - 1;
 /** Long enough that `__begin_block` never expires the occupancy lease mid-test. */
 val LEASE_DURATION_MS = 1000 * 365 * 24 * 60 * 60 * 1000;
 
 /** Node keys are only ever stored and compared, never used to sign, so they are synthesised. */
 function node_key(i: integer): pubkey = byte_array.from_hex("02" + "%064x".format(i));
+
+/**
+ * Provider keys must be real points: creating a provider also creates its FT4 account with a
+ * single-signature auth descriptor over this key.
+ */
+function provider_key(i: integer): pubkey {
+    val priv = ("provider " + i).hash();
+    return crypto.privkey_to_pubkey(priv, true);
+}
+
+/**
+ * Which provider holds node `i`. System nodes are 0..11 and dapp nodes 12..17; node 0 and node
+ * 12 are both held by `BOTH_CLUSTERS_PROVIDER`, which is what shifts the dapp nodes down by one.
+ */
+function node_owner(i: integer): integer = when {
+    i == 0 or i == SYSTEM_NODES -> BOTH_CLUSTERS_PROVIDER;
+    i < SYSTEM_NODES -> i;
+    else -> i - 1;
+};
 
 /* --------------------------------------------------------------------- fixtures ---- */
 
@@ -97,19 +123,15 @@ function setup_mainnet_shaped_network() {
         scu_price = SCU_PRICE, extra_storage_price = EXTRA_STORAGE_PRICE
     );
 
-    val system_provider = add_provider(system_provider_key.pub, true, provider_tier.NODE_PROVIDER);
-    val dapp_provider = add_provider(dapp_provider_key.pub, false, provider_tier.NODE_PROVIDER);
-
-    var i = 0;
-    while (i < SYSTEM_NODES) {
-        ensure_node(system_provider_key.pub, node_key(i), true, "SE", 1, 0, false);
-        add_cluster_node(system_cluster.name, node_key(i), false);
-        i += 1;
-    }
-    while (i < SYSTEM_NODES + DAPP_NODES) {
-        ensure_node(dapp_provider_key.pub, node_key(i), true, "SE", 1, 0, false);
-        add_cluster_node(dapp_cluster.name, node_key(i), false);
-        i += 1;
+    // One provider per node, except provider 0 which holds a node in each cluster. Providers
+    // signing in the system cluster carry the system flag, matching mainnet; `add_provider`
+    // returns the existing record on the second call for provider 0.
+    for (i in range(SYSTEM_NODES + DAPP_NODES)) {
+        val in_system_cluster = i < SYSTEM_NODES;
+        val owner = provider_key(node_owner(i));
+        add_provider(owner, in_system_cluster, provider_tier.NODE_PROVIDER);
+        ensure_node(owner, node_key(i), true, "SE", 1, 0, false);
+        add_cluster_node(if (in_system_cluster) system_cluster.name else dapp_cluster.name, node_key(i), false);
     }
 
     // Occupancy. The lease holder is irrelevant to the reward formula -- only the summed
@@ -120,9 +142,9 @@ function setup_mainnet_shaped_network() {
         set_pool_details_last_refill_millis_last_block_time_op()
     ).run();
 
-    // Fund the pool far beyond one round so nothing is clamped or deferred into reward_debt;
-    // partial payment is a different concern and would mask the calibration.
-    add_assets_to_pool(1000000 * units_per_asset);
+    // Fund the pool far beyond a month of rounds so nothing is clamped or deferred into
+    // reward_debt; partial payment is a different concern and would mask the calibration.
+    add_assets_to_pool(50000000 * units_per_asset);
 
     return (system_cluster = system_cluster, dapp_cluster = dapp_cluster);
 }
@@ -130,28 +152,61 @@ function setup_mainnet_shaped_network() {
 /** Every node in the cluster reporting full availability, so the factor is exactly 1.0. */
 function full_availability(from: integer, count: integer): map<byte_array, decimal> {
     val report = map<byte_array, decimal>();
-    var i = from;
-    while (i < from + count) {
+    for (i in range(from, from + count)) {
         report[node_key(i)] = 1.0;
-        i += 1;
     }
     return report;
 }
 
-/** Run one reward round and return what a single node was actually paid. */
-function pay_one_round_and_read_node_reward(cluster: cluster, from: integer, count: integer): big_integer {
-    rell.test.tx().op(
-        pay_rewards_op(cluster, node_availability_report(start_time = 0, end_time = 0, full_availability(from, count)))
-    ).nop().run();
+/** Run a month of daily reward rounds for one cluster. */
+function pay_a_month(cluster: cluster, from: integer, count: integer) {
+    val report = node_availability_report(start_time = 0, end_time = 0, full_availability(from, count));
+    for (day in range(DAYS_PER_MONTH)) {
+        rell.test.set_next_block_time_delta(millis_per_day);
+        rell.test.tx().op(pay_rewards_op(cluster, report)).nop().run();
+    }
+}
 
-    // Newest first: a node can be paid more than once in a test, and only the round just
-    // run is of interest.
-    return (node_payed_reward @* { .node == node_key(from) } ( @sort_desc @omit .time, .value ))[0];
+/**
+ * What a provider holds. Rewards are measured as the change in this across a month, because
+ * the balance is the money that actually arrived -- `node_payed_reward` is only the ledger
+ * entry, and would not notice a provider's payouts failing to accumulate.
+ */
+function balance_of(provider): big_integer = get_account_balance(provider_account @ { provider } .account);
+
+/** Run a month and return what reached the provider at `provider_index`. */
+function monthly_for(provider_index: integer, cluster: cluster, from: integer, count: integer): big_integer {
+    val p = provider @ { provider_key(provider_index) };
+    val before = balance_of(p);
+    pay_a_month(cluster, from, count);
+    return balance_of(p) - before;
+}
+
+/**
+ * The multiplier the dapp formula applies at a given occupancy: `(1 - r) + r * occupancy`.
+ * Linear in occupancy, which is what makes the effect of leasing more SCU exactly predictable.
+ */
+function occupancy_multiplier(chargeable_scu: integer, leased_scu: integer): decimal {
+    val occupancy = decimal(leased_scu) / chargeable_scu;
+    return (1 - PROPOSED_DAPP_PROVIDER_RISK_SHARE) + PROPOSED_DAPP_PROVIDER_RISK_SHARE * occupancy;
+}
+
+/** What a month should pay at `leased_scu`, given what it paid at `LEASED_SCU`. */
+function predicted_monthly(base: big_integer, chargeable_scu: integer, leased_scu: integer): big_integer {
+    val ratio = occupancy_multiplier(chargeable_scu, leased_scu)
+              / occupancy_multiplier(chargeable_scu, LEASED_SCU);
+    return (decimal(base) * ratio).to_big_integer();
+}
+
+/** Occupy `scu` more of the cluster. */
+function lease_more(name: text, scu: integer, cluster: cluster) {
+    rell.test.tx().op(
+        create_lease(name, scu, get_chromia_foundation_account(), cluster, false, LEASE_DURATION_MS)
+    ).run();
 }
 
 function assert_near_target(label: text, monthly: big_integer) {
-    val delta = if (monthly > TARGET_PER_NODE_PER_MONTH) monthly - TARGET_PER_NODE_PER_MONTH
-                else TARGET_PER_NODE_PER_MONTH - monthly;
+    val delta = abs(monthly - TARGET_PER_NODE_PER_MONTH);
     // Printed so the calibration is readable from the test output, not just asserted.
     log("%s: %s CHR per month (target %s, off by %s)".format(
         label,
@@ -177,9 +232,31 @@ function test_fixture_matches_mainnet_shape() {
     assert_equals(occupied_scus(clusters.dapp_cluster), LEASED_SCU);
     assert_equals(occupancy_rate(clusters.dapp_cluster), decimal(LEASED_SCU) / 124);
 
-    assert_equals(cluster_node @ { .cluster == clusters.system_cluster } ( @sum 1 ), SYSTEM_NODES);
-    assert_equals(cluster_node @ { .cluster == clusters.dapp_cluster } ( @sum 1 ), DAPP_NODES);
+    assert_equals(cluster_node @ { clusters.system_cluster } ( @sum 1 ), SYSTEM_NODES);
+    assert_equals(cluster_node @ { clusters.dapp_cluster } ( @sum 1 ), DAPP_NODES);
     assert_equals(economy_constants.chr_per_usd, CHR_PER_USD);
+
+    // 18 nodes held by 17 providers, because one provider signs in both clusters.
+    //
+    // Counted over node holders rather than over `provider`: creating a cluster goes through
+    // `create_pending_cluster` -> `create_proposal`, which seeds proposal-machinery providers
+    // of its own. Those are fixture artifacts and not part of the shape being modelled.
+    assert_equals(node @ { } ( @sum 1 ), SYSTEM_NODES + DAPP_NODES);
+
+    val holders = set<pubkey>();
+    for (pk in node @* { } ( .provider.pubkey )) holders.add(pk);
+    assert_equals(holders.size(), TOTAL_PROVIDERS);
+
+    // Every one of them has an account, so rewards land in 17 distinct places.
+    for (pk in holders) {
+        assert_true(exists(provider_account @? { .provider.pubkey == pk }));
+    }
+
+    // The provider in both clusters holds exactly two nodes, one on each side.
+    val both = provider @ { provider_key(BOTH_CLUSTERS_PROVIDER) };
+    assert_equals(node @ { .provider == both } ( @sum 1 ), 2);
+    assert_equals(cluster_node @ { .node.provider == both, .cluster == clusters.system_cluster } ( @sum 1 ), 1);
+    assert_equals(cluster_node @ { .node.provider == both, .cluster == clusters.dapp_cluster } ( @sum 1 ), 1);
 }
 
 /**
@@ -191,10 +268,9 @@ function test_fixture_matches_mainnet_shape() {
 function test_system_node_is_paid_about_60k_chr_per_month() {
     val clusters = setup_mainnet_shaped_network();
 
-    val daily = pay_one_round_and_read_node_reward(clusters.system_cluster, 0, SYSTEM_NODES);
-    val monthly = daily * DAYS_PER_MONTH;
+    val monthly = monthly_for(SYSTEM_ONLY_PROVIDER, clusters.system_cluster, 0, SYSTEM_NODES);
 
-    assert_true(daily > 0);
+    assert_true(monthly > 0);
     assert_near_target("system node", monthly);
 }
 
@@ -208,10 +284,9 @@ function test_system_node_is_paid_about_60k_chr_per_month() {
 function test_dapp_node_is_paid_about_60k_chr_per_month() {
     val clusters = setup_mainnet_shaped_network();
 
-    val daily = pay_one_round_and_read_node_reward(clusters.dapp_cluster, SYSTEM_NODES, DAPP_NODES);
-    val monthly = daily * DAYS_PER_MONTH;
+    val monthly = monthly_for(DAPP_ONLY_PROVIDER, clusters.dapp_cluster, SYSTEM_NODES, DAPP_NODES);
 
-    assert_true(daily > 0);
+    assert_true(monthly > 0);
     assert_near_target("dapp node", monthly);
 }
 
@@ -225,18 +300,37 @@ function test_dapp_node_is_paid_about_60k_chr_per_month() {
  */
 function test_dapp_reward_rises_with_occupancy_at_the_proposed_risk_share() {
     val clusters = setup_mainnet_shaped_network();
-    val at_current_occupancy = pay_one_round_and_read_node_reward(clusters.dapp_cluster, SYSTEM_NODES, DAPP_NODES);
+    val chargeable = total_available_scus_exclude_system(clusters.dapp_cluster);
+    // A CHR of slack absorbs the per-day rounding that accumulates over a month.
+    val rounding = units_per_asset;
 
-    // Lease the rest of the cluster.
-    rell.test.tx().op(
-        create_lease("fill", 124 - LEASED_SCU, get_chromia_foundation_account(), clusters.dapp_cluster, false, LEASE_DURATION_MS)
-    ).run();
-    assert_equals(occupancy_rate(clusters.dapp_cluster), 1);
+    val at_1x = monthly_for(DAPP_ONLY_PROVIDER, clusters.dapp_cluster, SYSTEM_NODES, DAPP_NODES);
+    log("dapp node, %s of %s SCU leased: %s CHR per month".format(
+        LEASED_SCU, chargeable, at_1x / units_per_asset));
 
-    rell.test.set_next_block_time_delta(1);
-    val at_full_occupancy = pay_one_round_and_read_node_reward(clusters.dapp_cluster, SYSTEM_NODES, DAPP_NODES);
+    lease_more("double", LEASED_SCU, clusters.dapp_cluster);
+    assert_equals(occupied_scus(clusters.dapp_cluster), 2 * LEASED_SCU);
+    val at_2x = monthly_for(DAPP_ONLY_PROVIDER, clusters.dapp_cluster, SYSTEM_NODES, DAPP_NODES);
+    val expect_2x = predicted_monthly(at_1x, chargeable, 2 * LEASED_SCU);
+    log("dapp node, %s of %s SCU leased: %s CHR per month (predicted %s, +%s%%)".format(
+        2 * LEASED_SCU, chargeable, at_2x / units_per_asset, expect_2x / units_per_asset,
+        (at_2x - at_1x) * 100 / at_1x));
 
-    assert_true(at_full_occupancy > at_current_occupancy);
+    lease_more("triple", LEASED_SCU, clusters.dapp_cluster);
+    assert_equals(occupied_scus(clusters.dapp_cluster), 3 * LEASED_SCU);
+    val at_3x = monthly_for(DAPP_ONLY_PROVIDER, clusters.dapp_cluster, SYSTEM_NODES, DAPP_NODES);
+    val expect_3x = predicted_monthly(at_1x, chargeable, 3 * LEASED_SCU);
+    log("dapp node, %s of %s SCU leased: %s CHR per month (predicted %s, +%s%%)".format(
+        3 * LEASED_SCU, chargeable, at_3x / units_per_asset, expect_3x / units_per_asset,
+        (at_3x - at_1x) * 100 / at_1x));
+
+    assert_true(at_2x > at_1x);
+    assert_true(at_3x > at_2x);
+
+    // Measured against the closed form, so the test pins the size of the effect and not
+    // merely its direction.
+    assert_true(abs(at_2x - expect_2x) <= rounding);
+    assert_true(abs(at_3x - expect_3x) <= rounding);
 }
 
 /**
@@ -250,25 +344,36 @@ function test_dapp_reward_rises_with_occupancy_at_the_proposed_risk_share() {
 function test_a_provider_signing_in_two_clusters_is_paid_per_node() {
     val clusters = setup_mainnet_shaped_network();
 
-    // Give the system provider a second node, in the dapp cluster.
-    val second_node = node_key(SYSTEM_NODES + DAPP_NODES);
-    ensure_node(system_provider_key.pub, second_node, true, "SE", 1, 0, false);
-    add_cluster_node(clusters.dapp_cluster.name, second_node, false);
+    val both_clusters = provider @ { provider_key(BOTH_CLUSTERS_PROVIDER) };
+    val system_only = provider @ { provider_key(SYSTEM_ONLY_PROVIDER) };
+    val dapp_only = provider @ { provider_key(DAPP_ONLY_PROVIDER) };
 
-    val report = full_availability(SYSTEM_NODES, DAPP_NODES);
-    report[second_node] = 1.0;
-    rell.test.tx().op(
-        pay_rewards_op(clusters.dapp_cluster, node_availability_report(start_time = 0, end_time = 0, report))
-    ).nop().run();
+    // Asserted here rather than left implicit in `node_owner()`: the relationship this test is
+    // about is that ONE provider holds a node on each side, against controls holding one each.
+    assert_equals(node @ { .provider == both_clusters } ( @sum 1 ), 2);
+    assert_equals(cluster_node @ { .node.provider == both_clusters, .cluster == clusters.system_cluster } ( @sum 1 ), 1);
+    assert_equals(cluster_node @ { .node.provider == both_clusters, .cluster == clusters.dapp_cluster } ( @sum 1 ), 1);
+    assert_equals(node @ { .provider == system_only } ( @sum 1 ), 1);
+    assert_equals(node @ { .provider == dapp_only } ( @sum 1 ), 1);
 
-    rell.test.set_next_block_time_delta(1);
-    rell.test.tx().op(
-        pay_rewards_op(clusters.system_cluster, node_availability_report(start_time = 0, end_time = 0, full_availability(0, SYSTEM_NODES)))
-    ).nop().run();
+    val both_before = balance_of(both_clusters);
+    val system_before = balance_of(system_only);
+    val dapp_before = balance_of(dapp_only);
 
-    val paid_across_both = node_payed_reward @ { .node in [node_key(0), second_node] } ( @sum .value );
+    pay_a_month(clusters.system_cluster, 0, SYSTEM_NODES);
+    pay_a_month(clusters.dapp_cluster, SYSTEM_NODES, DAPP_NODES);
 
-    // Both nodes earned, and the provider's total is the sum rather than a single node's share.
-    assert_true(node_payed_reward @ { .node == second_node } ( .value ) > 0);
-    assert_true(paid_across_both * DAYS_PER_MONTH > TARGET_PER_NODE_PER_MONTH + TOLERANCE);
+    val both_month = balance_of(both_clusters) - both_before;
+    val system_month = balance_of(system_only) - system_before;
+    val dapp_month = balance_of(dapp_only) - dapp_before;
+
+    log("provider in both clusters: %s CHR per month, against %s (system only) and %s (dapp only)".format(
+        both_month / units_per_asset, system_month / units_per_asset, dapp_month / units_per_asset));
+
+    // Paid strictly per node: the two-cluster provider receives exactly what a system-only
+    // provider earned plus what a dapp-only provider earned. Nothing caps its total.
+    assert_true(abs(both_month - (system_month + dapp_month)) <= units_per_asset);
+    assert_true(both_month > system_month);
+    assert_true(both_month > dapp_month);
+    assert_true(both_month > TARGET_PER_NODE_PER_MONTH + TOLERANCE);
 }
