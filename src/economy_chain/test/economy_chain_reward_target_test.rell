@@ -50,10 +50,22 @@ val CHR_PER_USD = 66.53304;
 
 /* ------------------------------------------------------------- proposed constants ---- */
 
-/** Down from $131. Whole dollars, since that is what the governance operation carries. */
-val PROPOSED_TOTAL_COST_SYSTEM_PROVIDERS_USD = 36;
-/** Up from 0.2. At 0.91 a dapp node is paid almost entirely on what the cluster actually earns. */
-val PROPOSED_DAPP_PROVIDER_RISK_SHARE = 0.91;
+/**
+ * Down from $131, and whole dollars is as fine as this lever gets: the formula divides by
+ * `units_per_usd` at economy_chain_reward.rell:70, and both sides are integers, so anything
+ * below a dollar is truncated away. $35.61 and $35.00 pay exactly the same. $36 is therefore
+ * the closest reachable setting to the target -- $35 undershoots by ~991 CHR a month.
+ */
+val PROPOSED_TOTAL_COST_SYSTEM_PROVIDERS_UNITS = 36000000; // $36
+/**
+ * The second system lever, and the one that gets the figure close. $36 alone overshoots by
+ * ~625 CHR a month and $35 undershoots by ~991; a decimal risk share closes the gap the
+ * whole-dollar cost cannot. It also shifts a little more of the reward onto cluster revenue,
+ * which is the direction this is meant to move in anyway.
+ */
+val PROPOSED_SYSTEM_PROVIDER_RISK_SHARE = 0.115;
+/** Up from 0.2. At this level a dapp node is paid almost entirely on what the cluster earns. */
+val PROPOSED_DAPP_PROVIDER_RISK_SHARE = 0.911;
 
 val TARGET_PER_NODE_PER_MONTH = 60000L * units_per_asset;
 /** The target is approximate, so calibration is checked to within 5%. */
@@ -110,10 +122,9 @@ function setup_mainnet_shaped_network() {
     rell.test.tx().op(
         update_reward_economy_constants(
             chr_per_usd = CHR_PER_USD,
-            dapp_provider_risk_share = PROPOSED_DAPP_PROVIDER_RISK_SHARE
-        ),
-        update_system_provider_economy_constants(
-            total_cost_system_providers = PROPOSED_TOTAL_COST_SYSTEM_PROVIDERS_USD
+            dapp_provider_risk_share = PROPOSED_DAPP_PROVIDER_RISK_SHARE,
+            total_cost_system_providers_units = PROPOSED_TOTAL_COST_SYSTEM_PROVIDERS_UNITS,
+            system_provider_risk_share = PROPOSED_SYSTEM_PROVIDER_RISK_SHARE
         )
     ).run();
 
@@ -214,6 +225,9 @@ function assert_near_target(label: text, monthly: big_integer) {
         TARGET_PER_NODE_PER_MONTH / units_per_asset,
         delta / units_per_asset));
     assert_true(delta <= TOLERANCE);
+    // Calibrated to sit on or just above the target: paying a provider less than the figure
+    // that was announced is the one direction that is not merely inaccurate.
+    assert_true(monthly >= TARGET_PER_NODE_PER_MONTH);
 }
 
 /* ------------------------------------------------------------------------ tests ---- */
@@ -260,7 +274,8 @@ function test_fixture_matches_mainnet_shape() {
 }
 
 /**
- * `total_cost_system_providers` at $36 pays a system node about 60,000 CHR a month.
+ * `total_cost_system_providers` at $36 with a 0.115 risk share pays a system node about
+ * 60,000 CHR a month.
  *
  * The flat cost term dominates the formula, so this lever is very nearly linear: it was $131,
  * which is why system nodes are on roughly 231,000 CHR a month today.
@@ -275,10 +290,10 @@ function test_system_node_is_paid_about_60k_chr_per_month() {
 }
 
 /**
- * `dapp_provider_risk_share` at 0.91 pays a dapp node about 60,000 CHR a month.
+ * `dapp_provider_risk_share` at 0.911 pays a dapp node about 60,000 CHR a month.
  *
  * The multiplier is `(1 - risk_share) + risk_share * occupancy`. At the current 0.2 a node is
- * paid 82% of cluster value on a cluster that is a tenth full; at 0.91 it is paid almost
+ * paid 82% of cluster value on a cluster that is a tenth full; at 0.911 it is paid almost
  * entirely on what the cluster actually earns.
  */
 function test_dapp_node_is_paid_about_60k_chr_per_month() {
