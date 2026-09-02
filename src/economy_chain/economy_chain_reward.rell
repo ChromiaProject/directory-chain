@@ -60,7 +60,13 @@ function pay_rewards(cluster: cluster, node_availability_report: node_availabili
     }
 }
 
-val MAX_REWARD_CHR_PER_NODE = 2200 * units_per_asset; // 2200 CHR per day per node -- roughly 66k CHR per month per node
+/**
+ * Per-node ceiling on one day's reward, applied before `pay_reward` deducts the delegator
+ * share, so it is not what a provider receives: at the default 10% share a node yields 1,980
+ * CHR a day, 59,400 a month rather than 66,000. 2223 would yield 60,000. The share is set per
+ * provider, so no single value here pins the net for everyone.
+ */
+val MAX_REWARD_CHR_PER_NODE = 2200 * units_per_asset;
 
 function calculate_system_cluster_rewards(system_cluster: cluster, node_availability_report: node_availability_report): map<node, big_integer> {
     val system_cluster_nodes = cluster_node @* { .cluster == system_cluster} .node;
