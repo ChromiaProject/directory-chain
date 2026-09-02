@@ -60,6 +60,14 @@ function pay_rewards(cluster: cluster, node_availability_report: node_availabili
     }
 }
 
+/**
+ * Per-node ceiling on one day's reward, applied before `pay_reward` deducts the delegator
+ * share, so it is not what a provider receives: at the default 10% share a node yields 1,980
+ * CHR a day, 59,400 a month rather than 66,000. 2223 would yield 60,000. The share is set per
+ * provider, so no single value here pins the net for everyone.
+ */
+val MAX_REWARD_CHR_PER_NODE = 2200 * units_per_asset;
+
 function calculate_system_cluster_rewards(system_cluster: cluster, node_availability_report: node_availability_report): map<node, big_integer> {
     val system_cluster_nodes = cluster_node @* { .cluster == system_cluster} .node;
 
@@ -67,7 +75,8 @@ function calculate_system_cluster_rewards(system_cluster: cluster, node_availabi
     val sum_total_max_revenue_per_dapp_cluster = sum_total_max_revenue_per_dapp_cluster();
 
     val system_provider_cost_share_per_node = (sum_total_max_revenue_per_dapp_cluster * economy_constants.system_provider_fee_share) / number_of_nodes_in_system_cluster;
-    val max_system_provider_reward_per_node = max((economy_constants.total_cost_system_providers / units_per_usd) * (1 - economy_constants.system_provider_risk_share) + system_provider_cost_share_per_node * economy_constants.system_provider_risk_share, system_provider_cost_share_per_node) * economy_constants.chr_per_usd * units_per_asset;
+    val max_system_provider_reward_per_node_bl = max((economy_constants.total_cost_system_providers / units_per_usd) * (1 - economy_constants.system_provider_risk_share) + system_provider_cost_share_per_node * economy_constants.system_provider_risk_share, system_provider_cost_share_per_node) * economy_constants.chr_per_usd * units_per_asset;
+    val max_system_provider_reward_per_node = min(MAX_REWARD_CHR_PER_NODE, max_system_provider_reward_per_node_bl);
 
     val system_node_reward = map<node, big_integer>();
     for (system_cluster_node in system_cluster_nodes) {
@@ -105,7 +114,8 @@ function calculate_dapp_cluster_rewards(cluster: cluster, node_availability_repo
     val node_reward = map<node, big_integer>();
     if (number_of_nodes_per_dapp_cluster > 0) {
 
-        val max_dapp_provider_reward_per_node = ((dapp_cluster_value * (1 - economy_constants.dapp_provider_risk_share) + dapp_cluster_value * occupancy_rate * economy_constants.dapp_provider_risk_share) / number_of_nodes_per_dapp_cluster) * economy_constants.chr_per_usd * units_per_asset;
+        val max_dapp_provider_reward_per_node_bl = ((dapp_cluster_value * (1 - economy_constants.dapp_provider_risk_share) + dapp_cluster_value * occupancy_rate * economy_constants.dapp_provider_risk_share) / number_of_nodes_per_dapp_cluster) * economy_constants.chr_per_usd * units_per_asset;
+        val max_dapp_provider_reward_per_node = min(MAX_REWARD_CHR_PER_NODE, max_dapp_provider_reward_per_node_bl);
 
         for (cluster_node in cluster_nodes) {
             // If availability report is completely empty then it could be that no chains are running in the cluster,
@@ -146,7 +156,8 @@ function calculate_dapp_cluster_rewards(cluster: cluster, node_availability_repo
  */
 function pay_out_chromia_foundation_reward() {
     val sum_total_max_revenue_per_dapp_cluster = sum_total_max_revenue_per_dapp_cluster();
-    val chromia_foundation_reward = (sum_total_max_revenue_per_dapp_cluster * economy_constants.chromia_foundation_fee_share * economy_constants.chr_per_usd * units_per_asset).to_big_integer();
+    val chromia_foundation_reward_bl = (sum_total_max_revenue_per_dapp_cluster * economy_constants.chromia_foundation_fee_share * economy_constants.chr_per_usd * units_per_asset).to_big_integer();
+    val chromia_foundation_reward = min(MAX_REWARD_CHR_PER_NODE, chromia_foundation_reward_bl);
     log("Reward calculated for chromia foundation based on sum_total_max_revenue_per_dapp_cluster: %s, chromia_foundation_fee_share: %s, chr_per_usd: %s, units_per_asset: %s is chromia_foundation_reward: %s"
         .format(sum_total_max_revenue_per_dapp_cluster, economy_constants.chromia_foundation_fee_share, economy_constants.chr_per_usd, units_per_asset, chromia_foundation_reward));
 
