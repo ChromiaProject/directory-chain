@@ -17,6 +17,30 @@ function append_release {
   fi
 }
 
+RESPONSE_FILE="$(mktemp)"
+trap 'rm -f "$RESPONSE_FILE"' EXIT
+
+# Queries the library chain and prints the response body. A throttled node answers 503 with an error body,
+# which must not be read as "library not found": retry on any non-200 answer and fail if it does not recover.
+query_library_chain() {
+  url="$1"
+  attempts=6
+  attempt=1
+  while [ "$attempt" -le "$attempts" ]; do
+    status="$(curl -sS -o "$RESPONSE_FILE" -w '%{http_code}' "$url" || echo 000)"
+    if [ "$status" = "200" ]; then
+      cat "$RESPONSE_FILE"
+      return 0
+    fi
+    echo "Library chain query failed (HTTP $status, attempt $attempt/$attempts): $(head -c 200 "$RESPONSE_FILE")" >&2
+    if [ "$attempt" -lt "$attempts" ]; then
+      sleep "$((attempt * ${LIBRARY_CHAIN_RETRY_DELAY:-10}))"
+    fi
+    attempt=$((attempt + 1))
+  done
+  return 1
+}
+
 while [ "$#" -gt 0 ]; do
     case $1 in
         -n|--name) LIBRARY_NAME="$2"; shift ;;
@@ -43,7 +67,7 @@ if [ ! -f "$XML_CONF" ]; then
 fi
 
 RID_NEW=`xmllint --xpath 'string(/dict/entry[@key="rid"]/bytea)' "$XML_CONF"`
-EXISTING=`curl -sS "$LIBRARY_CHAIN_API_URL/query/$LIBRARY_CHAIN_BRID?type=library_chain_versioning.get_latest_library_version&lib_id=com.chromia.$LIBRARY_NAME"`
+EXISTING="$(query_library_chain "$LIBRARY_CHAIN_API_URL/query/$LIBRARY_CHAIN_BRID?type=library_chain_versioning.get_latest_library_version&lib_id=com.chromia.$LIBRARY_NAME")"
 
 RID_EXISTING=`echo $EXISTING | jq -r '.rid'`
 if [ "$RID_EXISTING" = "null" ]; then
@@ -115,7 +139,8 @@ fi
 # Library description
 if [ -n "${LIBRARY_DESCRIPTION+x}" ]; then
   echo "Verify library description..."
-  EXISTING_LIBRARY_DESCRIPTION=`curl -sS "$LIBRARY_CHAIN_API_URL/query/$LIBRARY_CHAIN_BRID?type=library_chain_versioning.get_library&lib_id=com.chromia.$LIBRARY_NAME" | jq -r .description`
+  EXISTING_LIBRARY="$(query_library_chain "$LIBRARY_CHAIN_API_URL/query/$LIBRARY_CHAIN_BRID?type=library_chain_versioning.get_library&lib_id=com.chromia.$LIBRARY_NAME")"
+  EXISTING_LIBRARY_DESCRIPTION="$(echo "$EXISTING_LIBRARY" | jq -r .description)"
   echo "Current: $EXISTING_LIBRARY_DESCRIPTION"
   echo "New    : $LIBRARY_DESCRIPTION"
 
