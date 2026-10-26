@@ -95,11 +95,10 @@ integration-test:
     - postgres
   stage: test
   before_script:
-    - mkdir -p /opt/chromaway/chr
-    - curl -fsSL "https://gitlab.com/api/v4/projects/39844192/packages/maven/com/chromia/cli/chromia-cli/0.32.0/chromia-cli-0.32.0-dist.tar.gz" | tar -C /opt/chromaway/chr -xz
-    - curl -fsSL "https://gitlab.com/api/v4/projects/46346037/packages/maven/net/postchain/mc/management-console/3.61.2/management-console-3.61.2-dist.tar.gz" | tar -C /opt/chromaway -xz
-    - ln -s /opt/chromaway/chr/bin/chr /usr/local/bin/chr
-    - ln -s /opt/chromaway/management-console/bin/pmc /usr/local/bin/pmc
+    - curl -fsSL https://apt.chromia.com/chromia.gpg | tee /usr/share/keyrings/chromia.gpg >/dev/null
+    - echo "deb [arch=amd64 signed-by=/usr/share/keyrings/chromia.gpg] https://apt.chromia.com stable main" | tee /etc/apt/sources.list.d/chromia.list
+    - apt-get update
+    - apt-get install -y --no-install-recommends chr=0.32.2 pmc=3.63.0
   script:
     - CASC_YAML_MAX_ALIASES=1000 chr install --config config/chr.properties
     - chr build --hide-lib-warnings --settings chromia-it.yml
