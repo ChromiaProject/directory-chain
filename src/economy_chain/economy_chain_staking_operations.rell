@@ -8,10 +8,16 @@ function () = ft4.auth.add_auth_handler(
 function staking_deposit_auth_message(gtv): text {
     val args = struct<staking_deposit_native>.from_gtv(gtv);
 
-    return "Please sign the message\nto transfer %s %s from account {account_id} \nto deposit account.".format(
+    val message = "Please sign the message\nto transfer %s %s from account {account_id} \nto deposit account.".format(
         ft4.assets.format_amount_with_decimals(args.amount, chain_context.args.asset_decimals),
         chain_context.args.asset_symbol
     );
+
+    if (args.delegateTo == null) {
+        return message;
+    }
+
+    return "%s\nand delegate to provider %s.".format(message, args.delegateTo);
 }
 
 /**
